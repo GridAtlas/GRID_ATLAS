@@ -33,6 +33,8 @@ const elements = {
   detailCoords: document.querySelector("#detailCoords"),
   detailCreated: document.querySelector("#detailCreated"),
   detailNote: document.querySelector("#detailNote"),
+  openAppleMapsButton: document.querySelector("#openAppleMapsButton"),
+  openGoogleMapsButton: document.querySelector("#openGoogleMapsButton"),
   deletePointButton: document.querySelector("#deletePointButton"),
   pointCount: document.querySelector("#pointCount"),
   linkCount: document.querySelector("#linkCount"),
@@ -430,6 +432,35 @@ function renderDetails() {
   }
 }
 
+
+function openSelectedPointInExternalMap(provider) {
+  const point = findPoint(state.selectedPointId);
+  if (!point) {
+    return;
+  }
+
+  const geo = pointGeo(point);
+  const url = externalMapUrl(provider, geo, point.title);
+  const opened = window.open(url, "_blank");
+  if (opened) {
+    opened.opener = null;
+    return;
+  }
+
+  window.location.href = url;
+}
+
+function externalMapUrl(provider, geo, title) {
+  const lat = formatCoordinate(geo.lat);
+  const lng = formatCoordinate(geo.lng);
+  const label = encodeURIComponent(title || "GRID ATLAS Point");
+
+  if (provider === "apple") {
+    return `https://maps.apple.com/?ll=${lat},${lng}&q=${label}`;
+  }
+
+  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+}
 function renderAnalysis() {
   elements.pointCount.textContent = String(state.points.length);
   elements.linkCount.textContent = String(state.links.length);
@@ -1542,6 +1573,8 @@ function bindEvents() {
   elements.routeStartSelect.addEventListener("change", () => setRouteStart(elements.routeStartSelect.value));
   elements.computeRouteButton.addEventListener("click", computeRouteFromSelection);
   elements.clearRouteSelectionButton.addEventListener("click", clearRouteSelection);
+  elements.openAppleMapsButton.addEventListener("click", () => openSelectedPointInExternalMap("apple"));
+  elements.openGoogleMapsButton.addEventListener("click", () => openSelectedPointInExternalMap("google"));
   elements.deletePointButton.addEventListener("click", deleteSelectedPoint);
   elements.exportButton.addEventListener("click", exportWorkspace);
   elements.importButton.addEventListener("click", () => elements.importFile.click());
