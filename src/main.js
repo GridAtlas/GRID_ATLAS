@@ -1296,6 +1296,11 @@ function expandTextCandidates(value) {
 }
 
 function coordinatesFromText(value) {
+  const cardinal = coordinatesFromCardinalText(value);
+  if (cardinal) {
+    return cardinal;
+  }
+
   const fromUrl = coordinatesFromUrl(value);
   if (fromUrl) {
     return fromUrl;
@@ -1319,6 +1324,31 @@ function coordinatesFromText(value) {
   return null;
 }
 
+
+function coordinatesFromCardinalText(value) {
+  const latFirst = value.match(/([北南NS])\s*(\d+(?:\.\d+)?)\s*[°º]?\s*[,、，]\s*([東西EW])\s*(\d+(?:\.\d+)?)\s*[°º]?/i);
+  if (latFirst) {
+    return coordinatesFromPair(
+      signedCoordinate(latFirst[2], latFirst[1]),
+      signedCoordinate(latFirst[4], latFirst[3])
+    );
+  }
+
+  const lngFirst = value.match(/([東西EW])\s*(\d+(?:\.\d+)?)\s*[°º]?\s*[,、，]\s*([北南NS])\s*(\d+(?:\.\d+)?)\s*[°º]?/i);
+  if (lngFirst) {
+    return coordinatesFromPair(
+      signedCoordinate(lngFirst[4], lngFirst[3]),
+      signedCoordinate(lngFirst[2], lngFirst[1])
+    );
+  }
+
+  return null;
+}
+
+function signedCoordinate(value, direction) {
+  const sign = /[南西SW]/i.test(direction) ? -1 : 1;
+  return sign * Number.parseFloat(value);
+}
 function coordinatesFromUrl(value) {
   let url;
   try {
