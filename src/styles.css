@@ -34,6 +34,7 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -53,6 +54,7 @@ button:hover {
 
 button:focus-visible,
 input:focus-visible,
+select:focus-visible,
 textarea:focus-visible {
   outline: 3px solid rgb(233 95 26 / 0.28);
   outline-offset: 2px;
@@ -232,6 +234,7 @@ dt,
 }
 
 input,
+select,
 textarea {
   width: 100%;
   border: 1px solid var(--line);
@@ -379,6 +382,72 @@ textarea {
   height: 34px;
   min-height: 34px;
   padding: 0;
+}
+
+
+.panel-count {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.route-start-label {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+
+.route-summary {
+  margin-top: 12px;
+  padding: 10px;
+  border-left: 4px solid #5a4aa0;
+  background: rgb(90 74 160 / 0.08);
+  border-radius: 6px;
+  color: #473985;
+  overflow-wrap: anywhere;
+}
+
+.route-list {
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  list-style: none;
+}
+
+.route-list li {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.route-list .route-step-number {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #5a4aa0;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.route-list strong {
+  display: block;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.route-list span:last-child,
+.route-list small {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 @media (max-width: 860px) {

@@ -37,6 +37,12 @@ const elements = {
   longestDistance: document.querySelector("#longestDistance"),
   measureResult: document.querySelector("#measureResult"),
   linkList: document.querySelector("#linkList"),
+  routeSelectedCount: document.querySelector("#routeSelectedCount"),
+  routeStartSelect: document.querySelector("#routeStartSelect"),
+  computeRouteButton: document.querySelector("#computeRouteButton"),
+  clearRouteSelectionButton: document.querySelector("#clearRouteSelectionButton"),
+  routeSummary: document.querySelector("#routeSummary"),
+  routeList: document.querySelector("#routeList"),
   exportButton: document.querySelector("#exportButton"),
   importButton: document.querySelector("#importButton"),
   importFile: document.querySelector("#importFile"),
@@ -52,6 +58,9 @@ const state = {
   pendingLinkPointId: null,
   measureStartPointId: null,
   measureResult: null,
+  routeSelectionIds: [],
+  routeStartPointId: null,
+  routeResult: null,
   pendingGeo: null,
   viewport: {
     x: DEFAULT_CENTER.x,
@@ -95,6 +104,9 @@ function applyWorkspace(workspace) {
   state.pendingLinkPointId = null;
   state.measureStartPointId = null;
   state.measureResult = null;
+  state.routeSelectionIds = [];
+  state.routeStartPointId = null;
+  state.routeResult = null;
   state.pendingGeo = null;
 }
 
@@ -255,21 +267,83 @@ function drawLinks() {
   }
 }
 
+function drawRouteResult() {
+  const points = routeResultPoints();
+  if (points.length < 2) {
+    return;
+  }
+
+  context.save();
+  context.beginPath();
+  points.forEach((point, index) => {
+    const screen = worldToScreen(point);
+    if (index === 0) {
+      context.moveTo(screen.x, screen.y);
+    } else {
+      context.lineTo(screen.x, screen.y);
+    }
+  });
+  context.strokeStyle = "#5a4aa0";
+  context.lineWidth = 3.2;
+  context.setLineDash([10, 7]);
+  context.stroke();
+  context.restore();
+}
+
 function drawPoints() {
   for (const point of state.points) {
     const screen = worldToScreen(point);
     const isSelected = point.id === state.selectedPointId;
     const isPending = point.id === state.pendingLinkPointId || point.id === state.measureStartPointId;
-
+    const shouldShowRouteSelection = state.mode === "route" || Boolean(state.routeResult);
+    const isRouteSelected = shouldShowRouteSelection && state.routeSelectionIds.includes(point.id);
+    const isRouteStart = shouldShowRouteSelection && state.routeStartPointId === point.id;
     context.beginPath();
     context.arc(screen.x, screen.y, POINT_RADIUS, 0, Math.PI * 2);
     context.fillStyle = "#e95f1a";
     context.fill();
 
-    context.lineWidth = isSelected || isPending ? 4 : 2;
-    context.strokeStyle = isPending ? "#116c6d" : isSelected ? "#2e7d32" : "#ffffff";
+    context.lineWidth = isSelected || isPending || isRouteSelected ? 4 : 2;
+    context.strokeStyle = isRouteStart
+      ? "#5a4aa0"
+      : isRouteSelected
+        ? "#7b68c7"
+        : isPending
+          ? "#116c6d"
+          : isSelected
+            ? "#2e7d32"
+            : "#ffffff";
     context.stroke();
   }
+}
+
+function drawRouteBadges() {
+  const ids = state.routeResult?.pointIds?.length
+    ? state.routeResult.pointIds
+    : state.mode === "route"
+      ? state.routeSelectionIds
+      : [];
+  ids.forEach((pointId, index) => {
+    const point = findPoint(pointId);
+    if (!point) {
+      return;
+    }
+
+    const screen = worldToScreen(point);
+    const label = String(index + 1);
+    context.beginPath();
+    context.arc(screen.x + 12, screen.y - 12, 9, 0, Math.PI * 2);
+    context.fillStyle = index === 0 ? "#5a4aa0" : "#ffffff";
+    context.fill();
+    context.lineWidth = 2;
+    context.strokeStyle = "#5a4aa0";
+    context.stroke();
+    context.fillStyle = index === 0 ? "#ffffff" : "#5a4aa0";
+    context.font = "700 11px system-ui, sans-serif";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(label, screen.x + 12, screen.y - 12);
+  });
 }
 
 function draw() {
@@ -277,13 +351,16 @@ function draw() {
   context.clearRect(0, 0, size.width, size.height);
   drawGrid(size.width, size.height);
   drawLinks();
+  drawRouteResult();
   drawPoints();
+  drawRouteBadges();
 }
 
 function render() {
   draw();
   renderDetails();
   renderAnalysis();
+  renderRoute();
   renderStatus();
   renderModeButtons();
 }
@@ -293,7 +370,8 @@ function renderStatus() {
     inspect: "選択",
     add: "登録",
     link: "接続",
-    measure: "計測"
+    measure: "計測",
+    route: "巡回"
   }[state.mode];
 
   let extra = "";
@@ -304,6 +382,8 @@ function renderStatus() {
     extra = ` | 接続元: ${pendingLink.title}`;
   } else if (pendingMeasure) {
     extra = ` | 計測元: ${pendingMeasure.title}`;
+  } else if (state.mode === "route" && state.routeSelectionIds.length > 0) {
+    extra = ` | 候補: ${state.routeSelectionIds.length}点`;
   }
 
   elements.statusLine.value = `${modeLabel} | ${state.points.length}点 | ${state.links.length}線 | 格子 ${formatDistance(chooseGridStep())}${extra}`;
@@ -405,6 +485,75 @@ function renderAnalysis() {
   }
 }
 
+
+function renderRoute() {
+  normalizeRouteSelection();
+  const selectedPoints = selectedRoutePoints();
+  elements.routeSelectedCount.textContent = `${selectedPoints.length}点`;
+  elements.routeStartSelect.replaceChildren();
+
+  if (selectedPoints.length === 0) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "未選択";
+    elements.routeStartSelect.append(option);
+    elements.routeStartSelect.disabled = true;
+    elements.computeRouteButton.disabled = true;
+    elements.clearRouteSelectionButton.disabled = true;
+    elements.routeSummary.textContent = "巡回モードで地点を選択";
+    elements.routeList.replaceChildren();
+    return;
+  }
+
+  elements.routeStartSelect.disabled = false;
+  elements.computeRouteButton.disabled = selectedPoints.length < 2;
+  elements.clearRouteSelectionButton.disabled = false;
+
+  if (!state.routeStartPointId || !state.routeSelectionIds.includes(state.routeStartPointId)) {
+    state.routeStartPointId = state.routeSelectionIds[0] ?? null;
+  }
+
+  for (const point of selectedPoints) {
+    const option = document.createElement("option");
+    option.value = point.id;
+    option.textContent = point.title;
+    elements.routeStartSelect.append(option);
+  }
+
+  elements.routeStartSelect.value = state.routeStartPointId ?? "";
+  elements.routeList.replaceChildren();
+
+  if (!state.routeResult) {
+    elements.routeSummary.textContent = selectedPoints.length < 2
+      ? "2点以上を選択すると順番を計算"
+      : "スタート地点を選んで最適順を計算";
+    return;
+  }
+
+  const method = state.routeResult.exact ? "厳密" : "近似";
+  elements.routeSummary.textContent = `${method}計算 | ${state.routeResult.pointIds.length}点 | 合計 ${formatDistance(state.routeResult.totalDistance)}`;
+
+  const routePoints = routeResultPoints();
+  routePoints.forEach((point, index) => {
+    const item = document.createElement("li");
+    const number = document.createElement("span");
+    number.className = "route-step-number";
+    number.textContent = String(index + 1);
+
+    const text = document.createElement("div");
+    const title = document.createElement("strong");
+    const segment = document.createElement("small");
+    title.textContent = point.title;
+    segment.textContent = index === 0 ? "スタート" : `前地点から ${formatDistance(state.routeResult.segmentDistances[index - 1])}`;
+    text.append(title, segment);
+
+    const cumulative = document.createElement("span");
+    cumulative.textContent = index === 0 ? "0 m" : formatDistance(sumDistances(state.routeResult.segmentDistances.slice(0, index)));
+
+    item.append(number, text, cumulative);
+    elements.routeList.append(item);
+  });
+}
 function findPoint(id) {
   return findPointIn(id, state.points);
 }
@@ -509,6 +658,13 @@ function handleCanvasClick(screenPoint) {
     return;
   }
 
+  if (state.mode === "route") {
+    if (nearest) {
+      handleRoutePoint(nearest);
+    }
+    return;
+  }
+
   if (!nearest) {
     state.selectedPointId = null;
     render();
@@ -584,6 +740,227 @@ function handleMeasurePoint(point) {
   render();
 }
 
+
+function handleRoutePoint(point) {
+  const exists = state.routeSelectionIds.includes(point.id);
+  state.routeSelectionIds = exists
+    ? state.routeSelectionIds.filter((id) => id !== point.id)
+    : [...state.routeSelectionIds, point.id];
+
+  if (!state.routeSelectionIds.includes(state.routeStartPointId)) {
+    state.routeStartPointId = exists ? state.routeSelectionIds[0] ?? null : point.id;
+  }
+
+  state.routeResult = null;
+  state.selectedPointId = point.id;
+  render();
+}
+
+function setRouteStart(pointId) {
+  if (!state.routeSelectionIds.includes(pointId)) {
+    return;
+  }
+
+  state.routeStartPointId = pointId;
+  state.routeResult = null;
+  render();
+}
+
+function clearRouteSelection() {
+  state.routeSelectionIds = [];
+  state.routeStartPointId = null;
+  state.routeResult = null;
+  render();
+}
+
+function computeRouteFromSelection() {
+  normalizeRouteSelection();
+  const selectedPoints = selectedRoutePoints();
+
+  if (selectedPoints.length < 2) {
+    state.routeResult = null;
+    render();
+    return;
+  }
+
+  if (!state.routeStartPointId || !state.routeSelectionIds.includes(state.routeStartPointId)) {
+    state.routeStartPointId = selectedPoints[0].id;
+  }
+
+  state.routeResult = optimizeVisitOrder(selectedPoints, state.routeStartPointId);
+  render();
+}
+
+function normalizeRouteSelection() {
+  const validIds = new Set(state.points.map((point) => point.id));
+  const uniqueIds = [];
+
+  for (const id of state.routeSelectionIds) {
+    if (validIds.has(id) && !uniqueIds.includes(id)) {
+      uniqueIds.push(id);
+    }
+  }
+
+  state.routeSelectionIds = uniqueIds;
+
+  if (!state.routeSelectionIds.includes(state.routeStartPointId)) {
+    state.routeStartPointId = state.routeSelectionIds[0] ?? null;
+    state.routeResult = null;
+  }
+
+  if (state.routeResult && state.routeResult.pointIds.some((id) => !state.routeSelectionIds.includes(id))) {
+    state.routeResult = null;
+  }
+}
+
+function selectedRoutePoints() {
+  return state.routeSelectionIds.map(findPoint).filter(Boolean);
+}
+
+function routeResultPoints() {
+  return state.routeResult?.pointIds?.map(findPoint).filter(Boolean) ?? [];
+}
+
+function optimizeVisitOrder(points, startPointId) {
+  const startIndex = Math.max(0, points.findIndex((point) => point.id === startPointId));
+  const orderedPoints = [points[startIndex], ...points.filter((_, index) => index !== startIndex)];
+  const distances = buildDistanceMatrix(orderedPoints);
+  const result = orderedPoints.length <= 12
+    ? optimizeExact(distances)
+    : optimizeHeuristic(distances);
+  const routePoints = result.path.map((index) => orderedPoints[index]);
+  const segmentDistances = routePoints.slice(1).map((point, index) => distanceBetween(routePoints[index], point));
+
+  return {
+    pointIds: routePoints.map((point) => point.id),
+    totalDistance: sumDistances(segmentDistances),
+    segmentDistances,
+    exact: result.exact
+  };
+}
+
+function buildDistanceMatrix(points) {
+  return points.map((from) => points.map((to) => (from.id === to.id ? 0 : distanceBetween(from, to))));
+}
+
+function optimizeExact(distances) {
+  const count = distances.length;
+  const size = 1 << count;
+  const dp = Array.from({ length: size }, () => Array(count).fill(Infinity));
+  const parent = Array.from({ length: size }, () => Array(count).fill(-1));
+  dp[1][0] = 0;
+
+  for (let mask = 1; mask < size; mask += 1) {
+    if ((mask & 1) === 0) {
+      continue;
+    }
+
+    for (let last = 0; last < count; last += 1) {
+      const current = dp[mask][last];
+      if (!Number.isFinite(current)) {
+        continue;
+      }
+
+      for (let next = 1; next < count; next += 1) {
+        if ((mask & (1 << next)) !== 0) {
+          continue;
+        }
+
+        const nextMask = mask | (1 << next);
+        const candidate = current + distances[last][next];
+        if (candidate < dp[nextMask][next]) {
+          dp[nextMask][next] = candidate;
+          parent[nextMask][next] = last;
+        }
+      }
+    }
+  }
+
+  const fullMask = size - 1;
+  let bestLast = 0;
+  let bestDistance = Infinity;
+  for (let last = 0; last < count; last += 1) {
+    if (dp[fullMask][last] < bestDistance) {
+      bestDistance = dp[fullMask][last];
+      bestLast = last;
+    }
+  }
+
+  const path = [];
+  let mask = fullMask;
+  let current = bestLast;
+  while (current !== -1) {
+    path.push(current);
+    const previous = parent[mask][current];
+    mask ^= 1 << current;
+    current = previous;
+  }
+
+  return {
+    path: path.reverse(),
+    exact: true
+  };
+}
+
+function optimizeHeuristic(distances) {
+  const count = distances.length;
+  const unvisited = new Set(Array.from({ length: count - 1 }, (_, index) => index + 1));
+  const path = [0];
+
+  while (unvisited.size > 0) {
+    const last = path[path.length - 1];
+    let best = null;
+    let bestDistance = Infinity;
+
+    for (const candidate of unvisited) {
+      if (distances[last][candidate] < bestDistance) {
+        best = candidate;
+        bestDistance = distances[last][candidate];
+      }
+    }
+
+    path.push(best);
+    unvisited.delete(best);
+  }
+
+  improveRouteWithTwoOpt(path, distances);
+
+  return {
+    path,
+    exact: false
+  };
+}
+
+function improveRouteWithTwoOpt(path, distances) {
+  let improved = true;
+
+  while (improved) {
+    improved = false;
+
+    for (let start = 1; start < path.length - 1; start += 1) {
+      for (let end = start + 1; end < path.length; end += 1) {
+        const before = routeEdgeCost(path, distances, start, end);
+        const reversed = [...path.slice(0, start), ...path.slice(start, end + 1).reverse(), ...path.slice(end + 1)];
+        const after = routeEdgeCost(reversed, distances, start, end);
+
+        if (after + 0.000001 < before) {
+          path.splice(0, path.length, ...reversed);
+          improved = true;
+        }
+      }
+    }
+  }
+}
+
+function routeEdgeCost(path, distances, start, end) {
+  const beforeStart = distances[path[start - 1]][path[start]];
+  const afterEnd = end + 1 < path.length ? distances[path[end]][path[end + 1]] : 0;
+  return beforeStart + afterEnd;
+}
+
+function sumDistances(distances) {
+  return distances.reduce((sum, distance) => sum + distance, 0);
+}
 function zoomAt(screenPoint, factor) {
   const before = screenToWorld(screenPoint);
   state.viewport.scale = clampScale(state.viewport.scale * factor);
@@ -859,6 +1236,9 @@ function clearWorkspace() {
   state.pendingLinkPointId = null;
   state.measureStartPointId = null;
   state.measureResult = null;
+  state.routeSelectionIds = [];
+  state.routeStartPointId = null;
+  state.routeResult = null;
   localStorage.removeItem(STORAGE_KEY);
   render();
 }
@@ -879,6 +1259,9 @@ function deleteSelectedPoint() {
   state.selectedPointId = null;
   state.pendingLinkPointId = state.pendingLinkPointId === point.id ? null : state.pendingLinkPointId;
   state.measureStartPointId = state.measureStartPointId === point.id ? null : state.measureStartPointId;
+  state.routeSelectionIds = state.routeSelectionIds.filter((id) => id !== point.id);
+  state.routeStartPointId = state.routeStartPointId === point.id ? state.routeSelectionIds[0] ?? null : state.routeStartPointId;
+  state.routeResult = null;
   persistWorkspace();
   render();
 }
@@ -900,6 +1283,9 @@ function bindEvents() {
   elements.zoomOutButton.addEventListener("click", () => zoomAt({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 0.8));
   elements.fitButton.addEventListener("click", fitToPoints);
   elements.originButton.addEventListener("click", centerOnSelectedPoint);
+  elements.routeStartSelect.addEventListener("change", () => setRouteStart(elements.routeStartSelect.value));
+  elements.computeRouteButton.addEventListener("click", computeRouteFromSelection);
+  elements.clearRouteSelectionButton.addEventListener("click", clearRouteSelection);
   elements.deletePointButton.addEventListener("click", deleteSelectedPoint);
   elements.exportButton.addEventListener("click", exportWorkspace);
   elements.importButton.addEventListener("click", () => elements.importFile.click());

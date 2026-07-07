@@ -6,8 +6,8 @@
     <meta name="theme-color" content="#e95f1a">
     <title>GRID ATLAS</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="stylesheet" href="src/styles.css?v=2">
-    <script src="src/main.js?v=2" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=3">
+    <script src="src/main.js?v=3" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -32,6 +32,10 @@
           <button class="mode-button" type="button" data-mode="measure" aria-pressed="false" title="計測">
             <span aria-hidden="true">↔</span>
             <span>計測</span>
+          </button>
+          <button class="mode-button" type="button" data-mode="route" aria-pressed="false" title="巡回">
+            <span aria-hidden="true">⤨</span>
+            <span>巡回</span>
           </button>
         </nav>
       </header>
@@ -140,6 +144,22 @@
             <div id="linkList" class="link-list"></div>
           </section>
 
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>巡回ルート</h2>
+              <span id="routeSelectedCount" class="panel-count">0点</span>
+            </div>
+            <label class="route-start-label">
+              <span>スタート地点</span>
+              <select id="routeStartSelect"></select>
+            </label>
+            <div class="button-row">
+              <button id="computeRouteButton" type="button">最適順</button>
+              <button id="clearRouteSelectionButton" type="button">解除</button>
+            </div>
+            <div id="routeSummary" class="route-summary">巡回モードで地点を選択</div>
+            <ol id="routeList" class="route-list"></ol>
+          </section>
           <section class="panel">
             <h2>データ</h2>
             <div class="button-row">
