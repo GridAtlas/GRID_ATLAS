@@ -1,5 +1,9 @@
-const STORAGE_KEY = "grid-atlas-workspace-v1";
+const STORAGE_KEY = "grid-atlas-workspace-v2";
 const POINT_RADIUS = 8;
+const EARTH_RADIUS_METERS = 6371008.8;
+const MERCATOR_RADIUS = 6378137;
+const MAX_MERCATOR_LAT = 85.05112878;
+const DEFAULT_CENTER = projectLatLng(35.681236, 139.767125);
 
 const canvas = document.querySelector("#gridCanvas");
 const context = canvas.getContext("2d");
@@ -9,8 +13,8 @@ const elements = {
   statusLine: document.querySelector("#statusLine"),
   pointForm: document.querySelector("#pointForm"),
   pointTitle: document.querySelector("#pointTitle"),
-  pointX: document.querySelector("#pointX"),
-  pointY: document.querySelector("#pointY"),
+  pointLat: document.querySelector("#pointLat"),
+  pointLng: document.querySelector("#pointLng"),
   pointPhoto: document.querySelector("#pointPhoto"),
   pointNote: document.querySelector("#pointNote"),
   useCenterButton: document.querySelector("#useCenterButton"),
@@ -40,8 +44,7 @@ const elements = {
 };
 
 const state = {
-  version: 1,
-  origin: null,
+  version: 2,
   points: [],
   links: [],
   mode: "inspect",
@@ -51,9 +54,9 @@ const state = {
   measureResult: null,
   pendingGeo: null,
   viewport: {
-    x: 0,
-    y: 0,
-    scale: 1
+    x: DEFAULT_CENTER.x,
+    y: DEFAULT_CENTER.y,
+    scale: 0.7
   },
   pointer: null
 };
@@ -67,26 +70,80 @@ function createId() {
 }
 
 function loadWorkspace() {
-  const raw = localStorage.getItem(STORAGE_KEY);
+  const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem("grid-atlas-workspace-v1");
   if (!raw) {
     return;
   }
 
   try {
-    const parsed = JSON.parse(raw);
-    state.version = parsed.version ?? 1;
-    state.origin = parsed.origin ?? null;
-    state.points = Array.isArray(parsed.points) ? parsed.points : [];
-    state.links = Array.isArray(parsed.links) ? parsed.links : [];
+    applyWorkspace(JSON.parse(raw));
   } catch {
     localStorage.removeItem(STORAGE_KEY);
   }
 }
 
+function applyWorkspace(workspace) {
+  const origin = validGeo(workspace.origin) ? workspace.origin : null;
+  state.version = 2;
+  state.points = Array.isArray(workspace.points)
+    ? workspace.points.map((point) => normalizePoint(point, origin)).filter(Boolean)
+    : [];
+  state.links = Array.isArray(workspace.links)
+    ? workspace.links.filter((link) => findPointIn(link.a, state.points) && findPointIn(link.b, state.points))
+    : [];
+  state.selectedPointId = null;
+  state.pendingLinkPointId = null;
+  state.measureStartPointId = null;
+  state.measureResult = null;
+  state.pendingGeo = null;
+}
+
+function normalizePoint(point, origin) {
+  const geo = pointGeoFromAny(point, origin);
+  if (!geo) {
+    return null;
+  }
+
+  const projected = projectLatLng(geo.lat, geo.lng);
+  return {
+    id: point.id || createId(),
+    x: projected.x,
+    y: projected.y,
+    title: typeof point.title === "string" && point.title.trim() ? point.title.trim() : "Point",
+    note: typeof point.note === "string" ? point.note : "",
+    photo: typeof point.photo === "string" ? point.photo : "",
+    photoName: typeof point.photoName === "string" ? point.photoName : "",
+    geo,
+    createdAt: point.createdAt || new Date().toISOString()
+  };
+}
+
+function pointGeoFromAny(point, origin) {
+  if (validGeo(point.geo)) {
+    return normalizeGeo(point.geo);
+  }
+
+  if (Number.isFinite(point.lat) && Number.isFinite(point.lng)) {
+    return normalizeGeo({ lat: point.lat, lng: point.lng, accuracy: point.accuracy });
+  }
+
+  if (origin && Number.isFinite(point.x) && Number.isFinite(point.y)) {
+    const lat = origin.lat + point.y / 111320;
+    const lng = origin.lng + point.x / (111320 * Math.cos((origin.lat * Math.PI) / 180));
+    return normalizeGeo({ lat, lng });
+  }
+
+  if (Number.isFinite(point.x) && Number.isFinite(point.y)) {
+    return normalizeGeo(unprojectMercator(point.x, point.y));
+  }
+
+  return null;
+}
+
 function workspaceSnapshot() {
   return {
-    version: 1,
-    origin: state.origin,
+    version: 2,
+    projection: "web-mercator",
     points: state.points,
     links: state.links
   };
@@ -114,7 +171,7 @@ function canvasSize() {
 }
 
 function clampScale(scale) {
-  return Math.min(18, Math.max(0.08, scale));
+  return Math.min(24, Math.max(0.000006, scale));
 }
 
 function worldToScreen(point) {
@@ -134,8 +191,13 @@ function screenToWorld(point) {
 }
 
 function chooseGridStep() {
-  const candidates = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
-  return candidates.find((step) => step * state.viewport.scale >= 48) ?? 10000;
+  const candidates = [
+    1, 2, 5, 10, 20, 50, 100, 200, 500,
+    1000, 2000, 5000, 10000, 20000, 50000,
+    100000, 200000, 500000, 1000000, 2000000,
+    5000000, 10000000
+  ];
+  return candidates.find((step) => step * state.viewport.scale >= 48) ?? 20000000;
 }
 
 function drawGrid(width, height) {
@@ -146,7 +208,6 @@ function drawGrid(width, height) {
 
   drawGridLines(topLeft, bottomRight, minorStep, "#edf0e8", 1);
   drawGridLines(topLeft, bottomRight, majorStep, "#d8ded1", 1.25);
-  drawAxisLine(width, height);
 }
 
 function drawGridLines(topLeft, bottomRight, step, color, lineWidth) {
@@ -154,6 +215,7 @@ function drawGridLines(topLeft, bottomRight, step, color, lineWidth) {
   const maxX = Math.ceil(bottomRight.x / step) * step;
   const minY = Math.floor(bottomRight.y / step) * step;
   const maxY = Math.ceil(topLeft.y / step) * step;
+  const size = canvasSize();
 
   context.beginPath();
   context.strokeStyle = color;
@@ -162,33 +224,13 @@ function drawGridLines(topLeft, bottomRight, step, color, lineWidth) {
   for (let x = minX; x <= maxX; x += step) {
     const screen = worldToScreen({ x, y: 0 });
     context.moveTo(screen.x, 0);
-    context.lineTo(screen.x, canvasSize().height);
+    context.lineTo(screen.x, size.height);
   }
 
   for (let y = minY; y <= maxY; y += step) {
     const screen = worldToScreen({ x: 0, y });
     context.moveTo(0, screen.y);
-    context.lineTo(canvasSize().width, screen.y);
-  }
-
-  context.stroke();
-}
-
-function drawAxisLine(width, height) {
-  const origin = worldToScreen({ x: 0, y: 0 });
-
-  context.beginPath();
-  context.strokeStyle = "#b8c4b2";
-  context.lineWidth = 1.4;
-
-  if (origin.x >= 0 && origin.x <= width) {
-    context.moveTo(origin.x, 0);
-    context.lineTo(origin.x, height);
-  }
-
-  if (origin.y >= 0 && origin.y <= height) {
-    context.moveTo(0, origin.y);
-    context.lineTo(width, origin.y);
+    context.lineTo(size.width, screen.y);
   }
 
   context.stroke();
@@ -247,7 +289,6 @@ function render() {
 }
 
 function renderStatus() {
-  const scaleLabel = state.viewport.scale.toFixed(state.viewport.scale >= 1 ? 1 : 2);
   const modeLabel = {
     inspect: "選択",
     add: "登録",
@@ -265,7 +306,7 @@ function renderStatus() {
     extra = ` | 計測元: ${pendingMeasure.title}`;
   }
 
-  elements.statusLine.value = `${modeLabel} | ${state.points.length}点 | ${state.links.length}線 | ${scaleLabel}px/m${extra}`;
+  elements.statusLine.value = `${modeLabel} | ${state.points.length}点 | ${state.links.length}線 | 格子 ${formatDistance(chooseGridStep())}${extra}`;
 }
 
 function renderModeButtons() {
@@ -288,8 +329,10 @@ function renderDetails() {
     return;
   }
 
+  const geo = pointGeo(point);
+  const accuracy = Number.isFinite(geo.accuracy) ? ` / ±${formatDistance(geo.accuracy)}` : "";
   elements.detailTitle.textContent = point.title;
-  elements.detailCoords.textContent = `${formatNumber(point.x)} m, ${formatNumber(point.y)} m`;
+  elements.detailCoords.textContent = `${formatCoordinate(geo.lat)}, ${formatCoordinate(geo.lng)}${accuracy}`;
   elements.detailCreated.textContent = formatDate(point.createdAt);
   elements.detailNote.textContent = point.note || "なし";
 
@@ -319,8 +362,8 @@ function renderAnalysis() {
   const total = linkDistances.reduce((sum, item) => sum + item.distance, 0);
   const longest = linkDistances.reduce((max, item) => Math.max(max, item.distance), 0);
 
-  elements.totalDistance.textContent = formatDistance(total);
-  elements.longestDistance.textContent = formatDistance(longest);
+  elements.totalDistance.textContent = linkDistances.length ? formatDistance(total) : "-";
+  elements.longestDistance.textContent = linkDistances.length ? formatDistance(longest) : "-";
   elements.measureResult.textContent = state.measureResult
     ? `${state.measureResult.a.title} - ${state.measureResult.b.title}: ${formatDistance(state.measureResult.distance)}`
     : "未計測";
@@ -363,7 +406,11 @@ function renderAnalysis() {
 }
 
 function findPoint(id) {
-  return state.points.find((point) => point.id === id) ?? null;
+  return findPointIn(id, state.points);
+}
+
+function findPointIn(id, points) {
+  return points.find((point) => point.id === id) ?? null;
 }
 
 function findNearestPoint(screenPoint) {
@@ -383,25 +430,34 @@ function findNearestPoint(screenPoint) {
 }
 
 function distanceBetween(a, b) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
+  const geoA = pointGeo(a);
+  const geoB = pointGeo(b);
+  const lat1 = toRadians(geoA.lat);
+  const lat2 = toRadians(geoB.lat);
+  const dLat = toRadians(geoB.lat - geoA.lat);
+  const dLng = toRadians(geoB.lng - geoA.lng);
+  const haversine = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_METERS * Math.asin(Math.min(1, Math.sqrt(haversine)));
 }
 
 function formatDistance(distance) {
-  if (!Number.isFinite(distance) || distance <= 0) {
-    return "0 m";
+  if (!Number.isFinite(distance) || distance < 0) {
+    return "-";
   }
 
   if (distance < 1000) {
     return `${distance.toFixed(1)} m`;
   }
 
-  return `${(distance / 1000).toFixed(2)} km`;
+  if (distance < 1000000) {
+    return `${(distance / 1000).toFixed(2)} km`;
+  }
+
+  return `${Math.round(distance / 1000).toLocaleString("ja-JP")} km`;
 }
 
-function formatNumber(value) {
-  return Number(value).toLocaleString("ja-JP", {
-    maximumFractionDigits: 1
-  });
+function formatCoordinate(value) {
+  return Number(value).toFixed(6);
 }
 
 function formatDate(value) {
@@ -427,8 +483,13 @@ function setMode(mode) {
 }
 
 function fillFormFromWorld(point) {
-  elements.pointX.value = point.x.toFixed(1);
-  elements.pointY.value = point.y.toFixed(1);
+  fillFormFromGeo(unprojectMercator(point.x, point.y));
+}
+
+function fillFormFromGeo(geo) {
+  const normalized = normalizeGeo(geo);
+  elements.pointLat.value = normalized.lat.toFixed(6);
+  elements.pointLng.value = normalized.lng.toFixed(6);
 }
 
 function selectPoint(pointId) {
@@ -441,6 +502,7 @@ function handleCanvasClick(screenPoint) {
   const world = screenToWorld(screenPoint);
 
   if (state.mode === "add") {
+    state.pendingGeo = null;
     fillFormFromWorld(world);
     elements.pointTitle.focus();
     renderStatus();
@@ -533,9 +595,9 @@ function zoomAt(screenPoint, factor) {
 
 function fitToPoints() {
   if (state.points.length === 0) {
-    state.viewport.x = 0;
-    state.viewport.y = 0;
-    state.viewport.scale = 1;
+    state.viewport.x = DEFAULT_CENTER.x;
+    state.viewport.y = DEFAULT_CENTER.y;
+    state.viewport.scale = 0.7;
     render();
     return;
   }
@@ -547,8 +609,8 @@ function fitToPoints() {
   const maxX = Math.max(...xs);
   const minY = Math.min(...ys);
   const maxY = Math.max(...ys);
-  const spanX = Math.max(80, maxX - minX);
-  const spanY = Math.max(80, maxY - minY);
+  const spanX = Math.max(1000, maxX - minX);
+  const spanY = Math.max(1000, maxY - minY);
   const scaleX = (size.width - 100) / spanX;
   const scaleY = (size.height - 100) / spanY;
 
@@ -556,6 +618,20 @@ function fitToPoints() {
   state.viewport.y = (minY + maxY) / 2;
   state.viewport.scale = clampScale(Math.min(scaleX, scaleY));
   render();
+}
+
+function centerOnSelectedPoint() {
+  const selected = findPoint(state.selectedPointId);
+
+  if (selected) {
+    state.viewport.x = selected.x;
+    state.viewport.y = selected.y;
+    state.viewport.scale = Math.max(state.viewport.scale, 0.7);
+    render();
+    return;
+  }
+
+  fitToPoints();
 }
 
 function getCanvasPoint(event) {
@@ -569,14 +645,20 @@ function getCanvasPoint(event) {
 async function submitPoint(event) {
   event.preventDefault();
 
-  const x = Number.parseFloat(elements.pointX.value);
-  const y = Number.parseFloat(elements.pointY.value);
+  const lat = Number.parseFloat(elements.pointLat.value);
+  const lng = Number.parseFloat(elements.pointLng.value);
 
-  if (!Number.isFinite(x) || !Number.isFinite(y)) {
-    elements.statusLine.value = "座標エラー";
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    elements.statusLine.value = "緯度経度を入力してください";
     return;
   }
 
+  const geo = normalizeGeo({
+    lat,
+    lng,
+    accuracy: isSameGeo(state.pendingGeo, { lat, lng }) ? state.pendingGeo.accuracy : undefined
+  });
+  const projected = projectLatLng(geo.lat, geo.lng);
   const file = elements.pointPhoto.files[0] ?? null;
   const photo = file ? await readPhoto(file) : null;
   const createdAt = new Date().toISOString();
@@ -584,13 +666,13 @@ async function submitPoint(event) {
 
   const point = {
     id: createId(),
-    x,
-    y,
+    x: projected.x,
+    y: projected.y,
     title: elements.pointTitle.value.trim() || fallbackTitle,
     note: elements.pointNote.value.trim(),
     photo,
     photoName: file?.name ?? "",
-    geo: state.pendingGeo,
+    geo,
     createdAt
   };
 
@@ -598,7 +680,8 @@ async function submitPoint(event) {
   state.selectedPointId = point.id;
   state.pendingGeo = null;
   elements.pointForm.reset();
-  fillFormFromWorld({ x: state.viewport.x, y: state.viewport.y });
+  state.viewport.x = point.x;
+  state.viewport.y = point.y;
   persistWorkspace();
   render();
 }
@@ -647,27 +730,21 @@ function useCurrentLocation() {
 
   navigator.geolocation.getCurrentPosition(
     (position) => {
-      const geo = {
+      const geo = normalizeGeo({
         lat: position.coords.latitude,
         lng: position.coords.longitude,
         accuracy: position.coords.accuracy
-      };
+      });
+      const projected = projectLatLng(geo.lat, geo.lng);
 
-      if (!state.origin) {
-        state.origin = {
-          lat: geo.lat,
-          lng: geo.lng,
-          createdAt: new Date().toISOString()
-        };
-      }
-
-      const projected = projectGeoToGrid(geo);
       state.pendingGeo = geo;
-      fillFormFromWorld(projected);
-      persistWorkspace();
+      state.viewport.x = projected.x;
+      state.viewport.y = projected.y;
+      state.viewport.scale = Math.max(state.viewport.scale, 0.7);
+      fillFormFromGeo(geo);
       elements.useLocationButton.disabled = false;
       elements.useLocationButton.textContent = "現在地";
-      renderStatus();
+      render();
     },
     () => {
       elements.statusLine.value = "現在地エラー";
@@ -682,14 +759,61 @@ function useCurrentLocation() {
   );
 }
 
-function projectGeoToGrid(geo) {
-  const origin = state.origin;
-  const latRadians = (origin.lat * Math.PI) / 180;
-
+function projectLatLng(lat, lng) {
+  const safeLat = clampLatitude(lat);
+  const normalizedLng = normalizeLongitude(lng);
+  const latRadians = toRadians(safeLat);
   return {
-    x: (geo.lng - origin.lng) * 111320 * Math.cos(latRadians),
-    y: (geo.lat - origin.lat) * 111320
+    x: MERCATOR_RADIUS * toRadians(normalizedLng),
+    y: MERCATOR_RADIUS * Math.log(Math.tan(Math.PI / 4 + latRadians / 2))
   };
+}
+
+function unprojectMercator(x, y) {
+  const lng = toDegrees(x / MERCATOR_RADIUS);
+  const lat = toDegrees(2 * Math.atan(Math.exp(y / MERCATOR_RADIUS)) - Math.PI / 2);
+  return normalizeGeo({ lat, lng });
+}
+
+function normalizeGeo(geo) {
+  const normalized = {
+    lat: clampLatitude(Number(geo.lat)),
+    lng: normalizeLongitude(Number(geo.lng))
+  };
+
+  if (Number.isFinite(geo.accuracy)) {
+    normalized.accuracy = Number(geo.accuracy);
+  }
+
+  return normalized;
+}
+
+function validGeo(geo) {
+  return Boolean(geo) && Number.isFinite(Number(geo.lat)) && Number.isFinite(Number(geo.lng));
+}
+
+function pointGeo(point) {
+  return validGeo(point.geo) ? normalizeGeo(point.geo) : unprojectMercator(point.x, point.y);
+}
+
+function clampLatitude(lat) {
+  return Math.min(MAX_MERCATOR_LAT, Math.max(-MAX_MERCATOR_LAT, lat));
+}
+
+function normalizeLongitude(lng) {
+  return ((((lng + 180) % 360) + 360) % 360) - 180;
+}
+
+function toRadians(degrees) {
+  return (degrees * Math.PI) / 180;
+}
+
+function toDegrees(radians) {
+  return (radians * 180) / Math.PI;
+}
+
+function isSameGeo(a, b) {
+  return validGeo(a) && validGeo(b) && Math.abs(a.lat - b.lat) < 0.000001 && Math.abs(a.lng - b.lng) < 0.000001;
 }
 
 function exportWorkspace() {
@@ -713,14 +837,7 @@ function importWorkspaceFile(file) {
         throw new Error("Invalid workspace");
       }
 
-      state.version = parsed.version ?? 1;
-      state.origin = parsed.origin ?? null;
-      state.points = parsed.points;
-      state.links = parsed.links;
-      state.selectedPointId = null;
-      state.pendingLinkPointId = null;
-      state.measureStartPointId = null;
-      state.measureResult = null;
+      applyWorkspace(parsed);
       persistWorkspace();
       fitToPoints();
     } catch {
@@ -736,7 +853,6 @@ function clearWorkspace() {
     return;
   }
 
-  state.origin = null;
   state.points = [];
   state.links = [];
   state.selectedPointId = null;
@@ -783,11 +899,7 @@ function bindEvents() {
   elements.zoomInButton.addEventListener("click", () => zoomAt({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 1.25));
   elements.zoomOutButton.addEventListener("click", () => zoomAt({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 0.8));
   elements.fitButton.addEventListener("click", fitToPoints);
-  elements.originButton.addEventListener("click", () => {
-    state.viewport.x = 0;
-    state.viewport.y = 0;
-    render();
-  });
+  elements.originButton.addEventListener("click", centerOnSelectedPoint);
   elements.deletePointButton.addEventListener("click", deleteSelectedPoint);
   elements.exportButton.addEventListener("click", exportWorkspace);
   elements.importButton.addEventListener("click", () => elements.importFile.click());
@@ -866,5 +978,4 @@ function bindEvents() {
 loadWorkspace();
 bindEvents();
 resizeCanvas();
-fillFormFromWorld({ x: state.viewport.x, y: state.viewport.y });
 render();

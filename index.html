@@ -43,7 +43,7 @@
             <button id="zoomInButton" class="icon-button" type="button" title="拡大">＋</button>
             <button id="zoomOutButton" class="icon-button" type="button" title="縮小">−</button>
             <button id="fitButton" class="icon-button" type="button" title="全体表示">□</button>
-            <button id="originButton" class="icon-button" type="button" title="原点">◎</button>
+            <button id="originButton" class="icon-button" type="button" title="選択地点へ">⌾</button>
           </div>
           <output id="statusLine" class="status-line" aria-live="polite"></output>
         </section>
@@ -59,17 +59,17 @@
 
               <div class="coordinate-fields">
                 <label>
-                  <span>X m</span>
-                  <input id="pointX" name="x" type="number" step="0.1" value="0">
+                  <span>緯度</span>
+                  <input id="pointLat" name="lat" type="number" step="0.000001" inputmode="decimal" placeholder="35.681236">
                 </label>
                 <label>
-                  <span>Y m</span>
-                  <input id="pointY" name="y" type="number" step="0.1" value="0">
+                  <span>経度</span>
+                  <input id="pointLng" name="lng" type="number" step="0.000001" inputmode="decimal" placeholder="139.767125">
                 </label>
               </div>
 
               <div class="button-row">
-                <button id="useCenterButton" type="button">中心</button>
+                <button id="useCenterButton" type="button">画面中心</button>
                 <button id="useLocationButton" type="button">現在地</button>
               </div>
 
@@ -101,7 +101,7 @@
                   <dd id="detailTitle"></dd>
                 </div>
                 <div>
-                  <dt>座標</dt>
+                  <dt>緯度経度</dt>
                   <dd id="detailCoords"></dd>
                 </div>
                 <div>
