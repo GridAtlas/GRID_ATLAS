@@ -63,10 +63,11 @@ textarea:focus-visible {
 .app-shell {
   min-height: 100%;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .topbar {
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -99,10 +100,16 @@ textarea:focus-visible {
 }
 
 .modebar {
+  min-width: 0;
   display: flex;
   gap: 8px;
   overflow-x: auto;
   padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.modebar::-webkit-scrollbar {
+  display: none;
 }
 
 .mode-button {
@@ -127,6 +134,7 @@ textarea:focus-visible {
 }
 
 .workspace {
+  min-width: 0;
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 390px;
@@ -495,7 +503,7 @@ textarea {
 
   .workspace {
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(320px, 44vh) auto;
+    grid-template-rows: minmax(320px, 44svh) auto;
   }
 
   .sidebar {
@@ -505,6 +513,21 @@ textarea {
   }
 }
 
+@media (min-width: 861px) {
+  .app-shell {
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+}
+
+@supports (height: 100dvh) {
+  @media (max-width: 860px) {
+    .workspace {
+      grid-template-rows: minmax(320px, 44dvh) auto;
+    }
+  }
+}
 @media (max-width: 480px) {
   .topbar {
     padding: 10px;
@@ -532,4 +555,3 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
-

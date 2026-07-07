@@ -7,6 +7,13 @@ const DEFAULT_CENTER = projectLatLng(35.681236, 139.767125);
 
 const canvas = document.querySelector("#gridCanvas");
 const context = canvas.getContext("2d");
+let canvasMetrics = {
+  width: 0,
+  height: 0,
+  dpr: 1
+};
+let canvasResizeFrame = 0;
+let canvasResizeObserver = null;
 
 const elements = {
   modeButtons: Array.from(document.querySelectorAll(".mode-button")),
@@ -170,20 +177,52 @@ function persistWorkspace() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(workspaceSnapshot()));
 }
 
-function resizeCanvas() {
+function syncCanvasSize() {
   const rect = canvas.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
-  canvas.width = Math.max(1, Math.floor(rect.width * dpr));
-  canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+  const width = Math.max(1, rect.width);
+  const height = Math.max(1, rect.height);
+  const pixelWidth = Math.max(1, Math.round(width * dpr));
+  const pixelHeight = Math.max(1, Math.round(height * dpr));
+
+  canvasMetrics = { width, height, dpr };
+
+  if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+    canvas.width = pixelWidth;
+    canvas.height = pixelHeight;
+  }
+
   context.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function resizeCanvas() {
+  syncCanvasSize();
   draw();
 }
 
+function scheduleCanvasResize() {
+  if (canvasResizeFrame) {
+    return;
+  }
+
+  canvasResizeFrame = window.requestAnimationFrame(() => {
+    canvasResizeFrame = 0;
+    resizeCanvas();
+  });
+}
+
 function canvasSize() {
+  if (canvasMetrics.width > 0 && canvasMetrics.height > 0) {
+    return {
+      width: canvasMetrics.width,
+      height: canvasMetrics.height
+    };
+  }
+
   const rect = canvas.getBoundingClientRect();
   return {
-    width: rect.width,
-    height: rect.height
+    width: Math.max(1, rect.width),
+    height: Math.max(1, rect.height)
   };
 }
 
@@ -362,6 +401,7 @@ function draw() {
 }
 
 function render() {
+  syncCanvasSize();
   draw();
   renderDetails();
   renderAnalysis();
@@ -1005,6 +1045,8 @@ function zoomAt(screenPoint, factor) {
 }
 
 function fitToPoints() {
+  syncCanvasSize();
+
   if (state.points.length === 0) {
     state.viewport.x = DEFAULT_CENTER.x;
     state.viewport.y = DEFAULT_CENTER.y;
@@ -1020,10 +1062,13 @@ function fitToPoints() {
   const maxX = Math.max(...xs);
   const minY = Math.min(...ys);
   const maxY = Math.max(...ys);
-  const spanX = Math.max(1000, maxX - minX);
-  const spanY = Math.max(1000, maxY - minY);
-  const scaleX = (size.width - 100) / spanX;
-  const scaleY = (size.height - 100) / spanY;
+  const padding = Math.min(110, Math.max(34, Math.min(size.width, size.height) * 0.16));
+  const availableWidth = Math.max(64, size.width - padding * 2);
+  const availableHeight = Math.max(64, size.height - padding * 2);
+  const spanX = Math.max(60, maxX - minX);
+  const spanY = Math.max(60, maxY - minY);
+  const scaleX = availableWidth / spanX;
+  const scaleY = availableHeight / spanY;
 
   state.viewport.x = (minX + maxX) / 2;
   state.viewport.y = (minY + maxY) / 2;
@@ -1032,6 +1077,7 @@ function fitToPoints() {
 }
 
 function centerOnSelectedPoint() {
+  syncCanvasSize();
   const selected = findPoint(state.selectedPointId);
 
   if (selected) {
@@ -1093,7 +1139,9 @@ async function submitPoint(event) {
   elements.pointForm.reset();
   state.viewport.x = point.x;
   state.viewport.y = point.y;
+  state.viewport.scale = Math.max(state.viewport.scale, 0.7);
   persistWorkspace();
+  syncCanvasSize();
   render();
 }
 
@@ -1553,7 +1601,18 @@ function deleteSelectedPoint() {
 }
 
 function bindEvents() {
-  window.addEventListener("resize", resizeCanvas);
+  window.addEventListener("resize", scheduleCanvasResize);
+  window.visualViewport?.addEventListener("resize", scheduleCanvasResize);
+  window.visualViewport?.addEventListener("scroll", scheduleCanvasResize);
+
+  if ("ResizeObserver" in window) {
+    canvasResizeObserver = new ResizeObserver(scheduleCanvasResize);
+    canvasResizeObserver.observe(canvas);
+
+    if (canvas.parentElement) {
+      canvasResizeObserver.observe(canvas.parentElement);
+    }
+  }
 
   for (const button of elements.modeButtons) {
     button.addEventListener("click", () => setMode(button.dataset.mode));
