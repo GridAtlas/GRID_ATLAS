@@ -6,8 +6,8 @@
     <meta name="theme-color" content="#e95f1a">
     <title>GRID ATLAS</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="stylesheet" href="src/styles.css?v=3">
-    <script src="src/main.js?v=3" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=4">
+    <script src="src/main.js?v=4" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -91,6 +91,17 @@
             </form>
           </section>
 
+          <section class="panel">
+            <h2>共有から登録</h2>
+            <div class="share-import">
+              <label>
+                <span>共有テキスト</span>
+                <textarea id="shareInput" rows="3" autocomplete="off"></textarea>
+              </label>
+              <button id="parseShareButton" type="button">読み取り</button>
+              <output id="shareImportStatus" class="share-import-status" aria-live="polite"></output>
+            </div>
+          </section>
           <section class="panel">
             <div class="panel-heading">
               <h2>選択地点</h2>

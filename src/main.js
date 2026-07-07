@@ -17,6 +17,9 @@ const elements = {
   pointLng: document.querySelector("#pointLng"),
   pointPhoto: document.querySelector("#pointPhoto"),
   pointNote: document.querySelector("#pointNote"),
+  shareInput: document.querySelector("#shareInput"),
+  parseShareButton: document.querySelector("#parseShareButton"),
+  shareImportStatus: document.querySelector("#shareImportStatus"),
   useCenterButton: document.querySelector("#useCenterButton"),
   useLocationButton: document.querySelector("#useLocationButton"),
   zoomInButton: document.querySelector("#zoomInButton"),
@@ -1193,6 +1196,228 @@ function isSameGeo(a, b) {
   return validGeo(a) && validGeo(b) && Math.abs(a.lat - b.lat) < 0.000001 && Math.abs(a.lng - b.lng) < 0.000001;
 }
 
+
+function parseShareInput() {
+  const result = parseSharedLocationPayload({
+    text: elements.shareInput.value,
+    title: elements.pointTitle.value
+  });
+
+  if (!result) {
+    elements.shareImportStatus.value = shortMapUrlLikely(elements.shareInput.value)
+      ? "短縮URLは展開できません"
+      : "座標を読み取れません";
+    return;
+  }
+
+  applySharedLocationToForm(result, "共有地点を読み取りました");
+}
+
+function handleIncomingShare() {
+  const params = new URLSearchParams(window.location.search);
+  const payload = {
+    title: params.get("share_title") || params.get("title") || "",
+    text: params.get("share_text") || params.get("text") || "",
+    url: params.get("share_url") || params.get("url") || "",
+    lat: params.get("lat") || params.get("latitude") || "",
+    lng: params.get("lng") || params.get("lon") || params.get("longitude") || ""
+  };
+  const hasPayload = Object.values(payload).some((value) => typeof value === "string" && value.trim());
+
+  if (!hasPayload) {
+    return;
+  }
+
+  const result = parseSharedLocationPayload(payload);
+  elements.shareInput.value = [payload.title, payload.text, payload.url].filter(Boolean).join("\n");
+
+  if (!result) {
+    elements.shareImportStatus.value = shortMapUrlLikely(elements.shareInput.value)
+      ? "短縮URLは展開できません"
+      : "共有内容から座標を読み取れません";
+    return;
+  }
+
+  applySharedLocationToForm(result, "共有地点を読み取りました");
+}
+
+function applySharedLocationToForm(result, message) {
+  const geo = normalizeGeo({ lat: result.lat, lng: result.lng });
+  const projected = projectLatLng(geo.lat, geo.lng);
+
+  state.mode = "add";
+  state.pendingGeo = geo;
+  state.viewport.x = projected.x;
+  state.viewport.y = projected.y;
+  state.viewport.scale = Math.max(state.viewport.scale, 0.7);
+  fillFormFromGeo(geo);
+
+  if (result.title && !elements.pointTitle.value.trim()) {
+    elements.pointTitle.value = result.title.slice(0, 80);
+  }
+
+  if (result.note && !elements.pointNote.value.trim()) {
+    elements.pointNote.value = result.note;
+  }
+
+  elements.shareImportStatus.value = `${message}: ${formatCoordinate(geo.lat)}, ${formatCoordinate(geo.lng)}`;
+}
+
+function parseSharedLocationPayload(payload) {
+  const direct = coordinatesFromPair(payload.lat, payload.lng);
+  if (direct) {
+    return withShareMetadata(direct, payload);
+  }
+
+  const candidates = [payload.url, payload.text, payload.title]
+    .filter((value) => typeof value === "string" && value.trim())
+    .flatMap((value) => expandTextCandidates(value));
+
+  for (const candidate of candidates) {
+    const parsed = coordinatesFromText(candidate);
+    if (parsed) {
+      return withShareMetadata(parsed, payload);
+    }
+  }
+
+  return null;
+}
+
+function expandTextCandidates(value) {
+  const decoded = safelyDecode(value);
+  const candidates = [value, decoded];
+  const urls = decoded.match(/https?:\/\/\S+/g) ?? [];
+
+  for (const url of urls) {
+    candidates.push(url, safelyDecode(url));
+  }
+
+  return [...new Set(candidates)];
+}
+
+function coordinatesFromText(value) {
+  const fromUrl = coordinatesFromUrl(value);
+  if (fromUrl) {
+    return fromUrl;
+  }
+
+  const patterns = [
+    /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/i,
+    /@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)(?:[,/?]|$)/i,
+    /(?:^|[^\d.-])loc:(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/i,
+    /(?:^|[^\d.-])(-?\d{1,2}\.\d{4,}),\s*(-?\d{1,3}\.\d{4,})(?:[^\d.]|$)/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = value.match(pattern);
+    const coordinates = match ? coordinatesFromPair(match[1], match[2]) : null;
+    if (coordinates) {
+      return coordinates;
+    }
+  }
+
+  return null;
+}
+
+function coordinatesFromUrl(value) {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+
+  const params = url.searchParams;
+  const pairKeys = ["q", "query", "ll", "center", "destination", "origin"];
+  const direct = coordinatesFromPair(
+    params.get("lat") || params.get("latitude"),
+    params.get("lng") || params.get("lon") || params.get("longitude")
+  );
+
+  if (direct) {
+    return direct;
+  }
+
+  for (const key of pairKeys) {
+    const valueForKey = params.get(key);
+    if (!valueForKey) {
+      continue;
+    }
+
+    const coordinates = coordinatesFromText(valueForKey);
+    if (coordinates) {
+      return coordinates;
+    }
+  }
+
+  return coordinatesFromText(url.pathname + url.hash);
+}
+
+function coordinatesFromPair(latValue, lngValue) {
+  const lat = Number.parseFloat(String(latValue ?? "").trim());
+  const lng = Number.parseFloat(String(lngValue ?? "").trim());
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    return null;
+  }
+
+  return { lat, lng };
+}
+
+function withShareMetadata(coordinates, payload) {
+  const title = guessSharedTitle(payload);
+  const note = [payload.url, payload.text]
+    .filter((value) => typeof value === "string" && value.trim())
+    .join("\n")
+    .slice(0, 1200);
+
+  return {
+    ...coordinates,
+    title,
+    note
+  };
+}
+
+function guessSharedTitle(payload) {
+  const values = [payload.title, payload.text]
+    .filter((value) => typeof value === "string" && value.trim())
+    .map((value) => value.trim());
+
+  for (const value of values) {
+    const firstLine = value.split(/\r?\n/).map((line) => line.trim()).find(Boolean);
+    if (firstLine && !/^https?:\/\//i.test(firstLine) && !/^Google Maps$/i.test(firstLine)) {
+      return firstLine;
+    }
+  }
+
+  return "";
+}
+
+function safelyDecode(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function shortMapUrlLikely(value) {
+  return /(?:maps\.app\.goo\.gl|goo\.gl\/maps)/i.test(value);
+}
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./service-worker.js").catch(() => {});
+  });
+}
 function exportWorkspace() {
   const blob = new Blob([JSON.stringify(workspaceSnapshot(), null, 2)], {
     type: "application/json"
@@ -1274,6 +1499,7 @@ function bindEvents() {
   }
 
   elements.pointForm.addEventListener("submit", submitPoint);
+  elements.parseShareButton.addEventListener("click", parseShareInput);
   elements.useCenterButton.addEventListener("click", () => {
     state.pendingGeo = null;
     fillFormFromWorld({ x: state.viewport.x, y: state.viewport.y });
@@ -1364,4 +1590,6 @@ function bindEvents() {
 loadWorkspace();
 bindEvents();
 resizeCanvas();
+handleIncomingShare();
+registerServiceWorker();
 render();
