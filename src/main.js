@@ -277,10 +277,6 @@ function gridReferenceLatitude() {
     latitudes.push(normalizeGeo(state.currentGeo).lat);
   }
 
-  if (validGeo(state.pendingGeo)) {
-    latitudes.push(normalizeGeo(state.pendingGeo).lat);
-  }
-
   if (latitudes.length === 0) {
     return viewportCenterLatitude();
   }
