@@ -1,5 +1,6 @@
 const STORAGE_KEY = "grid-atlas-workspace-v2";
 const POINT_RADIUS = 8;
+const CURRENT_LOCATION_ID = "__current_location__";
 const EARTH_RADIUS_METERS = 6371008.8;
 const MERCATOR_RADIUS = 6378137;
 const MAX_MERCATOR_LAT = 85.05112878;
@@ -17,7 +18,6 @@ let canvasResizeObserver = null;
 
 const elements = {
   modeButtons: Array.from(document.querySelectorAll(".mode-button")),
-  modeHint: document.querySelector("#modeHint"),
   statusLine: document.querySelector("#statusLine"),
   mobileSelectedTitle: document.querySelector("#mobileSelectedTitle"),
   sidebarSelectedTitle: document.querySelector("#sidebarSelectedTitle"),
@@ -360,8 +360,8 @@ function drawCurrentLocation() {
   context.arc(screen.x, screen.y, 9, 0, Math.PI * 2);
   context.fillStyle = "#ffd436";
   context.fill();
-  context.lineWidth = 3;
-  context.strokeStyle = "#6b5a00";
+  context.lineWidth = state.selectedPointId === CURRENT_LOCATION_ID ? 4 : 3;
+  context.strokeStyle = state.selectedPointId === CURRENT_LOCATION_ID ? "#2e7d32" : "#6b5a00";
   context.stroke();
 
   context.beginPath();
@@ -443,7 +443,6 @@ function render() {
   renderAnalysis();
   renderRoute();
   renderSelectedSummary();
-  renderModeHint();
   renderStatus();
   renderModeButtons();
 }
@@ -455,19 +454,6 @@ function renderSelectedSummary() {
   elements.sidebarSelectedTitle.textContent = title;
 }
 
-function renderModeHint() {
-  const pendingLink = findPoint(state.pendingLinkPointId);
-  const pendingMeasure = findPoint(state.measureStartPointId);
-  const hints = {
-    inspect: "地点をタップして選択。ドラッグで移動、ホイールや＋−で拡大縮小。",
-    add: "登録したい場所をタップして座標を入れ、見出しを書いて登録。",
-    link: pendingLink ? `接続先の地点をタップ。もう一度 ${pendingLink.title} をタップすると解除。` : "線でつなぐ最初の地点をタップ。",
-    measure: pendingMeasure ? `距離を測る相手の地点をタップ。始点: ${pendingMeasure.title}` : "距離を測る最初の地点をタップ。",
-    route: state.routeSelectionIds.length > 0 ? "巡回したい地点を追加でタップ。選び終えたら最適順。" : "巡回したい地点を順番にタップして候補に追加。"
-  };
-
-  elements.modeHint.value = hints[state.mode] ?? "";
-}
 function renderStatus() {
   const modeLabel = {
     inspect: "選択",
@@ -506,7 +492,7 @@ function renderDetails() {
 
   elements.emptyDetails.hidden = hasPoint;
   elements.pointDetails.hidden = !hasPoint;
-  elements.deletePointButton.hidden = !hasPoint;
+  elements.deletePointButton.hidden = !hasPoint || point?.isVirtual;
 
   if (!point) {
     return;
@@ -687,7 +673,7 @@ function renderRoute() {
   });
 }
 function findPoint(id) {
-  return findPointIn(id, state.points);
+  return id === CURRENT_LOCATION_ID ? currentLocationPoint() : findPointIn(id, state.points);
 }
 
 function findPointIn(id, points) {
@@ -697,8 +683,14 @@ function findPointIn(id, points) {
 function findNearestPoint(screenPoint) {
   let nearest = null;
   let nearestDistance = Infinity;
+  const candidates = [...state.points];
+  const current = currentLocationPoint();
 
-  for (const point of state.points) {
+  if (current) {
+    candidates.push(current);
+  }
+
+  for (const point of candidates) {
     const screen = worldToScreen(point);
     const distance = Math.hypot(screen.x - screenPoint.x, screen.y - screenPoint.y);
     if (distance < nearestDistance) {
@@ -707,7 +699,7 @@ function findNearestPoint(screenPoint) {
     }
   }
 
-  return nearestDistance <= POINT_RADIUS + 10 ? nearest : null;
+  return nearestDistance <= POINT_RADIUS + 12 ? nearest : null;
 }
 
 function distanceBetween(a, b) {
@@ -817,6 +809,13 @@ function handleCanvasClick(screenPoint) {
 }
 
 function handleLinkPoint(point) {
+  if (point.isVirtual) {
+    state.pendingLinkPointId = null;
+    state.selectedPointId = point.id;
+    render();
+    return;
+  }
+
   if (!state.pendingLinkPointId) {
     state.pendingLinkPointId = point.id;
     state.selectedPointId = point.id;
@@ -925,6 +924,9 @@ function computeRouteFromSelection() {
 
 function normalizeRouteSelection() {
   const validIds = new Set(state.points.map((point) => point.id));
+  if (currentLocationPoint()) {
+    validIds.add(CURRENT_LOCATION_ID);
+  }
   const uniqueIds = [];
 
   for (const id of state.routeSelectionIds) {
@@ -1314,7 +1316,19 @@ function currentLocationPoint() {
     return null;
   }
 
-  return projectLatLng(state.currentGeo.lat, state.currentGeo.lng);
+  const projected = projectLatLng(state.currentGeo.lat, state.currentGeo.lng);
+  return {
+    id: CURRENT_LOCATION_ID,
+    x: projected.x,
+    y: projected.y,
+    title: "現在地",
+    note: "端末から取得した現在地です。",
+    photo: "",
+    photoName: "",
+    geo: state.currentGeo,
+    createdAt: new Date().toISOString(),
+    isVirtual: true
+  };
 }
 function projectLatLng(lat, lng) {
   const safeLat = clampLatitude(lat);
