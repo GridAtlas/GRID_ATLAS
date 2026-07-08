@@ -39,6 +39,10 @@ textarea {
   font: inherit;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 button {
   border: 1px solid var(--line);
   background: var(--surface);
