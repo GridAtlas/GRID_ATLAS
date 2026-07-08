@@ -262,17 +262,29 @@ function screenToWorld(point) {
 }
 
 function chooseGridStep() {
+  const latitude = viewportCenterLatitude();
   const candidates = [
     1, 2, 5, 10, 20, 50, 100, 200, 500,
     1000, 2000, 5000, 10000, 20000, 50000,
     100000, 200000, 500000, 1000000, 2000000,
     5000000, 10000000
   ];
-  return candidates.find((step) => step * state.viewport.scale >= 48) ?? 20000000;
+  return candidates.find((step) => groundDistanceToMercator(step, latitude) * state.viewport.scale >= 48) ?? 20000000;
+}
+
+function viewportCenterLatitude() {
+  return unprojectMercator(state.viewport.x, state.viewport.y).lat;
+}
+
+function groundDistanceToMercator(distance, latitude) {
+  const cosine = Math.max(0.02, Math.cos(toRadians(clampLatitude(latitude))));
+  return distance / cosine;
 }
 
 function drawGrid(width, height) {
-  const majorStep = chooseGridStep();
+  const latitude = viewportCenterLatitude();
+  const majorGroundStep = chooseGridStep();
+  const majorStep = groundDistanceToMercator(majorGroundStep, latitude);
   const minorStep = majorStep / 5;
   const topLeft = screenToWorld({ x: 0, y: 0 });
   const bottomRight = screenToWorld({ x: width, y: height });
