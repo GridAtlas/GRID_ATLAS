@@ -262,7 +262,7 @@ function screenToWorld(point) {
 }
 
 function chooseGridStep() {
-  const latitude = viewportCenterLatitude();
+  const latitude = gridReferenceLatitude();
   const candidates = [
     1, 2, 5, 10, 20, 50, 100, 200, 500,
     1000, 2000, 5000, 10000, 20000, 50000,
@@ -270,6 +270,24 @@ function chooseGridStep() {
     5000000, 10000000
   ];
   return candidates.find((step) => groundDistanceToMercator(step, latitude) * state.viewport.scale >= 48) ?? 20000000;
+}
+
+function gridReferenceLatitude() {
+  const latitudes = state.points.map((point) => pointGeo(point).lat);
+
+  if (validGeo(state.currentGeo)) {
+    latitudes.push(normalizeGeo(state.currentGeo).lat);
+  }
+
+  if (validGeo(state.pendingGeo)) {
+    latitudes.push(normalizeGeo(state.pendingGeo).lat);
+  }
+
+  if (latitudes.length === 0) {
+    return viewportCenterLatitude();
+  }
+
+  return (Math.min(...latitudes) + Math.max(...latitudes)) / 2;
 }
 
 function viewportCenterLatitude() {
@@ -282,7 +300,7 @@ function groundDistanceToMercator(distance, latitude) {
 }
 
 function drawGrid(width, height) {
-  const latitude = viewportCenterLatitude();
+  const latitude = gridReferenceLatitude();
   const majorGroundStep = chooseGridStep();
   const majorStep = groundDistanceToMercator(majorGroundStep, latitude);
   const minorStep = majorStep / 5;
