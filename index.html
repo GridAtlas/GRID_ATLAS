@@ -7,8 +7,8 @@
     <title>GRID ATLAS</title>
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="src/styles.css?v=6">
-    <script src="src/main.js?v=7" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=7">
+    <script src="src/main.js?v=8" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -16,6 +16,10 @@
         <div class="brand">
           <span class="brand-dot" aria-hidden="true"></span>
           <h1>GRID ATLAS</h1>
+        </div>
+        <div class="selected-summary selected-summary-mobile" aria-live="polite">
+          <span>選択中</span>
+          <strong id="mobileSelectedTitle">未選択</strong>
         </div>
         <nav class="modebar" aria-label="操作モード">
           <button class="mode-button is-active" type="button" data-mode="inspect" aria-pressed="true" title="選択">
@@ -39,6 +43,7 @@
             <span>巡回</span>
           </button>
         </nav>
+        <output id="modeHint" class="mode-hint" aria-live="polite"></output>
       </header>
 
       <main class="workspace">
@@ -54,6 +59,10 @@
         </section>
 
         <aside class="sidebar" aria-label="地点と分析">
+          <div class="selected-summary selected-summary-sidebar" aria-live="polite">
+            <span>選択中</span>
+            <strong id="sidebarSelectedTitle">未選択</strong>
+          </div>
           <section class="panel">
             <h2>地点登録</h2>
             <form id="pointForm" class="point-form">

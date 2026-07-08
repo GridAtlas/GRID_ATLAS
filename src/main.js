@@ -17,7 +17,10 @@ let canvasResizeObserver = null;
 
 const elements = {
   modeButtons: Array.from(document.querySelectorAll(".mode-button")),
+  modeHint: document.querySelector("#modeHint"),
   statusLine: document.querySelector("#statusLine"),
+  mobileSelectedTitle: document.querySelector("#mobileSelectedTitle"),
+  sidebarSelectedTitle: document.querySelector("#sidebarSelectedTitle"),
   pointForm: document.querySelector("#pointForm"),
   pointTitle: document.querySelector("#pointTitle"),
   pointLat: document.querySelector("#pointLat"),
@@ -74,6 +77,7 @@ const state = {
   routeStartPointId: null,
   routeResult: null,
   pendingGeo: null,
+  currentGeo: null,
   viewport: {
     x: DEFAULT_CENTER.x,
     y: DEFAULT_CENTER.y,
@@ -334,6 +338,37 @@ function drawRouteResult() {
   context.restore();
 }
 
+function drawCurrentLocation() {
+  const location = currentLocationPoint();
+  if (!location) {
+    return;
+  }
+
+  const screen = worldToScreen(location);
+  const accuracyRadius = Number.isFinite(state.currentGeo.accuracy)
+    ? Math.min(160, Math.max(16, state.currentGeo.accuracy * state.viewport.scale))
+    : 0;
+
+  if (accuracyRadius > 0) {
+    context.beginPath();
+    context.arc(screen.x, screen.y, accuracyRadius, 0, Math.PI * 2);
+    context.fillStyle = "rgb(255 212 54 / 0.16)";
+    context.fill();
+  }
+
+  context.beginPath();
+  context.arc(screen.x, screen.y, 9, 0, Math.PI * 2);
+  context.fillStyle = "#ffd436";
+  context.fill();
+  context.lineWidth = 3;
+  context.strokeStyle = "#6b5a00";
+  context.stroke();
+
+  context.beginPath();
+  context.arc(screen.x, screen.y, 3, 0, Math.PI * 2);
+  context.fillStyle = "#fff7bf";
+  context.fill();
+}
 function drawPoints() {
   for (const point of state.points) {
     const screen = worldToScreen(point);
@@ -394,6 +429,7 @@ function draw() {
   const size = canvasSize();
   context.clearRect(0, 0, size.width, size.height);
   drawGrid(size.width, size.height);
+  drawCurrentLocation();
   drawLinks();
   drawRouteResult();
   drawPoints();
@@ -406,10 +442,32 @@ function render() {
   renderDetails();
   renderAnalysis();
   renderRoute();
+  renderSelectedSummary();
+  renderModeHint();
   renderStatus();
   renderModeButtons();
 }
 
+function renderSelectedSummary() {
+  const point = findPoint(state.selectedPointId);
+  const title = point ? point.title : "未選択";
+  elements.mobileSelectedTitle.textContent = title;
+  elements.sidebarSelectedTitle.textContent = title;
+}
+
+function renderModeHint() {
+  const pendingLink = findPoint(state.pendingLinkPointId);
+  const pendingMeasure = findPoint(state.measureStartPointId);
+  const hints = {
+    inspect: "地点をタップして選択。ドラッグで移動、ホイールや＋−で拡大縮小。",
+    add: "登録したい場所をタップして座標を入れ、見出しを書いて登録。",
+    link: pendingLink ? `接続先の地点をタップ。もう一度 ${pendingLink.title} をタップすると解除。` : "線でつなぐ最初の地点をタップ。",
+    measure: pendingMeasure ? `距離を測る相手の地点をタップ。始点: ${pendingMeasure.title}` : "距離を測る最初の地点をタップ。",
+    route: state.routeSelectionIds.length > 0 ? "巡回したい地点を追加でタップ。選び終えたら最適順。" : "巡回したい地点を順番にタップして候補に追加。"
+  };
+
+  elements.modeHint.value = hints[state.mode] ?? "";
+}
 function renderStatus() {
   const modeLabel = {
     inspect: "選択",
@@ -1048,8 +1106,9 @@ function fitToPoints() {
   syncCanvasSize();
 
   if (state.points.length === 0) {
-    state.viewport.x = DEFAULT_CENTER.x;
-    state.viewport.y = DEFAULT_CENTER.y;
+    const current = currentLocationPoint();
+    state.viewport.x = current?.x ?? DEFAULT_CENTER.x;
+    state.viewport.y = current?.y ?? DEFAULT_CENTER.y;
     state.viewport.scale = 0.7;
     render();
     return;
@@ -1083,6 +1142,15 @@ function centerOnSelectedPoint() {
   if (selected) {
     state.viewport.x = selected.x;
     state.viewport.y = selected.y;
+    state.viewport.scale = Math.max(state.viewport.scale, 0.7);
+    render();
+    return;
+  }
+
+  const current = currentLocationPoint();
+  if (current) {
+    state.viewport.x = current.x;
+    state.viewport.y = current.y;
     state.viewport.scale = Math.max(state.viewport.scale, 0.7);
     render();
     return;
@@ -1179,13 +1247,25 @@ function resizeImage(dataUrl) {
 }
 
 function useCurrentLocation() {
+  requestCurrentLocation({ fillForm: true, center: true, showButtonState: true });
+}
+
+function locateOnStartup() {
+  requestCurrentLocation({ fillForm: false, center: true, showButtonState: false, startup: true });
+}
+
+function requestCurrentLocation(options = {}) {
   if (!("geolocation" in navigator)) {
-    elements.statusLine.value = "現在地を取得できません";
+    if (!options.startup) {
+      elements.statusLine.value = "現在地を取得できません";
+    }
     return;
   }
 
-  elements.useLocationButton.disabled = true;
-  elements.useLocationButton.textContent = "取得中";
+  if (options.showButtonState) {
+    elements.useLocationButton.disabled = true;
+    elements.useLocationButton.textContent = "取得中";
+  }
 
   navigator.geolocation.getCurrentPosition(
     (position) => {
@@ -1196,28 +1276,46 @@ function useCurrentLocation() {
       });
       const projected = projectLatLng(geo.lat, geo.lng);
 
-      state.pendingGeo = geo;
-      state.viewport.x = projected.x;
-      state.viewport.y = projected.y;
-      state.viewport.scale = Math.max(state.viewport.scale, 0.7);
-      fillFormFromGeo(geo);
-      elements.useLocationButton.disabled = false;
-      elements.useLocationButton.textContent = "現在地";
+      state.currentGeo = geo;
+      if (options.fillForm) {
+        state.pendingGeo = geo;
+        fillFormFromGeo(geo);
+      }
+      if (options.center && (!options.startup || (state.mode === "inspect" && !state.selectedPointId))) {
+        state.viewport.x = projected.x;
+        state.viewport.y = projected.y;
+        state.viewport.scale = Math.max(state.viewport.scale, 0.7);
+      }
+      if (options.showButtonState) {
+        elements.useLocationButton.disabled = false;
+        elements.useLocationButton.textContent = "現在地";
+      }
       render();
     },
     () => {
-      elements.statusLine.value = "現在地エラー";
-      elements.useLocationButton.disabled = false;
-      elements.useLocationButton.textContent = "現在地";
+      if (!options.startup) {
+        elements.statusLine.value = "現在地エラー";
+      }
+      if (options.showButtonState) {
+        elements.useLocationButton.disabled = false;
+        elements.useLocationButton.textContent = "現在地";
+      }
     },
     {
       enableHighAccuracy: true,
-      timeout: 10000,
+      timeout: options.startup ? 6500 : 10000,
       maximumAge: 5000
     }
   );
 }
 
+function currentLocationPoint() {
+  if (!validGeo(state.currentGeo)) {
+    return null;
+  }
+
+  return projectLatLng(state.currentGeo.lat, state.currentGeo.lng);
+}
 function projectLatLng(lat, lng) {
   const safeLat = clampLatitude(lat);
   const normalizedLng = normalizeLongitude(lng);
@@ -1713,5 +1811,6 @@ loadWorkspace();
 bindEvents();
 resizeCanvas();
 handleIncomingShare();
+locateOnStartup();
 registerServiceWorker();
 render();
