@@ -399,16 +399,6 @@ textarea {
   line-height: 1.1;
 }
 
-.measure-result {
-  margin-top: 12px;
-  padding: 10px;
-  border-left: 4px solid var(--teal);
-  background: rgb(17 108 109 / 0.08);
-  border-radius: 6px;
-  color: var(--teal);
-  overflow-wrap: anywhere;
-}
-
 .link-list {
   margin-top: 10px;
   display: grid;
