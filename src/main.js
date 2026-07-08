@@ -124,7 +124,7 @@ function applyWorkspace(workspace) {
     ? workspace.points.map((point) => normalizePoint(point, origin)).filter(Boolean)
     : [];
   state.links = Array.isArray(workspace.links)
-    ? workspace.links.filter((link) => findPointIn(link.a, state.points) && findPointIn(link.b, state.points))
+    ? workspace.links.filter((link) => validLinkEndpointId(link.a) && validLinkEndpointId(link.b))
     : [];
   state.selectedPointId = null;
   state.selectedLinkId = null;
@@ -381,6 +381,24 @@ function drawCurrentLocation() {
   context.fillStyle = "#fff7bf";
   context.fill();
 }
+function drawPendingPoint() {
+  if (!validGeo(state.pendingGeo)) {
+    return;
+  }
+
+  const projected = projectLatLng(state.pendingGeo.lat, state.pendingGeo.lng);
+  const screen = worldToScreen(projected);
+  context.save();
+  context.beginPath();
+  context.arc(screen.x, screen.y, 10, 0, Math.PI * 2);
+  context.fillStyle = "rgb(233 95 26 / 0.24)";
+  context.fill();
+  context.lineWidth = 2;
+  context.strokeStyle = "rgb(233 95 26 / 0.62)";
+  context.setLineDash([4, 4]);
+  context.stroke();
+  context.restore();
+}
 function drawPoints() {
   for (const point of state.points) {
     const screen = worldToScreen(point);
@@ -443,6 +461,7 @@ function draw() {
   drawLinks();
   drawRouteResult();
   drawPoints();
+  drawPendingPoint();
   drawRouteBadges();
 }
 
@@ -495,7 +514,7 @@ function renderActionButtons() {
   const hasPoint = Boolean(point);
   const isRouteSelected = hasPoint && state.routeSelectionIds.includes(point.id);
 
-  elements.actionLinkButton.disabled = !hasPoint || point.isVirtual;
+  elements.actionLinkButton.disabled = !hasPoint;
   elements.actionMeasureButton.disabled = !hasPoint;
   elements.actionRouteButton.disabled = !hasPoint;
   elements.deletePointButton.disabled = !(link || (point && !point.isVirtual));
@@ -724,6 +743,10 @@ function findPointIn(id, points) {
   return points.find((point) => point.id === id) ?? null;
 }
 
+function validLinkEndpointId(id) {
+  return id === CURRENT_LOCATION_ID || Boolean(findPointIn(id, state.points));
+}
+
 function findLink(id) {
   return state.links.find((link) => link.id === id) ?? null;
 }
@@ -850,7 +873,7 @@ function selectedPoint() {
 
 function startLinkFromSelection() {
   const point = selectedPoint();
-  if (!point || point.isVirtual) {
+  if (!point) {
     return;
   }
 
@@ -885,7 +908,8 @@ function toggleSelectedRoutePoint() {
 }
 
 function fillFormFromWorld(point) {
-  fillFormFromGeo(unprojectMercator(point.x, point.y));
+  state.pendingGeo = unprojectMercator(point.x, point.y);
+  fillFormFromGeo(state.pendingGeo);
 }
 
 function fillFormFromGeo(geo) {
@@ -942,20 +966,10 @@ function handleCanvasClick(screenPoint) {
   state.selectedLinkId = null;
   state.pendingLinkPointId = null;
   state.measureStartPointId = null;
-  state.pendingGeo = null;
   fillFormFromWorld(world);
   render();
 }
 function handleLinkPoint(point) {
-  if (point.isVirtual) {
-    state.pendingLinkPointId = null;
-    state.mode = "inspect";
-    state.selectedPointId = point.id;
-    state.selectedLinkId = null;
-    render();
-    return;
-  }
-
   if (!state.pendingLinkPointId) {
     state.pendingLinkPointId = point.id;
     state.selectedPointId = point.id;
