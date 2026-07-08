@@ -1255,18 +1255,20 @@ function zoomAt(screenPoint, factor) {
 function fitToPoints() {
   syncCanvasSize();
 
-  if (state.points.length === 0) {
-    const current = currentLocationPoint();
-    state.viewport.x = current?.x ?? DEFAULT_CENTER.x;
-    state.viewport.y = current?.y ?? DEFAULT_CENTER.y;
+  const current = currentLocationPoint();
+  const fitPoints = current ? [...state.points, current] : [...state.points];
+
+  if (fitPoints.length === 0) {
+    state.viewport.x = DEFAULT_CENTER.x;
+    state.viewport.y = DEFAULT_CENTER.y;
     state.viewport.scale = 0.7;
     render();
     return;
   }
 
   const size = canvasSize();
-  const xs = state.points.map((point) => point.x);
-  const ys = state.points.map((point) => point.y);
+  const xs = fitPoints.map((point) => point.x);
+  const ys = fitPoints.map((point) => point.y);
   const minX = Math.min(...xs);
   const maxX = Math.max(...xs);
   const minY = Math.min(...ys);
