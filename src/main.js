@@ -17,7 +17,6 @@ let canvasResizeFrame = 0;
 let canvasResizeObserver = null;
 
 const elements = {
-  actionRegisterButton: document.querySelector("#actionRegisterButton"),
   actionLinkButton: document.querySelector("#actionLinkButton"),
   actionMeasureButton: document.querySelector("#actionMeasureButton"),
   actionRouteButton: document.querySelector("#actionRouteButton"),
@@ -496,10 +495,10 @@ function renderActionButtons() {
   const hasPoint = Boolean(point);
   const isRouteSelected = hasPoint && state.routeSelectionIds.includes(point.id);
 
-  elements.actionRegisterButton.disabled = Boolean(link);
   elements.actionLinkButton.disabled = !hasPoint || point.isVirtual;
   elements.actionMeasureButton.disabled = !hasPoint;
   elements.actionRouteButton.disabled = !hasPoint;
+  elements.deletePointButton.disabled = !(link || (point && !point.isVirtual));
   elements.actionLinkButton.classList.toggle("is-active", Boolean(state.pendingLinkPointId));
   elements.actionMeasureButton.classList.toggle("is-active", Boolean(state.measureStartPointId));
   elements.actionRouteButton.classList.toggle("is-active", Boolean(isRouteSelected));
@@ -513,7 +512,6 @@ function renderDetails() {
 
   elements.emptyDetails.hidden = hasSelection;
   elements.pointDetails.hidden = !hasSelection;
-  elements.deletePointButton.hidden = !hasSelection || point?.isVirtual;
   elements.selectionHeading.textContent = link ? "選択線" : "選択地点";
 
   if (!hasSelection) {
@@ -848,24 +846,6 @@ function formatDate(value) {
 
 function selectedPoint() {
   return findPoint(state.selectedPointId);
-}
-
-function prepareRegistrationFromSelection() {
-  const point = selectedPoint();
-  state.mode = "inspect";
-  state.pendingLinkPointId = null;
-  state.measureStartPointId = null;
-
-  if (point) {
-    state.pendingGeo = pointGeo(point);
-    fillFormFromGeo(state.pendingGeo);
-  } else {
-    state.pendingGeo = null;
-    fillFormFromWorld({ x: state.viewport.x, y: state.viewport.y });
-  }
-
-  elements.pointTitle.focus();
-  render();
 }
 
 function startLinkFromSelection() {
@@ -1910,7 +1890,6 @@ function bindEvents() {
     }
   }
 
-  elements.actionRegisterButton.addEventListener("click", prepareRegistrationFromSelection);
   elements.actionLinkButton.addEventListener("click", startLinkFromSelection);
   elements.actionMeasureButton.addEventListener("click", startMeasureFromSelection);
   elements.actionRouteButton.addEventListener("click", toggleSelectedRoutePoint);

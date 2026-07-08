@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="src/styles.css?v=9">
-    <script src="src/main.js?v=11" type="module" defer></script>
+    <script src="src/main.js?v=12" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -21,11 +21,7 @@
           <span>選択中</span>
           <strong id="mobileSelectedTitle">未選択</strong>
         </div>
-        <nav class="actionbar" aria-label="選択地点の操作">
-          <button id="actionRegisterButton" class="action-button" type="button" title="この場所を登録">
-            <span aria-hidden="true">＋</span>
-            <span>登録</span>
-          </button>
+        <nav class="actionbar" aria-label="選択対象の操作">
           <button id="actionLinkButton" class="action-button" type="button" title="選択地点から線をつなぐ">
             <span aria-hidden="true">╱</span>
             <span>接続</span>
@@ -37,6 +33,10 @@
           <button id="actionRouteButton" class="action-button" type="button" title="巡回ルートに追加">
             <span aria-hidden="true">⤨</span>
             <span id="actionRouteLabel">巡回</span>
+          </button>
+          <button id="deletePointButton" class="action-button danger-button" type="button" title="選択対象を削除" disabled>
+            <span aria-hidden="true">×</span>
+            <span>削除</span>
           </button>
         </nav>
       </header>
@@ -110,7 +110,6 @@
           <section class="panel">
             <div class="panel-heading">
               <h2 id="selectionHeading">選択地点</h2>
-              <button id="deletePointButton" class="danger-button" type="button" hidden>削除</button>
             </div>
             <div id="emptyDetails" class="empty-state">未選択</div>
             <div id="pointDetails" class="point-details" hidden>
