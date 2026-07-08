@@ -7,8 +7,8 @@
     <title>GRID ATLAS</title>
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="src/styles.css?v=8">
-    <script src="src/main.js?v=9" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=9">
+    <script src="src/main.js?v=10" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -21,26 +21,22 @@
           <span>選択中</span>
           <strong id="mobileSelectedTitle">未選択</strong>
         </div>
-        <nav class="modebar" aria-label="操作モード">
-          <button class="mode-button is-active" type="button" data-mode="inspect" aria-pressed="true" title="選択">
-            <span aria-hidden="true">⌖</span>
-            <span>選択</span>
-          </button>
-          <button class="mode-button" type="button" data-mode="add" aria-pressed="false" title="登録">
+        <nav class="actionbar" aria-label="選択地点の操作">
+          <button id="actionRegisterButton" class="action-button" type="button" title="この場所を登録">
             <span aria-hidden="true">＋</span>
             <span>登録</span>
           </button>
-          <button class="mode-button" type="button" data-mode="link" aria-pressed="false" title="接続">
+          <button id="actionLinkButton" class="action-button" type="button" title="選択地点から線をつなぐ">
             <span aria-hidden="true">╱</span>
             <span>接続</span>
           </button>
-          <button class="mode-button" type="button" data-mode="measure" aria-pressed="false" title="計測">
+          <button id="actionMeasureButton" class="action-button" type="button" title="選択地点から距離を測る">
             <span aria-hidden="true">↔</span>
             <span>計測</span>
           </button>
-          <button class="mode-button" type="button" data-mode="route" aria-pressed="false" title="巡回">
+          <button id="actionRouteButton" class="action-button" type="button" title="巡回ルートに追加">
             <span aria-hidden="true">⤨</span>
-            <span>巡回</span>
+            <span id="actionRouteLabel">巡回</span>
           </button>
         </nav>
       </header>
@@ -181,7 +177,7 @@
               <button id="computeRouteButton" type="button">最適順</button>
               <button id="clearRouteSelectionButton" type="button">解除</button>
             </div>
-            <div id="routeSummary" class="route-summary">巡回モードで地点を選択</div>
+            <div id="routeSummary" class="route-summary">地点を選んで上部の巡回を押す</div>
             <ol id="routeList" class="route-list"></ol>
           </section>
           <section class="panel">

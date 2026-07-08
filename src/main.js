@@ -17,7 +17,11 @@ let canvasResizeFrame = 0;
 let canvasResizeObserver = null;
 
 const elements = {
-  modeButtons: Array.from(document.querySelectorAll(".mode-button")),
+  actionRegisterButton: document.querySelector("#actionRegisterButton"),
+  actionLinkButton: document.querySelector("#actionLinkButton"),
+  actionMeasureButton: document.querySelector("#actionMeasureButton"),
+  actionRouteButton: document.querySelector("#actionRouteButton"),
+  actionRouteLabel: document.querySelector("#actionRouteLabel"),
   statusLine: document.querySelector("#statusLine"),
   mobileSelectedTitle: document.querySelector("#mobileSelectedTitle"),
   sidebarSelectedTitle: document.querySelector("#sidebarSelectedTitle"),
@@ -374,7 +378,7 @@ function drawPoints() {
     const screen = worldToScreen(point);
     const isSelected = point.id === state.selectedPointId;
     const isPending = point.id === state.pendingLinkPointId || point.id === state.measureStartPointId;
-    const shouldShowRouteSelection = state.mode === "route" || Boolean(state.routeResult);
+    const shouldShowRouteSelection = state.routeSelectionIds.length > 0 || Boolean(state.routeResult);
     const isRouteSelected = shouldShowRouteSelection && state.routeSelectionIds.includes(point.id);
     const isRouteStart = shouldShowRouteSelection && state.routeStartPointId === point.id;
     context.beginPath();
@@ -399,9 +403,7 @@ function drawPoints() {
 function drawRouteBadges() {
   const ids = state.routeResult?.pointIds?.length
     ? state.routeResult.pointIds
-    : state.mode === "route"
-      ? state.routeSelectionIds
-      : [];
+    : state.routeSelectionIds;
   ids.forEach((pointId, index) => {
     const point = findPoint(pointId);
     if (!point) {
@@ -444,7 +446,7 @@ function render() {
   renderRoute();
   renderSelectedSummary();
   renderStatus();
-  renderModeButtons();
+  renderActionButtons();
 }
 
 function renderSelectedSummary() {
@@ -471,19 +473,25 @@ function renderStatus() {
     extra = ` | 接続元: ${pendingLink.title}`;
   } else if (pendingMeasure) {
     extra = ` | 計測元: ${pendingMeasure.title}`;
-  } else if (state.mode === "route" && state.routeSelectionIds.length > 0) {
-    extra = ` | 候補: ${state.routeSelectionIds.length}点`;
+  } else if (state.routeSelectionIds.length > 0) {
+    extra = ` | 巡回: ${state.routeSelectionIds.length}点`;
   }
 
   elements.statusLine.value = `${modeLabel} | ${state.points.length}点 | ${state.links.length}線 | 格子 ${formatDistance(chooseGridStep())}${extra}`;
 }
 
-function renderModeButtons() {
-  for (const button of elements.modeButtons) {
-    const isActive = button.dataset.mode === state.mode;
-    button.classList.toggle("is-active", isActive);
-    button.setAttribute("aria-pressed", String(isActive));
-  }
+function renderActionButtons() {
+  const point = findPoint(state.selectedPointId);
+  const hasPoint = Boolean(point);
+  const isRouteSelected = hasPoint && state.routeSelectionIds.includes(point.id);
+
+  elements.actionLinkButton.disabled = !hasPoint || point.isVirtual;
+  elements.actionMeasureButton.disabled = !hasPoint;
+  elements.actionRouteButton.disabled = !hasPoint;
+  elements.actionLinkButton.classList.toggle("is-active", Boolean(state.pendingLinkPointId));
+  elements.actionMeasureButton.classList.toggle("is-active", Boolean(state.measureStartPointId));
+  elements.actionRouteButton.classList.toggle("is-active", Boolean(isRouteSelected));
+  elements.actionRouteLabel.textContent = isRouteSelected ? "解除" : "巡回";
 }
 
 function renderDetails() {
@@ -502,7 +510,7 @@ function renderDetails() {
   const accuracy = Number.isFinite(geo.accuracy) ? ` / ±${formatDistance(geo.accuracy)}` : "";
   elements.detailTitle.textContent = point.title;
   elements.detailCoords.textContent = `${formatCoordinate(geo.lat)}, ${formatCoordinate(geo.lng)}${accuracy}`;
-  elements.detailCreated.textContent = formatDate(point.createdAt);
+  elements.detailCreated.textContent = point.isVirtual ? "現在地" : formatDate(point.createdAt);
   elements.detailNote.textContent = point.note || "なし";
 
   if (point.photo) {
@@ -618,7 +626,7 @@ function renderRoute() {
     elements.routeStartSelect.disabled = true;
     elements.computeRouteButton.disabled = true;
     elements.clearRouteSelectionButton.disabled = true;
-    elements.routeSummary.textContent = "巡回モードで地点を選択";
+    elements.routeSummary.textContent = "地点を選んで上部の巡回を押す";
     elements.routeList.replaceChildren();
     return;
   }
@@ -743,16 +751,62 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
-function setMode(mode) {
-  state.mode = mode;
+function selectedPoint() {
+  return findPoint(state.selectedPointId);
+}
+
+function prepareRegistrationFromSelection() {
+  const point = selectedPoint();
+  state.mode = "inspect";
   state.pendingLinkPointId = null;
   state.measureStartPointId = null;
 
-  if (mode === "add") {
+  if (point) {
+    state.pendingGeo = pointGeo(point);
+    fillFormFromGeo(state.pendingGeo);
+  } else {
+    state.pendingGeo = null;
     fillFormFromWorld({ x: state.viewport.x, y: state.viewport.y });
   }
 
+  elements.pointTitle.focus();
   render();
+}
+
+function startLinkFromSelection() {
+  const point = selectedPoint();
+  if (!point || point.isVirtual) {
+    return;
+  }
+
+  state.mode = "link";
+  state.pendingLinkPointId = point.id;
+  state.measureStartPointId = null;
+  render();
+}
+
+function startMeasureFromSelection() {
+  const point = selectedPoint();
+  if (!point) {
+    return;
+  }
+
+  state.mode = "measure";
+  state.measureStartPointId = point.id;
+  state.pendingLinkPointId = null;
+  render();
+}
+
+function toggleSelectedRoutePoint() {
+  const point = selectedPoint();
+  if (!point) {
+    return;
+  }
+
+  state.mode = "inspect";
+  state.pendingLinkPointId = null;
+  state.measureStartPointId = null;
+  handleRoutePoint(point);
 }
 
 function fillFormFromWorld(point) {
@@ -774,43 +828,37 @@ function handleCanvasClick(screenPoint) {
   const nearest = findNearestPoint(screenPoint);
   const world = screenToWorld(screenPoint);
 
-  if (state.mode === "add") {
-    state.pendingGeo = null;
-    fillFormFromWorld(world);
-    elements.pointTitle.focus();
-    renderStatus();
-    return;
-  }
-
-  if (state.mode === "route") {
-    if (nearest) {
-      handleRoutePoint(nearest);
+  if (nearest) {
+    if (state.mode === "link" && state.pendingLinkPointId) {
+      handleLinkPoint(nearest);
+      return;
     }
+
+    if (state.mode === "measure" && state.measureStartPointId) {
+      handleMeasurePoint(nearest);
+      return;
+    }
+
+    state.mode = "inspect";
+    state.pendingLinkPointId = null;
+    state.measureStartPointId = null;
+    selectPoint(nearest.id);
     return;
   }
 
-  if (!nearest) {
-    state.selectedPointId = null;
-    render();
-    return;
-  }
-
-  if (state.mode === "link") {
-    handleLinkPoint(nearest);
-    return;
-  }
-
-  if (state.mode === "measure") {
-    handleMeasurePoint(nearest);
-    return;
-  }
-
-  selectPoint(nearest.id);
+  state.mode = "inspect";
+  state.selectedPointId = null;
+  state.pendingLinkPointId = null;
+  state.measureStartPointId = null;
+  state.pendingGeo = null;
+  fillFormFromWorld(world);
+  render();
 }
 
 function handleLinkPoint(point) {
   if (point.isVirtual) {
     state.pendingLinkPointId = null;
+    state.mode = "inspect";
     state.selectedPointId = point.id;
     render();
     return;
@@ -825,6 +873,7 @@ function handleLinkPoint(point) {
 
   if (state.pendingLinkPointId === point.id) {
     state.pendingLinkPointId = null;
+    state.mode = "inspect";
     render();
     return;
   }
@@ -844,6 +893,7 @@ function handleLinkPoint(point) {
   }
 
   state.pendingLinkPointId = null;
+  state.mode = "inspect";
   state.selectedPointId = point.id;
   render();
 }
@@ -867,6 +917,7 @@ function handleMeasurePoint(point) {
   }
 
   state.measureStartPointId = null;
+  state.mode = "inspect";
   state.selectedPointId = point.id;
   render();
 }
@@ -1436,7 +1487,7 @@ function applySharedLocationToForm(result, message) {
   const geo = normalizeGeo({ lat: result.lat, lng: result.lng });
   const projected = projectLatLng(geo.lat, geo.lng);
 
-  state.mode = "add";
+  state.mode = "inspect";
   state.pendingGeo = geo;
   state.viewport.x = projected.x;
   state.viewport.y = projected.y;
@@ -1726,9 +1777,10 @@ function bindEvents() {
     }
   }
 
-  for (const button of elements.modeButtons) {
-    button.addEventListener("click", () => setMode(button.dataset.mode));
-  }
+  elements.actionRegisterButton.addEventListener("click", prepareRegistrationFromSelection);
+  elements.actionLinkButton.addEventListener("click", startLinkFromSelection);
+  elements.actionMeasureButton.addEventListener("click", startMeasureFromSelection);
+  elements.actionRouteButton.addEventListener("click", toggleSelectedRoutePoint);
 
   elements.pointForm.addEventListener("submit", submitPoint);
   elements.parseShareButton.addEventListener("click", parseShareInput);
