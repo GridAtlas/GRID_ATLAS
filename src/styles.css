@@ -476,6 +476,27 @@ textarea {
   margin-bottom: 12px;
 }
 
+.route-return-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.route-return-label input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #5a4aa0;
+}
+
+.route-return-label:has(input:disabled) {
+  color: var(--muted);
+}
+
 .route-summary {
   margin-top: 12px;
   padding: 10px;
@@ -515,6 +536,11 @@ textarea {
   color: #ffffff;
   font-size: 12px;
   font-weight: 800;
+}
+
+.route-list .route-step-return {
+  background: #ffffff;
+  color: #5a4aa0;
 }
 
 .route-list strong {

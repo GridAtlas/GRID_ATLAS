@@ -63,6 +63,7 @@ const elements = {
   linkList: document.querySelector("#linkList"),
   routeSelectedCount: document.querySelector("#routeSelectedCount"),
   routeStartSelect: document.querySelector("#routeStartSelect"),
+  routeReturnToStart: document.querySelector("#routeReturnToStart"),
   computeRouteButton: document.querySelector("#computeRouteButton"),
   clearRouteSelectionButton: document.querySelector("#clearRouteSelectionButton"),
   routeSummary: document.querySelector("#routeSummary"),
@@ -85,6 +86,7 @@ const state = {
   measureResult: null,
   routeSelectionIds: [],
   routeStartPointId: null,
+  routeReturnToStart: false,
   routeResult: null,
   pendingGeo: null,
   currentGeo: null,
@@ -133,6 +135,7 @@ function applyWorkspace(workspace) {
   state.measureResult = null;
   state.routeSelectionIds = [];
   state.routeStartPointId = null;
+  state.routeReturnToStart = false;
   state.routeResult = null;
   state.pendingGeo = null;
 }
@@ -373,6 +376,10 @@ function drawRouteResult() {
       context.lineTo(screen.x, screen.y);
     }
   });
+  if (state.routeResult.returnToStart) {
+    const first = worldToScreen(points[0]);
+    context.lineTo(first.x, first.y);
+  }
   context.strokeStyle = "#5a4aa0";
   context.lineWidth = 3.2;
   context.setLineDash([10, 7]);
@@ -709,6 +716,8 @@ function renderRoute() {
     option.textContent = "未選択";
     elements.routeStartSelect.append(option);
     elements.routeStartSelect.disabled = true;
+    elements.routeReturnToStart.disabled = true;
+    elements.routeReturnToStart.checked = state.routeReturnToStart;
     elements.computeRouteButton.disabled = true;
     elements.clearRouteSelectionButton.disabled = true;
     elements.routeSummary.textContent = "地点を選んで上部の巡回を押す";
@@ -717,6 +726,8 @@ function renderRoute() {
   }
 
   elements.routeStartSelect.disabled = false;
+  elements.routeReturnToStart.disabled = selectedPoints.length < 2;
+  elements.routeReturnToStart.checked = state.routeReturnToStart;
   elements.computeRouteButton.disabled = selectedPoints.length < 2;
   elements.clearRouteSelectionButton.disabled = false;
 
@@ -742,7 +753,8 @@ function renderRoute() {
   }
 
   const method = state.routeResult.exact ? "厳密" : "近似";
-  elements.routeSummary.textContent = `${method}計算 | ${state.routeResult.pointIds.length}点 | 合計 ${formatDistance(state.routeResult.totalDistance)}`;
+  const returnLabel = state.routeResult.returnToStart ? " | 戻る" : "";
+  elements.routeSummary.textContent = `${method}計算 | ${state.routeResult.pointIds.length}点${returnLabel} | 合計 ${formatDistance(state.routeResult.totalDistance)}`;
 
   const routePoints = routeResultPoints();
   routePoints.forEach((point, index) => {
@@ -764,6 +776,27 @@ function renderRoute() {
     item.append(number, text, cumulative);
     elements.routeList.append(item);
   });
+
+  if (state.routeResult.returnToStart && routePoints.length > 1) {
+    const returnDistance = state.routeResult.segmentDistances[routePoints.length - 1];
+    const item = document.createElement("li");
+    const number = document.createElement("span");
+    number.className = "route-step-number route-step-return";
+    number.textContent = "戻";
+
+    const text = document.createElement("div");
+    const title = document.createElement("strong");
+    const segment = document.createElement("small");
+    title.textContent = `${routePoints.at(-1).title} - ${routePoints[0].title}`;
+    segment.textContent = `スタートへ ${formatDistance(returnDistance)}`;
+    text.append(title, segment);
+
+    const cumulative = document.createElement("span");
+    cumulative.textContent = formatDistance(state.routeResult.totalDistance);
+
+    item.append(number, text, cumulative);
+    elements.routeList.append(item);
+  }
 }
 function findPoint(id) {
   return id === CURRENT_LOCATION_ID ? currentLocationPoint() : findPointIn(id, state.points);
@@ -1110,7 +1143,7 @@ function computeRouteFromSelection() {
     state.routeStartPointId = selectedPoints[0].id;
   }
 
-  state.routeResult = optimizeVisitOrder(selectedPoints, state.routeStartPointId);
+  state.routeResult = optimizeVisitOrder(selectedPoints, state.routeStartPointId, state.routeReturnToStart);
   render();
 }
 
@@ -1147,20 +1180,24 @@ function routeResultPoints() {
   return state.routeResult?.pointIds?.map(findPoint).filter(Boolean) ?? [];
 }
 
-function optimizeVisitOrder(points, startPointId) {
+function optimizeVisitOrder(points, startPointId, returnToStart) {
   const startIndex = Math.max(0, points.findIndex((point) => point.id === startPointId));
   const orderedPoints = [points[startIndex], ...points.filter((_, index) => index !== startIndex)];
   const distances = buildDistanceMatrix(orderedPoints);
   const result = orderedPoints.length <= 12
-    ? optimizeExact(distances)
-    : optimizeHeuristic(distances);
+    ? optimizeExact(distances, returnToStart)
+    : optimizeHeuristic(distances, returnToStart);
   const routePoints = result.path.map((index) => orderedPoints[index]);
   const segmentDistances = routePoints.slice(1).map((point, index) => distanceBetween(routePoints[index], point));
+  if (returnToStart && routePoints.length > 1) {
+    segmentDistances.push(distanceBetween(routePoints.at(-1), routePoints[0]));
+  }
 
   return {
     pointIds: routePoints.map((point) => point.id),
     totalDistance: sumDistances(segmentDistances),
     segmentDistances,
+    returnToStart: Boolean(returnToStart),
     exact: result.exact
   };
 }
@@ -1169,7 +1206,7 @@ function buildDistanceMatrix(points) {
   return points.map((from) => points.map((to) => (from.id === to.id ? 0 : distanceBetween(from, to))));
 }
 
-function optimizeExact(distances) {
+function optimizeExact(distances, returnToStart) {
   const count = distances.length;
   const size = 1 << count;
   const dp = Array.from({ length: size }, () => Array(count).fill(Infinity));
@@ -1206,8 +1243,9 @@ function optimizeExact(distances) {
   let bestLast = 0;
   let bestDistance = Infinity;
   for (let last = 0; last < count; last += 1) {
-    if (dp[fullMask][last] < bestDistance) {
-      bestDistance = dp[fullMask][last];
+    const candidate = dp[fullMask][last] + (returnToStart && count > 1 ? distances[last][0] : 0);
+    if (candidate < bestDistance) {
+      bestDistance = candidate;
       bestLast = last;
     }
   }
@@ -1228,7 +1266,7 @@ function optimizeExact(distances) {
   };
 }
 
-function optimizeHeuristic(distances) {
+function optimizeHeuristic(distances, returnToStart) {
   const count = distances.length;
   const unvisited = new Set(Array.from({ length: count - 1 }, (_, index) => index + 1));
   const path = [0];
@@ -1249,7 +1287,7 @@ function optimizeHeuristic(distances) {
     unvisited.delete(best);
   }
 
-  improveRouteWithTwoOpt(path, distances);
+  improveRouteWithTwoOpt(path, distances, returnToStart);
 
   return {
     path,
@@ -1257,7 +1295,7 @@ function optimizeHeuristic(distances) {
   };
 }
 
-function improveRouteWithTwoOpt(path, distances) {
+function improveRouteWithTwoOpt(path, distances, returnToStart) {
   let improved = true;
 
   while (improved) {
@@ -1265,9 +1303,9 @@ function improveRouteWithTwoOpt(path, distances) {
 
     for (let start = 1; start < path.length - 1; start += 1) {
       for (let end = start + 1; end < path.length; end += 1) {
-        const before = routeEdgeCost(path, distances, start, end);
+        const before = routeEdgeCost(path, distances, start, end, returnToStart);
         const reversed = [...path.slice(0, start), ...path.slice(start, end + 1).reverse(), ...path.slice(end + 1)];
-        const after = routeEdgeCost(reversed, distances, start, end);
+        const after = routeEdgeCost(reversed, distances, start, end, returnToStart);
 
         if (after + 0.000001 < before) {
           path.splice(0, path.length, ...reversed);
@@ -1278,9 +1316,13 @@ function improveRouteWithTwoOpt(path, distances) {
   }
 }
 
-function routeEdgeCost(path, distances, start, end) {
+function routeEdgeCost(path, distances, start, end, returnToStart) {
   const beforeStart = distances[path[start - 1]][path[start]];
-  const afterEnd = end + 1 < path.length ? distances[path[end]][path[end + 1]] : 0;
+  const afterEnd = end + 1 < path.length
+    ? distances[path[end]][path[end + 1]]
+    : returnToStart
+      ? distances[path[end]][path[0]]
+      : 0;
   return beforeStart + afterEnd;
 }
 
@@ -1880,6 +1922,7 @@ function clearWorkspace() {
   state.measureResult = null;
   state.routeSelectionIds = [];
   state.routeStartPointId = null;
+  state.routeReturnToStart = false;
   state.routeResult = null;
   localStorage.removeItem(STORAGE_KEY);
   render();
@@ -1952,6 +1995,11 @@ function bindEvents() {
   elements.fitButton.addEventListener("click", fitToPoints);
   elements.originButton.addEventListener("click", centerOnSelectedPoint);
   elements.routeStartSelect.addEventListener("change", () => setRouteStart(elements.routeStartSelect.value));
+  elements.routeReturnToStart.addEventListener("change", () => {
+    state.routeReturnToStart = elements.routeReturnToStart.checked;
+    state.routeResult = null;
+    render();
+  });
   elements.computeRouteButton.addEventListener("click", computeRouteFromSelection);
   elements.clearRouteSelectionButton.addEventListener("click", clearRouteSelection);
   elements.openAppleMapsButton.addEventListener("click", () => openSelectedPointInExternalMap("apple"));

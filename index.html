@@ -7,8 +7,8 @@
     <title>GRID ATLAS</title>
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="src/styles.css?v=9">
-    <script src="src/main.js?v=16" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=10">
+    <script src="src/main.js?v=17" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -171,6 +171,10 @@
             <label class="route-start-label">
               <span>スタート地点</span>
               <select id="routeStartSelect"></select>
+            </label>
+            <label class="route-return-label">
+              <input id="routeReturnToStart" type="checkbox">
+              <span>最後にスタート地点へ戻る</span>
             </label>
             <div class="button-row">
               <button id="computeRouteButton" type="button">最適順</button>
