@@ -42,11 +42,17 @@ const elements = {
   originButton: document.querySelector("#originButton"),
   emptyDetails: document.querySelector("#emptyDetails"),
   pointDetails: document.querySelector("#pointDetails"),
+  selectionHeading: document.querySelector("#selectionHeading"),
   detailPhoto: document.querySelector("#detailPhoto"),
+  detailTitleLabel: document.querySelector("#detailTitleLabel"),
   detailTitle: document.querySelector("#detailTitle"),
+  detailCoordsLabel: document.querySelector("#detailCoordsLabel"),
   detailCoords: document.querySelector("#detailCoords"),
+  detailCreatedLabel: document.querySelector("#detailCreatedLabel"),
   detailCreated: document.querySelector("#detailCreated"),
+  detailNoteLabel: document.querySelector("#detailNoteLabel"),
   detailNote: document.querySelector("#detailNote"),
+  mapOpenActions: document.querySelector("#mapOpenActions"),
   openAppleMapsButton: document.querySelector("#openAppleMapsButton"),
   openGoogleMapsButton: document.querySelector("#openGoogleMapsButton"),
   deletePointButton: document.querySelector("#deletePointButton"),
@@ -74,6 +80,7 @@ const state = {
   links: [],
   mode: "inspect",
   selectedPointId: null,
+  selectedLinkId: null,
   pendingLinkPointId: null,
   measureStartPointId: null,
   measureResult: null,
@@ -121,6 +128,7 @@ function applyWorkspace(workspace) {
     ? workspace.links.filter((link) => findPointIn(link.a, state.points) && findPointIn(link.b, state.points))
     : [];
   state.selectedPointId = null;
+  state.selectedLinkId = null;
   state.pendingLinkPointId = null;
   state.measureStartPointId = null;
   state.measureResult = null;
@@ -310,11 +318,12 @@ function drawLinks() {
 
     const start = worldToScreen(a);
     const end = worldToScreen(b);
+    const isSelected = link.id === state.selectedLinkId;
     context.beginPath();
     context.moveTo(start.x, start.y);
     context.lineTo(end.x, end.y);
-    context.strokeStyle = "#116c6d";
-    context.lineWidth = 2.4;
+    context.strokeStyle = isSelected ? "#2e7d32" : "#116c6d";
+    context.lineWidth = isSelected ? 5 : 2.4;
     context.stroke();
   }
 }
@@ -451,7 +460,8 @@ function render() {
 
 function renderSelectedSummary() {
   const point = findPoint(state.selectedPointId);
-  const title = point ? point.title : "未選択";
+  const link = selectedLink();
+  const title = point ? point.title : link ? linkTitle(link) : "未選択";
   elements.mobileSelectedTitle.textContent = title;
   elements.sidebarSelectedTitle.textContent = title;
 }
@@ -482,9 +492,11 @@ function renderStatus() {
 
 function renderActionButtons() {
   const point = findPoint(state.selectedPointId);
+  const link = selectedLink();
   const hasPoint = Boolean(point);
   const isRouteSelected = hasPoint && state.routeSelectionIds.includes(point.id);
 
+  elements.actionRegisterButton.disabled = Boolean(link);
   elements.actionLinkButton.disabled = !hasPoint || point.isVirtual;
   elements.actionMeasureButton.disabled = !hasPoint;
   elements.actionRouteButton.disabled = !hasPoint;
@@ -496,31 +508,56 @@ function renderActionButtons() {
 
 function renderDetails() {
   const point = findPoint(state.selectedPointId);
-  const hasPoint = Boolean(point);
+  const link = selectedLink();
+  const hasSelection = Boolean(point || link);
 
-  elements.emptyDetails.hidden = hasPoint;
-  elements.pointDetails.hidden = !hasPoint;
-  elements.deletePointButton.hidden = !hasPoint || point?.isVirtual;
+  elements.emptyDetails.hidden = hasSelection;
+  elements.pointDetails.hidden = !hasSelection;
+  elements.deletePointButton.hidden = !hasSelection || point?.isVirtual;
+  elements.selectionHeading.textContent = link ? "選択線" : "選択地点";
 
-  if (!point) {
+  if (!hasSelection) {
+    return;
+  }
+
+  elements.detailPhoto.hidden = true;
+  elements.detailPhoto.removeAttribute("src");
+  elements.detailPhoto.alt = "";
+
+  if (link) {
+    const endpoints = linkEndpoints(link);
+    if (!endpoints) {
+      return;
+    }
+
+    elements.detailTitleLabel.textContent = "線";
+    elements.detailCoordsLabel.textContent = "距離";
+    elements.detailCreatedLabel.textContent = "登録";
+    elements.detailNoteLabel.textContent = "端点";
+    elements.detailTitle.textContent = linkTitle(link);
+    elements.detailCoords.textContent = formatDistance(distanceBetween(endpoints.a, endpoints.b));
+    elements.detailCreated.textContent = formatDate(link.createdAt);
+    elements.detailNote.textContent = `${endpoints.a.title} / ${endpoints.b.title}`;
+    elements.mapOpenActions.hidden = true;
     return;
   }
 
   const geo = pointGeo(point);
   const accuracy = Number.isFinite(geo.accuracy) ? ` / ±${formatDistance(geo.accuracy)}` : "";
+  elements.detailTitleLabel.textContent = "見出し";
+  elements.detailCoordsLabel.textContent = "緯度経度";
+  elements.detailCreatedLabel.textContent = "登録";
+  elements.detailNoteLabel.textContent = "コメント";
   elements.detailTitle.textContent = point.title;
   elements.detailCoords.textContent = `${formatCoordinate(geo.lat)}, ${formatCoordinate(geo.lng)}${accuracy}`;
   elements.detailCreated.textContent = point.isVirtual ? "現在地" : formatDate(point.createdAt);
   elements.detailNote.textContent = point.note || "なし";
+  elements.mapOpenActions.hidden = false;
 
   if (point.photo) {
     elements.detailPhoto.hidden = false;
     elements.detailPhoto.src = point.photo;
     elements.detailPhoto.alt = point.photoName || point.title;
-  } else {
-    elements.detailPhoto.hidden = true;
-    elements.detailPhoto.removeAttribute("src");
-    elements.detailPhoto.alt = "";
   }
 }
 
@@ -602,6 +639,7 @@ function renderAnalysis() {
     remove.textContent = "×";
     remove.addEventListener("click", () => {
       state.links = state.links.filter((link) => link.id !== item.link.id);
+      state.selectedLinkId = state.selectedLinkId === item.link.id ? null : state.selectedLinkId;
       persistWorkspace();
       render();
     });
@@ -688,6 +726,24 @@ function findPointIn(id, points) {
   return points.find((point) => point.id === id) ?? null;
 }
 
+function findLink(id) {
+  return state.links.find((link) => link.id === id) ?? null;
+}
+
+function selectedLink() {
+  return findLink(state.selectedLinkId);
+}
+
+function linkEndpoints(link) {
+  const a = findPoint(link?.a);
+  const b = findPoint(link?.b);
+  return a && b ? { a, b } : null;
+}
+
+function linkTitle(link) {
+  const endpoints = linkEndpoints(link);
+  return endpoints ? `${endpoints.a.title} - ${endpoints.b.title}` : "線";
+}
 function findNearestPoint(screenPoint) {
   let nearest = null;
   let nearestDistance = Infinity;
@@ -710,6 +766,45 @@ function findNearestPoint(screenPoint) {
   return nearestDistance <= POINT_RADIUS + 12 ? nearest : null;
 }
 
+function findNearestLink(screenPoint) {
+  let nearest = null;
+  let nearestDistance = Infinity;
+
+  for (const link of state.links) {
+    const endpoints = linkEndpoints(link);
+    if (!endpoints) {
+      continue;
+    }
+
+    const start = worldToScreen(endpoints.a);
+    const end = worldToScreen(endpoints.b);
+    const distance = distanceToSegment(screenPoint, start, end);
+    if (distance < nearestDistance) {
+      nearest = link;
+      nearestDistance = distance;
+    }
+  }
+
+  return nearestDistance <= 12 ? nearest : null;
+}
+
+function distanceToSegment(point, start, end) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+
+  if (lengthSquared === 0) {
+    return Math.hypot(point.x - start.x, point.y - start.y);
+  }
+
+  const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared));
+  const projection = {
+    x: start.x + t * dx,
+    y: start.y + t * dy
+  };
+
+  return Math.hypot(point.x - projection.x, point.y - projection.y);
+}
 function distanceBetween(a, b) {
   const geoA = pointGeo(a);
   const geoB = pointGeo(b);
@@ -821,11 +916,22 @@ function fillFormFromGeo(geo) {
 
 function selectPoint(pointId) {
   state.selectedPointId = pointId;
+  state.selectedLinkId = null;
+  render();
+}
+
+function selectLink(linkId) {
+  state.mode = "inspect";
+  state.selectedPointId = null;
+  state.selectedLinkId = linkId;
+  state.pendingLinkPointId = null;
+  state.measureStartPointId = null;
   render();
 }
 
 function handleCanvasClick(screenPoint) {
   const nearest = findNearestPoint(screenPoint);
+  const nearestLink = nearest ? null : findNearestLink(screenPoint);
   const world = screenToWorld(screenPoint);
 
   if (nearest) {
@@ -846,20 +952,26 @@ function handleCanvasClick(screenPoint) {
     return;
   }
 
+  if (nearestLink) {
+    selectLink(nearestLink.id);
+    return;
+  }
+
   state.mode = "inspect";
   state.selectedPointId = null;
+  state.selectedLinkId = null;
   state.pendingLinkPointId = null;
   state.measureStartPointId = null;
   state.pendingGeo = null;
   fillFormFromWorld(world);
   render();
 }
-
 function handleLinkPoint(point) {
   if (point.isVirtual) {
     state.pendingLinkPointId = null;
     state.mode = "inspect";
     state.selectedPointId = point.id;
+    state.selectedLinkId = null;
     render();
     return;
   }
@@ -867,6 +979,7 @@ function handleLinkPoint(point) {
   if (!state.pendingLinkPointId) {
     state.pendingLinkPointId = point.id;
     state.selectedPointId = point.id;
+    state.selectedLinkId = null;
     render();
     return;
   }
@@ -895,6 +1008,7 @@ function handleLinkPoint(point) {
   state.pendingLinkPointId = null;
   state.mode = "inspect";
   state.selectedPointId = point.id;
+  state.selectedLinkId = null;
   render();
 }
 
@@ -902,6 +1016,7 @@ function handleMeasurePoint(point) {
   if (!state.measureStartPointId) {
     state.measureStartPointId = point.id;
     state.selectedPointId = point.id;
+    state.selectedLinkId = null;
     render();
     return;
   }
@@ -919,6 +1034,7 @@ function handleMeasurePoint(point) {
   state.measureStartPointId = null;
   state.mode = "inspect";
   state.selectedPointId = point.id;
+  state.selectedLinkId = null;
   render();
 }
 
@@ -935,6 +1051,7 @@ function handleRoutePoint(point) {
 
   state.routeResult = null;
   state.selectedPointId = point.id;
+  state.selectedLinkId = null;
   render();
 }
 
@@ -1256,6 +1373,7 @@ async function submitPoint(event) {
 
   state.points.push(point);
   state.selectedPointId = point.id;
+  state.selectedLinkId = null;
   state.pendingGeo = null;
   elements.pointForm.reset();
   state.viewport.x = point.x;
@@ -1730,6 +1848,7 @@ function clearWorkspace() {
   state.points = [];
   state.links = [];
   state.selectedPointId = null;
+  state.selectedLinkId = null;
   state.pendingLinkPointId = null;
   state.measureStartPointId = null;
   state.measureResult = null;
@@ -1741,6 +1860,20 @@ function clearWorkspace() {
 }
 
 function deleteSelectedPoint() {
+  const link = selectedLink();
+  if (link) {
+    const confirmed = window.confirm("選択線を削除しますか。");
+    if (!confirmed) {
+      return;
+    }
+
+    state.links = state.links.filter((item) => item.id !== link.id);
+    state.selectedLinkId = null;
+    persistWorkspace();
+    render();
+    return;
+  }
+
   const point = findPoint(state.selectedPointId);
   if (!point) {
     return;
@@ -1752,8 +1885,9 @@ function deleteSelectedPoint() {
   }
 
   state.points = state.points.filter((item) => item.id !== point.id);
-  state.links = state.links.filter((link) => link.a !== point.id && link.b !== point.id);
+  state.links = state.links.filter((item) => item.a !== point.id && item.b !== point.id);
   state.selectedPointId = null;
+  state.selectedLinkId = null;
   state.pendingLinkPointId = state.pendingLinkPointId === point.id ? null : state.pendingLinkPointId;
   state.measureStartPointId = state.measureStartPointId === point.id ? null : state.measureStartPointId;
   state.routeSelectionIds = state.routeSelectionIds.filter((id) => id !== point.id);
@@ -1762,7 +1896,6 @@ function deleteSelectedPoint() {
   persistWorkspace();
   render();
 }
-
 function bindEvents() {
   window.addEventListener("resize", scheduleCanvasResize);
   window.visualViewport?.addEventListener("resize", scheduleCanvasResize);

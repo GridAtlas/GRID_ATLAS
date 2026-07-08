@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="src/styles.css?v=9">
-    <script src="src/main.js?v=10" type="module" defer></script>
+    <script src="src/main.js?v=11" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -109,7 +109,7 @@
           </section>
           <section class="panel">
             <div class="panel-heading">
-              <h2>選択地点</h2>
+              <h2 id="selectionHeading">選択地点</h2>
               <button id="deletePointButton" class="danger-button" type="button" hidden>削除</button>
             </div>
             <div id="emptyDetails" class="empty-state">未選択</div>
@@ -117,23 +117,23 @@
               <img id="detailPhoto" alt="" hidden>
               <dl>
                 <div>
-                  <dt>見出し</dt>
+                  <dt id="detailTitleLabel">見出し</dt>
                   <dd id="detailTitle"></dd>
                 </div>
                 <div>
-                  <dt>緯度経度</dt>
+                  <dt id="detailCoordsLabel">緯度経度</dt>
                   <dd id="detailCoords"></dd>
                 </div>
                 <div>
-                  <dt>登録</dt>
+                  <dt id="detailCreatedLabel">登録</dt>
                   <dd id="detailCreated"></dd>
                 </div>
                 <div>
-                  <dt>コメント</dt>
+                  <dt id="detailNoteLabel">コメント</dt>
                   <dd id="detailNote"></dd>
                 </div>
               </dl>
-              <div class="map-open-actions" aria-label="外部地図">
+              <div id="mapOpenActions" class="map-open-actions" aria-label="外部地図">
                 <button id="openAppleMapsButton" type="button">Appleマップ</button>
                 <button id="openGoogleMapsButton" type="button">Googleマップ</button>
               </div>
