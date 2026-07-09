@@ -8,8 +8,8 @@
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("grid-atlas-theme")==="retro"?"retro":"light"}catch{document.documentElement.dataset.theme="light"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=13">
-    <script src="src/main.js?v=24" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=14">
+    <script src="src/main.js?v=25" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -51,6 +51,7 @@
             <button id="zoomOutButton" class="icon-button" type="button" title="縮小">−</button>
             <button id="fitButton" class="icon-button" type="button" title="全体表示">□</button>
             <button id="originButton" class="icon-button" type="button" title="選択地点へ">⌾</button>
+            <button id="followLocationButton" class="icon-button" type="button" title="現在地を追従" aria-pressed="false">◎</button>
           </div>
           <output id="statusLine" class="status-line" aria-live="polite"></output>
         </section>

@@ -43,6 +43,7 @@ const elements = {
   zoomOutButton: document.querySelector("#zoomOutButton"),
   fitButton: document.querySelector("#fitButton"),
   originButton: document.querySelector("#originButton"),
+  followLocationButton: document.querySelector("#followLocationButton"),
   emptyDetails: document.querySelector("#emptyDetails"),
   pointDetails: document.querySelector("#pointDetails"),
   selectionHeading: document.querySelector("#selectionHeading"),
@@ -91,6 +92,8 @@ const state = {
   routeResult: null,
   pendingGeo: null,
   currentGeo: null,
+  followCurrentLocation: false,
+  locationWatchId: null,
   viewport: {
     x: DEFAULT_CENTER.x,
     y: DEFAULT_CENTER.y,
@@ -614,15 +617,20 @@ function renderStatus() {
     route: "巡回"
   }[state.mode];
 
-  let extra = "";
+  const extras = [];
   const pendingLink = findPoint(state.pendingLinkPointId);
 
-  if (pendingLink) {
-    extra = ` | 接続元: ${pendingLink.title}`;
-  } else if (state.routeSelectionIds.length > 0) {
-    extra = ` | 巡回: ${state.routeSelectionIds.length}点`;
+  if (state.followCurrentLocation) {
+    extras.push("追従");
   }
 
+  if (pendingLink) {
+    extras.push(`接続元: ${pendingLink.title}`);
+  } else if (state.routeSelectionIds.length > 0) {
+    extras.push(`巡回: ${state.routeSelectionIds.length}点`);
+  }
+
+  const extra = extras.length > 0 ? ` | ${extras.join(" | ")}` : "";
   elements.statusLine.value = `${modeLabel} | ${state.points.length}点 | ${state.links.length}線 | 格子 ${formatDistance(chooseGridStep())}${extra}`;
 }
 
@@ -641,6 +649,7 @@ function renderActionButtons() {
   elements.actionLinkButton.classList.toggle("is-active", Boolean(state.pendingLinkPointId));
   elements.actionRouteButton.classList.toggle("is-active", Boolean(isRouteSelected));
   elements.actionRouteLabel.textContent = isRouteSelected ? "解除" : "巡回";
+  renderLocationFollowButton();
 }
 
 function renderDetails() {
@@ -1377,6 +1386,7 @@ function zoomAt(screenPoint, factor) {
 }
 
 function fitToPoints() {
+  pauseLocationFollowForManualView();
   syncCanvasSize();
 
   const fitPoints = fitTargetPoints();
@@ -1436,6 +1446,7 @@ function fitTargetPoints() {
 }
 
 function centerOnSelectedPoint() {
+  pauseLocationFollowForManualView();
   syncCanvasSize();
   const selected = findPoint(state.selectedPointId);
 
@@ -1488,6 +1499,8 @@ async function submitPoint(event) {
   const photo = file ? await readPhoto(file) : null;
   const createdAt = new Date().toISOString();
   const fallbackTitle = `Point ${state.points.length + 1}`;
+
+  pauseLocationFollowForManualView();
 
   const point = {
     id: createId(),
@@ -1556,6 +1569,47 @@ function locateOnStartup() {
   requestCurrentLocation({ fillForm: false, center: true, showButtonState: false, startup: true });
 }
 
+function geolocationOptions(options = {}) {
+  return {
+    enableHighAccuracy: true,
+    timeout: options.startup ? 6500 : 10000,
+    maximumAge: 5000
+  };
+}
+
+function updateCurrentLocationFromPosition(position, options = {}) {
+  const geo = normalizeGeo({
+    lat: position.coords.latitude,
+    lng: position.coords.longitude,
+    accuracy: position.coords.accuracy
+  });
+  const projected = projectLatLng(geo.lat, geo.lng);
+
+  state.currentGeo = geo;
+
+  if (options.fillForm) {
+    state.mode = "add";
+    state.pendingGeo = geo;
+    fillFormFromGeo(geo);
+  }
+
+  if (options.center) {
+    state.viewport.x = projected.x;
+    state.viewport.y = projected.y;
+    state.viewport.scale = Math.max(state.viewport.scale, 0.7);
+  }
+
+  render();
+}
+
+function locationErrorMessage(error, fallback) {
+  if (error?.code === 1) {
+    return "位置情報を許可してください";
+  }
+
+  return fallback;
+}
+
 function requestCurrentLocation(options = {}) {
   if (!("geolocation" in navigator)) {
     if (!options.startup) {
@@ -1571,45 +1625,98 @@ function requestCurrentLocation(options = {}) {
 
   navigator.geolocation.getCurrentPosition(
     (position) => {
-      const geo = normalizeGeo({
-        lat: position.coords.latitude,
-        lng: position.coords.longitude,
-        accuracy: position.coords.accuracy
+      const shouldCenter = options.center && (!options.startup || (state.mode === "inspect" && !state.selectedPointId));
+      updateCurrentLocationFromPosition(position, {
+        fillForm: options.fillForm,
+        center: shouldCenter
       });
-      const projected = projectLatLng(geo.lat, geo.lng);
 
-      state.currentGeo = geo;
-      if (options.fillForm) {
-        state.mode = "add";
-        state.pendingGeo = geo;
-        fillFormFromGeo(geo);
-      }
-      if (options.center && (!options.startup || (state.mode === "inspect" && !state.selectedPointId))) {
-        state.viewport.x = projected.x;
-        state.viewport.y = projected.y;
-        state.viewport.scale = Math.max(state.viewport.scale, 0.7);
-      }
       if (options.showButtonState) {
         elements.useLocationButton.disabled = false;
         elements.useLocationButton.textContent = "現在地";
       }
-      render();
     },
-    () => {
+    (error) => {
       if (!options.startup) {
-        elements.statusLine.value = "現在地エラー";
+        elements.statusLine.value = locationErrorMessage(error, "現在地エラー");
       }
       if (options.showButtonState) {
         elements.useLocationButton.disabled = false;
         elements.useLocationButton.textContent = "現在地";
       }
     },
-    {
-      enableHighAccuracy: true,
-      timeout: options.startup ? 6500 : 10000,
-      maximumAge: 5000
-    }
+    geolocationOptions({ startup: options.startup })
   );
+}
+
+function toggleLocationFollow() {
+  if (state.followCurrentLocation) {
+    stopLocationFollow();
+    return;
+  }
+
+  startLocationFollow();
+}
+
+function startLocationFollow() {
+  if (!("geolocation" in navigator)) {
+    elements.statusLine.value = "現在地を取得できません";
+    return;
+  }
+
+  if (state.locationWatchId !== null) {
+    return;
+  }
+
+  state.followCurrentLocation = true;
+
+  try {
+    state.locationWatchId = navigator.geolocation.watchPosition(
+      (position) => updateCurrentLocationFromPosition(position, { center: state.followCurrentLocation }),
+      (error) => {
+        const message = locationErrorMessage(error, "追従エラー");
+        stopLocationFollow();
+        elements.statusLine.value = message;
+      },
+      geolocationOptions()
+    );
+    render();
+  } catch {
+    state.followCurrentLocation = false;
+    state.locationWatchId = null;
+    renderLocationFollowButton();
+    elements.statusLine.value = "追従エラー";
+  }
+}
+
+function stopLocationFollow(options = {}) {
+  if (state.locationWatchId !== null && "geolocation" in navigator) {
+    navigator.geolocation.clearWatch(state.locationWatchId);
+  }
+
+  state.locationWatchId = null;
+  state.followCurrentLocation = false;
+
+  if (options.render !== false) {
+    render();
+    return;
+  }
+
+  renderLocationFollowButton();
+}
+
+function pauseLocationFollowForManualView() {
+  if (state.followCurrentLocation) {
+    stopLocationFollow({ render: false });
+  }
+}
+
+function renderLocationFollowButton() {
+  const isSupported = "geolocation" in navigator;
+  elements.followLocationButton.disabled = !isSupported;
+  elements.followLocationButton.classList.toggle("is-active", state.followCurrentLocation);
+  elements.followLocationButton.setAttribute("aria-pressed", String(state.followCurrentLocation));
+  elements.followLocationButton.title = state.followCurrentLocation ? "現在地追従を停止" : "現在地を追従";
 }
 
 function currentLocationPoint() {
@@ -1734,6 +1841,7 @@ function handleIncomingShare() {
 }
 
 function applySharedLocationToForm(result, message) {
+  pauseLocationFollowForManualView();
   const geo = normalizeGeo({ lat: result.lat, lng: result.lng });
   const projected = projectLatLng(geo.lat, geo.lng);
 
@@ -2056,6 +2164,7 @@ function bindEvents() {
   elements.zoomOutButton.addEventListener("click", () => zoomAt({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 0.8));
   elements.fitButton.addEventListener("click", fitToPoints);
   elements.originButton.addEventListener("click", centerOnSelectedPoint);
+  elements.followLocationButton.addEventListener("click", toggleLocationFollow);
   elements.routeStartSelect.addEventListener("change", () => setRouteStart(elements.routeStartSelect.value));
   elements.routeReturnToStart.addEventListener("change", () => {
     state.routeReturnToStart = elements.routeReturnToStart.checked;
@@ -2101,6 +2210,9 @@ function bindEvents() {
     const dy = point.y - state.pointer.start.y;
 
     if (Math.hypot(dx, dy) > 3) {
+      if (!state.pointer.moved) {
+        pauseLocationFollowForManualView();
+      }
       state.pointer.moved = true;
     }
 

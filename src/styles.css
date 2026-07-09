@@ -272,7 +272,7 @@ textarea:focus-visible {
   top: 14px;
   left: 14px;
   display: grid;
-  grid-template-columns: repeat(4, 42px);
+  grid-template-columns: repeat(5, 42px);
   gap: 8px;
 }
 
@@ -283,6 +283,12 @@ textarea:focus-visible {
   padding: 0;
   font-size: 18px;
   box-shadow: var(--shadow);
+}
+
+.icon-button.is-active {
+  border-color: var(--accent);
+  background: var(--active-bg);
+  color: var(--accent-strong);
 }
 
 .status-line {
