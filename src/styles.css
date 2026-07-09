@@ -207,24 +207,20 @@ textarea:focus-visible {
 
 .actionbar {
   min-width: 0;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-  scrollbar-width: none;
+  padding: 10px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
 }
-
-.actionbar::-webkit-scrollbar {
-  display: none;
-}
-
 .action-button {
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  min-width: 78px;
-  padding: 0 12px;
+  padding: 0 10px;
   white-space: nowrap;
 }
 
@@ -250,6 +246,14 @@ textarea:focus-visible {
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 390px;
+}
+
+.map-column {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  background: var(--canvas-bg);
 }
 
 .grid-stage {
@@ -635,17 +639,12 @@ textarea {
     display: none;
   }
 
-  .actionbar {
-    width: 100%;
-  }
-
-  .action-button {
-    min-width: 72px;
-    flex: 1 0 auto;
-  }
-
   .workspace {
     grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  .map-column {
     grid-template-rows: minmax(320px, 44svh) auto;
   }
 
@@ -665,7 +664,7 @@ textarea {
 
 @supports (height: 100dvh) {
   @media (max-width: 860px) {
-    .workspace {
+    .map-column {
       grid-template-rows: minmax(320px, 44dvh) auto;
     }
   }
@@ -680,8 +679,7 @@ textarea {
   }
 
   .action-button {
-    min-width: 64px;
-    padding: 0 8px;
+    padding: 0 6px;
   }
 
   .action-button span:last-child {

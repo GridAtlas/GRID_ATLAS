@@ -9,8 +9,8 @@
     <link rel="icon" href="assets/icon-retro.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-retro.png">
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("grid-atlas-theme")==="light"?"light":"retro"}catch{document.documentElement.dataset.theme="retro"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=17">
-    <script src="src/main.js?v=33" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=18">
+    <script src="src/main.js?v=34" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -24,37 +24,56 @@
           <span>選択中</span>
           <strong id="mobileSelectedTitle">未選択</strong>
         </div>
-        <nav class="actionbar" aria-label="地点操作">
-          <button id="actionRegisterButton" class="action-button" type="button" title="この位置を登録" disabled>
-            <span aria-hidden="true">＋</span>
-            <span>登録</span>
-          </button>
-          <button id="actionLinkButton" class="action-button" type="button" title="選択地点から線をつなぐ">
-            <span aria-hidden="true">╱</span>
-            <span>接続</span>
-          </button>
-          <button id="actionRouteButton" class="action-button" type="button" title="巡回ルートに追加">
-            <span aria-hidden="true">⤨</span>
-            <span id="actionRouteLabel">巡回</span>
-          </button>
-          <button id="deletePointButton" class="action-button danger-button" type="button" title="選択対象を削除" disabled>
-            <span aria-hidden="true">×</span>
-            <span>削除</span>
-          </button>
-        </nav>
       </header>
 
       <main class="workspace">
-        <section class="grid-stage" aria-label="格子">
-          <canvas id="gridCanvas" aria-label="地点格子"></canvas>
-          <div class="canvas-tools" aria-label="表示操作">
-            <button id="zoomInButton" class="icon-button" type="button" title="拡大">＋</button>
-            <button id="zoomOutButton" class="icon-button" type="button" title="縮小">−</button>
-            <button id="fitButton" class="icon-button" type="button" title="全体表示">□</button>
-            <button id="originButton" class="icon-button" type="button" title="選択地点へ">⌾</button>
-          </div>
-          <output id="statusLine" class="status-line" aria-live="polite"></output>
-        </section>
+        <div class="map-column">
+          <section class="grid-stage" aria-label="格子">
+            <canvas id="gridCanvas" aria-label="地点格子"></canvas>
+            <div class="canvas-tools" aria-label="表示操作">
+              <button id="zoomInButton" class="icon-button" type="button" title="拡大">＋</button>
+              <button id="zoomOutButton" class="icon-button" type="button" title="縮小">−</button>
+              <button id="fitButton" class="icon-button" type="button" title="全体表示">□</button>
+              <button id="originButton" class="icon-button" type="button" title="選択地点へ">⌾</button>
+            </div>
+            <output id="statusLine" class="status-line" aria-live="polite"></output>
+          </section>
+
+          <nav class="actionbar" aria-label="地点操作">
+            <button id="actionRegisterButton" class="action-button" type="button" title="この位置を登録" disabled>
+              <span aria-hidden="true">＋</span>
+              <span>登録</span>
+            </button>
+            <button id="actionLinkButton" class="action-button" type="button" title="選択中の2点を接続" disabled>
+              <span aria-hidden="true">╱</span>
+              <span>接続</span>
+            </button>
+            <button id="actionRouteButton" class="action-button" type="button" title="選択点を巡回対象にする" disabled>
+              <span aria-hidden="true">⤨</span>
+              <span id="actionRouteLabel">巡回</span>
+            </button>
+            <button id="deletePointButton" class="action-button danger-button" type="button" title="選択対象を削除" disabled>
+              <span aria-hidden="true">×</span>
+              <span>削除</span>
+            </button>
+            <button id="clearSelectionButton" class="action-button" type="button" title="選択を解除" disabled>
+              <span aria-hidden="true">○</span>
+              <span>解除</span>
+            </button>
+            <button id="actionTargetButton" class="action-button" type="button" title="選択地点を対象にする" disabled>
+              <span aria-hidden="true">◎</span>
+              <span>対象</span>
+            </button>
+            <button id="actionRouteStartButton" class="action-button" type="button" title="選択地点を巡回の起点にする" disabled>
+              <span aria-hidden="true">●</span>
+              <span>起点</span>
+            </button>
+            <button id="actionFollowButton" class="action-button" type="button" aria-pressed="false" title="現在地追従を切り替え">
+              <span aria-hidden="true">⌾</span>
+              <span>追従</span>
+            </button>
+          </nav>
+        </div>
 
         <aside class="sidebar" aria-label="地点と分析">
           <div class="selected-summary selected-summary-sidebar" aria-live="polite">
@@ -82,7 +101,7 @@
 
               <div class="button-row">
                 <button id="readClipboardButton" type="button">クリップ読取</button>
-                <button id="useLocationButton" type="button" aria-pressed="false" title="現在地を取得して追従">現在地</button>
+                <button id="useLocationButton" type="button" aria-pressed="false" title="現在地を登録フォームへ入力">現在地</button>
               </div>
               <output id="shareImportStatus" class="form-status" aria-live="polite"></output>
 
@@ -174,7 +193,7 @@
               <button id="computeRouteButton" type="button">最適順</button>
               <button id="clearRouteSelectionButton" type="button">解除</button>
             </div>
-            <div id="routeSummary" class="route-summary">地点を選んで上部の巡回を押す</div>
+            <div id="routeSummary" class="route-summary">地点を選んで巡回を押す</div>
             <ol id="routeList" class="route-list"></ol>
           </section>
           <section class="panel">
