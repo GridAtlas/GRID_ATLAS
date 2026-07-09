@@ -1287,8 +1287,7 @@ function zoomAt(screenPoint, factor) {
 function fitToPoints() {
   syncCanvasSize();
 
-  const current = currentLocationPoint();
-  const fitPoints = current ? [...state.points, current] : [...state.points];
+  const fitPoints = fitTargetPoints();
 
   if (fitPoints.length === 0) {
     state.viewport.x = DEFAULT_CENTER.x;
@@ -1317,6 +1316,31 @@ function fitToPoints() {
   state.viewport.y = (minY + maxY) / 2;
   state.viewport.scale = clampScale(Math.min(scaleX, scaleY));
   render();
+}
+
+function fitTargetPoints() {
+  const routePoints = routeResultPoints();
+  if (routePoints.length > 0) {
+    return routePoints;
+  }
+
+  const routeSelection = selectedRoutePoints();
+  if (routeSelection.length > 0) {
+    return routeSelection;
+  }
+
+  const points = [...state.points];
+  const current = currentLocationPoint();
+  if (current) {
+    points.push(current);
+  }
+
+  if (validGeo(state.pendingGeo)) {
+    const pending = normalizeGeo(state.pendingGeo);
+    points.push({ ...projectLatLng(pending.lat, pending.lng), geo: pending });
+  }
+
+  return points;
 }
 
 function centerOnSelectedPoint() {
