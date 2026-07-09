@@ -43,7 +43,6 @@ const elements = {
   zoomOutButton: document.querySelector("#zoomOutButton"),
   fitButton: document.querySelector("#fitButton"),
   originButton: document.querySelector("#originButton"),
-  followLocationButton: document.querySelector("#followLocationButton"),
   emptyDetails: document.querySelector("#emptyDetails"),
   pointDetails: document.querySelector("#pointDetails"),
   selectionHeading: document.querySelector("#selectionHeading"),
@@ -94,6 +93,7 @@ const state = {
   currentGeo: null,
   followCurrentLocation: false,
   locationWatchId: null,
+  locationFollowFillForm: false,
   viewport: {
     x: DEFAULT_CENTER.x,
     y: DEFAULT_CENTER.y,
@@ -1099,6 +1099,7 @@ function handleCanvasClick(screenPoint) {
     return;
   }
 
+  pauseLocationFollowForManualView();
   state.mode = "inspect";
   state.selectedPointId = null;
   state.selectedLinkId = null;
@@ -1562,7 +1563,7 @@ function resizeImage(dataUrl) {
 }
 
 function useCurrentLocation() {
-  requestCurrentLocation({ fillForm: true, center: true, showButtonState: true });
+  toggleLocationFollow({ fillForm: true });
 }
 
 function locateOnStartup() {
@@ -1649,16 +1650,16 @@ function requestCurrentLocation(options = {}) {
   );
 }
 
-function toggleLocationFollow() {
+function toggleLocationFollow(options = {}) {
   if (state.followCurrentLocation) {
     stopLocationFollow();
     return;
   }
 
-  startLocationFollow();
+  startLocationFollow(options);
 }
 
-function startLocationFollow() {
+function startLocationFollow(options = {}) {
   if (!("geolocation" in navigator)) {
     elements.statusLine.value = "現在地を取得できません";
     return;
@@ -1669,10 +1670,14 @@ function startLocationFollow() {
   }
 
   state.followCurrentLocation = true;
+  state.locationFollowFillForm = Boolean(options.fillForm);
 
   try {
     state.locationWatchId = navigator.geolocation.watchPosition(
-      (position) => updateCurrentLocationFromPosition(position, { center: state.followCurrentLocation }),
+      (position) => updateCurrentLocationFromPosition(position, {
+        center: state.followCurrentLocation,
+        fillForm: state.locationFollowFillForm
+      }),
       (error) => {
         const message = locationErrorMessage(error, "追従エラー");
         stopLocationFollow();
@@ -1684,6 +1689,7 @@ function startLocationFollow() {
   } catch {
     state.followCurrentLocation = false;
     state.locationWatchId = null;
+    state.locationFollowFillForm = false;
     renderLocationFollowButton();
     elements.statusLine.value = "追従エラー";
   }
@@ -1696,6 +1702,7 @@ function stopLocationFollow(options = {}) {
 
   state.locationWatchId = null;
   state.followCurrentLocation = false;
+  state.locationFollowFillForm = false;
 
   if (options.render !== false) {
     render();
@@ -1713,10 +1720,11 @@ function pauseLocationFollowForManualView() {
 
 function renderLocationFollowButton() {
   const isSupported = "geolocation" in navigator;
-  elements.followLocationButton.disabled = !isSupported;
-  elements.followLocationButton.classList.toggle("is-active", state.followCurrentLocation);
-  elements.followLocationButton.setAttribute("aria-pressed", String(state.followCurrentLocation));
-  elements.followLocationButton.title = state.followCurrentLocation ? "現在地追従を停止" : "現在地を追従";
+  elements.useLocationButton.disabled = !isSupported;
+  elements.useLocationButton.classList.toggle("is-active", state.followCurrentLocation);
+  elements.useLocationButton.setAttribute("aria-pressed", String(state.followCurrentLocation));
+  elements.useLocationButton.textContent = state.followCurrentLocation ? "追従中" : "現在地";
+  elements.useLocationButton.title = state.followCurrentLocation ? "現在地追従を停止" : "現在地を取得して追従";
 }
 
 function currentLocationPoint() {
@@ -2156,6 +2164,7 @@ function bindEvents() {
   elements.pointForm.addEventListener("submit", submitPoint);
   elements.parseShareButton.addEventListener("click", parseShareInput);
   elements.useCenterButton.addEventListener("click", () => {
+    pauseLocationFollowForManualView();
     state.pendingGeo = null;
     fillFormFromWorld({ x: state.viewport.x, y: state.viewport.y });
   });
@@ -2164,7 +2173,6 @@ function bindEvents() {
   elements.zoomOutButton.addEventListener("click", () => zoomAt({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 0.8));
   elements.fitButton.addEventListener("click", fitToPoints);
   elements.originButton.addEventListener("click", centerOnSelectedPoint);
-  elements.followLocationButton.addEventListener("click", toggleLocationFollow);
   elements.routeStartSelect.addEventListener("change", () => setRouteStart(elements.routeStartSelect.value));
   elements.routeReturnToStart.addEventListener("change", () => {
     state.routeReturnToStart = elements.routeReturnToStart.checked;
