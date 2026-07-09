@@ -760,45 +760,7 @@ function selectedLinksDistance(links) {
 }
 
 function renderStatus() {
-  const modeLabel = {
-    inspect: "選択",
-    add: "登録",
-    link: "接続",
-    route: "巡回"
-  }[state.mode];
-
-  const extras = [];
-  const counts = selectedCounts();
-
-  if (counts.total > 0) {
-    const parts = [];
-    if (counts.point > 0) {
-      parts.push(`${counts.point}点`);
-    }
-    if (counts.link > 0) {
-      parts.push(`${counts.link}線`);
-    }
-    extras.push(`選択: ${parts.join(" / ")}`);
-  }
-
-  if (state.followCurrentLocation) {
-    extras.push("追従");
-  }
-
-  const target = targetPoint();
-  const targetDistance = targetDistanceMeters();
-  if (target) {
-    const distanceLabel = Number.isFinite(targetDistance) ? ` ${formatDistance(targetDistance)}` : "";
-    const arrivalLabel = targetArrived() ? " 到着圏" : "";
-    extras.push(`ターゲット: ${target.title}${distanceLabel}${arrivalLabel}`);
-  }
-
-  if (state.routeSelectionIds.length > 0) {
-    extras.push(`巡回: ${state.routeSelectionIds.length}点`);
-  }
-
-  const extra = extras.length > 0 ? ` | ${extras.join(" | ")}` : "";
-  elements.statusLine.value = `${modeLabel} | ${state.points.length}点 | ${state.links.length}線 | 格子 ${formatDistance(chooseGridStep())}${extra}`;
+  elements.statusLine.value = `格子 ${formatDistance(chooseGridStep())}`;
 }
 
 function renderActionButtons() {
@@ -2139,7 +2101,7 @@ async function submitPoint(event) {
   const lng = Number.parseFloat(elements.pointLng.value);
 
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    elements.statusLine.value = "緯度経度を入力してください";
+    elements.shareImportStatus.value = "緯度経度を入力してください";
     return;
   }
 
@@ -2275,7 +2237,7 @@ function locationErrorMessage(error, fallback) {
 function requestCurrentLocation(options = {}) {
   if (!("geolocation" in navigator)) {
     if (!options.startup) {
-      elements.statusLine.value = "現在地を取得できません";
+      elements.shareImportStatus.value = "現在地を取得できません";
     }
     return;
   }
@@ -2300,7 +2262,7 @@ function requestCurrentLocation(options = {}) {
     },
     (error) => {
       if (!options.startup) {
-        elements.statusLine.value = locationErrorMessage(error, "現在地エラー");
+        elements.shareImportStatus.value = locationErrorMessage(error, "現在地エラー");
       }
       if (options.showButtonState) {
         elements.useLocationButton.disabled = false;
@@ -2322,7 +2284,7 @@ function toggleLocationFollow(options = {}) {
 
 function startLocationFollow(options = {}) {
   if (!("geolocation" in navigator)) {
-    elements.statusLine.value = "現在地を取得できません";
+    elements.shareImportStatus.value = "現在地を取得できません";
     return;
   }
 
@@ -2345,7 +2307,7 @@ function startLocationFollow(options = {}) {
       (error) => {
         const message = locationErrorMessage(error, "追従エラー");
         stopLocationFollow();
-        elements.statusLine.value = message;
+        elements.shareImportStatus.value = message;
       },
       geolocationOptions()
     );
@@ -2356,7 +2318,7 @@ function startLocationFollow(options = {}) {
     state.locationFollowFillForm = false;
     state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
     renderLocationFollowButton();
-    elements.statusLine.value = "追従エラー";
+    elements.shareImportStatus.value = "追従エラー";
   }
 }
 
@@ -2802,7 +2764,7 @@ function importWorkspaceFile(file) {
       persistWorkspace();
       fitToPoints();
     } catch {
-      elements.statusLine.value = "読み込みエラー";
+      elements.shareImportStatus.value = "読み込みエラー";
     }
   });
   reader.readAsText(file);
