@@ -3,6 +3,7 @@ const THEME_KEY = "grid-atlas-theme";
 const LIGHT_THEME = "light";
 const RETRO_THEME = "retro";
 const POINT_RADIUS = 8;
+const POINTER_MOVE_THRESHOLD = 3;
 const CURRENT_LOCATION_ID = "__current_location__";
 const FOLLOW_SCALE_MANUAL = "manual";
 const FOLLOW_SCALE_RANGE = "range";
@@ -111,7 +112,7 @@ const state = {
     y: DEFAULT_CENTER.y,
     scale: 0.7
   },
-  pointer: null
+  pointer: createPointerGestureState()
 };
 
 const CANVAS_PALETTES = {
@@ -1481,7 +1482,6 @@ function selectLink(linkId) {
 function handleCanvasClick(screenPoint) {
   const nearest = findNearestPoint(screenPoint);
   const nearestLink = nearest ? null : findNearestLink(screenPoint);
-  const world = screenToWorld(screenPoint);
 
   if (nearest) {
     toggleSelection("point", nearest.id);
@@ -1493,10 +1493,14 @@ function handleCanvasClick(screenPoint) {
     return;
   }
 
+  if (state.selection.length > 0) {
+    return;
+  }
+
   pauseLocationFollowForManualView();
   state.mode = "inspect";
   clearSelection({ render: false });
-  fillFormFromWorld(world);
+  fillFormFromWorld(screenToWorld(screenPoint));
   render();
 }
 function setRouteStart(pointId) {
@@ -1894,6 +1898,145 @@ function getCanvasPoint(event) {
     x: event.clientX - rect.left,
     y: event.clientY - rect.top
   };
+}
+
+function createPointerGestureState() {
+  return {
+    active: new Map(),
+    drag: null,
+    pinch: null
+  };
+}
+
+function pointerEntries() {
+  return [...state.pointer.active.entries()];
+}
+
+function pointerDistance(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function pointerMidpoint(a, b) {
+  return {
+    x: (a.x + b.x) / 2,
+    y: (a.y + b.y) / 2
+  };
+}
+
+function startDragGesture(pointerId, point, options = {}) {
+  state.pointer.drag = {
+    id: pointerId,
+    start: point,
+    last: point,
+    viewportX: state.viewport.x,
+    viewportY: state.viewport.y,
+    moved: Boolean(options.moved)
+  };
+}
+
+function startPinchGesture() {
+  const entries = pointerEntries();
+  if (entries.length < 2) {
+    state.pointer.pinch = null;
+    return;
+  }
+
+  const [, first] = entries[0];
+  const [, second] = entries[1];
+  const midpoint = pointerMidpoint(first, second);
+  state.pointer.drag = null;
+  state.pointer.pinch = {
+    startDistance: Math.max(1, pointerDistance(first, second)),
+    startMidpoint: midpoint,
+    startWorld: screenToWorld(midpoint),
+    startScale: state.viewport.scale,
+    moved: false
+  };
+}
+
+function updatePinchGesture() {
+  const entries = pointerEntries();
+  if (entries.length < 2) {
+    return;
+  }
+
+  if (!state.pointer.pinch) {
+    startPinchGesture();
+  }
+
+  const pinch = state.pointer.pinch;
+  const [, first] = entries[0];
+  const [, second] = entries[1];
+  const distance = Math.max(1, pointerDistance(first, second));
+  const midpoint = pointerMidpoint(first, second);
+  const movedDistance = Math.abs(distance - pinch.startDistance);
+  const movedCenter = pointerDistance(midpoint, pinch.startMidpoint);
+
+  if (movedDistance > POINTER_MOVE_THRESHOLD || movedCenter > POINTER_MOVE_THRESHOLD) {
+    pinch.moved = true;
+  }
+
+  if (!pinch.moved) {
+    return;
+  }
+
+  const size = canvasSize();
+  const nextScale = clampScale(pinch.startScale * (distance / pinch.startDistance));
+  state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
+  state.viewport.scale = nextScale;
+
+  const current = state.followCurrentLocation ? currentLocationPoint() : null;
+  if (current) {
+    state.viewport.x = current.x;
+    state.viewport.y = current.y;
+  } else {
+    state.viewport.x = pinch.startWorld.x - (midpoint.x - size.width / 2) / nextScale;
+    state.viewport.y = pinch.startWorld.y + (midpoint.y - size.height / 2) / nextScale;
+  }
+
+  draw();
+  renderStatus();
+}
+
+function removePointer(event, options = {}) {
+  if (!state.pointer.active.has(event.pointerId)) {
+    return;
+  }
+
+  const point = getCanvasPoint(event);
+  const drag = state.pointer.drag;
+  const allowTap = options.allowTap !== false;
+  const wasTap = allowTap
+    && state.pointer.active.size === 1
+    && drag
+    && drag.id === event.pointerId
+    && !drag.moved
+    && !state.pointer.pinch;
+
+  state.pointer.active.delete(event.pointerId);
+
+  try {
+    canvas.releasePointerCapture(event.pointerId);
+  } catch {
+    // Pointer capture can already be released by the browser during cancellation.
+  }
+
+  if (state.pointer.pinch) {
+    state.pointer.pinch = null;
+    const remaining = pointerEntries()[0];
+    if (remaining) {
+      startDragGesture(remaining[0], remaining[1], { moved: true });
+    } else {
+      state.pointer.drag = null;
+    }
+    return;
+  }
+
+  state.pointer.drag = null;
+
+  if (wasTap) {
+    handleCanvasClick(point);
+  }
 }
 
 async function submitPoint(event) {
@@ -2695,57 +2838,64 @@ function bindEvents() {
 
   canvas.addEventListener("pointerdown", (event) => {
     const point = getCanvasPoint(event);
-    state.pointer = {
-      id: event.pointerId,
-      start: point,
-      last: point,
-      viewportX: state.viewport.x,
-      viewportY: state.viewport.y,
-      moved: false
-    };
-    canvas.setPointerCapture(event.pointerId);
+    state.pointer.active.set(event.pointerId, point);
+
+    try {
+      canvas.setPointerCapture(event.pointerId);
+    } catch {
+      // Some browsers skip pointer capture for canceled touch gestures.
+    }
+
+    if (state.pointer.active.size === 1) {
+      startDragGesture(event.pointerId, point);
+      return;
+    }
+
+    if (state.pointer.active.size === 2) {
+      startPinchGesture();
+    }
   });
 
   canvas.addEventListener("pointermove", (event) => {
-    if (!state.pointer || state.pointer.id !== event.pointerId) {
+    if (!state.pointer.active.has(event.pointerId)) {
       return;
     }
 
     const point = getCanvasPoint(event);
-    const dx = point.x - state.pointer.start.x;
-    const dy = point.y - state.pointer.start.y;
+    state.pointer.active.set(event.pointerId, point);
 
-    if (Math.hypot(dx, dy) > 3) {
-      if (!state.pointer.moved) {
-        pauseLocationFollowForManualView();
-      }
-      state.pointer.moved = true;
+    if (state.pointer.active.size >= 2) {
+      updatePinchGesture();
+      return;
     }
 
-    if (state.pointer.moved) {
-      state.viewport.x = state.pointer.viewportX - dx / state.viewport.scale;
-      state.viewport.y = state.pointer.viewportY + dy / state.viewport.scale;
+    const drag = state.pointer.drag;
+    if (!drag || drag.id !== event.pointerId) {
+      return;
+    }
+
+    const dx = point.x - drag.start.x;
+    const dy = point.y - drag.start.y;
+
+    if (Math.hypot(dx, dy) > POINTER_MOVE_THRESHOLD) {
+      if (!drag.moved) {
+        pauseLocationFollowForManualView();
+      }
+      drag.moved = true;
+    }
+
+    if (drag.moved) {
+      state.viewport.x = drag.viewportX - dx / state.viewport.scale;
+      state.viewport.y = drag.viewportY + dy / state.viewport.scale;
       draw();
       renderStatus();
     }
 
-    state.pointer.last = point;
+    drag.last = point;
   });
 
-  canvas.addEventListener("pointerup", (event) => {
-    if (!state.pointer || state.pointer.id !== event.pointerId) {
-      return;
-    }
-
-    const point = getCanvasPoint(event);
-    const wasMoved = state.pointer.moved;
-    state.pointer = null;
-    canvas.releasePointerCapture(event.pointerId);
-
-    if (!wasMoved) {
-      handleCanvasClick(point);
-    }
-  });
+  canvas.addEventListener("pointerup", removePointer);
+  canvas.addEventListener("pointercancel", (event) => removePointer(event, { allowTap: false }));
 
   canvas.addEventListener(
     "wheel",
