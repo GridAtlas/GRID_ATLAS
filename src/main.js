@@ -36,6 +36,7 @@ const elements = {
   actionFollowButton: document.querySelector("#actionFollowButton"),
   themeToggleButton: document.querySelector("#themeToggleButton"),
   statusLine: document.querySelector("#statusLine"),
+  selectionInfoText: document.querySelector("#selectionInfoText"),
   mobileSelectedTitle: document.querySelector("#mobileSelectedTitle"),
   sidebarSelectedTitle: document.querySelector("#sidebarSelectedTitle"),
   pointForm: document.querySelector("#pointForm"),
@@ -654,6 +655,7 @@ function render() {
   renderAnalysis();
   renderRoute();
   renderSelectedSummary();
+  renderSelectionInfo();
   renderStatus();
   renderActionButtons();
 }
@@ -664,6 +666,97 @@ function renderSelectedSummary() {
     : "未選択";
   elements.mobileSelectedTitle.textContent = title;
   elements.sidebarSelectedTitle.textContent = title;
+}
+
+function renderSelectionInfo() {
+  elements.selectionInfoText.textContent = selectionInfoText();
+}
+
+function selectionInfoText() {
+  if (state.selection.length === 0) {
+    return "未選択";
+  }
+
+  const points = selectedPointIds().map(findPoint).filter(Boolean);
+  const links = selectedLinkIds().map(findLink).filter(Boolean);
+
+  if (state.selection.length === 1) {
+    const entry = state.selection[0];
+    if (entry.type === "point") {
+      const point = findPoint(entry.id);
+      return point ? pointSelectionInfo(point) : "地点を確認できません";
+    }
+
+    const link = findLink(entry.id);
+    return link ? linkSelectionInfo(link) : "線を確認できません";
+  }
+
+  if (points.length === 2 && links.length === 0) {
+    return `${points[0].title} - ${points[1].title} | 2点間 ${formatDistance(distanceBetween(points[0], points[1]))}`;
+  }
+
+  const parts = [];
+  const countParts = [];
+  if (points.length > 0) {
+    countParts.push(`${points.length}点`);
+  }
+  if (links.length > 0) {
+    countParts.push(`${links.length}線`);
+  }
+  if (countParts.length > 0) {
+    parts.push(`選択 ${countParts.join(" / ")}`);
+  }
+
+  if (points.length > 1) {
+    parts.push(`選択順 ${formatDistance(pointSequenceDistance(points))}`);
+  }
+
+  const linkTotal = selectedLinksDistance(links);
+  if (Number.isFinite(linkTotal)) {
+    parts.push(`線合計 ${formatDistance(linkTotal)}`);
+  }
+
+  return parts.join(" | ") || "選択中";
+}
+
+function pointSelectionInfo(point) {
+  const geo = pointGeo(point);
+  const accuracy = Number.isFinite(geo.accuracy) ? ` | 精度 ±${formatDistance(geo.accuracy)}` : "";
+
+  if (point.id === CURRENT_LOCATION_ID) {
+    return `${point.title} | 現在地${accuracy}`;
+  }
+
+  const current = currentLocationPoint();
+  if (current) {
+    return `${point.title} | 現在地から ${formatDistance(distanceBetween(current, point))}`;
+  }
+
+  return `${point.title} | ${formatCoordinate(geo.lat)}, ${formatCoordinate(geo.lng)}`;
+}
+
+function linkSelectionInfo(link) {
+  const endpoints = linkEndpoints(link);
+  if (!endpoints) {
+    return "線を確認できません";
+  }
+
+  return `${linkTitle(link)} | 距離 ${formatDistance(distanceBetween(endpoints.a, endpoints.b))}`;
+}
+
+function pointSequenceDistance(points) {
+  return points.slice(1).reduce((total, point, index) => total + distanceBetween(points[index], point), 0);
+}
+
+function selectedLinksDistance(links) {
+  if (links.length === 0) {
+    return NaN;
+  }
+
+  return links.reduce((total, link) => {
+    const endpoints = linkEndpoints(link);
+    return endpoints ? total + distanceBetween(endpoints.a, endpoints.b) : total;
+  }, 0);
 }
 
 function renderStatus() {
