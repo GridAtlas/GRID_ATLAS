@@ -545,7 +545,7 @@ function renderActionButtons() {
   elements.actionLinkButton.disabled = !hasPoint;
   elements.actionRouteButton.disabled = !hasPoint;
   elements.deletePointButton.disabled = !(link || (point && !point.isVirtual));
-  elements.actionRegisterButton.classList.toggle("is-active", hasPendingPoint);
+  elements.actionRegisterButton.classList.remove("is-active");
   elements.actionLinkButton.classList.toggle("is-active", Boolean(state.pendingLinkPointId));
   elements.actionRouteButton.classList.toggle("is-active", Boolean(isRouteSelected));
   elements.actionRouteLabel.textContent = isRouteSelected ? "解除" : "巡回";
