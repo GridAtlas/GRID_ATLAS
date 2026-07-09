@@ -4,9 +4,14 @@ const LIGHT_THEME = "light";
 const RETRO_THEME = "retro";
 const POINT_RADIUS = 8;
 const CURRENT_LOCATION_ID = "__current_location__";
+const FOLLOW_SCALE_MANUAL = "manual";
+const FOLLOW_SCALE_RANGE = "range";
+const FOLLOW_SCALE_TARGET = "target";
 const EARTH_RADIUS_METERS = 6371008.8;
 const MERCATOR_RADIUS = 6378137;
 const MAX_MERCATOR_LAT = 85.05112878;
+const TARGET_DISTANCE_STEPS = [25, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000];
+const TARGET_ARRIVAL_METERS = 25;
 const DEFAULT_CENTER = projectLatLng(35.681236, 139.767125);
 
 const canvas = document.querySelector("#gridCanvas");
@@ -56,6 +61,8 @@ const elements = {
   detailNoteLabel: document.querySelector("#detailNoteLabel"),
   detailNote: document.querySelector("#detailNote"),
   mapOpenActions: document.querySelector("#mapOpenActions"),
+  targetActions: document.querySelector("#targetActions"),
+  targetPointButton: document.querySelector("#targetPointButton"),
   openAppleMapsButton: document.querySelector("#openAppleMapsButton"),
   openGoogleMapsButton: document.querySelector("#openGoogleMapsButton"),
   deletePointButton: document.querySelector("#deletePointButton"),
@@ -89,12 +96,13 @@ const state = {
   routeStartPointId: null,
   routeReturnToStart: false,
   routeResult: null,
+  targetPointId: null,
   pendingGeo: null,
   currentGeo: null,
   followCurrentLocation: false,
   locationWatchId: null,
   locationFollowFillForm: false,
-  locationFollowRangeFit: false,
+  locationFollowScaleMode: FOLLOW_SCALE_MANUAL,
   viewport: {
     x: DEFAULT_CENTER.x,
     y: DEFAULT_CENTER.y,
@@ -110,6 +118,8 @@ const CANVAS_PALETTES = {
     link: "#116c6d",
     linkSelected: "#2e7d32",
     route: "#5a4aa0",
+    target: "#c73a2a",
+    targetSoft: "rgb(199 58 42 / 0.18)",
     currentAccuracy: "rgb(255 212 54 / 0.16)",
     currentFill: "#ffd436",
     currentStroke: "#6b5a00",
@@ -134,6 +144,8 @@ const CANVAS_PALETTES = {
     link: "#29ff68",
     linkSelected: "#d6ffe0",
     route: "#7dff9b",
+    target: "#d6ffe0",
+    targetSoft: "rgb(214 255 224 / 0.16)",
     currentAccuracy: "rgb(255 236 72 / 0.12)",
     currentFill: "#fff35a",
     currentStroke: "#d8c900",
@@ -224,6 +236,7 @@ function applyWorkspace(workspace) {
   state.routeStartPointId = null;
   state.routeReturnToStart = false;
   state.routeResult = null;
+  state.targetPointId = null;
   state.pendingGeo = null;
 }
 
@@ -445,6 +458,34 @@ function drawLinks() {
   }
 }
 
+function drawTargetLine() {
+  const current = currentLocationPoint();
+  const target = targetPoint();
+  if (!current || !target) {
+    return;
+  }
+
+  const start = worldToScreen(current);
+  const end = worldToScreen(target);
+  const colors = canvasPalette();
+
+  context.save();
+  context.beginPath();
+  context.moveTo(start.x, start.y);
+  context.lineTo(end.x, end.y);
+  context.strokeStyle = colors.target;
+  context.lineWidth = 2.8;
+  context.setLineDash([7, 6]);
+  context.stroke();
+
+  context.beginPath();
+  context.arc(end.x, end.y, POINT_RADIUS + 8, 0, Math.PI * 2);
+  context.strokeStyle = colors.targetSoft;
+  context.lineWidth = 6;
+  context.setLineDash([]);
+  context.stroke();
+  context.restore();
+}
 function drawRouteResult() {
   const points = routeResultPoints();
   if (points.length < 2) {
@@ -529,6 +570,7 @@ function drawPoints() {
     const screen = worldToScreen(point);
     const isSelected = point.id === state.selectedPointId;
     const isPending = point.id === state.pendingLinkPointId;
+    const isTarget = point.id === state.targetPointId;
     const shouldShowRouteSelection = state.routeSelectionIds.length > 0 || Boolean(state.routeResult);
     const isRouteSelected = shouldShowRouteSelection && state.routeSelectionIds.includes(point.id);
     const isRouteStart = shouldShowRouteSelection && state.routeStartPointId === point.id;
@@ -537,10 +579,12 @@ function drawPoints() {
     context.fillStyle = colors.pointFill;
     context.fill();
 
-    context.lineWidth = isSelected || isPending || isRouteSelected ? 4 : 2;
+    context.lineWidth = isSelected || isPending || isRouteSelected || isTarget ? 4 : 2;
     context.strokeStyle = isRouteStart
       ? colors.routeStart
-      : isRouteSelected
+      : isTarget
+        ? colors.target
+        : isRouteSelected
         ? colors.routeSelected
         : isPending
           ? colors.pendingPointStroke
@@ -583,6 +627,7 @@ function draw() {
   const size = canvasSize();
   context.clearRect(0, 0, size.width, size.height);
   drawGrid(size.width, size.height);
+  drawTargetLine();
   drawCurrentLocation();
   drawLinks();
   drawRouteResult();
@@ -623,6 +668,14 @@ function renderStatus() {
 
   if (state.followCurrentLocation) {
     extras.push("追従");
+  }
+
+  const target = targetPoint();
+  const targetDistance = targetDistanceMeters();
+  if (target) {
+    const distanceLabel = Number.isFinite(targetDistance) ? ` ${formatDistance(targetDistance)}` : "";
+    const arrivalLabel = targetArrived() ? " 到着圏" : "";
+    extras.push(`ターゲット: ${target.title}${distanceLabel}${arrivalLabel}`);
   }
 
   if (pendingLink) {
@@ -685,6 +738,7 @@ function renderDetails() {
     elements.detailCreated.textContent = formatDate(link.createdAt);
     elements.detailNote.textContent = `${endpoints.a.title} / ${endpoints.b.title}`;
     elements.mapOpenActions.hidden = true;
+    elements.targetActions.hidden = true;
     return;
   }
 
@@ -699,6 +753,7 @@ function renderDetails() {
   elements.detailCreated.textContent = point.isVirtual ? "現在地" : formatDate(point.createdAt);
   elements.detailNote.textContent = point.note || "なし";
   elements.mapOpenActions.hidden = false;
+  renderTargetActions(point);
 
   if (point.photo) {
     elements.detailPhoto.hidden = false;
@@ -708,6 +763,77 @@ function renderDetails() {
 }
 
 
+function renderTargetActions(point) {
+  const canTarget = point && !point.isVirtual;
+  elements.targetActions.hidden = !canTarget;
+  if (!canTarget) {
+    return;
+  }
+
+  const isTarget = point.id === state.targetPointId;
+  elements.targetPointButton.textContent = isTarget ? "ターゲット解除" : "ターゲットにする";
+  elements.targetPointButton.classList.toggle("is-active", isTarget);
+  elements.targetPointButton.setAttribute("aria-pressed", String(isTarget));
+}
+
+function targetPoint() {
+  return findPoint(state.targetPointId);
+}
+
+function targetDistanceMeters() {
+  const current = currentLocationPoint();
+  const target = targetPoint();
+  return current && target ? distanceBetween(current, target) : NaN;
+}
+
+function targetArrived() {
+  const distance = targetDistanceMeters();
+  if (!Number.isFinite(distance)) {
+    return false;
+  }
+
+  const accuracy = Number.isFinite(state.currentGeo?.accuracy) ? state.currentGeo.accuracy : 0;
+  return distance <= Math.max(TARGET_ARRIVAL_METERS, accuracy);
+}
+
+function toggleTargetForSelection() {
+  const point = findPoint(state.selectedPointId);
+  if (!point || point.isVirtual) {
+    return;
+  }
+
+  if (state.targetPointId === point.id) {
+    clearTarget();
+    return;
+  }
+
+  state.targetPointId = point.id;
+  state.locationFollowScaleMode = FOLLOW_SCALE_TARGET;
+
+  if (!state.followCurrentLocation) {
+    startLocationFollow({ fillForm: false });
+    return;
+  }
+
+  const current = currentLocationPoint();
+  if (current) {
+    fitTargetFromCurrent(current, point);
+    return;
+  }
+
+  render();
+}
+
+function clearTarget(options = {}) {
+  state.targetPointId = null;
+  if (state.locationFollowScaleMode === FOLLOW_SCALE_TARGET) {
+    state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
+  }
+
+  if (options.render !== false) {
+    render();
+  }
+}
 function openSelectedPointInExternalMap(provider) {
   const point = findPoint(state.selectedPointId);
   if (!point) {
@@ -1379,7 +1505,7 @@ function sumDistances(distances) {
   return distances.reduce((sum, distance) => sum + distance, 0);
 }
 function zoomAt(screenPoint, factor) {
-  state.locationFollowRangeFit = false;
+  state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
   const before = screenToWorld(screenPoint);
   state.viewport.scale = clampScale(state.viewport.scale * factor);
   const after = screenToWorld(screenPoint);
@@ -1392,10 +1518,10 @@ function fitToPoints() {
   syncCanvasSize();
 
   if (state.followCurrentLocation) {
-    state.locationFollowRangeFit = true;
+    state.locationFollowScaleMode = state.targetPointId ? FOLLOW_SCALE_TARGET : FOLLOW_SCALE_RANGE;
     const current = currentLocationPoint();
     if (current) {
-      fitAroundCurrentLocation(current);
+      fitFollowViewport(current);
       return;
     }
 
@@ -1436,8 +1562,14 @@ function fitToPoints() {
   render();
 }
 
-function fitAroundCurrentLocation(current) {
+function fitFollowViewport(current) {
   const size = canvasSize();
+  const target = targetPoint();
+  if (state.locationFollowScaleMode === FOLLOW_SCALE_TARGET && target) {
+    fitTargetFromCurrent(current, target);
+    return;
+  }
+
   const targets = followFitTargetPoints(current);
   const remoteTargets = targets.filter((point) => Math.hypot(point.x - current.x, point.y - current.y) > 1);
 
@@ -1459,6 +1591,28 @@ function fitAroundCurrentLocation(current) {
 
   state.viewport.scale = clampScale(Math.min(scaleX, scaleY));
   render();
+}
+
+function fitTargetFromCurrent(current, target) {
+  const geo = pointGeo(current);
+  const distance = distanceBetween(current, target);
+  const accuracy = Number.isFinite(geo.accuracy) ? geo.accuracy : 0;
+  const range = targetRangeForDistance(Math.max(distance, accuracy * 2));
+  const mercatorRange = groundDistanceToMercator(range, geo.lat);
+  const size = canvasSize();
+  const padding = Math.min(110, Math.max(34, Math.min(size.width, size.height) * 0.16));
+  const availableWidth = Math.max(64, size.width - padding * 2);
+  const availableHeight = Math.max(64, size.height - padding * 2);
+
+  state.viewport.x = current.x;
+  state.viewport.y = current.y;
+  state.viewport.scale = clampScale(Math.min(availableWidth, availableHeight) / (mercatorRange * 2));
+  render();
+}
+
+function targetRangeForDistance(distance) {
+  const desired = Math.max(25, distance * 1.25);
+  return TARGET_DISTANCE_STEPS.find((step) => step >= desired) ?? desired;
 }
 
 function followFitTargetPoints(current) {
@@ -1646,8 +1800,8 @@ function updateCurrentLocationFromPosition(position, options = {}) {
   }
 
   if (options.center) {
-    if (state.followCurrentLocation && state.locationFollowRangeFit) {
-      fitAroundCurrentLocation(currentLocationPoint());
+    if (state.followCurrentLocation && state.locationFollowScaleMode !== FOLLOW_SCALE_MANUAL) {
+      fitFollowViewport(currentLocationPoint());
       return;
     }
 
@@ -1730,6 +1884,9 @@ function startLocationFollow(options = {}) {
 
   state.followCurrentLocation = true;
   state.locationFollowFillForm = Boolean(options.fillForm);
+  if (state.targetPointId && state.locationFollowScaleMode === FOLLOW_SCALE_MANUAL) {
+    state.locationFollowScaleMode = FOLLOW_SCALE_TARGET;
+  }
 
   try {
     state.locationWatchId = navigator.geolocation.watchPosition(
@@ -1749,7 +1906,7 @@ function startLocationFollow(options = {}) {
     state.followCurrentLocation = false;
     state.locationWatchId = null;
     state.locationFollowFillForm = false;
-    state.locationFollowRangeFit = false;
+    state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
     renderLocationFollowButton();
     elements.statusLine.value = "追従エラー";
   }
@@ -1763,7 +1920,7 @@ function stopLocationFollow(options = {}) {
   state.locationWatchId = null;
   state.followCurrentLocation = false;
   state.locationFollowFillForm = false;
-  state.locationFollowRangeFit = false;
+  state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
 
   if (options.render !== false) {
     render();
@@ -2192,6 +2349,7 @@ function clearWorkspace() {
   state.routeStartPointId = null;
   state.routeReturnToStart = false;
   state.routeResult = null;
+  clearTarget({ render: false });
   localStorage.removeItem(STORAGE_KEY);
   render();
 }
@@ -2229,6 +2387,9 @@ function deleteSelectedPoint() {
   state.routeSelectionIds = state.routeSelectionIds.filter((id) => id !== point.id);
   state.routeStartPointId = state.routeStartPointId === point.id ? state.routeSelectionIds[0] ?? null : state.routeStartPointId;
   state.routeResult = null;
+  if (state.targetPointId === point.id) {
+    clearTarget({ render: false });
+  }
   persistWorkspace();
   render();
 }
@@ -2273,6 +2434,7 @@ function bindEvents() {
   elements.clearRouteSelectionButton.addEventListener("click", clearRouteSelection);
   elements.openAppleMapsButton.addEventListener("click", () => openSelectedPointInExternalMap("apple"));
   elements.openGoogleMapsButton.addEventListener("click", () => openSelectedPointInExternalMap("google"));
+  elements.targetPointButton.addEventListener("click", toggleTargetForSelection);
   elements.deletePointButton.addEventListener("click", deleteSelectedPoint);
   elements.exportButton.addEventListener("click", exportWorkspace);
   elements.importButton.addEventListener("click", () => elements.importFile.click());

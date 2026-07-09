@@ -448,6 +448,16 @@ textarea {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
+.target-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.target-actions button.is-active {
+  border-color: var(--accent);
+  background: var(--active-bg);
+  color: var(--accent-strong);
+}
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

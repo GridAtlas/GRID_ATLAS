@@ -8,8 +8,8 @@
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("grid-atlas-theme")==="retro"?"retro":"light"}catch{document.documentElement.dataset.theme="light"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=15">
-    <script src="src/main.js?v=29" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=16">
+    <script src="src/main.js?v=31" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -137,6 +137,9 @@
               <div id="mapOpenActions" class="map-open-actions" aria-label="外部地図">
                 <button id="openAppleMapsButton" type="button">Appleマップ</button>
                 <button id="openGoogleMapsButton" type="button">Googleマップ</button>
+              </div>
+              <div id="targetActions" class="target-actions">
+                <button id="targetPointButton" type="button">ターゲットにする</button>
               </div>
             </div>
           </section>
