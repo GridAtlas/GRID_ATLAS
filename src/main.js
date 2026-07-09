@@ -1787,19 +1787,6 @@ function zoomAt(screenPoint, factor) {
 
 function fitToPoints() {
   syncCanvasSize();
-
-  if (state.followCurrentLocation) {
-    state.locationFollowScaleMode = state.targetPointId ? FOLLOW_SCALE_TARGET : FOLLOW_SCALE_RANGE;
-    const current = currentLocationPoint();
-    if (current) {
-      fitFollowViewport(current);
-      return;
-    }
-
-    render();
-    return;
-  }
-
   pauseLocationFollowForManualView();
 
   const fitPoints = fitTargetPoints();
@@ -1923,8 +1910,21 @@ function fitTargetPoints() {
 }
 
 function centerOnSelectedPoint() {
-  pauseLocationFollowForManualView();
   syncCanvasSize();
+
+  if (state.followCurrentLocation) {
+    const current = currentLocationPoint();
+    if (current) {
+      state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
+      state.viewport.x = current.x;
+      state.viewport.y = current.y;
+      state.viewport.scale = Math.max(state.viewport.scale, 0.7);
+      render();
+      return;
+    }
+  }
+
+  pauseLocationFollowForManualView();
   const selected = lastSelectedPoint();
 
   if (selected) {
@@ -2039,15 +2039,8 @@ function updatePinchGesture() {
   const nextScale = clampScale(pinch.startScale * (distance / pinch.startDistance));
   state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
   state.viewport.scale = nextScale;
-
-  const current = state.followCurrentLocation ? currentLocationPoint() : null;
-  if (current) {
-    state.viewport.x = current.x;
-    state.viewport.y = current.y;
-  } else {
-    state.viewport.x = pinch.startWorld.x - (midpoint.x - size.width / 2) / nextScale;
-    state.viewport.y = pinch.startWorld.y + (midpoint.y - size.height / 2) / nextScale;
-  }
+  state.viewport.x = pinch.startWorld.x - (midpoint.x - size.width / 2) / nextScale;
+  state.viewport.y = pinch.startWorld.y + (midpoint.y - size.height / 2) / nextScale;
 
   draw();
   renderStatus();
@@ -2210,15 +2203,14 @@ function updateCurrentLocationFromPosition(position, options = {}) {
   }
 
   if (options.center) {
-    if (state.followCurrentLocation && state.locationFollowScaleMode !== FOLLOW_SCALE_MANUAL) {
-      fitFollowViewport(currentLocationPoint());
-      return;
-    }
-
-    state.viewport.x = projected.x;
-    state.viewport.y = projected.y;
-
-    if (!state.followCurrentLocation) {
+    if (state.followCurrentLocation) {
+      if (state.locationFollowScaleMode !== FOLLOW_SCALE_MANUAL) {
+        fitFollowViewport(currentLocationPoint());
+        return;
+      }
+    } else {
+      state.viewport.x = projected.x;
+      state.viewport.y = projected.y;
       state.viewport.scale = Math.max(state.viewport.scale, 0.7);
     }
   }
@@ -2294,8 +2286,8 @@ function startLocationFollow(options = {}) {
 
   state.followCurrentLocation = true;
   state.locationFollowFillForm = Boolean(options.fillForm);
-  if (state.targetPointId && state.locationFollowScaleMode === FOLLOW_SCALE_MANUAL) {
-    state.locationFollowScaleMode = FOLLOW_SCALE_TARGET;
+  if (state.locationFollowScaleMode === FOLLOW_SCALE_MANUAL) {
+    state.locationFollowScaleMode = state.targetPointId ? FOLLOW_SCALE_TARGET : FOLLOW_SCALE_RANGE;
   }
 
   try {
@@ -2342,7 +2334,8 @@ function stopLocationFollow(options = {}) {
 
 function pauseLocationFollowForManualView() {
   if (state.followCurrentLocation) {
-    stopLocationFollow({ render: false });
+    state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
+    renderLocationFollowButton();
   }
 }
 
@@ -2357,7 +2350,8 @@ function renderLocationFollowButton() {
   elements.actionFollowButton.disabled = !isSupported;
   elements.actionFollowButton.classList.toggle("is-active", state.followCurrentLocation);
   elements.actionFollowButton.setAttribute("aria-pressed", String(state.followCurrentLocation));
-  elements.actionFollowButton.title = state.followCurrentLocation ? "現在地追従を停止" : "現在地追従を開始";
+  elements.actionFollowButton.title = state.followCurrentLocation ? "現在地更新を停止" : "現在地更新を開始";
+  elements.originButton.title = state.followCurrentLocation ? "現在地へ" : "選択地点へ";
 }
 
 function currentLocationPoint() {
