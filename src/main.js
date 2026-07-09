@@ -1439,16 +1439,24 @@ function fitToPoints() {
 function fitAroundCurrentLocation(current) {
   const size = canvasSize();
   const targets = followFitTargetPoints(current);
-  const padding = Math.min(110, Math.max(34, Math.min(size.width, size.height) * 0.16));
-  const availableWidth = Math.max(64, size.width - padding * 2);
-  const availableHeight = Math.max(64, size.height - padding * 2);
-  const maxDx = Math.max(30, ...targets.map((point) => Math.abs(point.x - current.x)));
-  const maxDy = Math.max(30, ...targets.map((point) => Math.abs(point.y - current.y)));
-  const scaleX = availableWidth / (maxDx * 2);
-  const scaleY = availableHeight / (maxDy * 2);
+  const remoteTargets = targets.filter((point) => Math.hypot(point.x - current.x, point.y - current.y) > 1);
 
   state.viewport.x = current.x;
   state.viewport.y = current.y;
+
+  if (remoteTargets.length === 0) {
+    render();
+    return;
+  }
+
+  const padding = Math.min(110, Math.max(34, Math.min(size.width, size.height) * 0.16));
+  const availableWidth = Math.max(64, size.width - padding * 2);
+  const availableHeight = Math.max(64, size.height - padding * 2);
+  const maxDx = Math.max(30, ...remoteTargets.map((point) => Math.abs(point.x - current.x)));
+  const maxDy = Math.max(30, ...remoteTargets.map((point) => Math.abs(point.y - current.y)));
+  const scaleX = availableWidth / (maxDx * 2);
+  const scaleY = availableHeight / (maxDy * 2);
+
   state.viewport.scale = clampScale(Math.min(scaleX, scaleY));
   render();
 }
@@ -2100,13 +2108,42 @@ function shortMapUrlLikely(value) {
   return /(?:maps\.app\.goo\.gl|goo\.gl\/maps)/i.test(value);
 }
 
+function activateWaitingServiceWorker(registration) {
+  if (registration.waiting && navigator.serviceWorker.controller) {
+    registration.waiting.postMessage({ type: "SKIP_WAITING" });
+  }
+}
+
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) {
     return;
   }
 
+  const reloadOnControllerChange = Boolean(navigator.serviceWorker.controller);
+  let reloadingForUpdate = false;
+
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!reloadOnControllerChange || reloadingForUpdate) {
+      return;
+    }
+
+    reloadingForUpdate = true;
+    window.location.reload();
+  });
+
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js").then((registration) => {
+      activateWaitingServiceWorker(registration);
+      registration.update().catch(() => {});
+      registration.addEventListener("updatefound", () => {
+        const worker = registration.installing;
+        worker?.addEventListener("statechange", () => {
+          if (worker.state === "installed") {
+            activateWaitingServiceWorker(registration);
+          }
+        });
+      });
+    }).catch(() => {});
   });
 }
 function exportWorkspace() {

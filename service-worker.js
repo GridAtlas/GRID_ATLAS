@@ -1,13 +1,18 @@
-const CACHE_NAME = "grid-atlas-static-v29";
+const CACHE_NAME = "grid-atlas-static-v30";
 const STATIC_ASSETS = [
   "./",
   "./index.html",
   "./src/styles.css?v=15",
-  "./src/main.js?v=28",
+  "./src/main.js?v=29",
   "./manifest.webmanifest",
   "./assets/icon.svg"
 ];
 
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)));
   self.skipWaiting();
