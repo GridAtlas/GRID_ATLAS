@@ -94,6 +94,7 @@ const state = {
   followCurrentLocation: false,
   locationWatchId: null,
   locationFollowFillForm: false,
+  locationFollowRangeFit: false,
   viewport: {
     x: DEFAULT_CENTER.x,
     y: DEFAULT_CENTER.y,
@@ -1378,6 +1379,7 @@ function sumDistances(distances) {
   return distances.reduce((sum, distance) => sum + distance, 0);
 }
 function zoomAt(screenPoint, factor) {
+  state.locationFollowRangeFit = false;
   const before = screenToWorld(screenPoint);
   state.viewport.scale = clampScale(state.viewport.scale * factor);
   const after = screenToWorld(screenPoint);
@@ -1390,6 +1392,7 @@ function fitToPoints() {
   syncCanvasSize();
 
   if (state.followCurrentLocation) {
+    state.locationFollowRangeFit = true;
     const current = currentLocationPoint();
     if (current) {
       fitAroundCurrentLocation(current);
@@ -1635,9 +1638,17 @@ function updateCurrentLocationFromPosition(position, options = {}) {
   }
 
   if (options.center) {
+    if (state.followCurrentLocation && state.locationFollowRangeFit) {
+      fitAroundCurrentLocation(currentLocationPoint());
+      return;
+    }
+
     state.viewport.x = projected.x;
     state.viewport.y = projected.y;
-    state.viewport.scale = Math.max(state.viewport.scale, 0.7);
+
+    if (!state.followCurrentLocation) {
+      state.viewport.scale = Math.max(state.viewport.scale, 0.7);
+    }
   }
 
   render();
@@ -1730,6 +1741,7 @@ function startLocationFollow(options = {}) {
     state.followCurrentLocation = false;
     state.locationWatchId = null;
     state.locationFollowFillForm = false;
+    state.locationFollowRangeFit = false;
     renderLocationFollowButton();
     elements.statusLine.value = "追従エラー";
   }
@@ -1743,6 +1755,7 @@ function stopLocationFollow(options = {}) {
   state.locationWatchId = null;
   state.followCurrentLocation = false;
   state.locationFollowFillForm = false;
+  state.locationFollowRangeFit = false;
 
   if (options.render !== false) {
     render();
