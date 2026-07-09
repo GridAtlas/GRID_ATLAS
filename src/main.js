@@ -714,9 +714,7 @@ function renderActionButtons() {
   const pointPair = selectedPointPair();
   const targetCandidate = lastTargetableSelectedPoint();
   const routeStartCandidate = lastSelectedPoint();
-  const routeMatchesSelection = pointIds.length > 0
-    && pointIds.length === state.routeSelectionIds.length
-    && pointIds.every((id, index) => state.routeSelectionIds[index] === id);
+  const routeMatchesSelection = selectedPointIdsMatchRoute(pointIds);
   const connectedPair = pointPair ? findLinkBetween(pointPair[0], pointPair[1]) : null;
   const deletablePointCount = pointIds.filter((id) => id !== CURRENT_LOCATION_ID).length;
   const canDelete = deletablePointCount + linkIds.length > 0;
@@ -732,11 +730,12 @@ function renderActionButtons() {
   elements.actionRegisterButton.classList.remove("is-active");
   elements.actionLinkButton.classList.toggle("is-active", Boolean(connectedPair));
   elements.actionRouteButton.classList.toggle("is-active", routeMatchesSelection);
+  elements.actionRouteButton.title = routeMatchesSelection ? "選択中の巡回対象を解除" : "選択点を巡回対象にする";
   elements.deletePointButton.classList.toggle("is-active", false);
   elements.clearSelectionButton.classList.toggle("is-active", state.selection.length > 0 || hasPendingPoint);
   elements.actionTargetButton.classList.toggle("is-active", Boolean(targetCandidate && targetCandidate.id === state.targetPointId));
   elements.actionRouteStartButton.classList.toggle("is-active", Boolean(routeStartCandidate && routeStartCandidate.id === state.routeStartPointId));
-  elements.actionRouteLabel.textContent = "巡回";
+  elements.actionRouteLabel.textContent = routeMatchesSelection ? "解除" : "巡回";
   renderLocationFollowButton();
 }
 
@@ -1267,6 +1266,12 @@ function selectedPointPair() {
   return ids.length === 2 ? ids : null;
 }
 
+function selectedPointIdsMatchRoute(ids) {
+  return ids.length > 0
+    && ids.length === state.routeSelectionIds.length
+    && ids.every((id, index) => state.routeSelectionIds[index] === id);
+}
+
 function findLinkBetween(a, b) {
   return state.links.find((link) => (link.a === a && link.b === b) || (link.a === b && link.b === a)) ?? null;
 }
@@ -1279,6 +1284,15 @@ function setRouteFromSelectedPoints() {
 
   state.mode = "inspect";
   state.pendingLinkPointId = null;
+
+  if (selectedPointIdsMatchRoute(ids)) {
+    state.routeSelectionIds = [];
+    state.routeStartPointId = null;
+    state.routeResult = null;
+    render();
+    return;
+  }
+
   state.routeSelectionIds = ids;
   if (!state.routeSelectionIds.includes(state.routeStartPointId)) {
     state.routeStartPointId = ids[0] ?? null;
