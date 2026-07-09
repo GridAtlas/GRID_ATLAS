@@ -39,10 +39,8 @@ const elements = {
   pointLng: document.querySelector("#pointLng"),
   pointPhoto: document.querySelector("#pointPhoto"),
   pointNote: document.querySelector("#pointNote"),
-  shareInput: document.querySelector("#shareInput"),
-  parseShareButton: document.querySelector("#parseShareButton"),
+  readClipboardButton: document.querySelector("#readClipboardButton"),
   shareImportStatus: document.querySelector("#shareImportStatus"),
-  useCenterButton: document.querySelector("#useCenterButton"),
   useLocationButton: document.querySelector("#useLocationButton"),
   zoomInButton: document.querySelector("#zoomInButton"),
   zoomOutButton: document.querySelector("#zoomOutButton"),
@@ -2026,20 +2024,41 @@ function isSameGeo(a, b) {
 }
 
 
-function parseShareInput() {
+async function readClipboardShare() {
+  if (!navigator.clipboard?.readText) {
+    elements.shareImportStatus.value = "このブラウザではクリップボードを読めません";
+    return;
+  }
+
+  let text = "";
+  try {
+    text = await navigator.clipboard.readText();
+  } catch {
+    elements.shareImportStatus.value = "クリップボードの読み取りが許可されませんでした";
+    return;
+  }
+
+  if (!text.trim()) {
+    elements.shareImportStatus.value = "クリップボードが空です";
+    return;
+  }
+
+  applySharedTextToForm(text, "クリップボードから読み取りました", "クリップボードから座標を読み取れません");
+}
+
+function applySharedTextToForm(text, successMessage, failureMessage) {
   const result = parseSharedLocationPayload({
-    text: elements.shareInput.value,
+    text,
     title: elements.pointTitle.value
   });
 
   if (!result) {
-    elements.shareImportStatus.value = shortMapUrlLikely(elements.shareInput.value)
-      ? "短縮URLは展開できません"
-      : "座標を読み取れません";
-    return;
+    elements.shareImportStatus.value = shortMapUrlLikely(text) ? "短縮URLは展開できません" : failureMessage;
+    return false;
   }
 
-  applySharedLocationToForm(result, "共有地点を読み取りました");
+  applySharedLocationToForm(result, successMessage);
+  return true;
 }
 
 function handleIncomingShare() {
@@ -2058,10 +2077,10 @@ function handleIncomingShare() {
   }
 
   const result = parseSharedLocationPayload(payload);
-  elements.shareInput.value = [payload.title, payload.text, payload.url].filter(Boolean).join("\n");
+  const sharedText = [payload.title, payload.text, payload.url].filter(Boolean).join("\n");
 
   if (!result) {
-    elements.shareImportStatus.value = shortMapUrlLikely(elements.shareInput.value)
+    elements.shareImportStatus.value = shortMapUrlLikely(sharedText)
       ? "短縮URLは展開できません"
       : "共有内容から座標を読み取れません";
     return;
@@ -2417,12 +2436,7 @@ function bindEvents() {
   elements.actionRouteButton.addEventListener("click", toggleSelectedRoutePoint);
 
   elements.pointForm.addEventListener("submit", submitPoint);
-  elements.parseShareButton.addEventListener("click", parseShareInput);
-  elements.useCenterButton.addEventListener("click", () => {
-    pauseLocationFollowForManualView();
-    state.pendingGeo = null;
-    fillFormFromWorld({ x: state.viewport.x, y: state.viewport.y });
-  });
+  elements.readClipboardButton.addEventListener("click", readClipboardShare);
   elements.useLocationButton.addEventListener("click", useCurrentLocation);
   elements.zoomInButton.addEventListener("click", () => zoomAt({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 1.25));
   elements.zoomOutButton.addEventListener("click", () => zoomAt({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 0.8));

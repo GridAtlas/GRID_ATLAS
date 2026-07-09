@@ -516,25 +516,13 @@ textarea {
   min-height: 34px;
   padding: 0;
 }
-
-
-
-.share-import {
-  display: grid;
-  gap: 10px;
-}
-
-.share-import label {
-  display: grid;
-  gap: 7px;
-}
-
-.share-import-status {
-  min-height: 20px;
+.form-status {
+  min-height: 18px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
+
 .panel-count {
   color: var(--muted);
   font-size: 12px;

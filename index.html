@@ -9,8 +9,8 @@
     <link rel="icon" href="assets/icon-retro.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-retro.png">
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("grid-atlas-theme")==="light"?"light":"retro"}catch{document.documentElement.dataset.theme="retro"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=16">
-    <script src="src/main.js?v=32" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=17">
+    <script src="src/main.js?v=33" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -81,9 +81,10 @@
               </div>
 
               <div class="button-row">
-                <button id="useCenterButton" type="button">画面中心</button>
+                <button id="readClipboardButton" type="button">クリップ読取</button>
                 <button id="useLocationButton" type="button" aria-pressed="false" title="現在地を取得して追従">現在地</button>
               </div>
+              <output id="shareImportStatus" class="form-status" aria-live="polite"></output>
 
               <label>
                 <span>写真</span>
@@ -97,18 +98,6 @@
 
               <button class="primary-button" type="submit">登録</button>
             </form>
-          </section>
-
-          <section class="panel">
-            <h2>共有から登録</h2>
-            <div class="share-import">
-              <label>
-                <span>共有テキスト</span>
-                <textarea id="shareInput" rows="3" autocomplete="off"></textarea>
-              </label>
-              <button id="parseShareButton" type="button">読み取り</button>
-              <output id="shareImportStatus" class="share-import-status" aria-live="polite"></output>
-            </div>
           </section>
           <section class="panel">
             <div class="panel-heading">
