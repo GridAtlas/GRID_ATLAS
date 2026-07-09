@@ -1,14 +1,14 @@
-const CACHE_NAME = "grid-atlas-static-v34";
+const CACHE_NAME = "grid-atlas-static-v35";
 const STATIC_ASSETS = [
   "./",
   "./index.html",
   "./src/styles.css?v=16",
   "./src/main.js?v=32",
-  "./manifest.webmanifest?v=2",
-  "./assets/icon.svg?v=2",
-  "./assets/icon-192.png?v=2",
-  "./assets/icon-512.png?v=2",
-  "./assets/apple-touch-icon.png?v=2"
+  "./manifest.webmanifest",
+  "./assets/icon-retro.svg",
+  "./assets/icon-retro-192.png",
+  "./assets/icon-retro-512.png",
+  "./assets/apple-touch-icon-retro.png"
 ];
 
 self.addEventListener("message", (event) => {
