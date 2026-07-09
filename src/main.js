@@ -614,12 +614,6 @@ function openSelectedPointInExternalMap(provider) {
 
   const geo = pointGeo(point);
   const url = externalMapUrl(provider, geo, point.title);
-  const opened = window.open(url, "_blank");
-  if (opened) {
-    opened.opener = null;
-    return;
-  }
-
   window.location.href = url;
 }
 
