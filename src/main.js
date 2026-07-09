@@ -1,4 +1,7 @@
 const STORAGE_KEY = "grid-atlas-workspace-v2";
+const THEME_KEY = "grid-atlas-theme";
+const LIGHT_THEME = "light";
+const RETRO_THEME = "retro";
 const POINT_RADIUS = 8;
 const CURRENT_LOCATION_ID = "__current_location__";
 const EARTH_RADIUS_METERS = 6371008.8;
@@ -21,6 +24,7 @@ const elements = {
   actionRegisterButton: document.querySelector("#actionRegisterButton"),
   actionRouteButton: document.querySelector("#actionRouteButton"),
   actionRouteLabel: document.querySelector("#actionRouteLabel"),
+  themeToggleButton: document.querySelector("#themeToggleButton"),
   statusLine: document.querySelector("#statusLine"),
   mobileSelectedTitle: document.querySelector("#mobileSelectedTitle"),
   sidebarSelectedTitle: document.querySelector("#sidebarSelectedTitle"),
@@ -94,6 +98,90 @@ const state = {
   },
   pointer: null
 };
+
+const CANVAS_PALETTES = {
+  light: {
+    gridMinor: "#edf0e8",
+    gridMajor: "#d8ded1",
+    link: "#116c6d",
+    linkSelected: "#2e7d32",
+    route: "#5a4aa0",
+    currentAccuracy: "rgb(255 212 54 / 0.16)",
+    currentFill: "#ffd436",
+    currentStroke: "#6b5a00",
+    currentSelectedStroke: "#2e7d32",
+    currentInner: "#fff7bf",
+    pendingFill: "rgb(233 95 26 / 0.24)",
+    pendingStroke: "rgb(233 95 26 / 0.62)",
+    pointFill: "#e95f1a",
+    pointBaseStroke: "#ffffff",
+    routeStart: "#5a4aa0",
+    routeSelected: "#7b68c7",
+    pendingPointStroke: "#116c6d",
+    selected: "#2e7d32",
+    badgeFill: "#ffffff",
+    badgeText: "#5a4aa0",
+    badgeStartFill: "#5a4aa0",
+    badgeStartText: "#ffffff"
+  },
+  retro: {
+    gridMinor: "rgb(44 255 100 / 0.14)",
+    gridMajor: "rgb(69 255 124 / 0.36)",
+    link: "#29ff68",
+    linkSelected: "#d6ffe0",
+    route: "#7dff9b",
+    currentAccuracy: "rgb(255 236 72 / 0.12)",
+    currentFill: "#fff35a",
+    currentStroke: "#d8c900",
+    currentSelectedStroke: "#ffffff",
+    currentInner: "#021006",
+    pendingFill: "rgb(44 255 100 / 0.18)",
+    pendingStroke: "rgb(119 255 153 / 0.72)",
+    pointFill: "#23ff5e",
+    pointBaseStroke: "#020806",
+    routeStart: "#d6ffe0",
+    routeSelected: "#8dffaa",
+    pendingPointStroke: "#d6ffe0",
+    selected: "#ffffff",
+    badgeFill: "#020806",
+    badgeText: "#d6ffe0",
+    badgeStartFill: "#2cff64",
+    badgeStartText: "#020806"
+  }
+};
+
+function currentTheme() {
+  return document.documentElement.dataset.theme === RETRO_THEME ? RETRO_THEME : LIGHT_THEME;
+}
+
+function canvasPalette() {
+  return CANVAS_PALETTES[currentTheme()];
+}
+
+function loadTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  setTheme(saved === RETRO_THEME ? RETRO_THEME : LIGHT_THEME, { persist: false });
+}
+
+function setTheme(theme, options = {}) {
+  const normalized = theme === RETRO_THEME ? RETRO_THEME : LIGHT_THEME;
+  const isRetro = normalized === RETRO_THEME;
+  document.documentElement.dataset.theme = normalized;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", isRetro ? "#020806" : "#e95f1a");
+
+  if (options.persist !== false) {
+    localStorage.setItem(THEME_KEY, normalized);
+  }
+
+  elements.themeToggleButton.textContent = isRetro ? "LIGHT" : "RETRO";
+  elements.themeToggleButton.setAttribute("aria-pressed", String(isRetro));
+  elements.themeToggleButton.title = isRetro ? "通常表示へ" : "レトロ表示へ";
+}
+
+function toggleTheme() {
+  setTheme(currentTheme() === RETRO_THEME ? LIGHT_THEME : RETRO_THEME);
+  render();
+}
 
 function createId() {
   if ("randomUUID" in crypto) {
@@ -301,8 +389,9 @@ function drawGrid(width, height) {
   const topLeft = screenToWorld({ x: 0, y: 0 });
   const bottomRight = screenToWorld({ x: width, y: height });
 
-  drawGridLines(topLeft, bottomRight, minorStep, "#edf0e8", 1);
-  drawGridLines(topLeft, bottomRight, majorStep, "#d8ded1", 1.25);
+  const colors = canvasPalette();
+  drawGridLines(topLeft, bottomRight, minorStep, colors.gridMinor, 1);
+  drawGridLines(topLeft, bottomRight, majorStep, colors.gridMajor, 1.25);
 }
 
 function drawGridLines(topLeft, bottomRight, step, color, lineWidth) {
@@ -345,7 +434,8 @@ function drawLinks() {
     context.beginPath();
     context.moveTo(start.x, start.y);
     context.lineTo(end.x, end.y);
-    context.strokeStyle = isSelected ? "#2e7d32" : "#116c6d";
+    const colors = canvasPalette();
+    context.strokeStyle = isSelected ? colors.linkSelected : colors.link;
     context.lineWidth = isSelected ? 5 : 2.4;
     context.stroke();
   }
@@ -371,7 +461,7 @@ function drawRouteResult() {
     const first = worldToScreen(points[0]);
     context.lineTo(first.x, first.y);
   }
-  context.strokeStyle = "#5a4aa0";
+  context.strokeStyle = canvasPalette().route;
   context.lineWidth = 3.2;
   context.setLineDash([10, 7]);
   context.stroke();
@@ -384,6 +474,7 @@ function drawCurrentLocation() {
     return;
   }
 
+  const colors = canvasPalette();
   const screen = worldToScreen(location);
   const accuracyRadius = Number.isFinite(state.currentGeo.accuracy)
     ? Math.min(160, Math.max(16, state.currentGeo.accuracy * state.viewport.scale))
@@ -392,21 +483,21 @@ function drawCurrentLocation() {
   if (accuracyRadius > 0) {
     context.beginPath();
     context.arc(screen.x, screen.y, accuracyRadius, 0, Math.PI * 2);
-    context.fillStyle = "rgb(255 212 54 / 0.16)";
+    context.fillStyle = colors.currentAccuracy;
     context.fill();
   }
 
   context.beginPath();
   context.arc(screen.x, screen.y, 9, 0, Math.PI * 2);
-  context.fillStyle = "#ffd436";
+  context.fillStyle = colors.currentFill;
   context.fill();
   context.lineWidth = state.selectedPointId === CURRENT_LOCATION_ID ? 4 : 3;
-  context.strokeStyle = state.selectedPointId === CURRENT_LOCATION_ID ? "#2e7d32" : "#6b5a00";
+  context.strokeStyle = state.selectedPointId === CURRENT_LOCATION_ID ? colors.currentSelectedStroke : colors.currentStroke;
   context.stroke();
 
   context.beginPath();
   context.arc(screen.x, screen.y, 3, 0, Math.PI * 2);
-  context.fillStyle = "#fff7bf";
+  context.fillStyle = colors.currentInner;
   context.fill();
 }
 function drawPendingPoint() {
@@ -414,20 +505,22 @@ function drawPendingPoint() {
     return;
   }
 
+  const colors = canvasPalette();
   const projected = projectLatLng(state.pendingGeo.lat, state.pendingGeo.lng);
   const screen = worldToScreen(projected);
   context.save();
   context.beginPath();
   context.arc(screen.x, screen.y, 10, 0, Math.PI * 2);
-  context.fillStyle = "rgb(233 95 26 / 0.24)";
+  context.fillStyle = colors.pendingFill;
   context.fill();
   context.lineWidth = 2;
-  context.strokeStyle = "rgb(233 95 26 / 0.62)";
+  context.strokeStyle = colors.pendingStroke;
   context.setLineDash([4, 4]);
   context.stroke();
   context.restore();
 }
 function drawPoints() {
+  const colors = canvasPalette();
   for (const point of state.points) {
     const screen = worldToScreen(point);
     const isSelected = point.id === state.selectedPointId;
@@ -437,24 +530,25 @@ function drawPoints() {
     const isRouteStart = shouldShowRouteSelection && state.routeStartPointId === point.id;
     context.beginPath();
     context.arc(screen.x, screen.y, POINT_RADIUS, 0, Math.PI * 2);
-    context.fillStyle = "#e95f1a";
+    context.fillStyle = colors.pointFill;
     context.fill();
 
     context.lineWidth = isSelected || isPending || isRouteSelected ? 4 : 2;
     context.strokeStyle = isRouteStart
-      ? "#5a4aa0"
+      ? colors.routeStart
       : isRouteSelected
-        ? "#7b68c7"
+        ? colors.routeSelected
         : isPending
-          ? "#116c6d"
+          ? colors.pendingPointStroke
           : isSelected
-            ? "#2e7d32"
-            : "#ffffff";
+            ? colors.selected
+            : colors.pointBaseStroke;
     context.stroke();
   }
 }
 
 function drawRouteBadges() {
+  const colors = canvasPalette();
   const ids = state.routeResult?.pointIds?.length
     ? state.routeResult.pointIds
     : state.routeSelectionIds;
@@ -468,12 +562,12 @@ function drawRouteBadges() {
     const label = String(index + 1);
     context.beginPath();
     context.arc(screen.x + 12, screen.y - 12, 9, 0, Math.PI * 2);
-    context.fillStyle = index === 0 ? "#5a4aa0" : "#ffffff";
+    context.fillStyle = index === 0 ? colors.badgeStartFill : colors.badgeFill;
     context.fill();
     context.lineWidth = 2;
-    context.strokeStyle = "#5a4aa0";
+    context.strokeStyle = colors.badgeStartFill;
     context.stroke();
-    context.fillStyle = index === 0 ? "#ffffff" : "#5a4aa0";
+    context.fillStyle = index === 0 ? colors.badgeStartText : colors.badgeText;
     context.font = "700 11px system-ui, sans-serif";
     context.textAlign = "center";
     context.textBaseline = "middle";
@@ -1948,6 +2042,7 @@ function bindEvents() {
     }
   }
 
+  elements.themeToggleButton.addEventListener("click", toggleTheme);
   elements.actionLinkButton.addEventListener("click", startLinkFromSelection);
   elements.actionRegisterButton.addEventListener("click", submitPendingPoint);
   elements.actionRouteButton.addEventListener("click", toggleSelectedRoutePoint);
@@ -2048,6 +2143,7 @@ function bindEvents() {
   );
 }
 
+loadTheme();
 loadWorkspace();
 bindEvents();
 resizeCanvas();

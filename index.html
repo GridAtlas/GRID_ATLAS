@@ -7,8 +7,9 @@
     <title>GRID ATLAS</title>
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="src/styles.css?v=12">
-    <script src="src/main.js?v=22" type="module" defer></script>
+    <script>try{document.documentElement.dataset.theme=localStorage.getItem("grid-atlas-theme")==="retro"?"retro":"light"}catch{document.documentElement.dataset.theme="light"}</script>
+    <link rel="stylesheet" href="src/styles.css?v=13">
+    <script src="src/main.js?v=23" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -16,6 +17,7 @@
         <div class="brand">
           <span class="brand-dot" aria-hidden="true"></span>
           <h1>GRID ATLAS</h1>
+          <button id="themeToggleButton" class="theme-toggle" type="button" aria-pressed="false" title="レトロ表示へ">RETRO</button>
         </div>
         <div class="selected-summary selected-summary-mobile" aria-live="polite">
           <span>選択中</span>

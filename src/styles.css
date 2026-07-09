@@ -13,6 +13,45 @@
   --green: #2e7d32;
   --danger: #a7332a;
   --shadow: 0 12px 30px rgb(24 35 20 / 0.12);
+  --field-bg: #ffffff;
+  --canvas-bg: #f9faf6;
+  --status-bg: rgb(255 255 255 / 0.92);
+  --active-bg: rgb(233 95 26 / 0.11);
+  --focus-ring: rgb(233 95 26 / 0.28);
+  --brand-glow: 0 0 0 5px rgb(233 95 26 / 0.14);
+  --route: #5a4aa0;
+  --route-soft: rgb(90 74 160 / 0.08);
+  --route-text: #473985;
+  --on-accent: #ffffff;
+  --on-route: #ffffff;
+}
+
+:root[data-theme="retro"] {
+  color-scheme: dark;
+  --bg: #020806;
+  --surface: #06120b;
+  --surface-strong: #030d07;
+  --line: #174728;
+  --line-strong: #4dff82;
+  --text: #c9ffd6;
+  --muted: #78bd8b;
+  --accent: #2cff64;
+  --accent-strong: #baffc9;
+  --teal: #35ffc3;
+  --green: #2cff64;
+  --danger: #ff6767;
+  --shadow: 0 0 22px rgb(44 255 100 / 0.16);
+  --field-bg: #010b05;
+  --canvas-bg: #020806;
+  --status-bg: rgb(1 15 7 / 0.9);
+  --active-bg: rgb(44 255 100 / 0.14);
+  --focus-ring: rgb(44 255 100 / 0.35);
+  --brand-glow: 0 0 16px rgb(44 255 100 / 0.48);
+  --route: #68ff8b;
+  --route-soft: rgb(44 255 100 / 0.1);
+  --route-text: #c9ffd6;
+  --on-accent: #021006;
+  --on-route: #021006;
 }
 
 * {
@@ -60,7 +99,7 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid rgb(233 95 26 / 0.28);
+  outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -101,7 +140,28 @@ textarea:focus-visible {
   height: 18px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 0 5px rgb(233 95 26 / 0.14);
+  box-shadow: var(--brand-glow);
+}
+
+.theme-toggle {
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.theme-toggle[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--active-bg);
+  color: var(--accent-strong);
+}
+
+:root[data-theme="retro"] .brand h1,
+:root[data-theme="retro"] .theme-toggle,
+:root[data-theme="retro"] .status-line {
+  text-shadow: 0 0 8px rgb(44 255 100 / 0.42);
 }
 
 .selected-summary {
@@ -113,7 +173,7 @@ textarea:focus-visible {
   padding: 7px 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--field-bg);
 }
 
 .selected-summary span {
@@ -181,7 +241,7 @@ textarea:focus-visible {
 
 .action-button.is-active {
   border-color: var(--accent);
-  background: rgb(233 95 26 / 0.11);
+  background: var(--active-bg);
   color: var(--accent-strong);
 }
 
@@ -196,7 +256,7 @@ textarea:focus-visible {
   position: relative;
   min-height: 0;
   overflow: hidden;
-  background: #f9faf6;
+  background: var(--canvas-bg);
 }
 
 #gridCanvas {
@@ -231,7 +291,7 @@ textarea:focus-visible {
   bottom: 14px;
   max-width: min(560px, calc(100% - 28px));
   padding: 8px 10px;
-  background: rgb(255 255 255 / 0.92);
+  background: var(--status-bg);
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--muted);
@@ -299,7 +359,7 @@ textarea {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--field-bg);
   color: var(--text);
   padding: 9px 10px;
 }
@@ -329,7 +389,7 @@ textarea {
 .primary-button {
   border-color: var(--accent);
   background: var(--accent);
-  color: #ffffff;
+  color: var(--on-accent);
   font-weight: 800;
 }
 
@@ -415,7 +475,7 @@ textarea {
   gap: 8px;
   align-items: center;
   padding: 9px 10px;
-  background: #ffffff;
+  background: var(--field-bg);
   border: 1px solid var(--line);
   border-radius: 8px;
 }
@@ -484,7 +544,7 @@ textarea {
   width: 18px;
   height: 18px;
   margin: 0;
-  accent-color: #5a4aa0;
+  accent-color: var(--route);
 }
 
 .route-return-label:has(input:disabled) {
@@ -494,10 +554,10 @@ textarea {
 .route-summary {
   margin-top: 12px;
   padding: 10px;
-  border-left: 4px solid #5a4aa0;
-  background: rgb(90 74 160 / 0.08);
+  border-left: 4px solid var(--route);
+  background: var(--route-soft);
   border-radius: 6px;
-  color: #473985;
+  color: var(--route-text);
   overflow-wrap: anywhere;
 }
 
@@ -515,7 +575,7 @@ textarea {
   align-items: center;
   gap: 9px;
   padding: 9px 10px;
-  background: #ffffff;
+  background: var(--field-bg);
   border: 1px solid var(--line);
   border-radius: 8px;
 }
@@ -526,15 +586,15 @@ textarea {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: #5a4aa0;
-  color: #ffffff;
+  background: var(--route);
+  color: var(--on-route);
   font-size: 12px;
   font-weight: 800;
 }
 
 .route-list .route-step-return {
-  background: #ffffff;
-  color: #5a4aa0;
+  background: var(--field-bg);
+  color: var(--route);
 }
 
 .route-list strong {
