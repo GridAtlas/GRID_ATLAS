@@ -3,13 +3,14 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#e95f1a">
+    <meta name="theme-color" content="#020806">
     <title>GRID ATLAS</title>
-    <link rel="manifest" href="manifest.webmanifest">
-    <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
-    <script>try{document.documentElement.dataset.theme=localStorage.getItem("grid-atlas-theme")==="retro"?"retro":"light"}catch{document.documentElement.dataset.theme="light"}</script>
+    <link rel="manifest" href="manifest.webmanifest?v=2">
+    <link rel="icon" href="assets/icon.svg?v=2" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=2">
+    <script>try{document.documentElement.dataset.theme=localStorage.getItem("grid-atlas-theme")==="light"?"light":"retro"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=16">
-    <script src="src/main.js?v=31" type="module" defer></script>
+    <script src="src/main.js?v=32" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -17,7 +18,7 @@
         <div class="brand">
           <span class="brand-dot" aria-hidden="true"></span>
           <h1>GRID ATLAS</h1>
-          <button id="themeToggleButton" class="theme-toggle" type="button" aria-pressed="false" title="レトロ表示へ">RETRO</button>
+          <button id="themeToggleButton" class="theme-toggle" type="button" aria-pressed="true" title="通常表示へ">LIGHT</button>
         </div>
         <div class="selected-summary selected-summary-mobile" aria-live="polite">
           <span>選択中</span>

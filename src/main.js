@@ -175,8 +175,12 @@ function canvasPalette() {
 }
 
 function loadTheme() {
-  const saved = localStorage.getItem(THEME_KEY);
-  setTheme(saved === RETRO_THEME ? RETRO_THEME : LIGHT_THEME, { persist: false });
+  let saved = null;
+  try {
+    saved = localStorage.getItem(THEME_KEY);
+  } catch {}
+
+  setTheme(saved === LIGHT_THEME ? LIGHT_THEME : RETRO_THEME, { persist: false });
 }
 
 function setTheme(theme, options = {}) {

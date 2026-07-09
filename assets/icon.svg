@@ -1,6 +1,37 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#f6f7f2"/>
-  <path d="M96 160h320M96 256h320M96 352h320M160 96v320M256 96v320M352 96v320" stroke="#d7ddcf" stroke-width="20"/>
-  <circle cx="256" cy="256" r="74" fill="#e95f1a"/>
-  <circle cx="256" cy="256" r="104" fill="none" stroke="#116c6d" stroke-width="18"/>
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="48%" r="72%">
+      <stop offset="0" stop-color="#08351a"/>
+      <stop offset="0.58" stop-color="#020d07"/>
+      <stop offset="1" stop-color="#010403"/>
+    </radialGradient>
+    <linearGradient id="sweep" x1="135" y1="103" x2="362" y2="390" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#baffc9" stop-opacity="0.95"/>
+      <stop offset="0.46" stop-color="#2cff64" stop-opacity="0.44"/>
+      <stop offset="1" stop-color="#2cff64" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <g opacity="0.42" stroke="#2cff64" stroke-width="2">
+    <path d="M96 136h320M96 196h320M96 256h320M96 316h320M96 376h320"/>
+    <path d="M136 96v320M196 96v320M256 96v320M316 96v320M376 96v320"/>
+  </g>
+  <g filter="url(#glow)">
+    <circle cx="256" cy="256" r="138" fill="none" stroke="#2cff64" stroke-width="10" opacity="0.96"/>
+    <circle cx="256" cy="256" r="88" fill="none" stroke="#7dff9b" stroke-width="5" opacity="0.76"/>
+    <circle cx="256" cy="256" r="36" fill="none" stroke="#baffc9" stroke-width="4" opacity="0.82"/>
+    <path d="M256 256 382 154 A138 138 0 0 1 401 277 Z" fill="url(#sweep)" opacity="0.88"/>
+    <path d="M256 256 391 173" stroke="#d6ffe0" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="256" cy="256" r="13" fill="#fff35a" stroke="#020806" stroke-width="6"/>
+    <circle cx="344" cy="188" r="16" fill="#2cff64" stroke="#d6ffe0" stroke-width="6"/>
+    <circle cx="179" cy="329" r="12" fill="#2cff64" stroke="#d6ffe0" stroke-width="5"/>
+  </g>
+  <path d="M96 416h320" stroke="#2cff64" stroke-width="10" stroke-linecap="round" opacity="0.7"/>
 </svg>
