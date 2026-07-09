@@ -1387,8 +1387,20 @@ function zoomAt(screenPoint, factor) {
 }
 
 function fitToPoints() {
-  pauseLocationFollowForManualView();
   syncCanvasSize();
+
+  if (state.followCurrentLocation) {
+    const current = currentLocationPoint();
+    if (current) {
+      fitAroundCurrentLocation(current);
+      return;
+    }
+
+    render();
+    return;
+  }
+
+  pauseLocationFollowForManualView();
 
   const fitPoints = fitTargetPoints();
 
@@ -1419,6 +1431,34 @@ function fitToPoints() {
   state.viewport.y = (minY + maxY) / 2;
   state.viewport.scale = clampScale(Math.min(scaleX, scaleY));
   render();
+}
+
+function fitAroundCurrentLocation(current) {
+  const size = canvasSize();
+  const targets = followFitTargetPoints(current);
+  const padding = Math.min(110, Math.max(34, Math.min(size.width, size.height) * 0.16));
+  const availableWidth = Math.max(64, size.width - padding * 2);
+  const availableHeight = Math.max(64, size.height - padding * 2);
+  const maxDx = Math.max(30, ...targets.map((point) => Math.abs(point.x - current.x)));
+  const maxDy = Math.max(30, ...targets.map((point) => Math.abs(point.y - current.y)));
+  const scaleX = availableWidth / (maxDx * 2);
+  const scaleY = availableHeight / (maxDy * 2);
+
+  state.viewport.x = current.x;
+  state.viewport.y = current.y;
+  state.viewport.scale = clampScale(Math.min(scaleX, scaleY));
+  render();
+}
+
+function followFitTargetPoints(current) {
+  const points = [...state.points, current];
+
+  if (validGeo(state.pendingGeo)) {
+    const pending = normalizeGeo(state.pendingGeo);
+    points.push({ ...projectLatLng(pending.lat, pending.lng), geo: pending });
+  }
+
+  return points;
 }
 
 function fitTargetPoints() {
