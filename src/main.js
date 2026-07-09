@@ -621,8 +621,6 @@ function renderStatus() {
     extra = ` | 接続元: ${pendingLink.title}`;
   } else if (state.routeSelectionIds.length > 0) {
     extra = ` | 巡回: ${state.routeSelectionIds.length}点`;
-  } else if (validGeo(state.pendingGeo)) {
-    extra = " | 仮ポイント";
   }
 
   elements.statusLine.value = `${modeLabel} | ${state.points.length}点 | ${state.links.length}線 | 格子 ${formatDistance(chooseGridStep())}${extra}`;
