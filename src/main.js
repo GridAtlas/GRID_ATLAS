@@ -6,7 +6,7 @@ const POINT_RADIUS = 8;
 const POINTER_MOVE_THRESHOLD = 3;
 const CURRENT_LOCATION_ID = "__current_location__";
 const FOLLOW_SCALE_MANUAL = "manual";
-const FOLLOW_SCALE_RANGE = "range";
+const FOLLOW_SCALE_CENTER = "center";
 const FOLLOW_SCALE_TARGET = "target";
 const EARTH_RADIUS_METERS = 6371008.8;
 const MERCATOR_RADIUS = 6378137;
@@ -968,7 +968,7 @@ function toggleTargetForSelection() {
 function clearTarget(options = {}) {
   state.targetPointId = null;
   if (state.locationFollowScaleMode === FOLLOW_SCALE_TARGET) {
-    state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
+    state.locationFollowScaleMode = state.followCurrentLocation ? FOLLOW_SCALE_CENTER : FOLLOW_SCALE_MANUAL;
   }
 
   if (options.render !== false) {
@@ -2388,7 +2388,10 @@ function updateCurrentLocationFromPosition(position, options = {}) {
 
   if (options.center) {
     if (state.followCurrentLocation) {
-      if (state.locationFollowScaleMode !== FOLLOW_SCALE_MANUAL) {
+      if (state.locationFollowScaleMode === FOLLOW_SCALE_CENTER) {
+        state.viewport.x = projected.x;
+        state.viewport.y = projected.y;
+      } else if (state.locationFollowScaleMode !== FOLLOW_SCALE_MANUAL) {
         fitFollowViewport(currentLocationPoint());
         return;
       }
@@ -2471,7 +2474,7 @@ function startLocationFollow(options = {}) {
   state.followCurrentLocation = true;
   state.locationFollowFillForm = Boolean(options.fillForm);
   if (state.locationFollowScaleMode === FOLLOW_SCALE_MANUAL) {
-    state.locationFollowScaleMode = state.targetPointId ? FOLLOW_SCALE_TARGET : FOLLOW_SCALE_RANGE;
+    state.locationFollowScaleMode = state.targetPointId ? FOLLOW_SCALE_TARGET : FOLLOW_SCALE_CENTER;
   }
 
   try {
