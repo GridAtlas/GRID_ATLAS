@@ -34,6 +34,10 @@ const elements = {
   actionTargetButton: document.querySelector("#actionTargetButton"),
   actionRouteStartButton: document.querySelector("#actionRouteStartButton"),
   actionFollowButton: document.querySelector("#actionFollowButton"),
+  actionCenterButton: document.querySelector("#actionCenterButton"),
+  actionRestoreButton: document.querySelector("#actionRestoreButton"),
+  actionEditButton: document.querySelector("#actionEditButton"),
+  actionMapButton: document.querySelector("#actionMapButton"),
   themeToggleButton: document.querySelector("#themeToggleButton"),
   statusLine: document.querySelector("#statusLine"),
   selectionInfoText: document.querySelector("#selectionInfoText"),
@@ -45,6 +49,7 @@ const elements = {
   pointLng: document.querySelector("#pointLng"),
   pointPhoto: document.querySelector("#pointPhoto"),
   pointNote: document.querySelector("#pointNote"),
+  pointSubmitButton: document.querySelector("#pointSubmitButton"),
   readClipboardButton: document.querySelector("#readClipboardButton"),
   shareImportStatus: document.querySelector("#shareImportStatus"),
   useLocationButton: document.querySelector("#useLocationButton"),
@@ -102,6 +107,8 @@ const state = {
   routeReturnToStart: false,
   routeResult: null,
   targetPointId: null,
+  editingPointId: null,
+  lastDeleted: null,
   pendingGeo: null,
   currentGeo: null,
   followCurrentLocation: false,
@@ -247,6 +254,8 @@ function applyWorkspace(workspace) {
   state.routeReturnToStart = false;
   state.routeResult = null;
   state.targetPointId = null;
+  state.editingPointId = null;
+  state.lastDeleted = null;
   state.pendingGeo = null;
 }
 
@@ -772,6 +781,10 @@ function renderActionButtons() {
   const routeStartCandidate = lastSelectedPoint();
   const routeMatchesSelection = selectedPointIdsMatchRoute(pointIds);
   const connectedPair = pointPair ? findLinkBetween(pointPair[0], pointPair[1]) : null;
+  const centerCandidateCount = pointIds.length;
+  const restoreCandidateCount = deletedSnapshotItemCount();
+  const editCandidate = editableSelectedPoint();
+  const mapCandidate = mapPointForSelection();
   const deletablePointCount = pointIds.filter((id) => id !== CURRENT_LOCATION_ID).length;
   const canDelete = deletablePointCount + linkIds.length > 0;
 
@@ -782,6 +795,10 @@ function renderActionButtons() {
   elements.clearSelectionButton.disabled = state.selection.length === 0 && !hasPendingPoint;
   elements.actionTargetButton.disabled = !targetCandidate;
   elements.actionRouteStartButton.disabled = !routeStartCandidate;
+  elements.actionCenterButton.disabled = centerCandidateCount < 2;
+  elements.actionRestoreButton.disabled = restoreCandidateCount === 0;
+  elements.actionEditButton.disabled = !editCandidate;
+  elements.actionMapButton.disabled = !mapCandidate;
 
   elements.actionRegisterButton.classList.remove("is-active");
   elements.actionLinkButton.classList.toggle("is-active", Boolean(connectedPair));
@@ -791,6 +808,12 @@ function renderActionButtons() {
   elements.clearSelectionButton.classList.toggle("is-active", state.selection.length > 0 || hasPendingPoint);
   elements.actionTargetButton.classList.toggle("is-active", Boolean(targetCandidate && targetCandidate.id === state.targetPointId));
   elements.actionRouteStartButton.classList.toggle("is-active", Boolean(routeStartCandidate && routeStartCandidate.id === state.routeStartPointId));
+  elements.actionCenterButton.classList.toggle("is-active", validGeo(state.pendingGeo) && centerCandidateCount >= 2);
+  elements.actionRestoreButton.classList.toggle("is-active", false);
+  elements.actionEditButton.classList.toggle("is-active", Boolean(state.editingPointId));
+  elements.actionMapButton.classList.toggle("is-active", false);
+  elements.actionRestoreButton.title = restoreCandidateCount > 0 ? `直前の削除を復旧 (${restoreCandidateCount}件)` : "直前の削除を復旧";
+  elements.pointSubmitButton.textContent = state.editingPointId ? "更新" : "登録";
   elements.actionRouteLabel.textContent = routeMatchesSelection ? "解除" : "巡回";
   renderLocationFollowButton();
 }
@@ -958,6 +981,19 @@ function openSelectedPointInExternalMap(provider) {
     return;
   }
 
+  openPointInExternalMap(point, provider);
+}
+
+function openSelectedPointInPreferredMap() {
+  const point = mapPointForSelection();
+  if (!point) {
+    return;
+  }
+
+  openPointInExternalMap(point, preferredMapProvider());
+}
+
+function openPointInExternalMap(point, provider) {
   const geo = pointGeo(point);
   const url = externalMapUrl(provider, geo, point.title);
   window.location.href = url;
@@ -1222,6 +1258,31 @@ function selectedCounts() {
   return { point, link, total: point + link };
 }
 
+function editableSelectedPoint() {
+  const pointIds = selectedPointIds().filter((id) => id !== CURRENT_LOCATION_ID);
+  return pointIds.length === 1 && selectedCounts().total === 1 ? findPointIn(pointIds[0], state.points) : null;
+}
+
+function mapPointForSelection() {
+  return lastSelectedPoint();
+}
+
+function deletedSnapshotItemCount() {
+  if (!state.lastDeleted) {
+    return 0;
+  }
+
+  return state.lastDeleted.points.length + state.lastDeleted.links.length;
+}
+
+function clonePlain(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function preferredMapProvider() {
+  return /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent) ? "apple" : "google";
+}
+
 function isPointSelected(pointId) {
   return state.selection.some((entry) => entry.type === "point" && entry.id === pointId);
 }
@@ -1279,6 +1340,7 @@ function setSelection(entries, options = {}) {
   }
 
   state.pendingLinkPointId = null;
+  state.editingPointId = null;
 
   if (options.render !== false) {
     render();
@@ -1302,6 +1364,7 @@ function clearSelection(options = {}) {
   state.selectedPointId = null;
   state.selectedLinkId = null;
   state.pendingLinkPointId = null;
+  state.editingPointId = null;
 
   if (options.clearPending !== false) {
     state.pendingGeo = null;
@@ -1514,9 +1577,91 @@ function submitPendingPoint() {
   elements.pointForm.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
 }
 
+function createCenterPendingPoint() {
+  const points = selectedPointIds().map(findPoint).filter(Boolean);
+  if (points.length < 2) {
+    return;
+  }
+
+  const center = points.reduce((total, point) => ({
+    x: total.x + point.x,
+    y: total.y + point.y
+  }), { x: 0, y: 0 });
+  center.x /= points.length;
+  center.y /= points.length;
+
+  const geo = unprojectMercator(center.x, center.y);
+  state.mode = "add";
+  state.pendingGeo = geo;
+  state.editingPointId = null;
+  state.pendingLinkPointId = null;
+  elements.pointTitle.value = "中心";
+  elements.pointNote.value = `${points.length}点の中心`;
+  elements.pointPhoto.value = "";
+  fillFormFromGeo(geo);
+  render();
+}
+
+function startEditingSelectedPoint() {
+  const point = editableSelectedPoint();
+  if (!point) {
+    return;
+  }
+
+  const geo = pointGeo(point);
+  state.editingPointId = point.id;
+  state.pendingGeo = null;
+  state.pendingLinkPointId = null;
+  state.mode = "inspect";
+  elements.pointTitle.value = point.title;
+  elements.pointNote.value = point.note || "";
+  elements.pointPhoto.value = "";
+  fillFormFromGeo(geo);
+  elements.shareImportStatus.value = "編集: 内容を更新できます";
+  render();
+}
+
+function restoreLastDeleted() {
+  const snapshot = state.lastDeleted;
+  if (!snapshot || deletedSnapshotItemCount() === 0) {
+    return;
+  }
+
+  const restoredSelection = [];
+  const existingPointIds = new Set(state.points.map((point) => point.id));
+  for (const point of snapshot.points) {
+    if (existingPointIds.has(point.id)) {
+      continue;
+    }
+
+    state.points.push(clonePlain(point));
+    existingPointIds.add(point.id);
+    restoredSelection.push({ type: "point", id: point.id });
+  }
+
+  const existingLinkIds = new Set(state.links.map((link) => link.id));
+  for (const link of snapshot.links) {
+    if (existingLinkIds.has(link.id) || !validLinkEndpointId(link.a) || !validLinkEndpointId(link.b)) {
+      continue;
+    }
+
+    state.links.push(clonePlain(link));
+    existingLinkIds.add(link.id);
+    restoredSelection.push({ type: "link", id: link.id });
+  }
+
+  state.lastDeleted = null;
+  state.selection = restoredSelection;
+  normalizeSelection();
+  state.routeResult = null;
+  persistWorkspace();
+  render();
+}
+
 function fillFormFromWorld(point) {
   state.mode = "add";
   state.pendingGeo = unprojectMercator(point.x, point.y);
+  state.editingPointId = null;
   fillFormFromGeo(state.pendingGeo);
 }
 
@@ -2110,6 +2255,35 @@ async function submitPoint(event) {
   const fallbackTitle = `Point ${state.points.length + 1}`;
 
   pauseLocationFollowForManualView();
+
+  const editedPoint = state.editingPointId ? findPointIn(state.editingPointId, state.points) : null;
+  if (editedPoint) {
+    editedPoint.x = projected.x;
+    editedPoint.y = projected.y;
+    editedPoint.title = elements.pointTitle.value.trim() || editedPoint.title || fallbackTitle;
+    editedPoint.note = elements.pointNote.value.trim();
+    editedPoint.geo = geo;
+    editedPoint.updatedAt = createdAt;
+    if (photo) {
+      editedPoint.photo = photo;
+      editedPoint.photoName = file?.name ?? "";
+    }
+
+    state.selection = [{ type: "point", id: editedPoint.id }];
+    normalizeSelection();
+    state.pendingGeo = null;
+    state.editingPointId = null;
+    state.mode = "inspect";
+    elements.pointForm.reset();
+    elements.shareImportStatus.value = "更新しました";
+    state.viewport.x = editedPoint.x;
+    state.viewport.y = editedPoint.y;
+    state.viewport.scale = Math.max(state.viewport.scale, 0.7);
+    persistWorkspace();
+    syncCanvasSize();
+    render();
+    return;
+  }
 
   const point = {
     id: createId(),
@@ -2776,6 +2950,8 @@ function clearWorkspace() {
   state.selectedPointId = null;
   state.selectedLinkId = null;
   state.pendingLinkPointId = null;
+  state.editingPointId = null;
+  state.lastDeleted = null;
   state.routeSelectionIds = [];
   state.routeStartPointId = null;
   state.routeReturnToStart = false;
@@ -2815,12 +2991,19 @@ function deleteSelectedPoint() {
     return;
   }
 
+  state.lastDeleted = {
+    points: state.points.filter((item) => pointIdSet.has(item.id)).map(clonePlain),
+    links: state.links.filter((item) => linkIdSet.has(item.id)).map(clonePlain)
+  };
   state.points = state.points.filter((item) => !pointIdSet.has(item.id));
   state.links = state.links.filter((item) => !linkIdSet.has(item.id));
   state.selection = [];
   state.selectedPointId = null;
   state.selectedLinkId = null;
   state.pendingLinkPointId = null;
+  if (pointIdSet.has(state.editingPointId)) {
+    state.editingPointId = null;
+  }
   state.routeSelectionIds = state.routeSelectionIds.filter((id) => !pointIdSet.has(id));
   state.routeStartPointId = state.routeSelectionIds.includes(state.routeStartPointId) ? state.routeStartPointId : state.routeSelectionIds[0] ?? null;
   state.routeResult = null;
@@ -2854,6 +3037,10 @@ function bindEvents() {
   elements.actionTargetButton.addEventListener("click", toggleTargetForSelection);
   elements.actionRouteStartButton.addEventListener("click", setRouteStartFromSelection);
   elements.actionFollowButton.addEventListener("click", () => toggleLocationFollow({ fillForm: false }));
+  elements.actionCenterButton.addEventListener("click", createCenterPendingPoint);
+  elements.actionRestoreButton.addEventListener("click", restoreLastDeleted);
+  elements.actionEditButton.addEventListener("click", startEditingSelectedPoint);
+  elements.actionMapButton.addEventListener("click", openSelectedPointInPreferredMap);
 
   elements.pointForm.addEventListener("submit", submitPoint);
   elements.readClipboardButton.addEventListener("click", readClipboardShare);

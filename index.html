@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-retro.png">
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("grid-atlas-theme")==="light"?"light":"retro"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=19">
-    <script src="src/main.js?v=39" type="module" defer></script>
+    <script src="src/main.js?v=40" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -77,6 +77,22 @@
               <span aria-hidden="true">⌾</span>
               <span>追従</span>
             </button>
+            <button id="actionCenterButton" class="action-button" type="button" title="選択点の中心に仮ポイントを作成" disabled>
+              <span aria-hidden="true">◇</span>
+              <span>中心</span>
+            </button>
+            <button id="actionRestoreButton" class="action-button" type="button" title="直前の削除を復旧" disabled>
+              <span aria-hidden="true">↶</span>
+              <span>復旧</span>
+            </button>
+            <button id="actionEditButton" class="action-button" type="button" title="選択地点を編集" disabled>
+              <span aria-hidden="true">✎</span>
+              <span>編集</span>
+            </button>
+            <button id="actionMapButton" class="action-button" type="button" title="選択地点を地図で開く" disabled>
+              <span aria-hidden="true">↗</span>
+              <span>地図</span>
+            </button>
           </nav>
         </div>
 
@@ -120,7 +136,7 @@
                 <textarea id="pointNote" name="note" rows="4"></textarea>
               </label>
 
-              <button class="primary-button" type="submit">登録</button>
+              <button id="pointSubmitButton" class="primary-button" type="submit">登録</button>
             </form>
           </section>
           <section class="panel">
