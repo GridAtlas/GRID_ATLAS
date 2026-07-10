@@ -1612,9 +1612,15 @@ function setRouteStartFromSelection() {
     return;
   }
 
-  if (state.routeStartPointId !== point.id) {
+  if (state.routeStartPointId === point.id) {
+    state.routeStartPointId = null;
     resetObservationTrail();
+    state.routeResult = null;
+    render();
+    return;
   }
+
+  resetObservationTrail();
   state.routeStartPointId = point.id;
   state.routeResult = null;
   render();
