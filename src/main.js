@@ -2076,7 +2076,6 @@ function centerOnSelectedPoint() {
       state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
       state.viewport.x = current.x;
       state.viewport.y = current.y;
-      state.viewport.scale = Math.max(state.viewport.scale, 0.7);
       render();
       return;
     }
@@ -2088,7 +2087,6 @@ function centerOnSelectedPoint() {
   if (selected) {
     state.viewport.x = selected.x;
     state.viewport.y = selected.y;
-    state.viewport.scale = Math.max(state.viewport.scale, 0.7);
     render();
     return;
   }
@@ -2097,7 +2095,6 @@ function centerOnSelectedPoint() {
   if (current) {
     state.viewport.x = current.x;
     state.viewport.y = current.y;
-    state.viewport.scale = Math.max(state.viewport.scale, 0.7);
     render();
     return;
   }
