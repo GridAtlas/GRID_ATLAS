@@ -13,7 +13,9 @@ const MERCATOR_RADIUS = 6378137;
 const MAX_MERCATOR_LAT = 85.05112878;
 const TARGET_DISTANCE_STEPS = [25, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000, 2000000, 5000000];
 const TARGET_ARRIVAL_METERS = 25;
-const OBSERVATION_MIN_STEP_METERS = 5;
+const OBSERVATION_MIN_STEP_METERS = 15;
+const OBSERVATION_ACCURACY_FACTOR = 1.5;
+const OBSERVATION_MAX_ACCURACY_METERS = 50;
 const OBSERVATION_MAX_POINTS = 2000;
 const DEFAULT_CENTER = projectLatLng(35.681236, 139.767125);
 
@@ -1013,6 +1015,21 @@ function observationStartPoint() {
   return state.observationStart ?? findPoint(state.routeStartPointId);
 }
 
+function observationAccuracy(point) {
+  const accuracy = Number(point?.geo?.accuracy);
+  return Number.isFinite(accuracy) ? Math.max(0, accuracy) : 0;
+}
+
+function hasUsableObservationAccuracy(point) {
+  const accuracy = observationAccuracy(point);
+  return accuracy === 0 || accuracy <= OBSERVATION_MAX_ACCURACY_METERS;
+}
+
+function observationStepThreshold(previous, point) {
+  const accuracyThreshold = Math.max(observationAccuracy(previous), observationAccuracy(point)) * OBSERVATION_ACCURACY_FACTOR;
+  return Math.max(OBSERVATION_MIN_STEP_METERS, accuracyThreshold);
+}
+
 function recordObservationPoint(current) {
   const target = targetPoint();
   const start = findPoint(state.routeStartPointId);
@@ -1028,8 +1045,12 @@ function recordObservationPoint(current) {
   }
 
   const point = cloneObservationPoint(current);
-  const last = state.observationTrail.at(-1);
-  if (last && distanceBetween(last, point) < OBSERVATION_MIN_STEP_METERS) {
+  if (!hasUsableObservationAccuracy(point)) {
+    return;
+  }
+
+  const previous = state.observationTrail.at(-1) ?? state.observationStart;
+  if (previous && distanceBetween(previous, point) < observationStepThreshold(previous, point)) {
     return;
   }
 
