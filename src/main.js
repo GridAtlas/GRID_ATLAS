@@ -11,7 +11,7 @@ const FOLLOW_SCALE_TARGET = "target";
 const EARTH_RADIUS_METERS = 6371008.8;
 const MERCATOR_RADIUS = 6378137;
 const MAX_MERCATOR_LAT = 85.05112878;
-const TARGET_DISTANCE_STEPS = [25, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000];
+const TARGET_DISTANCE_STEPS = [25, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000, 2000000, 5000000];
 const TARGET_ARRIVAL_METERS = 25;
 const DEFAULT_CENTER = projectLatLng(35.681236, 139.767125);
 
@@ -949,13 +949,14 @@ function toggleTargetForSelection() {
   }
 
   state.targetPointId = point.id;
-  state.locationFollowScaleMode = FOLLOW_SCALE_TARGET;
 
   if (!state.followCurrentLocation) {
-    startLocationFollow({ fillForm: false });
+    state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
+    render();
     return;
   }
 
+  state.locationFollowScaleMode = FOLLOW_SCALE_TARGET;
   const current = currentLocationPoint();
   if (current) {
     fitTargetFromCurrent(current, point);
@@ -2027,7 +2028,7 @@ function fitTargetFromCurrent(current, target) {
 }
 
 function targetRangeForDistance(distance) {
-  const desired = Math.max(25, distance * 1.25);
+  const desired = Math.max(TARGET_ARRIVAL_METERS, distance);
   return TARGET_DISTANCE_STEPS.find((step) => step >= desired) ?? desired;
 }
 
