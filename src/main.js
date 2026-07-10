@@ -13,6 +13,8 @@ const MERCATOR_RADIUS = 6378137;
 const MAX_MERCATOR_LAT = 85.05112878;
 const TARGET_DISTANCE_STEPS = [25, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000, 2000000, 5000000];
 const TARGET_ARRIVAL_METERS = 25;
+const OBSERVATION_MIN_STEP_METERS = 5;
+const OBSERVATION_MAX_POINTS = 2000;
 const DEFAULT_CENTER = projectLatLng(35.681236, 139.767125);
 
 const canvas = document.querySelector("#gridCanvas");
@@ -107,6 +109,10 @@ const state = {
   routeReturnToStart: false,
   routeResult: null,
   targetPointId: null,
+  observationStartId: null,
+  observationTargetId: null,
+  observationStart: null,
+  observationTrail: [],
   editingPointId: null,
   lastDeleted: null,
   pendingGeo: null,
@@ -132,6 +138,8 @@ const CANVAS_PALETTES = {
     route: "#5a4aa0",
     target: "#c73a2a",
     targetSoft: "rgb(199 58 42 / 0.18)",
+    observationBaseline: "rgb(199 58 42 / 0.34)",
+    observationTrail: "#c73a2a",
     currentAccuracy: "rgb(255 212 54 / 0.16)",
     currentFill: "#ffd436",
     currentStroke: "#6b5a00",
@@ -158,6 +166,8 @@ const CANVAS_PALETTES = {
     route: "#7dff9b",
     target: "#d6ffe0",
     targetSoft: "rgb(214 255 224 / 0.16)",
+    observationBaseline: "rgb(214 255 224 / 0.28)",
+    observationTrail: "#fff35a",
     currentAccuracy: "rgb(255 236 72 / 0.12)",
     currentFill: "#fff35a",
     currentStroke: "#d8c900",
@@ -254,6 +264,7 @@ function applyWorkspace(workspace) {
   state.routeReturnToStart = false;
   state.routeResult = null;
   state.targetPointId = null;
+  resetObservationTrail();
   state.editingPointId = null;
   state.lastDeleted = null;
   state.pendingGeo = null;
@@ -505,6 +516,43 @@ function drawTargetLine() {
   context.stroke();
   context.restore();
 }
+
+function drawObservationPath() {
+  const start = observationStartPoint();
+  const target = targetPoint();
+  const points = observationPathPoints();
+  if (!start || !target || points.length < 2) {
+    return;
+  }
+
+  const colors = canvasPalette();
+  const startScreen = worldToScreen(start);
+  const targetScreen = worldToScreen(target);
+
+  context.save();
+  context.beginPath();
+  context.moveTo(startScreen.x, startScreen.y);
+  context.lineTo(targetScreen.x, targetScreen.y);
+  context.strokeStyle = colors.observationBaseline;
+  context.lineWidth = 2.2;
+  context.setLineDash([12, 8]);
+  context.stroke();
+
+  context.beginPath();
+  points.forEach((point, index) => {
+    const screen = worldToScreen(point);
+    if (index === 0) {
+      context.moveTo(screen.x, screen.y);
+    } else {
+      context.lineTo(screen.x, screen.y);
+    }
+  });
+  context.strokeStyle = colors.observationTrail;
+  context.lineWidth = 3.4;
+  context.setLineDash([]);
+  context.stroke();
+  context.restore();
+}
 function drawRouteResult() {
   const points = routeResultPoints();
   if (points.length < 2) {
@@ -647,10 +695,11 @@ function draw() {
   const size = canvasSize();
   context.clearRect(0, 0, size.width, size.height);
   drawGrid(size.width, size.height);
-  drawTargetLine();
-  drawCurrentLocation();
   drawLinks();
   drawRouteResult();
+  drawObservationPath();
+  drawTargetLine();
+  drawCurrentLocation();
   drawPoints();
   drawPendingPoint();
   drawRouteBadges();
@@ -682,6 +731,11 @@ function renderSelectionInfo() {
 }
 
 function selectionInfoText() {
+  const observationText = observationInfoText();
+  if (observationText) {
+    return observationText;
+  }
+
   if (state.selection.length === 0) {
     return "未選択";
   }
@@ -937,6 +991,117 @@ function targetArrived() {
   return distance <= Math.max(TARGET_ARRIVAL_METERS, accuracy);
 }
 
+function resetObservationTrail() {
+  state.observationStartId = null;
+  state.observationTargetId = null;
+  state.observationStart = null;
+  state.observationTrail = [];
+}
+
+function cloneObservationPoint(point) {
+  const geo = pointGeo(point);
+  return {
+    id: point.id,
+    x: point.x,
+    y: point.y,
+    title: point.title,
+    geo,
+    recordedAt: new Date().toISOString()
+  };
+}
+
+function observationStartPoint() {
+  return state.observationStart ?? findPoint(state.routeStartPointId);
+}
+
+function recordObservationPoint(current) {
+  const target = targetPoint();
+  const start = findPoint(state.routeStartPointId);
+  if (!state.followCurrentLocation || !target || !start || !current) {
+    return;
+  }
+
+  if (state.observationStartId !== start.id || state.observationTargetId !== target.id || !state.observationStart) {
+    state.observationStartId = start.id;
+    state.observationTargetId = target.id;
+    state.observationStart = cloneObservationPoint(start);
+    state.observationTrail = [];
+  }
+
+  const point = cloneObservationPoint(current);
+  const last = state.observationTrail.at(-1);
+  if (last && distanceBetween(last, point) < OBSERVATION_MIN_STEP_METERS) {
+    return;
+  }
+
+  state.observationTrail.push(point);
+  if (state.observationTrail.length > OBSERVATION_MAX_POINTS) {
+    state.observationTrail.splice(0, state.observationTrail.length - OBSERVATION_MAX_POINTS);
+  }
+}
+
+function observationPathPoints() {
+  const start = observationStartPoint();
+  if (!start || state.observationTrail.length === 0) {
+    return [];
+  }
+
+  return [start, ...state.observationTrail];
+}
+
+function observationPathDistance() {
+  const points = observationPathPoints();
+  if (points.length < 2) {
+    return 0;
+  }
+
+  return points.slice(1).reduce((total, point, index) => total + distanceBetween(points[index], point), 0);
+}
+
+function observationMetrics() {
+  const start = observationStartPoint();
+  const target = targetPoint();
+  const current = currentLocationPoint() ?? state.observationTrail.at(-1);
+  if (!start || !target || !current || state.observationTrail.length === 0) {
+    return null;
+  }
+
+  const directToTarget = distanceBetween(start, target);
+  const directToCurrent = distanceBetween(start, current);
+  const traveled = observationPathDistance();
+  return {
+    start,
+    target,
+    current,
+    traveled,
+    remaining: distanceBetween(current, target),
+    progress: directToTarget > 0 ? directToCurrent / directToTarget : NaN,
+    ratio: directToCurrent > 1 ? traveled / directToCurrent : NaN
+  };
+}
+
+function observationInfoText() {
+  const metrics = observationMetrics();
+  if (!metrics) {
+    return "";
+  }
+
+  const parts = [
+    `観察 ${metrics.start.title} → ${metrics.target.title}`,
+    `残 ${formatDistance(metrics.remaining)}`,
+    `実 ${formatDistance(metrics.traveled)}`
+  ];
+
+  if (Number.isFinite(metrics.ratio)) {
+    parts.push(`道直比 ${metrics.ratio.toFixed(2)}`);
+  }
+  if (Number.isFinite(metrics.progress)) {
+    parts.push(`進捗 ${Math.round(metrics.progress * 100)}%`);
+  }
+
+  return parts.join(" | ");
+}
+
 function toggleTargetForSelection() {
   const point = lastTargetableSelectedPoint();
   if (!point) {
@@ -949,6 +1114,7 @@ function toggleTargetForSelection() {
   }
 
   state.targetPointId = point.id;
+  resetObservationTrail();
 
   if (!state.followCurrentLocation) {
     state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
@@ -959,6 +1125,7 @@ function toggleTargetForSelection() {
   state.locationFollowScaleMode = FOLLOW_SCALE_TARGET;
   const current = currentLocationPoint();
   if (current) {
+    recordObservationPoint(current);
     fitTargetFromCurrent(current, point);
     return;
   }
@@ -967,6 +1134,7 @@ function toggleTargetForSelection() {
 }
 
 function clearTarget(options = {}) {
+  resetObservationTrail();
   state.targetPointId = null;
   if (state.locationFollowScaleMode === FOLLOW_SCALE_TARGET) {
     state.locationFollowScaleMode = state.followCurrentLocation ? FOLLOW_SCALE_CENTER : FOLLOW_SCALE_MANUAL;
@@ -1408,14 +1576,19 @@ function setRouteFromSelectedPoints() {
   if (selectedPointIdsMatchRoute(ids)) {
     state.routeSelectionIds = [];
     state.routeStartPointId = null;
+    resetObservationTrail();
     state.routeResult = null;
     render();
     return;
   }
 
+  const previousStartPointId = state.routeStartPointId;
   state.routeSelectionIds = ids;
   if (!state.routeSelectionIds.includes(state.routeStartPointId)) {
     state.routeStartPointId = ids[0] ?? null;
+  }
+  if (previousStartPointId !== state.routeStartPointId) {
+    resetObservationTrail();
   }
   state.routeResult = null;
   render();
@@ -1432,6 +1605,9 @@ function setRouteStartFromSelection() {
     state.routeSelectionIds = ids.includes(point.id) ? ids : [point.id, ...ids];
   }
 
+  if (state.routeStartPointId !== point.id) {
+    resetObservationTrail();
+  }
   state.routeStartPointId = point.id;
   state.routeResult = null;
   render();
@@ -1722,6 +1898,9 @@ function setRouteStart(pointId) {
     return;
   }
 
+  if (state.routeStartPointId !== pointId) {
+    resetObservationTrail();
+  }
   state.routeStartPointId = pointId;
   state.routeResult = null;
   render();
@@ -1730,6 +1909,7 @@ function setRouteStart(pointId) {
 function clearRouteSelection() {
   state.routeSelectionIds = [];
   state.routeStartPointId = null;
+  resetObservationTrail();
   state.routeResult = null;
   render();
 }
@@ -1745,7 +1925,11 @@ function computeRouteFromSelection() {
   }
 
   if (!state.routeStartPointId || !state.routeSelectionIds.includes(state.routeStartPointId)) {
+    const previousStartPointId = state.routeStartPointId;
     state.routeStartPointId = selectedPoints[0].id;
+    if (previousStartPointId !== state.routeStartPointId) {
+      resetObservationTrail();
+    }
   }
 
   state.routeResult = optimizeVisitOrder(selectedPoints, state.routeStartPointId, state.routeReturnToStart);
@@ -1753,6 +1937,7 @@ function computeRouteFromSelection() {
 }
 
 function normalizeRouteSelection() {
+  const previousStartPointId = state.routeStartPointId;
   const validIds = new Set(state.points.map((point) => point.id));
   if (currentLocationPoint()) {
     validIds.add(CURRENT_LOCATION_ID);
@@ -1770,6 +1955,10 @@ function normalizeRouteSelection() {
   if (!state.routeSelectionIds.includes(state.routeStartPointId)) {
     state.routeStartPointId = state.routeSelectionIds[0] ?? null;
     state.routeResult = null;
+  }
+
+  if (previousStartPointId !== state.routeStartPointId) {
+    resetObservationTrail();
   }
 
   if (state.routeResult && state.routeResult.pointIds.some((id) => !state.routeSelectionIds.includes(id))) {
@@ -2380,6 +2569,7 @@ function updateCurrentLocationFromPosition(position, options = {}) {
   const projected = projectLatLng(geo.lat, geo.lng);
 
   state.currentGeo = geo;
+  recordObservationPoint(currentLocationPoint());
 
   if (options.fillForm) {
     state.mode = "add";
@@ -2474,6 +2664,7 @@ function startLocationFollow(options = {}) {
 
   state.followCurrentLocation = true;
   state.locationFollowFillForm = Boolean(options.fillForm);
+  resetObservationTrail();
   if (state.locationFollowScaleMode === FOLLOW_SCALE_MANUAL) {
     state.locationFollowScaleMode = state.targetPointId ? FOLLOW_SCALE_TARGET : FOLLOW_SCALE_CENTER;
   }
@@ -3018,8 +3209,12 @@ function deleteSelectedPoint() {
   if (pointIdSet.has(state.editingPointId)) {
     state.editingPointId = null;
   }
+  const previousStartPointId = state.routeStartPointId;
   state.routeSelectionIds = state.routeSelectionIds.filter((id) => !pointIdSet.has(id));
   state.routeStartPointId = state.routeSelectionIds.includes(state.routeStartPointId) ? state.routeStartPointId : state.routeSelectionIds[0] ?? null;
+  if (previousStartPointId !== state.routeStartPointId) {
+    resetObservationTrail();
+  }
   state.routeResult = null;
 
   if (pointIdSet.has(state.targetPointId)) {
