@@ -1627,6 +1627,19 @@ function restoreLastDeleted() {
     return;
   }
 
+  const parts = [];
+  if (snapshot.points.length > 0) {
+    parts.push(`${snapshot.points.length}点`);
+  }
+  if (snapshot.links.length > 0) {
+    parts.push(`${snapshot.links.length}線`);
+  }
+
+  const confirmed = window.confirm(`直前に削除した${parts.join(" / ")}を復旧しますか。`);
+  if (!confirmed) {
+    return;
+  }
+
   const restoredSelection = [];
   const existingPointIds = new Set(state.points.map((point) => point.id));
   for (const point of snapshot.points) {
