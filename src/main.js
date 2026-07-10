@@ -1066,7 +1066,6 @@ function observationMetrics() {
     return null;
   }
 
-  const directToTarget = distanceBetween(start, target);
   const directToCurrent = distanceBetween(start, current);
   const traveled = observationPathDistance();
   return {
@@ -1075,7 +1074,6 @@ function observationMetrics() {
     current,
     traveled,
     remaining: distanceBetween(current, target),
-    progress: directToTarget > 0 ? directToCurrent / directToTarget : NaN,
     ratio: directToCurrent > 1 ? traveled / directToCurrent : NaN
   };
 }
@@ -1094,9 +1092,6 @@ function observationInfoText() {
 
   if (Number.isFinite(metrics.ratio)) {
     parts.push(`道直比 ${metrics.ratio.toFixed(2)}`);
-  }
-  if (Number.isFinite(metrics.progress)) {
-    parts.push(`進捗 ${Math.round(metrics.progress * 100)}%`);
   }
 
   return parts.join(" | ");
