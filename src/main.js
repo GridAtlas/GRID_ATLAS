@@ -604,8 +604,9 @@ function drawCurrentLocation() {
   context.fillStyle = colors.currentFill;
   context.fill();
   const isSelected = isPointSelected(CURRENT_LOCATION_ID);
-  context.lineWidth = isSelected ? 4 : 3;
-  context.strokeStyle = isSelected ? colors.currentSelectedStroke : colors.currentStroke;
+  const isRouteStart = state.routeStartPointId === CURRENT_LOCATION_ID;
+  context.lineWidth = isSelected || isRouteStart ? 4 : 3;
+  context.strokeStyle = isRouteStart ? colors.routeStart : isSelected ? colors.currentSelectedStroke : colors.currentStroke;
   context.stroke();
 
   context.beginPath();
@@ -641,13 +642,13 @@ function drawPoints() {
     const isTarget = point.id === state.targetPointId;
     const shouldShowRouteSelection = state.routeSelectionIds.length > 0 || Boolean(state.routeResult);
     const isRouteSelected = shouldShowRouteSelection && state.routeSelectionIds.includes(point.id);
-    const isRouteStart = shouldShowRouteSelection && state.routeStartPointId === point.id;
+    const isRouteStart = state.routeStartPointId === point.id;
     context.beginPath();
     context.arc(screen.x, screen.y, POINT_RADIUS, 0, Math.PI * 2);
     context.fillStyle = colors.pointFill;
     context.fill();
 
-    context.lineWidth = isSelected || isPending || isRouteSelected || isTarget ? 4 : 2;
+    context.lineWidth = isSelected || isPending || isRouteSelected || isTarget || isRouteStart ? 4 : 2;
     context.strokeStyle = isRouteStart
       ? colors.routeStart
       : isTarget
@@ -665,9 +666,7 @@ function drawPoints() {
 
 function drawRouteBadges() {
   const colors = canvasPalette();
-  const ids = state.routeResult?.pointIds?.length
-    ? state.routeResult.pointIds
-    : state.routeSelectionIds;
+  const ids = state.routeResult?.pointIds ?? [];
   ids.forEach((pointId, index) => {
     const point = findPoint(pointId);
     if (!point) {
@@ -1258,9 +1257,7 @@ function renderRoute() {
   elements.computeRouteButton.disabled = selectedPoints.length < 2;
   elements.clearRouteSelectionButton.disabled = false;
 
-  if (!state.routeStartPointId || !state.routeSelectionIds.includes(state.routeStartPointId)) {
-    state.routeStartPointId = state.routeSelectionIds[0] ?? null;
-  }
+  const routeStartPointId = effectiveRouteStartPointId();
 
   for (const point of selectedPoints) {
     const option = document.createElement("option");
@@ -1269,7 +1266,7 @@ function renderRoute() {
     elements.routeStartSelect.append(option);
   }
 
-  elements.routeStartSelect.value = state.routeStartPointId ?? "";
+  elements.routeStartSelect.value = routeStartPointId ?? "";
   elements.routeList.replaceChildren();
 
   if (!state.routeResult) {
@@ -1555,6 +1552,14 @@ function selectedPointIdsMatchRoute(ids) {
     && ids.every((id, index) => state.routeSelectionIds[index] === id);
 }
 
+function routeStartInSelection() {
+  return state.routeSelectionIds.includes(state.routeStartPointId) ? state.routeStartPointId : null;
+}
+
+function effectiveRouteStartPointId() {
+  return routeStartInSelection() ?? state.routeSelectionIds[0] ?? null;
+}
+
 function findLinkBetween(a, b) {
   return state.links.find((link) => (link.a === a && link.b === b) || (link.a === b && link.b === a)) ?? null;
 }
@@ -1570,21 +1575,12 @@ function setRouteFromSelectedPoints() {
 
   if (selectedPointIdsMatchRoute(ids)) {
     state.routeSelectionIds = [];
-    state.routeStartPointId = null;
-    resetObservationTrail();
     state.routeResult = null;
     render();
     return;
   }
 
-  const previousStartPointId = state.routeStartPointId;
   state.routeSelectionIds = ids;
-  if (!state.routeSelectionIds.includes(state.routeStartPointId)) {
-    state.routeStartPointId = ids[0] ?? null;
-  }
-  if (previousStartPointId !== state.routeStartPointId) {
-    resetObservationTrail();
-  }
   state.routeResult = null;
   render();
 }
@@ -1593,11 +1589,6 @@ function setRouteStartFromSelection() {
   const point = lastSelectedPoint();
   if (!point) {
     return;
-  }
-
-  if (!state.routeSelectionIds.includes(point.id)) {
-    const ids = selectedPointIds();
-    state.routeSelectionIds = ids.includes(point.id) ? ids : [point.id, ...ids];
   }
 
   if (state.routeStartPointId !== point.id) {
@@ -1903,8 +1894,6 @@ function setRouteStart(pointId) {
 
 function clearRouteSelection() {
   state.routeSelectionIds = [];
-  state.routeStartPointId = null;
-  resetObservationTrail();
   state.routeResult = null;
   render();
 }
@@ -1919,20 +1908,18 @@ function computeRouteFromSelection() {
     return;
   }
 
-  if (!state.routeStartPointId || !state.routeSelectionIds.includes(state.routeStartPointId)) {
-    const previousStartPointId = state.routeStartPointId;
-    state.routeStartPointId = selectedPoints[0].id;
-    if (previousStartPointId !== state.routeStartPointId) {
-      resetObservationTrail();
-    }
+  const routeStartPointId = effectiveRouteStartPointId();
+  if (!routeStartPointId) {
+    state.routeResult = null;
+    render();
+    return;
   }
 
-  state.routeResult = optimizeVisitOrder(selectedPoints, state.routeStartPointId, state.routeReturnToStart);
+  state.routeResult = optimizeVisitOrder(selectedPoints, routeStartPointId, state.routeReturnToStart);
   render();
 }
 
 function normalizeRouteSelection() {
-  const previousStartPointId = state.routeStartPointId;
   const validIds = new Set(state.points.map((point) => point.id));
   if (currentLocationPoint()) {
     validIds.add(CURRENT_LOCATION_ID);
@@ -1947,13 +1934,10 @@ function normalizeRouteSelection() {
 
   state.routeSelectionIds = uniqueIds;
 
-  if (!state.routeSelectionIds.includes(state.routeStartPointId)) {
-    state.routeStartPointId = state.routeSelectionIds[0] ?? null;
-    state.routeResult = null;
-  }
-
-  if (previousStartPointId !== state.routeStartPointId) {
+  if (state.routeStartPointId && !validIds.has(state.routeStartPointId)) {
+    state.routeStartPointId = null;
     resetObservationTrail();
+    state.routeResult = null;
   }
 
   if (state.routeResult && state.routeResult.pointIds.some((id) => !state.routeSelectionIds.includes(id))) {
@@ -3204,10 +3188,9 @@ function deleteSelectedPoint() {
   if (pointIdSet.has(state.editingPointId)) {
     state.editingPointId = null;
   }
-  const previousStartPointId = state.routeStartPointId;
   state.routeSelectionIds = state.routeSelectionIds.filter((id) => !pointIdSet.has(id));
-  state.routeStartPointId = state.routeSelectionIds.includes(state.routeStartPointId) ? state.routeStartPointId : state.routeSelectionIds[0] ?? null;
-  if (previousStartPointId !== state.routeStartPointId) {
+  if (pointIdSet.has(state.routeStartPointId)) {
+    state.routeStartPointId = null;
     resetObservationTrail();
   }
   state.routeResult = null;
