@@ -694,6 +694,19 @@ textarea {
     grid-template-rows: auto minmax(320px, 44svh) auto;
   }
 
+  .selection-info {
+    min-height: 38px;
+    max-height: 38px;
+    align-items: center;
+    padding-block: 0;
+  }
+
+  .selection-info strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .sidebar {
     border-left: 0;
     border-top: 1px solid var(--line);
