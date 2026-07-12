@@ -695,16 +695,18 @@ textarea {
   }
 
   .selection-info {
-    min-height: 38px;
-    max-height: 38px;
+    min-height: 56px;
+    max-height: 56px;
     align-items: center;
     padding-block: 0;
   }
 
   .selection-info strong {
+    display: -webkit-box;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
   }
 
   .sidebar {
