@@ -999,6 +999,22 @@ function resetObservationTrail() {
   state.observationTrail = [];
 }
 
+function observationModeActive() {
+  return state.followCurrentLocation && Boolean(targetPoint()) && Boolean(findPoint(state.routeStartPointId));
+}
+
+function observationResetNeedsConfirmation() {
+  return observationModeActive() || state.observationTrail.length > 0;
+}
+
+function confirmObservationReset(actionLabel) {
+  if (!observationResetNeedsConfirmation()) {
+    return true;
+  }
+
+  return window.confirm(`${actionLabel}しますか。記録中の実軌道はリセットされます。`);
+}
+
 function cloneObservationPoint(point) {
   const geo = pointGeo(point);
   return {
@@ -1124,7 +1140,14 @@ function toggleTargetForSelection() {
   }
 
   if (state.targetPointId === point.id) {
+    if (!confirmObservationReset("対象を解除")) {
+      return;
+    }
     clearTarget();
+    return;
+  }
+
+  if (state.targetPointId && !confirmObservationReset("対象を変更")) {
     return;
   }
 
@@ -1613,10 +1636,17 @@ function setRouteStartFromSelection() {
   }
 
   if (state.routeStartPointId === point.id) {
+    if (!confirmObservationReset("起点を解除")) {
+      return;
+    }
     state.routeStartPointId = null;
     resetObservationTrail();
     state.routeResult = null;
     render();
+    return;
+  }
+
+  if (state.routeStartPointId && !confirmObservationReset("起点を変更")) {
     return;
   }
 
@@ -1912,6 +1942,10 @@ function setRouteStart(pointId) {
   }
 
   if (state.routeStartPointId !== pointId) {
+    if (!confirmObservationReset("起点を変更")) {
+      render();
+      return;
+    }
     resetObservationTrail();
   }
   state.routeStartPointId = pointId;
@@ -2269,7 +2303,7 @@ function centerOnSelectedPoint() {
   if (state.followCurrentLocation) {
     const current = currentLocationPoint();
     if (current) {
-      state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
+      state.locationFollowScaleMode = FOLLOW_SCALE_CENTER;
       state.viewport.x = current.x;
       state.viewport.y = current.y;
       render();
@@ -2651,6 +2685,9 @@ function requestCurrentLocation(options = {}) {
 
 function toggleLocationFollow(options = {}) {
   if (state.followCurrentLocation) {
+    if (!confirmObservationReset("観察モードを停止")) {
+      return;
+    }
     stopLocationFollow();
     return;
   }

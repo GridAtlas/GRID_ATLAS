@@ -209,7 +209,7 @@ textarea:focus-visible {
   min-width: 0;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
+  align-items: start;
   gap: 8px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--line);
@@ -227,11 +227,12 @@ textarea:focus-visible {
 
 .selection-info strong {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
   font-size: 14px;
-  line-height: 1.25;
+  line-height: 1.3;
 }
 
 .actionbar {
