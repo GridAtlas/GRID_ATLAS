@@ -108,6 +108,7 @@ const state = {
   pendingLinkPointId: null,
   routeSelectionIds: [],
   routeStartPointId: null,
+  routeStartSnapshot: null,
   routeReturnToStart: false,
   routeResult: null,
   targetPointId: null,
@@ -263,6 +264,7 @@ function applyWorkspace(workspace) {
   state.pendingLinkPointId = null;
   state.routeSelectionIds = [];
   state.routeStartPointId = null;
+  state.routeStartSnapshot = null;
   state.routeReturnToStart = false;
   state.routeResult = null;
   state.targetPointId = null;
@@ -606,7 +608,7 @@ function drawCurrentLocation() {
   context.fillStyle = colors.currentFill;
   context.fill();
   const isSelected = isPointSelected(CURRENT_LOCATION_ID);
-  const isRouteStart = state.routeStartPointId === CURRENT_LOCATION_ID;
+  const isRouteStart = state.routeStartPointId === CURRENT_LOCATION_ID && !state.routeStartSnapshot;
   context.lineWidth = isSelected || isRouteStart ? 4 : 3;
   context.strokeStyle = isRouteStart ? colors.routeStart : isSelected ? colors.currentSelectedStroke : colors.currentStroke;
   context.stroke();
@@ -615,6 +617,29 @@ function drawCurrentLocation() {
   context.arc(screen.x, screen.y, 3, 0, Math.PI * 2);
   context.fillStyle = colors.currentInner;
   context.fill();
+}
+
+function drawRouteStartSnapshot() {
+  if (state.routeStartPointId !== CURRENT_LOCATION_ID || !state.routeStartSnapshot) {
+    return;
+  }
+
+  const colors = canvasPalette();
+  const screen = worldToScreen(state.routeStartSnapshot);
+  context.save();
+  context.beginPath();
+  context.arc(screen.x, screen.y, 13, 0, Math.PI * 2);
+  context.fillStyle = colors.targetSoft;
+  context.fill();
+  context.lineWidth = 4;
+  context.strokeStyle = colors.routeStart;
+  context.stroke();
+
+  context.beginPath();
+  context.arc(screen.x, screen.y, 5, 0, Math.PI * 2);
+  context.fillStyle = colors.routeStart;
+  context.fill();
+  context.restore();
 }
 function drawPendingPoint() {
   if (!validGeo(state.pendingGeo)) {
@@ -701,6 +726,7 @@ function draw() {
   drawObservationPath();
   drawTargetLine();
   drawCurrentLocation();
+  drawRouteStartSnapshot();
   drawPoints();
   drawPendingPoint();
   drawRouteBadges();
@@ -1000,7 +1026,7 @@ function resetObservationTrail() {
 }
 
 function observationModeActive() {
-  return state.followCurrentLocation && Boolean(targetPoint()) && Boolean(findPoint(state.routeStartPointId));
+  return state.followCurrentLocation && Boolean(targetPoint()) && Boolean(routeStartPoint());
 }
 
 function observationResetNeedsConfirmation() {
@@ -1027,8 +1053,27 @@ function cloneObservationPoint(point) {
   };
 }
 
+function routeStartPoint() {
+  if (state.routeStartPointId === CURRENT_LOCATION_ID && state.routeStartSnapshot) {
+    return state.routeStartSnapshot;
+  }
+
+  return findPoint(state.routeStartPointId);
+}
+
+function updateRouteStartSnapshot(point) {
+  state.routeStartSnapshot = point?.id === CURRENT_LOCATION_ID ? cloneObservationPoint(point) : null;
+}
+
+function clearRouteStartState() {
+  state.routeStartPointId = null;
+  state.routeStartSnapshot = null;
+  resetObservationTrail();
+  state.routeResult = null;
+}
+
 function observationStartPoint() {
-  return state.observationStart ?? findPoint(state.routeStartPointId);
+  return state.observationStart ?? routeStartPoint();
 }
 
 function observationAccuracy(point) {
@@ -1048,7 +1093,7 @@ function observationStepThreshold(previous, point) {
 
 function recordObservationPoint(current) {
   const target = targetPoint();
-  const start = findPoint(state.routeStartPointId);
+  const start = routeStartPoint();
   if (!state.followCurrentLocation || !target || !start || !current) {
     return;
   }
@@ -1639,9 +1684,7 @@ function setRouteStartFromSelection() {
     if (!confirmObservationReset("起点を解除")) {
       return;
     }
-    state.routeStartPointId = null;
-    resetObservationTrail();
-    state.routeResult = null;
+    clearRouteStartState();
     render();
     return;
   }
@@ -1652,6 +1695,7 @@ function setRouteStartFromSelection() {
 
   resetObservationTrail();
   state.routeStartPointId = point.id;
+  updateRouteStartSnapshot(point);
   state.routeResult = null;
   render();
 }
@@ -1949,6 +1993,7 @@ function setRouteStart(pointId) {
     resetObservationTrail();
   }
   state.routeStartPointId = pointId;
+  updateRouteStartSnapshot(findPoint(pointId));
   state.routeResult = null;
   render();
 }
@@ -1996,9 +2041,7 @@ function normalizeRouteSelection() {
   state.routeSelectionIds = uniqueIds;
 
   if (state.routeStartPointId && !validIds.has(state.routeStartPointId)) {
-    state.routeStartPointId = null;
-    resetObservationTrail();
-    state.routeResult = null;
+    clearRouteStartState();
   }
 
   if (state.routeResult && state.routeResult.pointIds.some((id) => !state.routeSelectionIds.includes(id))) {
@@ -2273,17 +2316,18 @@ function followFitTargetPoints(current) {
 }
 
 function fitTargetPoints() {
+  const routeStartSnapshot = state.routeStartSnapshot ? [state.routeStartSnapshot] : [];
   const routePoints = routeResultPoints();
   if (routePoints.length > 0) {
-    return routePoints;
+    return [...routePoints, ...routeStartSnapshot];
   }
 
   const routeSelection = selectedRoutePoints();
   if (routeSelection.length > 0) {
-    return routeSelection;
+    return [...routeSelection, ...routeStartSnapshot];
   }
 
-  const points = [...state.points];
+  const points = [...state.points, ...routeStartSnapshot];
   const current = currentLocationPoint();
   if (current) {
     points.push(current);
@@ -3202,6 +3246,7 @@ function clearWorkspace() {
   state.lastDeleted = null;
   state.routeSelectionIds = [];
   state.routeStartPointId = null;
+  state.routeStartSnapshot = null;
   state.routeReturnToStart = false;
   state.routeResult = null;
   clearTarget({ render: false });
@@ -3254,8 +3299,7 @@ function deleteSelectedPoint() {
   }
   state.routeSelectionIds = state.routeSelectionIds.filter((id) => !pointIdSet.has(id));
   if (pointIdSet.has(state.routeStartPointId)) {
-    state.routeStartPointId = null;
-    resetObservationTrail();
+    clearRouteStartState();
   }
   state.routeResult = null;
 
