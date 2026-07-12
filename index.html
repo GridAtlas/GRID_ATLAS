@@ -9,8 +9,8 @@
     <link rel="icon" href="assets/icon-retro.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-retro.png">
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("grid-atlas-theme")==="light"?"light":"retro"}catch{document.documentElement.dataset.theme="retro"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=20">
-    <script src="src/main.js?v=51" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=21">
+    <script src="src/main.js?v=52" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -217,14 +217,33 @@
             <div id="routeSummary" class="route-summary">地点を選んで巡回を押す</div>
             <ol id="routeList" class="route-list"></ol>
           </section>
-          <section class="panel">
+          <section class="panel data-panel">
             <h2>データ</h2>
-            <div class="button-row">
-              <button id="exportButton" type="button">書き出し</button>
-              <button id="importButton" type="button">読み込み</button>
-              <button id="clearButton" class="danger-button" type="button">初期化</button>
+            <div class="data-group">
+              <h3>全体</h3>
+              <div class="button-row">
+                <button id="exportButton" type="button">書き出し</button>
+                <button id="importButton" type="button">読み込み</button>
+                <button id="clearButton" class="danger-button" type="button">初期化</button>
+              </div>
+            </div>
+            <div class="data-group">
+              <h3>地点リスト</h3>
+              <div class="button-row">
+                <button id="exportPointsButton" type="button">地点を書き出し</button>
+                <button id="importPointsButton" type="button">地点を読み込み</button>
+              </div>
+            </div>
+            <div class="data-group">
+              <h3>観察記録</h3>
+              <div class="button-row">
+                <button id="exportObservationButton" type="button">観察を書き出し</button>
+                <button id="importObservationButton" type="button">観察を読み込み</button>
+              </div>
             </div>
             <input id="importFile" type="file" accept="application/json,.json" hidden>
+            <input id="pointImportFile" type="file" accept="application/json,.json" hidden>
+            <input id="observationImportFile" type="file" accept="application/json,.json" hidden>
           </section>
         </aside>
       </main>

@@ -94,6 +94,12 @@ const elements = {
   exportButton: document.querySelector("#exportButton"),
   importButton: document.querySelector("#importButton"),
   importFile: document.querySelector("#importFile"),
+  exportPointsButton: document.querySelector("#exportPointsButton"),
+  importPointsButton: document.querySelector("#importPointsButton"),
+  pointImportFile: document.querySelector("#pointImportFile"),
+  exportObservationButton: document.querySelector("#exportObservationButton"),
+  importObservationButton: document.querySelector("#importObservationButton"),
+  observationImportFile: document.querySelector("#observationImportFile"),
   clearButton: document.querySelector("#clearButton")
 };
 
@@ -116,6 +122,7 @@ const state = {
   observationTargetId: null,
   observationStart: null,
   observationTrail: [],
+  loadedObservation: null,
   editingPointId: null,
   lastDeleted: null,
   pendingGeo: null,
@@ -268,6 +275,7 @@ function applyWorkspace(workspace) {
   state.routeReturnToStart = false;
   state.routeResult = null;
   state.targetPointId = null;
+  state.loadedObservation = null;
   resetObservationTrail();
   state.editingPointId = null;
   state.lastDeleted = null;
@@ -521,17 +529,36 @@ function drawTargetLine() {
   context.restore();
 }
 
-function drawObservationPath() {
+function visibleObservationLayer() {
   const start = observationStartPoint();
   const target = targetPoint();
   const points = observationPathPoints();
-  if (!start || !target || points.length < 2) {
+  if (start && target && points.length >= 2) {
+    return { start, target, points, loaded: false };
+  }
+
+  const loaded = state.loadedObservation;
+  if (!loaded || !loaded.start || !loaded.target || loaded.trail.length === 0) {
+    return null;
+  }
+
+  return {
+    start: loaded.start,
+    target: loaded.target,
+    points: [loaded.start, ...loaded.trail],
+    loaded: true
+  };
+}
+
+function drawObservationPath() {
+  const layer = visibleObservationLayer();
+  if (!layer) {
     return;
   }
 
   const colors = canvasPalette();
-  const startScreen = worldToScreen(start);
-  const targetScreen = worldToScreen(target);
+  const startScreen = worldToScreen(layer.start);
+  const targetScreen = worldToScreen(layer.target);
 
   context.save();
   context.beginPath();
@@ -543,7 +570,7 @@ function drawObservationPath() {
   context.stroke();
 
   context.beginPath();
-  points.forEach((point, index) => {
+  layer.points.forEach((point, index) => {
     const screen = worldToScreen(point);
     if (index === 0) {
       context.moveTo(screen.x, screen.y);
@@ -552,8 +579,8 @@ function drawObservationPath() {
     }
   });
   context.strokeStyle = colors.observationTrail;
-  context.lineWidth = 3.4;
-  context.setLineDash([]);
+  context.lineWidth = layer.loaded ? 2.8 : 3.4;
+  context.setLineDash(layer.loaded ? [4, 4] : []);
   context.stroke();
   context.restore();
 }
@@ -761,6 +788,11 @@ function selectionInfoText() {
   const observationText = observationInfoText();
   if (observationText) {
     return observationText;
+  }
+
+  const loadedObservationText = loadedObservationInfoText();
+  if (loadedObservationText) {
+    return loadedObservationText;
   }
 
   if (state.selection.length === 0) {
@@ -1038,7 +1070,12 @@ function confirmObservationReset(actionLabel) {
     return true;
   }
 
-  return window.confirm(`${actionLabel}しますか。記録中の実軌道はリセットされます。`);
+  const confirmed = window.confirm(`${actionLabel}しますか。記録中の実軌道はリセットされます。`);
+  if (confirmed) {
+    maybeSaveObservationRecord();
+  }
+
+  return confirmed;
 }
 
 function cloneObservationPoint(point) {
@@ -1176,6 +1213,72 @@ function observationInfoText() {
   }
 
   return parts.join(" | ");
+}
+
+function loadedObservationInfoText() {
+  const loaded = state.loadedObservation;
+  if (!loaded) {
+    return "";
+  }
+
+  const parts = [
+    `読込観察 ${loaded.start.title} → ${loaded.target.title}`,
+    `実 ${formatDistance(loaded.metrics.traveled)}`
+  ];
+
+  if (Number.isFinite(loaded.metrics.ratio)) {
+    parts.push(`道直比 ${loaded.metrics.ratio.toFixed(2)}`);
+  }
+
+  return parts.join(" | ");
+}
+
+function observationSnapshot() {
+  const start = observationStartPoint();
+  const target = targetPoint();
+  if (!start || !target || state.observationTrail.length === 0) {
+    return null;
+  }
+
+  const metrics = observationMetrics();
+  return {
+    type: "grid-atlas-observation",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    startedAt: state.observationStart?.recordedAt ?? state.observationTrail[0]?.recordedAt ?? new Date().toISOString(),
+    endedAt: new Date().toISOString(),
+    start: exportObservationPoint(start),
+    target: exportObservationPoint(target),
+    trail: state.observationTrail.map(exportObservationPoint),
+    metrics: {
+      remaining: metrics?.remaining ?? distanceBetween(state.observationTrail.at(-1), target),
+      traveled: metrics?.traveled ?? observationPathDistance(),
+      ratio: metrics?.ratio ?? NaN
+    }
+  };
+}
+
+function exportObservationPoint(point) {
+  const geo = pointGeo(point);
+  return {
+    id: point.id,
+    title: point.title,
+    geo,
+    x: point.x,
+    y: point.y,
+    recordedAt: point.recordedAt
+  };
+}
+
+function maybeSaveObservationRecord() {
+  const snapshot = observationSnapshot();
+  if (!snapshot) {
+    return;
+  }
+
+  if (window.confirm("観察記録を保存しますか。")) {
+    downloadJson(snapshot, `grid-atlas-observation-${dateTimeStamp()}.json`);
+  }
 }
 
 function toggleTargetForSelection() {
@@ -2315,19 +2418,25 @@ function followFitTargetPoints(current) {
   return points;
 }
 
+function loadedObservationFitPoints() {
+  const loaded = state.loadedObservation;
+  return loaded ? [loaded.start, loaded.target, ...loaded.trail] : [];
+}
+
 function fitTargetPoints() {
   const routeStartSnapshot = state.routeStartSnapshot ? [state.routeStartSnapshot] : [];
+  const loadedPoints = loadedObservationFitPoints();
   const routePoints = routeResultPoints();
   if (routePoints.length > 0) {
-    return [...routePoints, ...routeStartSnapshot];
+    return [...routePoints, ...routeStartSnapshot, ...loadedPoints];
   }
 
   const routeSelection = selectedRoutePoints();
   if (routeSelection.length > 0) {
-    return [...routeSelection, ...routeStartSnapshot];
+    return [...routeSelection, ...routeStartSnapshot, ...loadedPoints];
   }
 
-  const points = [...state.points, ...routeStartSnapshot];
+  const points = [...state.points, ...routeStartSnapshot, ...loadedPoints];
   const current = currentLocationPoint();
   if (current) {
     points.push(current);
@@ -2751,6 +2860,7 @@ function startLocationFollow(options = {}) {
 
   state.followCurrentLocation = true;
   state.locationFollowFillForm = Boolean(options.fillForm);
+  state.loadedObservation = null;
   resetObservationTrail();
   if (state.locationFollowScaleMode === FOLLOW_SCALE_MANUAL) {
     state.locationFollowScaleMode = state.targetPointId ? FOLLOW_SCALE_TARGET : FOLLOW_SCALE_CENTER;
@@ -3199,16 +3309,28 @@ function registerServiceWorker() {
     }).catch(() => {});
   });
 }
-function exportWorkspace() {
-  const blob = new Blob([JSON.stringify(workspaceSnapshot(), null, 2)], {
+function dateStamp() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function dateTimeStamp() {
+  return new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
+}
+
+function downloadJson(payload, filename) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
     type: "application/json"
   });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `grid-atlas-${new Date().toISOString().slice(0, 10)}.json`;
+  anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+function exportWorkspace() {
+  downloadJson(workspaceSnapshot(), `grid-atlas-${dateStamp()}.json`);
 }
 
 function importWorkspaceFile(file) {
@@ -3222,6 +3344,205 @@ function importWorkspaceFile(file) {
 
       applyWorkspace(parsed);
       persistWorkspace();
+      fitToPoints();
+    } catch {
+      elements.shareImportStatus.value = "読み込みエラー";
+    }
+  });
+  reader.readAsText(file);
+}
+
+function pointListSnapshot() {
+  return {
+    type: "grid-atlas-points",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    points: state.points.map((point) => ({
+      id: point.id,
+      title: point.title,
+      note: point.note,
+      photo: point.photo,
+      photoName: point.photoName,
+      geo: pointGeo(point),
+      createdAt: point.createdAt
+    }))
+  };
+}
+
+function exportPointList() {
+  downloadJson(pointListSnapshot(), `grid-atlas-points-${dateStamp()}.json`);
+}
+
+function normalizeImportedPoints(points, existingIds = new Set()) {
+  const ids = new Set(existingIds);
+  return points.map((point) => {
+    if (!point || typeof point !== "object") {
+      return null;
+    }
+
+    const normalized = normalizePoint(point, null);
+    if (!normalized) {
+      return null;
+    }
+
+    if (ids.has(normalized.id)) {
+      normalized.id = createId();
+    }
+    ids.add(normalized.id);
+    return normalized;
+  }).filter(Boolean);
+}
+
+function pointImportMode() {
+  const replace = window.confirm("地点リストを置き換えますか。\nOK: 置き換え / キャンセル: 追加または中止");
+  if (replace) {
+    return "replace";
+  }
+
+  return window.confirm("現在の地点に追加しますか。") ? "append" : "cancel";
+}
+
+function importPointListFile(file) {
+  const reader = new FileReader();
+  reader.addEventListener("load", () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      if (parsed?.type !== "grid-atlas-points" || !Array.isArray(parsed.points)) {
+        throw new Error("Invalid point list");
+      }
+
+      const mode = pointImportMode();
+      if (mode === "cancel") {
+        return;
+      }
+
+      if (mode === "replace" && !confirmObservationReset("地点リストを置き換え")) {
+        return;
+      }
+
+      const existingIds = mode === "append" ? new Set(state.points.map((point) => point.id)) : new Set();
+      const importedPoints = normalizeImportedPoints(parsed.points, existingIds);
+
+      if (mode === "replace") {
+        state.points = importedPoints;
+        state.links = [];
+        state.selection = [];
+        state.selectedPointId = null;
+        state.selectedLinkId = null;
+        state.pendingLinkPointId = null;
+        state.routeSelectionIds = [];
+        clearRouteStartState();
+        state.routeReturnToStart = false;
+        state.routeResult = null;
+        state.loadedObservation = null;
+        clearTarget({ render: false });
+      } else {
+        state.points.push(...importedPoints);
+        state.selection = importedPoints.map((point) => ({ type: "point", id: point.id }));
+        normalizeSelection();
+      }
+
+      persistWorkspace();
+      elements.shareImportStatus.value = mode === "replace" ? "地点リストを置き換えました" : "地点リストを追加しました";
+      fitToPoints();
+    } catch {
+      elements.shareImportStatus.value = "読み込みエラー";
+    }
+  });
+  reader.readAsText(file);
+}
+
+function observationExportPayload() {
+  const snapshot = observationSnapshot();
+  if (snapshot) {
+    return snapshot;
+  }
+
+  return state.loadedObservation
+    ? { ...clonePlain(state.loadedObservation), exportedAt: new Date().toISOString() }
+    : null;
+}
+
+function exportObservationRecord() {
+  const payload = observationExportPayload();
+  if (!payload) {
+    elements.shareImportStatus.value = "観察記録なし";
+    return;
+  }
+
+  downloadJson(payload, `grid-atlas-observation-${dateTimeStamp()}.json`);
+}
+
+function normalizeObservationPoint(point, fallbackTitle) {
+  if (!point || typeof point !== "object") {
+    return null;
+  }
+
+  const geo = pointGeoFromAny(point, null);
+  if (!geo) {
+    return null;
+  }
+
+  const projected = projectLatLng(geo.lat, geo.lng);
+  return {
+    id: typeof point.id === "string" && point.id ? point.id : createId(),
+    title: typeof point.title === "string" && point.title.trim() ? point.title.trim() : fallbackTitle,
+    x: projected.x,
+    y: projected.y,
+    geo,
+    recordedAt: typeof point.recordedAt === "string" ? point.recordedAt : new Date().toISOString()
+  };
+}
+
+function normalizeObservationRecord(parsed) {
+  if (parsed?.type !== "grid-atlas-observation" || !Array.isArray(parsed.trail)) {
+    throw new Error("Invalid observation");
+  }
+
+  const start = normalizeObservationPoint(parsed.start, "起点");
+  const target = normalizeObservationPoint(parsed.target, "対象");
+  const trail = parsed.trail.map((point) => normalizeObservationPoint(point, "現在地")).filter(Boolean);
+  if (!start || !target || trail.length === 0) {
+    throw new Error("Invalid observation points");
+  }
+
+  const path = [start, ...trail];
+  const traveled = path.slice(1).reduce((total, point, index) => total + distanceBetween(path[index], point), 0);
+  const current = trail.at(-1);
+  const directToCurrent = distanceBetween(start, current);
+  return {
+    type: "grid-atlas-observation",
+    version: 1,
+    exportedAt: typeof parsed.exportedAt === "string" ? parsed.exportedAt : new Date().toISOString(),
+    startedAt: typeof parsed.startedAt === "string" ? parsed.startedAt : trail[0].recordedAt,
+    endedAt: typeof parsed.endedAt === "string" ? parsed.endedAt : trail.at(-1).recordedAt,
+    start,
+    target,
+    trail,
+    metrics: {
+      remaining: distanceBetween(current, target),
+      traveled,
+      ratio: directToCurrent > 1 ? traveled / directToCurrent : NaN
+    }
+  };
+}
+
+function importObservationFile(file) {
+  const reader = new FileReader();
+  reader.addEventListener("load", () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      const observation = normalizeObservationRecord(parsed);
+      if (observationResetNeedsConfirmation() && !confirmObservationReset("読み込み観察を表示")) {
+        return;
+      }
+
+      if (state.followCurrentLocation) {
+        stopLocationFollow({ render: false });
+      }
+      resetObservationTrail();
+      state.loadedObservation = observation;
+      elements.shareImportStatus.value = "観察記録を読み込みました";
       fitToPoints();
     } catch {
       elements.shareImportStatus.value = "読み込みエラー";
@@ -3249,6 +3570,7 @@ function clearWorkspace() {
   state.routeStartSnapshot = null;
   state.routeReturnToStart = false;
   state.routeResult = null;
+  state.loadedObservation = null;
   clearTarget({ render: false });
   localStorage.removeItem(STORAGE_KEY);
   render();
@@ -3364,6 +3686,24 @@ function bindEvents() {
       importWorkspaceFile(file);
     }
     elements.importFile.value = "";
+  });
+  elements.exportPointsButton.addEventListener("click", exportPointList);
+  elements.importPointsButton.addEventListener("click", () => elements.pointImportFile.click());
+  elements.pointImportFile.addEventListener("change", () => {
+    const file = elements.pointImportFile.files[0];
+    if (file) {
+      importPointListFile(file);
+    }
+    elements.pointImportFile.value = "";
+  });
+  elements.exportObservationButton.addEventListener("click", exportObservationRecord);
+  elements.importObservationButton.addEventListener("click", () => elements.observationImportFile.click());
+  elements.observationImportFile.addEventListener("change", () => {
+    const file = elements.observationImportFile.files[0];
+    if (file) {
+      importObservationFile(file);
+    }
+    elements.observationImportFile.value = "";
   });
   elements.clearButton.addEventListener("click", clearWorkspace);
 
