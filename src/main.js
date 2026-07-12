@@ -3282,18 +3282,6 @@ function registerServiceWorker() {
     return;
   }
 
-  const reloadOnControllerChange = Boolean(navigator.serviceWorker.controller);
-  let reloadingForUpdate = false;
-
-  navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (!reloadOnControllerChange || reloadingForUpdate) {
-      return;
-    }
-
-    reloadingForUpdate = true;
-    window.location.reload();
-  });
-
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("./service-worker.js").then((registration) => {
       activateWaitingServiceWorker(registration);
