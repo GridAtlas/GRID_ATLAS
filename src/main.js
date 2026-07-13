@@ -928,7 +928,7 @@ function renderActionButtons() {
   elements.actionRouteButton.classList.toggle("is-active", routeMatchesSelection);
   elements.actionRouteButton.title = routeMatchesSelection ? "選択中の巡回対象を解除" : "選択点を巡回対象にする";
   elements.deletePointButton.classList.toggle("is-active", false);
-  elements.clearSelectionButton.classList.toggle("is-active", state.selection.length > 0 || hasPendingPoint);
+  elements.clearSelectionButton.classList.toggle("is-active", false);
   elements.actionTargetButton.classList.toggle("is-active", Boolean(targetCandidate && targetCandidate.id === state.targetPointId));
   elements.actionRouteStartButton.classList.toggle("is-active", Boolean(routeStartCandidate && routeStartCandidate.id === state.routeStartPointId));
   elements.actionCenterButton.classList.toggle("is-active", validGeo(state.pendingGeo) && centerCandidateCount >= 2);
@@ -1261,27 +1261,44 @@ function loadedObservationInfoText() {
   return parts.join(" | ");
 }
 
-function observationSnapshot() {
+function observationSnapshot(options = {}) {
   const start = observationStartPoint();
   const target = targetPoint();
-  if (!start || !target || state.observationTrail.length === 0) {
+  if (!start || !target) {
     return null;
   }
 
-  const metrics = observationMetrics();
+  const trail = state.observationTrail.map(clonePlain);
+  if (options.includeTarget) {
+    const finalTarget = cloneObservationPoint(target);
+    const last = trail.at(-1);
+    if (!last || distanceBetween(last, finalTarget) > 1) {
+      trail.push(finalTarget);
+    }
+  }
+
+  if (trail.length === 0) {
+    return null;
+  }
+
+  const path = [start, ...trail];
+  const current = trail.at(-1);
+  const traveled = path.slice(1).reduce((total, point, index) => total + distanceBetween(path[index], point), 0);
+  const directToCurrent = distanceBetween(start, current);
+
   return {
     type: "grid-atlas-observation",
     version: 1,
     exportedAt: new Date().toISOString(),
-    startedAt: state.observationStart?.recordedAt ?? state.observationTrail[0]?.recordedAt ?? new Date().toISOString(),
-    endedAt: new Date().toISOString(),
+    startedAt: state.observationStart?.recordedAt ?? trail[0]?.recordedAt ?? new Date().toISOString(),
+    endedAt: current.recordedAt ?? new Date().toISOString(),
     start: exportObservationPoint(start),
     target: exportObservationPoint(target),
-    trail: state.observationTrail.map(exportObservationPoint),
+    trail: trail.map(exportObservationPoint),
     metrics: {
-      remaining: metrics?.remaining ?? distanceBetween(state.observationTrail.at(-1), target),
-      traveled: metrics?.traveled ?? observationPathDistance(),
-      ratio: metrics?.ratio ?? NaN
+      remaining: distanceBetween(current, target),
+      traveled,
+      ratio: directToCurrent > 1 ? traveled / directToCurrent : NaN
     }
   };
 }
@@ -2914,14 +2931,42 @@ function requestCurrentLocation(options = {}) {
 
 function toggleLocationFollow(options = {}) {
   if (state.followCurrentLocation) {
-    if (!confirmObservationReset("観察モードを停止")) {
+    if (observationModeActive()) {
+      const arrived = window.confirm("対象に到着しましたか？\nOK: 到着として終了 / キャンセル: 継続");
+      if (!arrived) {
+        return;
+      }
+      finishObservationAtTarget();
+      stopLocationFollow({ render: false });
+      clearObservationAssignments();
+      elements.shareImportStatus.value = "到着として観察を終了しました";
+      render();
       return;
     }
+
     stopLocationFollow();
     return;
   }
 
   startLocationFollow(options);
+}
+
+function finishObservationAtTarget() {
+  const snapshot = observationSnapshot({ includeTarget: true });
+  if (!snapshot) {
+    return;
+  }
+
+  state.loadedObservation = snapshot;
+  setSelection([{ type: "observation", id: LOADED_OBSERVATION_ID }], { render: false });
+}
+
+function clearObservationAssignments() {
+  state.routeStartPointId = null;
+  state.routeStartSnapshot = null;
+  state.targetPointId = null;
+  state.routeResult = null;
+  resetObservationTrail();
 }
 
 function startLocationFollow(options = {}) {
