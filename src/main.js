@@ -534,7 +534,8 @@ function drawTargetLine() {
 function activeObservationLayer() {
   const start = observationStartPoint();
   const target = targetPoint();
-  const points = observationPathPoints();
+  const current = observationModeActive() ? currentLocationPoint() : null;
+  const points = observationDisplayPathPoints(current);
   if (!start || !target || points.length < 2) {
     return null;
   }
@@ -1227,8 +1228,24 @@ function observationPathPoints() {
   return [start, ...state.observationTrail];
 }
 
-function observationPathDistance() {
-  const points = observationPathPoints();
+function observationDisplayPathPoints(current) {
+  const start = observationStartPoint();
+  if (!start) {
+    return [];
+  }
+
+  const points = [start, ...state.observationTrail];
+  if (current) {
+    const last = points.at(-1);
+    if (!last || distanceBetween(last, current) > 1) {
+      points.push(current);
+    }
+  }
+
+  return points;
+}
+
+function observationPathDistance(points = observationPathPoints()) {
   if (points.length < 2) {
     return 0;
   }
@@ -1239,13 +1256,15 @@ function observationPathDistance() {
 function observationMetrics() {
   const start = observationStartPoint();
   const target = targetPoint();
-  const current = currentLocationPoint() ?? state.observationTrail.at(-1);
-  if (!start || !target || !current || state.observationTrail.length === 0) {
+  const observing = observationModeActive();
+  const current = observing ? currentLocationPoint() ?? state.observationTrail.at(-1) : state.observationTrail.at(-1);
+  if (!start || !target || !current || (!observing && state.observationTrail.length === 0)) {
     return null;
   }
 
   const directToCurrent = distanceBetween(start, current);
-  const traveled = observationPathDistance();
+  const displayPath = observationDisplayPathPoints(observing ? current : null);
+  const traveled = Math.max(observationPathDistance(displayPath), directToCurrent);
   return {
     start,
     target,
