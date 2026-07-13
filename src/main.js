@@ -149,8 +149,9 @@ const CANVAS_PALETTES = {
     link: "#116c6d",
     linkSelected: "#2e7d32",
     route: "#5a4aa0",
-    target: "#c73a2a",
-    targetSoft: "rgb(199 58 42 / 0.18)",
+    target: "#ff7a1a",
+    targetSoft: "rgb(255 122 26 / 0.18)",
+    targetFill: "#ff7a1a",
     observationBaseline: "rgb(199 58 42 / 0.34)",
     observationTrail: "#c73a2a",
     currentAccuracy: "rgb(255 212 54 / 0.16)",
@@ -177,8 +178,9 @@ const CANVAS_PALETTES = {
     link: "#29ff68",
     linkSelected: "#d6ffe0",
     route: "#7dff9b",
-    target: "#d6ffe0",
-    targetSoft: "rgb(214 255 224 / 0.16)",
+    target: "#ff8a1c",
+    targetSoft: "rgb(255 138 28 / 0.18)",
+    targetFill: "#ff8a1c",
     observationBaseline: "rgb(214 255 224 / 0.28)",
     observationTrail: "#fff35a",
     currentAccuracy: "rgb(255 236 72 / 0.12)",
@@ -721,7 +723,7 @@ function drawPoints() {
     const isRouteStart = state.routeStartPointId === point.id;
     context.beginPath();
     context.arc(screen.x, screen.y, POINT_RADIUS, 0, Math.PI * 2);
-    context.fillStyle = colors.pointFill;
+    context.fillStyle = isTarget ? colors.targetFill : colors.pointFill;
     context.fill();
 
     context.lineWidth = isSelected || isPending || isRouteSelected || isTarget || isRouteStart ? 4 : 2;
