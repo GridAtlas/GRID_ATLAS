@@ -796,8 +796,9 @@ function selectionInfoText() {
     return observationText;
   }
 
+  const followText = followStateInfoText();
   if (state.selection.length === 0) {
-    return "未選択";
+    return followText || "未選択";
   }
 
   const points = selectedPointIds().map(findPoint).filter(Boolean);
@@ -848,6 +849,23 @@ function selectionInfoText() {
   }
 
   return parts.join(" | ") || "選択中";
+}
+
+function followStateInfoText() {
+  if (!state.followCurrentLocation) {
+    return "";
+  }
+
+  const start = routeStartPoint();
+  const target = targetPoint();
+  if (start && target) {
+    return `観察中 ${start.title} → ${target.title}`;
+  }
+  if (target) {
+    return `追従中 現在地 → ${target.title}`;
+  }
+
+  return "追従中 現在地";
 }
 
 function pointSelectionInfo(point) {
@@ -902,7 +920,6 @@ function renderActionButtons() {
   const targetCandidate = lastTargetableSelectedPoint();
   const routeStartCandidate = lastSelectedPoint();
   const routeMatchesSelection = selectedPointIdsMatchRoute(pointIds);
-  const connectedPair = pointPair ? findLinkBetween(pointPair[0], pointPair[1]) : null;
   const centerCandidateCount = pointIds.length;
   const restoreCandidateCount = deletedSnapshotItemCount();
   const editCandidate = editableSelectedPoint();
@@ -924,14 +941,14 @@ function renderActionButtons() {
   elements.actionMapButton.disabled = !mapCandidate;
 
   elements.actionRegisterButton.classList.remove("is-active");
-  elements.actionLinkButton.classList.toggle("is-active", Boolean(connectedPair));
+  elements.actionLinkButton.classList.toggle("is-active", false);
   elements.actionRouteButton.classList.toggle("is-active", routeMatchesSelection);
   elements.actionRouteButton.title = routeMatchesSelection ? "選択中の巡回対象を解除" : "選択点を巡回対象にする";
   elements.deletePointButton.classList.toggle("is-active", false);
   elements.clearSelectionButton.classList.toggle("is-active", false);
   elements.actionTargetButton.classList.toggle("is-active", Boolean(targetCandidate && targetCandidate.id === state.targetPointId));
   elements.actionRouteStartButton.classList.toggle("is-active", Boolean(routeStartCandidate && routeStartCandidate.id === state.routeStartPointId));
-  elements.actionCenterButton.classList.toggle("is-active", validGeo(state.pendingGeo) && centerCandidateCount >= 2);
+  elements.actionCenterButton.classList.toggle("is-active", false);
   elements.actionRestoreButton.classList.toggle("is-active", false);
   elements.actionEditButton.classList.toggle("is-active", Boolean(state.editingPointId));
   elements.actionMapButton.classList.toggle("is-active", false);
@@ -987,14 +1004,14 @@ function renderDetails() {
     return;
   }
 
-  elements.selectionHeading.textContent = observation ? "読み込み観察" : link ? "選択線" : "選択地点";
+  elements.selectionHeading.textContent = observation ? "観察結果" : link ? "選択線" : "選択地点";
 
   if (observation) {
-    elements.detailTitleLabel.textContent = "観察";
+    elements.detailTitleLabel.textContent = "名前";
     elements.detailCoordsLabel.textContent = "実距離";
     elements.detailCreatedLabel.textContent = "記録";
     elements.detailNoteLabel.textContent = "結果";
-    elements.detailTitle.textContent = `${observation.start.title} → ${observation.target.title}`;
+    elements.detailTitle.textContent = loadedObservationTitle(observation);
     elements.detailCoords.textContent = formatDistance(observation.metrics.traveled);
     elements.detailCreated.textContent = `${formatDate(observation.startedAt)} - ${formatDate(observation.endedAt)}`;
     elements.detailNote.textContent = loadedObservationInfoText() || "読み込み観察";
@@ -1243,6 +1260,35 @@ function observationInfoText() {
   return parts.join(" | ");
 }
 
+function observationDateLabel(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("ja-JP", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
+function observationRecordName(start, target, endedAt) {
+  const label = observationDateLabel(endedAt);
+  return `${start.title} → ${target.title}${label ? ` ${label}` : ""}`;
+}
+
+function loadedObservationTitle(observation = state.loadedObservation) {
+  if (!observation) {
+    return "読み込み観察";
+  }
+
+  return typeof observation.title === "string" && observation.title.trim()
+    ? observation.title.trim()
+    : observationRecordName(observation.start, observation.target, observation.endedAt);
+}
+
 function loadedObservationInfoText() {
   const loaded = state.loadedObservation;
   if (!loaded) {
@@ -1250,7 +1296,7 @@ function loadedObservationInfoText() {
   }
 
   const parts = [
-    `読込観察 ${loaded.start.title} → ${loaded.target.title}`,
+    `観察結果 ${loadedObservationTitle(loaded)}`,
     `実 ${formatDistance(loaded.metrics.traveled)}`
   ];
 
@@ -1285,13 +1331,15 @@ function observationSnapshot(options = {}) {
   const current = trail.at(-1);
   const traveled = path.slice(1).reduce((total, point, index) => total + distanceBetween(path[index], point), 0);
   const directToCurrent = distanceBetween(start, current);
+  const endedAt = current.recordedAt ?? new Date().toISOString();
 
   return {
     type: "grid-atlas-observation",
     version: 1,
+    title: observationRecordName(start, target, endedAt),
     exportedAt: new Date().toISOString(),
     startedAt: state.observationStart?.recordedAt ?? trail[0]?.recordedAt ?? new Date().toISOString(),
-    endedAt: current.recordedAt ?? new Date().toISOString(),
+    endedAt,
     start: exportObservationPoint(start),
     target: exportObservationPoint(target),
     trail: trail.map(exportObservationPoint),
@@ -1643,7 +1691,7 @@ function selectionTitle(entry) {
   }
 
   if (entry.type === "observation") {
-    return "読み込み観察";
+    return loadedObservationTitle();
   }
 
   const link = findLink(entry.id);
@@ -1683,7 +1731,10 @@ function deletedSnapshotItemCount() {
     return 0;
   }
 
-  return state.lastDeleted.points.length + state.lastDeleted.links.length;
+  const points = Array.isArray(state.lastDeleted.points) ? state.lastDeleted.points.length : 0;
+  const links = Array.isArray(state.lastDeleted.links) ? state.lastDeleted.links.length : 0;
+  const observations = Array.isArray(state.lastDeleted.observations) ? state.lastDeleted.observations.length : 0;
+  return points + links + observations;
 }
 
 function clonePlain(value) {
@@ -2060,12 +2111,18 @@ function restoreLastDeleted() {
     return;
   }
 
+  const snapshotPoints = Array.isArray(snapshot.points) ? snapshot.points : [];
+  const snapshotLinks = Array.isArray(snapshot.links) ? snapshot.links : [];
+  const snapshotObservations = Array.isArray(snapshot.observations) ? snapshot.observations : [];
   const parts = [];
-  if (snapshot.points.length > 0) {
-    parts.push(`${snapshot.points.length}点`);
+  if (snapshotPoints.length > 0) {
+    parts.push(`${snapshotPoints.length}点`);
   }
-  if (snapshot.links.length > 0) {
-    parts.push(`${snapshot.links.length}線`);
+  if (snapshotLinks.length > 0) {
+    parts.push(`${snapshotLinks.length}線`);
+  }
+  if (snapshotObservations.length > 0) {
+    parts.push(`${snapshotObservations.length}観察`);
   }
 
   const confirmed = window.confirm(`直前に削除した${parts.join(" / ")}を復旧しますか。`);
@@ -2075,7 +2132,7 @@ function restoreLastDeleted() {
 
   const restoredSelection = [];
   const existingPointIds = new Set(state.points.map((point) => point.id));
-  for (const point of snapshot.points) {
+  for (const point of snapshotPoints) {
     if (existingPointIds.has(point.id)) {
       continue;
     }
@@ -2086,7 +2143,7 @@ function restoreLastDeleted() {
   }
 
   const existingLinkIds = new Set(state.links.map((link) => link.id));
-  for (const link of snapshot.links) {
+  for (const link of snapshotLinks) {
     if (existingLinkIds.has(link.id) || !validLinkEndpointId(link.a) || !validLinkEndpointId(link.b)) {
       continue;
     }
@@ -2096,11 +2153,19 @@ function restoreLastDeleted() {
     restoredSelection.push({ type: "link", id: link.id });
   }
 
+  const observation = snapshotObservations.at(-1);
+  if (observation) {
+    state.loadedObservation = clonePlain(observation);
+    restoredSelection.push({ type: "observation", id: LOADED_OBSERVATION_ID });
+  }
+
   state.lastDeleted = null;
   state.selection = restoredSelection;
   normalizeSelection();
   state.routeResult = null;
-  persistWorkspace();
+  if (snapshotPoints.length + snapshotLinks.length > 0) {
+    persistWorkspace();
+  }
   render();
 }
 
@@ -2932,14 +2997,15 @@ function requestCurrentLocation(options = {}) {
 function toggleLocationFollow(options = {}) {
   if (state.followCurrentLocation) {
     if (observationModeActive()) {
-      const arrived = window.confirm("対象に到着しましたか？\nOK: 到着として終了 / キャンセル: 継続");
-      if (!arrived) {
+      const action = chooseObservationStopAction();
+      if (action === "continue") {
         return;
       }
-      finishObservationAtTarget();
+
+      finishObservation({ includeTarget: action === "arrived" });
       stopLocationFollow({ render: false });
       clearObservationAssignments();
-      elements.shareImportStatus.value = "到着として観察を終了しました";
+      elements.shareImportStatus.value = action === "arrived" ? "到着として観察を終了しました" : "観察を中断終了しました";
       render();
       return;
     }
@@ -2951,9 +3017,28 @@ function toggleLocationFollow(options = {}) {
   startLocationFollow(options);
 }
 
-function finishObservationAtTarget() {
-  const snapshot = observationSnapshot({ includeTarget: true });
+function chooseObservationStopAction() {
+  const value = window.prompt("観察を終了しますか？\n1: 到着終了（対象へ接続）\n2: 中断終了（現在地まで）\n空欄/キャンセル: 継続", "1");
+  if (value === null || value.trim() === "") {
+    return "continue";
+  }
+
+  const normalized = value.trim();
+  if (normalized === "1") {
+    return "arrived";
+  }
+  if (normalized === "2") {
+    return "abort";
+  }
+
+  return "continue";
+}
+
+function finishObservation(options = {}) {
+  const snapshot = observationSnapshot({ includeTarget: Boolean(options.includeTarget) });
   if (!snapshot) {
+    state.loadedObservation = null;
+    clearSelection({ render: false });
     return;
   }
 
@@ -2981,6 +3066,9 @@ function startLocationFollow(options = {}) {
 
   state.followCurrentLocation = true;
   state.locationFollowFillForm = Boolean(options.fillForm);
+  state.pendingGeo = null;
+  state.editingPointId = null;
+  state.pendingLinkPointId = null;
   state.loadedObservation = null;
   resetObservationTrail();
   if (state.locationFollowScaleMode === FOLLOW_SCALE_MANUAL) {
@@ -3619,12 +3707,14 @@ function normalizeObservationRecord(parsed) {
   const traveled = path.slice(1).reduce((total, point, index) => total + distanceBetween(path[index], point), 0);
   const current = trail.at(-1);
   const directToCurrent = distanceBetween(start, current);
+  const endedAt = typeof parsed.endedAt === "string" ? parsed.endedAt : trail.at(-1).recordedAt;
   return {
     type: "grid-atlas-observation",
     version: 1,
+    title: typeof parsed.title === "string" && parsed.title.trim() ? parsed.title.trim() : observationRecordName(start, target, endedAt),
     exportedAt: typeof parsed.exportedAt === "string" ? parsed.exportedAt : new Date().toISOString(),
     startedAt: typeof parsed.startedAt === "string" ? parsed.startedAt : trail[0].recordedAt,
-    endedAt: typeof parsed.endedAt === "string" ? parsed.endedAt : trail.at(-1).recordedAt,
+    endedAt,
     start,
     target,
     trail,
@@ -3712,7 +3802,7 @@ function deleteSelectedPoint() {
     parts.push(`${linkIdSet.size}線`);
   }
   if (deleteLoadedObservation) {
-    parts.push("読み込み観察");
+    parts.push("読み込み観察（保存ファイルには影響しません）");
   }
 
   const confirmed = window.confirm(`選択中の${parts.join(" / ")}を削除しますか。`);
@@ -3720,12 +3810,11 @@ function deleteSelectedPoint() {
     return;
   }
 
-  if (pointIdSet.size + linkIdSet.size > 0) {
-    state.lastDeleted = {
-      points: state.points.filter((item) => pointIdSet.has(item.id)).map(clonePlain),
-      links: state.links.filter((item) => linkIdSet.has(item.id)).map(clonePlain)
-    };
-  }
+  state.lastDeleted = {
+    points: state.points.filter((item) => pointIdSet.has(item.id)).map(clonePlain),
+    links: state.links.filter((item) => linkIdSet.has(item.id)).map(clonePlain),
+    observations: deleteLoadedObservation && state.loadedObservation ? [clonePlain(state.loadedObservation)] : []
+  };
   if (deleteLoadedObservation) {
     state.loadedObservation = null;
   }
