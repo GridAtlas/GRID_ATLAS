@@ -5,7 +5,7 @@ const RETRO_THEME = "retro";
 const POINT_RADIUS = 8;
 const POINTER_MOVE_THRESHOLD = 3;
 const CURRENT_LOCATION_ID = "__current_location__";
-const LOADED_OBSERVATION_ID = "__loaded_observation__";
+const LOADED_OBSERVATION_PREFIX = "__loaded_observation__";
 const FOLLOW_SCALE_MANUAL = "manual";
 const FOLLOW_SCALE_CENTER = "center";
 const FOLLOW_SCALE_TARGET = "target";
@@ -92,14 +92,13 @@ const elements = {
   clearRouteSelectionButton: document.querySelector("#clearRouteSelectionButton"),
   routeSummary: document.querySelector("#routeSummary"),
   routeList: document.querySelector("#routeList"),
-  exportButton: document.querySelector("#exportButton"),
-  importButton: document.querySelector("#importButton"),
-  importFile: document.querySelector("#importFile"),
   exportPointsButton: document.querySelector("#exportPointsButton"),
-  importPointsButton: document.querySelector("#importPointsButton"),
+  replacePointsButton: document.querySelector("#replacePointsButton"),
+  appendPointsButton: document.querySelector("#appendPointsButton"),
   pointImportFile: document.querySelector("#pointImportFile"),
   exportObservationButton: document.querySelector("#exportObservationButton"),
-  importObservationButton: document.querySelector("#importObservationButton"),
+  replaceObservationButton: document.querySelector("#replaceObservationButton"),
+  appendObservationButton: document.querySelector("#appendObservationButton"),
   observationImportFile: document.querySelector("#observationImportFile"),
   clearButton: document.querySelector("#clearButton")
 };
@@ -123,7 +122,7 @@ const state = {
   observationTargetId: null,
   observationStart: null,
   observationTrail: [],
-  loadedObservation: null,
+  loadedObservations: [],
   editingPointId: null,
   lastDeleted: null,
   pendingGeo: null,
@@ -139,6 +138,9 @@ const state = {
   },
   pointer: createPointerGestureState()
 };
+
+let pendingPointImportMode = "replace";
+let pendingObservationImportMode = "replace";
 
 const CANVAS_PALETTES = {
   light: {
@@ -276,7 +278,6 @@ function applyWorkspace(workspace) {
   state.routeReturnToStart = false;
   state.routeResult = null;
   state.targetPointId = null;
-  state.loadedObservation = null;
   resetObservationTrail();
   state.editingPointId = null;
   state.lastDeleted = null;
@@ -530,39 +531,47 @@ function drawTargetLine() {
   context.restore();
 }
 
-function visibleObservationLayer() {
+function activeObservationLayer() {
   const start = observationStartPoint();
   const target = targetPoint();
   const points = observationPathPoints();
-  if (start && target && points.length >= 2) {
-    return { start, target, points, loaded: false };
+  if (!start || !target || points.length < 2) {
+    return null;
   }
 
-  return loadedObservationLayer();
+  return { id: "__active_observation__", start, target, points, loaded: false };
 }
 
-function loadedObservationLayer() {
-  const loaded = state.loadedObservation;
-  if (!loaded || !loaded.start || !loaded.target || loaded.trail.length === 0) {
+function loadedObservationLayer(observation) {
+  if (!observation || !observation.start || !observation.target || !Array.isArray(observation.trail) || observation.trail.length === 0) {
     return null;
   }
 
   return {
-    start: loaded.start,
-    target: loaded.target,
-    points: [loaded.start, ...loaded.trail],
+    id: observation.id,
+    start: observation.start,
+    target: observation.target,
+    points: [observation.start, ...observation.trail],
     loaded: true
   };
 }
 
-function drawObservationPath() {
-  const layer = visibleObservationLayer();
-  if (!layer) {
-    return;
-  }
+function loadedObservationLayers() {
+  return state.loadedObservations.map(loadedObservationLayer).filter(Boolean);
+}
 
+function visibleObservationLayers() {
+  const layers = loadedObservationLayers();
+  const active = activeObservationLayer();
+  if (active) {
+    layers.push(active);
+  }
+  return layers;
+}
+
+function drawObservationLayer(layer) {
   const colors = canvasPalette();
-  const isSelected = layer.loaded && isLoadedObservationSelected();
+  const isSelected = layer.loaded && isLoadedObservationSelected(layer.id);
   const startScreen = worldToScreen(layer.start);
   const targetScreen = worldToScreen(layer.target);
 
@@ -589,6 +598,12 @@ function drawObservationPath() {
   context.setLineDash(layer.loaded ? [4, 4] : []);
   context.stroke();
   context.restore();
+}
+
+function drawObservationPath() {
+  for (const layer of visibleObservationLayers()) {
+    drawObservationLayer(layer);
+  }
 }
 function drawRouteResult() {
   const points = routeResultPoints();
@@ -808,7 +823,7 @@ function selectionInfoText() {
   if (state.selection.length === 1) {
     const entry = state.selection[0];
     if (entry.type === "observation") {
-      return loadedObservationInfoText() || "読み込み観察";
+      return loadedObservationInfoText(findLoadedObservation(entry.id)) || "読み込み観察";
     }
 
     if (entry.type === "point") {
@@ -1014,7 +1029,7 @@ function renderDetails() {
     elements.detailTitle.textContent = loadedObservationTitle(observation);
     elements.detailCoords.textContent = formatDistance(observation.metrics.traveled);
     elements.detailCreated.textContent = `${formatDate(observation.startedAt)} - ${formatDate(observation.endedAt)}`;
-    elements.detailNote.textContent = loadedObservationInfoText() || "読み込み観察";
+    elements.detailNote.textContent = loadedObservationInfoText(observation) || "読み込み観察";
     elements.mapOpenActions.hidden = true;
     elements.targetActions.hidden = true;
     return;
@@ -1279,7 +1294,7 @@ function observationRecordName(start, target, endedAt) {
   return `${start.title} → ${target.title}${label ? ` ${label}` : ""}`;
 }
 
-function loadedObservationTitle(observation = state.loadedObservation) {
+function loadedObservationTitle(observation = selectedObservation()) {
   if (!observation) {
     return "読み込み観察";
   }
@@ -1289,8 +1304,8 @@ function loadedObservationTitle(observation = state.loadedObservation) {
     : observationRecordName(observation.start, observation.target, observation.endedAt);
 }
 
-function loadedObservationInfoText() {
-  const loaded = state.loadedObservation;
+function loadedObservationInfoText(observation = selectedObservation()) {
+  const loaded = observation;
   if (!loaded) {
     return "";
   }
@@ -1651,7 +1666,7 @@ function isValidSelectionEntry(entry) {
   }
 
   if (entry.type === "observation") {
-    return entry.id === LOADED_OBSERVATION_ID && Boolean(state.loadedObservation);
+    return Boolean(findLoadedObservation(entry.id));
   }
 
   return false;
@@ -1691,7 +1706,7 @@ function selectionTitle(entry) {
   }
 
   if (entry.type === "observation") {
-    return loadedObservationTitle();
+    return loadedObservationTitle(findLoadedObservation(entry.id));
   }
 
   const link = findLink(entry.id);
@@ -1707,7 +1722,11 @@ function selectedLinkIds() {
 }
 
 function selectedObservationIds() {
-  return state.selection.filter((entry) => entry.type === "observation" && entry.id === LOADED_OBSERVATION_ID && state.loadedObservation).map((entry) => entry.id);
+  return state.selection.filter((entry) => entry.type === "observation" && findLoadedObservation(entry.id)).map((entry) => entry.id);
+}
+
+function selectedLoadedObservations() {
+  return selectedObservationIds().map(findLoadedObservation).filter(Boolean);
 }
 
 function selectedCounts() {
@@ -1741,6 +1760,25 @@ function clonePlain(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function createObservationId() {
+  return `${LOADED_OBSERVATION_PREFIX}-${createId()}`;
+}
+
+function withObservationId(observation, existingIds = new Set()) {
+  const next = clonePlain(observation);
+  let id = typeof next.id === "string" && next.id ? next.id : createObservationId();
+  while (existingIds.has(id)) {
+    id = createObservationId();
+  }
+  next.id = id;
+  existingIds.add(id);
+  return next;
+}
+
+function findLoadedObservation(id) {
+  return state.loadedObservations.find((observation) => observation.id === id) ?? null;
+}
+
 function preferredMapProvider() {
   return /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent) ? "apple" : "google";
 }
@@ -1753,12 +1791,26 @@ function isLinkSelected(linkId) {
   return state.selection.some((entry) => entry.type === "link" && entry.id === linkId);
 }
 
-function isLoadedObservationSelected() {
-  return state.selection.some((entry) => entry.type === "observation" && entry.id === LOADED_OBSERVATION_ID && state.loadedObservation);
+function isLoadedObservationSelected(id) {
+  if (id) {
+    return state.selection.some((entry) => entry.type === "observation" && entry.id === id && findLoadedObservation(id));
+  }
+
+  return selectedObservationIds().length > 0;
 }
 
 function selectedObservation() {
-  return isLoadedObservationSelected() ? state.loadedObservation : null;
+  for (let index = state.selection.length - 1; index >= 0; index -= 1) {
+    const entry = state.selection[index];
+    if (entry.type === "observation") {
+      const observation = findLoadedObservation(entry.id);
+      if (observation) {
+        return observation;
+      }
+    }
+  }
+
+  return null;
 }
 
 function selectedPoint() {
@@ -2153,10 +2205,11 @@ function restoreLastDeleted() {
     restoredSelection.push({ type: "link", id: link.id });
   }
 
-  const observation = snapshotObservations.at(-1);
-  if (observation) {
-    state.loadedObservation = clonePlain(observation);
-    restoredSelection.push({ type: "observation", id: LOADED_OBSERVATION_ID });
+  const existingObservationIds = new Set(state.loadedObservations.map((observation) => observation.id));
+  for (const observation of snapshotObservations) {
+    const restoredObservation = withObservationId(observation, existingObservationIds);
+    state.loadedObservations.push(restoredObservation);
+    restoredSelection.push({ type: "observation", id: restoredObservation.id });
   }
 
   state.lastDeleted = null;
@@ -2191,24 +2244,27 @@ function selectLink(linkId) {
 }
 
 function findNearestLoadedObservation(screenPoint) {
-  const layer = loadedObservationLayer();
-  if (!layer) {
-    return null;
-  }
-
+  let nearestId = null;
   let nearestDistance = Infinity;
-  const measurePath = (points) => {
+
+  const measurePath = (layer, points) => {
     for (let index = 1; index < points.length; index += 1) {
       const start = worldToScreen(points[index - 1]);
       const end = worldToScreen(points[index]);
-      nearestDistance = Math.min(nearestDistance, distanceToSegment(screenPoint, start, end));
+      const distance = distanceToSegment(screenPoint, start, end);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestId = layer.id;
+      }
     }
   };
 
-  measurePath([layer.start, layer.target]);
-  measurePath(layer.points);
+  for (const layer of loadedObservationLayers()) {
+    measurePath(layer, [layer.start, layer.target]);
+    measurePath(layer, layer.points);
+  }
 
-  return nearestDistance <= 14 ? LOADED_OBSERVATION_ID : null;
+  return nearestDistance <= 14 ? nearestId : null;
 }
 
 function handleCanvasClick(screenPoint) {
@@ -2577,8 +2633,7 @@ function followFitTargetPoints(current) {
 }
 
 function loadedObservationFitPoints() {
-  const loaded = state.loadedObservation;
-  return loaded ? [loaded.start, loaded.target, ...loaded.trail] : [];
+  return state.loadedObservations.flatMap((observation) => [observation.start, observation.target, ...observation.trail]);
 }
 
 function fitTargetPoints() {
@@ -3037,13 +3092,13 @@ function chooseObservationStopAction() {
 function finishObservation(options = {}) {
   const snapshot = observationSnapshot({ includeTarget: Boolean(options.includeTarget) });
   if (!snapshot) {
-    state.loadedObservation = null;
     clearSelection({ render: false });
     return;
   }
 
-  state.loadedObservation = snapshot;
-  setSelection([{ type: "observation", id: LOADED_OBSERVATION_ID }], { render: false });
+  const observation = withObservationId(snapshot, new Set(state.loadedObservations.map((item) => item.id)));
+  state.loadedObservations.push(observation);
+  setSelection([{ type: "observation", id: observation.id }], { render: false });
 }
 
 function clearObservationAssignments() {
@@ -3069,7 +3124,6 @@ function startLocationFollow(options = {}) {
   state.pendingGeo = null;
   state.editingPointId = null;
   state.pendingLinkPointId = null;
-  state.loadedObservation = null;
   resetObservationTrail();
   if (state.locationFollowScaleMode === FOLLOW_SCALE_MANUAL) {
     state.locationFollowScaleMode = state.targetPointId ? FOLLOW_SCALE_TARGET : FOLLOW_SCALE_CENTER;
@@ -3526,27 +3580,23 @@ function downloadJson(payload, filename) {
   URL.revokeObjectURL(url);
 }
 
-function exportWorkspace() {
-  downloadJson(workspaceSnapshot(), `grid-atlas-${dateStamp()}.json`);
+function selectedFiles(fileList) {
+  return Array.from(fileList ?? []).filter(Boolean);
 }
 
-function importWorkspaceFile(file) {
-  const reader = new FileReader();
-  reader.addEventListener("load", () => {
-    try {
-      const parsed = JSON.parse(reader.result);
-      if (!Array.isArray(parsed.points) || !Array.isArray(parsed.links)) {
-        throw new Error("Invalid workspace");
+function readJsonFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      try {
+        resolve(JSON.parse(String(reader.result ?? "")));
+      } catch (error) {
+        reject(error);
       }
-
-      applyWorkspace(parsed);
-      persistWorkspace();
-      fitToPoints();
-    } catch {
-      elements.shareImportStatus.value = "読み込みエラー";
-    }
+    });
+    reader.addEventListener("error", () => reject(reader.error ?? new Error("Read failed")));
+    reader.readAsText(file);
   });
-  reader.readAsText(file);
 }
 
 function pointListSnapshot() {
@@ -3590,74 +3640,92 @@ function normalizeImportedPoints(points, existingIds = new Set()) {
   }).filter(Boolean);
 }
 
-function pointImportMode() {
-  const replace = window.confirm("地点リストを置き換えますか。\nOK: 置き換え / キャンセル: 追加または中止");
-  if (replace) {
-    return "replace";
+function pointListPointsFromPayload(parsed) {
+  if (parsed?.type !== "grid-atlas-points" || !Array.isArray(parsed.points)) {
+    throw new Error("Invalid point list");
   }
 
-  return window.confirm("現在の地点に追加しますか。") ? "append" : "cancel";
+  return parsed.points;
 }
 
-function importPointListFile(file) {
-  const reader = new FileReader();
-  reader.addEventListener("load", () => {
-    try {
-      const parsed = JSON.parse(reader.result);
-      if (parsed?.type !== "grid-atlas-points" || !Array.isArray(parsed.points)) {
-        throw new Error("Invalid point list");
-      }
+async function importPointListFiles(files, mode) {
+  const fileItems = selectedFiles(files);
+  if (fileItems.length === 0) {
+    return;
+  }
 
-      const mode = pointImportMode();
-      if (mode === "cancel") {
+  try {
+    const parsedFiles = await Promise.all(fileItems.map(readJsonFile));
+    const rawPoints = parsedFiles.flatMap(pointListPointsFromPayload);
+    const existingIds = mode === "append" ? new Set(state.points.map((point) => point.id)) : new Set();
+    const importedPoints = normalizeImportedPoints(rawPoints, existingIds);
+
+    if (mode === "replace") {
+      if (!confirmObservationReset("地点リストを新規読み込み")) {
         return;
       }
 
-      if (mode === "replace" && !confirmObservationReset("地点リストを置き換え")) {
-        return;
-      }
-
-      const existingIds = mode === "append" ? new Set(state.points.map((point) => point.id)) : new Set();
-      const importedPoints = normalizeImportedPoints(parsed.points, existingIds);
-
-      if (mode === "replace") {
-        state.points = importedPoints;
-        state.links = [];
-        state.selection = [];
-        state.selectedPointId = null;
-        state.selectedLinkId = null;
-        state.pendingLinkPointId = null;
-        state.routeSelectionIds = [];
-        clearRouteStartState();
-        state.routeReturnToStart = false;
-        state.routeResult = null;
-        state.loadedObservation = null;
-        clearTarget({ render: false });
-      } else {
-        state.points.push(...importedPoints);
-        state.selection = importedPoints.map((point) => ({ type: "point", id: point.id }));
-        normalizeSelection();
-      }
-
-      persistWorkspace();
-      elements.shareImportStatus.value = mode === "replace" ? "地点リストを置き換えました" : "地点リストを追加しました";
-      fitToPoints();
-    } catch {
-      elements.shareImportStatus.value = "読み込みエラー";
+      state.points = importedPoints;
+      state.links = [];
+      state.selection = [];
+      state.selectedPointId = null;
+      state.selectedLinkId = null;
+      state.pendingLinkPointId = null;
+      state.routeSelectionIds = [];
+      clearRouteStartState();
+      state.routeReturnToStart = false;
+      state.routeResult = null;
+      state.loadedObservations = [];
+      clearTarget({ render: false });
+    } else {
+      state.points.push(...importedPoints);
+      state.selection = importedPoints.map((point) => ({ type: "point", id: point.id }));
+      normalizeSelection();
     }
-  });
-  reader.readAsText(file);
+
+    persistWorkspace();
+    elements.shareImportStatus.value = mode === "replace" ? "地点リストを新規読み込みしました" : "地点リストを追加しました";
+    fitToPoints();
+  } catch {
+    elements.shareImportStatus.value = "読み込みエラー";
+  }
+}
+
+function observationExportRecords() {
+  const records = state.loadedObservations.map((observation) => ({
+    ...clonePlain(observation),
+    exportedAt: new Date().toISOString()
+  }));
+  const snapshot = observationSnapshot();
+  if (snapshot) {
+    records.push(snapshot);
+  }
+
+  return records;
 }
 
 function observationExportPayload() {
-  const snapshot = observationSnapshot();
-  if (snapshot) {
-    return snapshot;
+  const records = observationExportRecords();
+  if (records.length === 0) {
+    return null;
   }
 
-  return state.loadedObservation
-    ? { ...clonePlain(state.loadedObservation), exportedAt: new Date().toISOString() }
-    : null;
+  if (records.length === 1) {
+    return {
+      ...clonePlain(records[0]),
+      exportedAt: new Date().toISOString()
+    };
+  }
+
+  return {
+    type: "grid-atlas-observations",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    records: records.map((record) => ({
+      ...clonePlain(record),
+      exportedAt: record.exportedAt ?? new Date().toISOString()
+    }))
+  };
 }
 
 function exportObservationRecord() {
@@ -3709,6 +3777,7 @@ function normalizeObservationRecord(parsed) {
   const directToCurrent = distanceBetween(start, current);
   const endedAt = typeof parsed.endedAt === "string" ? parsed.endedAt : trail.at(-1).recordedAt;
   return {
+    id: typeof parsed.id === "string" && parsed.id ? parsed.id : createObservationId(),
     type: "grid-atlas-observation",
     version: 1,
     title: typeof parsed.title === "string" && parsed.title.trim() ? parsed.title.trim() : observationRecordName(start, target, endedAt),
@@ -3726,33 +3795,58 @@ function normalizeObservationRecord(parsed) {
   };
 }
 
-function importObservationFile(file) {
-  const reader = new FileReader();
-  reader.addEventListener("load", () => {
-    try {
-      const parsed = JSON.parse(reader.result);
-      const observation = normalizeObservationRecord(parsed);
-      if (observationResetNeedsConfirmation() && !confirmObservationReset("読み込み観察を表示")) {
-        return;
-      }
+function normalizeObservationRecordsPayload(parsed) {
+  if (parsed?.type === "grid-atlas-observations") {
+    const records = Array.isArray(parsed.records)
+      ? parsed.records
+      : Array.isArray(parsed.observations)
+        ? parsed.observations
+        : [];
+    return records.map(normalizeObservationRecord);
+  }
 
-      if (state.followCurrentLocation) {
-        stopLocationFollow({ render: false });
-      }
-      resetObservationTrail();
-      state.loadedObservation = observation;
-      setSelection([{ type: "observation", id: LOADED_OBSERVATION_ID }], { render: false });
-      elements.shareImportStatus.value = "観察記録を読み込みました";
-      fitToPoints();
-    } catch {
-      elements.shareImportStatus.value = "読み込みエラー";
-    }
-  });
-  reader.readAsText(file);
+  return [normalizeObservationRecord(parsed)];
 }
 
+async function importObservationFiles(files, mode) {
+  const fileItems = selectedFiles(files);
+  if (fileItems.length === 0) {
+    return;
+  }
+
+  try {
+    const parsedFiles = await Promise.all(fileItems.map(readJsonFile));
+    const observations = parsedFiles.flatMap(normalizeObservationRecordsPayload);
+    if (observations.length === 0) {
+      throw new Error("No observations");
+    }
+
+    const action = mode === "replace" ? "観察記録を新規読み込み" : "観察記録を追加読み込み";
+    if (observationResetNeedsConfirmation() && !confirmObservationReset(action)) {
+      return;
+    }
+
+    if (state.followCurrentLocation) {
+      stopLocationFollow({ render: false });
+    }
+    resetObservationTrail();
+
+    if (mode === "replace") {
+      state.loadedObservations = [];
+    }
+
+    const existingIds = new Set(state.loadedObservations.map((observation) => observation.id));
+    const importedObservations = observations.map((observation) => withObservationId(observation, existingIds));
+    state.loadedObservations.push(...importedObservations);
+    setSelection(importedObservations.map((observation) => ({ type: "observation", id: observation.id })), { render: false });
+    elements.shareImportStatus.value = mode === "replace" ? "観察記録を新規読み込みしました" : "観察記録を追加しました";
+    fitToPoints();
+  } catch {
+    elements.shareImportStatus.value = "読み込みエラー";
+  }
+}
 function clearWorkspace() {
-  const confirmed = window.confirm("登録データを初期化しますか。");
+  const confirmed = window.confirm("グリッドを初期化しますか。登録地点、線、読み込み観察を消去します。\n保存済みファイルには影響しません。");
   if (!confirmed) {
     return;
   }
@@ -3770,7 +3864,7 @@ function clearWorkspace() {
   state.routeStartSnapshot = null;
   state.routeReturnToStart = false;
   state.routeResult = null;
-  state.loadedObservation = null;
+  state.loadedObservations = [];
   clearTarget({ render: false });
   localStorage.removeItem(STORAGE_KEY);
   render();
@@ -3780,7 +3874,8 @@ function deleteSelectedPoint() {
   normalizeSelection();
   const pointIds = selectedPointIds().filter((id) => id !== CURRENT_LOCATION_ID);
   const explicitLinkIds = selectedLinkIds();
-  const deleteLoadedObservation = isLoadedObservationSelected();
+  const selectedObservations = selectedLoadedObservations();
+  const selectedObservationIdSet = new Set(selectedObservations.map((observation) => observation.id));
   const pointIdSet = new Set(pointIds);
   const linkIdSet = new Set(explicitLinkIds);
 
@@ -3790,7 +3885,7 @@ function deleteSelectedPoint() {
     }
   }
 
-  if (pointIdSet.size + linkIdSet.size === 0 && !deleteLoadedObservation) {
+  if (pointIdSet.size + linkIdSet.size + selectedObservationIdSet.size === 0) {
     return;
   }
 
@@ -3801,8 +3896,8 @@ function deleteSelectedPoint() {
   if (linkIdSet.size > 0) {
     parts.push(`${linkIdSet.size}線`);
   }
-  if (deleteLoadedObservation) {
-    parts.push("読み込み観察（保存ファイルには影響しません）");
+  if (selectedObservationIdSet.size > 0) {
+    parts.push(`${selectedObservationIdSet.size}観察（保存ファイルには影響しません）`);
   }
 
   const confirmed = window.confirm(`選択中の${parts.join(" / ")}を削除しますか。`);
@@ -3813,10 +3908,10 @@ function deleteSelectedPoint() {
   state.lastDeleted = {
     points: state.points.filter((item) => pointIdSet.has(item.id)).map(clonePlain),
     links: state.links.filter((item) => linkIdSet.has(item.id)).map(clonePlain),
-    observations: deleteLoadedObservation && state.loadedObservation ? [clonePlain(state.loadedObservation)] : []
+    observations: selectedObservations.map(clonePlain)
   };
-  if (deleteLoadedObservation) {
-    state.loadedObservation = null;
+  if (selectedObservationIdSet.size > 0) {
+    state.loadedObservations = state.loadedObservations.filter((observation) => !selectedObservationIdSet.has(observation.id));
   }
   state.points = state.points.filter((item) => !pointIdSet.has(item.id));
   state.links = state.links.filter((item) => !linkIdSet.has(item.id));
@@ -3842,6 +3937,7 @@ function deleteSelectedPoint() {
   }
   render();
 }
+
 function bindEvents() {
   window.addEventListener("resize", scheduleCanvasResize);
   window.visualViewport?.addEventListener("resize", scheduleCanvasResize);
@@ -3888,30 +3984,35 @@ function bindEvents() {
   elements.openGoogleMapsButton.addEventListener("click", () => openSelectedPointInExternalMap("google"));
   elements.targetPointButton.addEventListener("click", toggleTargetForSelection);
   elements.deletePointButton.addEventListener("click", deleteSelectedPoint);
-  elements.exportButton.addEventListener("click", exportWorkspace);
-  elements.importButton.addEventListener("click", () => elements.importFile.click());
-  elements.importFile.addEventListener("change", () => {
-    const file = elements.importFile.files[0];
-    if (file) {
-      importWorkspaceFile(file);
-    }
-    elements.importFile.value = "";
-  });
   elements.exportPointsButton.addEventListener("click", exportPointList);
-  elements.importPointsButton.addEventListener("click", () => elements.pointImportFile.click());
+  elements.replacePointsButton.addEventListener("click", () => {
+    pendingPointImportMode = "replace";
+    elements.pointImportFile.click();
+  });
+  elements.appendPointsButton.addEventListener("click", () => {
+    pendingPointImportMode = "append";
+    elements.pointImportFile.click();
+  });
   elements.pointImportFile.addEventListener("change", () => {
-    const file = elements.pointImportFile.files[0];
-    if (file) {
-      importPointListFile(file);
+    const files = selectedFiles(elements.pointImportFile.files);
+    if (files.length > 0) {
+      void importPointListFiles(files, pendingPointImportMode);
     }
     elements.pointImportFile.value = "";
   });
   elements.exportObservationButton.addEventListener("click", exportObservationRecord);
-  elements.importObservationButton.addEventListener("click", () => elements.observationImportFile.click());
+  elements.replaceObservationButton.addEventListener("click", () => {
+    pendingObservationImportMode = "replace";
+    elements.observationImportFile.click();
+  });
+  elements.appendObservationButton.addEventListener("click", () => {
+    pendingObservationImportMode = "append";
+    elements.observationImportFile.click();
+  });
   elements.observationImportFile.addEventListener("change", () => {
-    const file = elements.observationImportFile.files[0];
-    if (file) {
-      importObservationFile(file);
+    const files = selectedFiles(elements.observationImportFile.files);
+    if (files.length > 0) {
+      void importObservationFiles(files, pendingObservationImportMode);
     }
     elements.observationImportFile.value = "";
   });
