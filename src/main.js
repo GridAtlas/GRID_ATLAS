@@ -5,6 +5,7 @@ const RETRO_THEME = "retro";
 const POINT_RADIUS = 8;
 const POINTER_MOVE_THRESHOLD = 3;
 const CURRENT_LOCATION_ID = "__current_location__";
+const LOADED_OBSERVATION_ID = "__loaded_observation__";
 const FOLLOW_SCALE_MANUAL = "manual";
 const FOLLOW_SCALE_CENTER = "center";
 const FOLLOW_SCALE_TARGET = "target";
@@ -537,6 +538,10 @@ function visibleObservationLayer() {
     return { start, target, points, loaded: false };
   }
 
+  return loadedObservationLayer();
+}
+
+function loadedObservationLayer() {
   const loaded = state.loadedObservation;
   if (!loaded || !loaded.start || !loaded.target || loaded.trail.length === 0) {
     return null;
@@ -557,6 +562,7 @@ function drawObservationPath() {
   }
 
   const colors = canvasPalette();
+  const isSelected = layer.loaded && isLoadedObservationSelected();
   const startScreen = worldToScreen(layer.start);
   const targetScreen = worldToScreen(layer.target);
 
@@ -564,8 +570,8 @@ function drawObservationPath() {
   context.beginPath();
   context.moveTo(startScreen.x, startScreen.y);
   context.lineTo(targetScreen.x, targetScreen.y);
-  context.strokeStyle = colors.observationBaseline;
-  context.lineWidth = 2.2;
+  context.strokeStyle = isSelected ? colors.selected : colors.observationBaseline;
+  context.lineWidth = isSelected ? 3 : 2.2;
   context.setLineDash([12, 8]);
   context.stroke();
 
@@ -578,8 +584,8 @@ function drawObservationPath() {
       context.lineTo(screen.x, screen.y);
     }
   });
-  context.strokeStyle = colors.observationTrail;
-  context.lineWidth = layer.loaded ? 2.8 : 3.4;
+  context.strokeStyle = isSelected ? colors.selected : colors.observationTrail;
+  context.lineWidth = layer.loaded ? (isSelected ? 4.2 : 2.8) : 3.4;
   context.setLineDash(layer.loaded ? [4, 4] : []);
   context.stroke();
   context.restore();
@@ -790,20 +796,20 @@ function selectionInfoText() {
     return observationText;
   }
 
-  const loadedObservationText = loadedObservationInfoText();
-  if (loadedObservationText) {
-    return loadedObservationText;
-  }
-
   if (state.selection.length === 0) {
     return "未選択";
   }
 
   const points = selectedPointIds().map(findPoint).filter(Boolean);
   const links = selectedLinkIds().map(findLink).filter(Boolean);
+  const observations = selectedObservationIds();
 
   if (state.selection.length === 1) {
     const entry = state.selection[0];
+    if (entry.type === "observation") {
+      return loadedObservationInfoText() || "読み込み観察";
+    }
+
     if (entry.type === "point") {
       const point = findPoint(entry.id);
       return point ? pointSelectionInfo(point) : "地点を確認できません";
@@ -824,6 +830,9 @@ function selectionInfoText() {
   }
   if (links.length > 0) {
     countParts.push(`${links.length}線`);
+  }
+  if (observations.length > 0) {
+    countParts.push(`${observations.length}観察`);
   }
   if (countParts.length > 0) {
     parts.push(`選択 ${countParts.join(" / ")}`);
@@ -899,7 +908,8 @@ function renderActionButtons() {
   const editCandidate = editableSelectedPoint();
   const mapCandidate = mapPointForSelection();
   const deletablePointCount = pointIds.filter((id) => id !== CURRENT_LOCATION_ID).length;
-  const canDelete = deletablePointCount + linkIds.length > 0;
+  const observationSelected = isLoadedObservationSelected();
+  const canDelete = deletablePointCount + linkIds.length > 0 || observationSelected;
 
   elements.actionRegisterButton.disabled = !hasPendingPoint;
   elements.actionLinkButton.disabled = !pointPair;
@@ -935,6 +945,7 @@ function renderDetails() {
   const entries = state.selection;
   const point = selectedPoint();
   const link = selectedLink();
+  const observation = selectedObservation();
   const hasSelection = entries.length > 0;
 
   elements.emptyDetails.hidden = hasSelection;
@@ -958,6 +969,9 @@ function renderDetails() {
     if (counts.link > 0) {
       parts.push(`${counts.link}線`);
     }
+    if (counts.observation > 0) {
+      parts.push(`${counts.observation}観察`);
+    }
 
     elements.selectionHeading.textContent = "複数選択";
     elements.detailTitleLabel.textContent = "選択";
@@ -973,7 +987,21 @@ function renderDetails() {
     return;
   }
 
-  elements.selectionHeading.textContent = link ? "選択線" : "選択地点";
+  elements.selectionHeading.textContent = observation ? "読み込み観察" : link ? "選択線" : "選択地点";
+
+  if (observation) {
+    elements.detailTitleLabel.textContent = "観察";
+    elements.detailCoordsLabel.textContent = "実距離";
+    elements.detailCreatedLabel.textContent = "記録";
+    elements.detailNoteLabel.textContent = "結果";
+    elements.detailTitle.textContent = `${observation.start.title} → ${observation.target.title}`;
+    elements.detailCoords.textContent = formatDistance(observation.metrics.traveled);
+    elements.detailCreated.textContent = `${formatDate(observation.startedAt)} - ${formatDate(observation.endedAt)}`;
+    elements.detailNote.textContent = loadedObservationInfoText() || "読み込み観察";
+    elements.mapOpenActions.hidden = true;
+    elements.targetActions.hidden = true;
+    return;
+  }
 
   if (link) {
     const endpoints = linkEndpoints(link);
@@ -1557,6 +1585,10 @@ function isValidSelectionEntry(entry) {
     return Boolean(findLink(entry.id));
   }
 
+  if (entry.type === "observation") {
+    return entry.id === LOADED_OBSERVATION_ID && Boolean(state.loadedObservation);
+  }
+
   return false;
 }
 
@@ -1593,6 +1625,10 @@ function selectionTitle(entry) {
     return findPoint(entry.id)?.title ?? "地点";
   }
 
+  if (entry.type === "observation") {
+    return "読み込み観察";
+  }
+
   const link = findLink(entry.id);
   return link ? linkTitle(link) : "線";
 }
@@ -1605,10 +1641,15 @@ function selectedLinkIds() {
   return state.selection.filter((entry) => entry.type === "link" && findLink(entry.id)).map((entry) => entry.id);
 }
 
+function selectedObservationIds() {
+  return state.selection.filter((entry) => entry.type === "observation" && entry.id === LOADED_OBSERVATION_ID && state.loadedObservation).map((entry) => entry.id);
+}
+
 function selectedCounts() {
   const point = selectedPointIds().length;
   const link = selectedLinkIds().length;
-  return { point, link, total: point + link };
+  const observation = selectedObservationIds().length;
+  return { point, link, observation, total: point + link + observation };
 }
 
 function editableSelectedPoint() {
@@ -1642,6 +1683,14 @@ function isPointSelected(pointId) {
 
 function isLinkSelected(linkId) {
   return state.selection.some((entry) => entry.type === "link" && entry.id === linkId);
+}
+
+function isLoadedObservationSelected() {
+  return state.selection.some((entry) => entry.type === "observation" && entry.id === LOADED_OBSERVATION_ID && state.loadedObservation);
+}
+
+function selectedObservation() {
+  return isLoadedObservationSelected() ? state.loadedObservation : null;
 }
 
 function selectedPoint() {
@@ -2059,9 +2108,31 @@ function selectLink(linkId) {
   setSelection([{ type: "link", id: linkId }]);
 }
 
+function findNearestLoadedObservation(screenPoint) {
+  const layer = loadedObservationLayer();
+  if (!layer) {
+    return null;
+  }
+
+  let nearestDistance = Infinity;
+  const measurePath = (points) => {
+    for (let index = 1; index < points.length; index += 1) {
+      const start = worldToScreen(points[index - 1]);
+      const end = worldToScreen(points[index]);
+      nearestDistance = Math.min(nearestDistance, distanceToSegment(screenPoint, start, end));
+    }
+  };
+
+  measurePath([layer.start, layer.target]);
+  measurePath(layer.points);
+
+  return nearestDistance <= 14 ? LOADED_OBSERVATION_ID : null;
+}
+
 function handleCanvasClick(screenPoint) {
   const nearest = findNearestPoint(screenPoint);
   const nearestLink = nearest ? null : findNearestLink(screenPoint);
+  const nearestObservation = nearest || nearestLink ? null : findNearestLoadedObservation(screenPoint);
 
   if (nearest) {
     toggleSelection("point", nearest.id);
@@ -2070,6 +2141,11 @@ function handleCanvasClick(screenPoint) {
 
   if (nearestLink) {
     toggleSelection("link", nearestLink.id);
+    return;
+  }
+
+  if (nearestObservation) {
+    toggleSelection("observation", nearestObservation);
     return;
   }
 
@@ -3530,6 +3606,7 @@ function importObservationFile(file) {
       }
       resetObservationTrail();
       state.loadedObservation = observation;
+      setSelection([{ type: "observation", id: LOADED_OBSERVATION_ID }], { render: false });
       elements.shareImportStatus.value = "観察記録を読み込みました";
       fitToPoints();
     } catch {
@@ -3568,6 +3645,7 @@ function deleteSelectedPoint() {
   normalizeSelection();
   const pointIds = selectedPointIds().filter((id) => id !== CURRENT_LOCATION_ID);
   const explicitLinkIds = selectedLinkIds();
+  const deleteLoadedObservation = isLoadedObservationSelected();
   const pointIdSet = new Set(pointIds);
   const linkIdSet = new Set(explicitLinkIds);
 
@@ -3577,7 +3655,7 @@ function deleteSelectedPoint() {
     }
   }
 
-  if (pointIdSet.size + linkIdSet.size === 0) {
+  if (pointIdSet.size + linkIdSet.size === 0 && !deleteLoadedObservation) {
     return;
   }
 
@@ -3588,16 +3666,24 @@ function deleteSelectedPoint() {
   if (linkIdSet.size > 0) {
     parts.push(`${linkIdSet.size}線`);
   }
+  if (deleteLoadedObservation) {
+    parts.push("読み込み観察");
+  }
 
   const confirmed = window.confirm(`選択中の${parts.join(" / ")}を削除しますか。`);
   if (!confirmed) {
     return;
   }
 
-  state.lastDeleted = {
-    points: state.points.filter((item) => pointIdSet.has(item.id)).map(clonePlain),
-    links: state.links.filter((item) => linkIdSet.has(item.id)).map(clonePlain)
-  };
+  if (pointIdSet.size + linkIdSet.size > 0) {
+    state.lastDeleted = {
+      points: state.points.filter((item) => pointIdSet.has(item.id)).map(clonePlain),
+      links: state.links.filter((item) => linkIdSet.has(item.id)).map(clonePlain)
+    };
+  }
+  if (deleteLoadedObservation) {
+    state.loadedObservation = null;
+  }
   state.points = state.points.filter((item) => !pointIdSet.has(item.id));
   state.links = state.links.filter((item) => !linkIdSet.has(item.id));
   state.selection = [];
@@ -3617,7 +3703,9 @@ function deleteSelectedPoint() {
     clearTarget({ render: false });
   }
 
-  persistWorkspace();
+  if (pointIdSet.size + linkIdSet.size > 0) {
+    persistWorkspace();
+  }
   render();
 }
 function bindEvents() {
