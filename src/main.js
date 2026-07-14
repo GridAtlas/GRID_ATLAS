@@ -161,7 +161,7 @@ const CANVAS_PALETTES = {
     currentInner: "#fff7bf",
     pendingFill: "rgb(233 95 26 / 0.24)",
     pendingStroke: "rgb(233 95 26 / 0.62)",
-    pointFill: "#e95f1a",
+    pointFill: "#116c6d",
     pointBaseStroke: "#ffffff",
     routeStart: "#5a4aa0",
     routeSelected: "#7b68c7",
@@ -513,24 +513,69 @@ function drawTargetLine() {
 
   const start = worldToScreen(anchor);
   const end = worldToScreen(target);
+  const lineEnd = targetLineEndPoint(start, end);
   const colors = canvasPalette();
 
   context.save();
   context.beginPath();
   context.moveTo(start.x, start.y);
-  context.lineTo(end.x, end.y);
+  context.lineTo(lineEnd.x, lineEnd.y);
   context.strokeStyle = colors.target;
   context.lineWidth = 2.8;
   context.setLineDash([7, 6]);
   context.stroke();
+  context.setLineDash([]);
+  drawArrowHead(start, lineEnd, colors.target);
 
   context.beginPath();
   context.arc(end.x, end.y, POINT_RADIUS + 8, 0, Math.PI * 2);
   context.strokeStyle = colors.targetSoft;
   context.lineWidth = 6;
-  context.setLineDash([]);
   context.stroke();
   context.restore();
+}
+
+function targetLineEndPoint(start, end) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance <= POINT_RADIUS + 12) {
+    return end;
+  }
+
+  const offset = POINT_RADIUS + 5;
+  return {
+    x: end.x - (dx / distance) * offset,
+    y: end.y - (dy / distance) * offset
+  };
+}
+
+function drawArrowHead(start, tip, color) {
+  const dx = tip.x - start.x;
+  const dy = tip.y - start.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance < 1) {
+    return;
+  }
+
+  const ux = dx / distance;
+  const uy = dy / distance;
+  const px = -uy;
+  const py = ux;
+  const length = 13;
+  const width = 7;
+  const base = {
+    x: tip.x - ux * length,
+    y: tip.y - uy * length
+  };
+
+  context.beginPath();
+  context.moveTo(tip.x, tip.y);
+  context.lineTo(base.x + px * width, base.y + py * width);
+  context.lineTo(base.x - px * width, base.y - py * width);
+  context.closePath();
+  context.fillStyle = color;
+  context.fill();
 }
 
 function activeObservationLayer() {
@@ -658,10 +703,8 @@ function drawCurrentLocation() {
   context.arc(screen.x, screen.y, 9, 0, Math.PI * 2);
   context.fillStyle = colors.currentFill;
   context.fill();
-  const isSelected = isPointSelected(CURRENT_LOCATION_ID);
-  const isRouteStart = state.routeStartPointId === CURRENT_LOCATION_ID && !state.routeStartSnapshot;
-  context.lineWidth = isSelected || isRouteStart ? 4 : 3;
-  context.strokeStyle = isRouteStart ? colors.routeStart : isSelected ? colors.currentSelectedStroke : colors.currentStroke;
+  context.lineWidth = 3;
+  context.strokeStyle = colors.currentStroke;
   context.stroke();
 
   context.beginPath();
@@ -715,30 +758,11 @@ function drawPoints() {
   const colors = canvasPalette();
   for (const point of state.points) {
     const screen = worldToScreen(point);
-    const isSelected = isPointSelected(point.id);
-    const isPending = point.id === state.pendingLinkPointId;
     const isTarget = point.id === state.targetPointId;
-    const shouldShowRouteSelection = state.routeSelectionIds.length > 0 || Boolean(state.routeResult);
-    const isRouteSelected = shouldShowRouteSelection && state.routeSelectionIds.includes(point.id);
-    const isRouteStart = state.routeStartPointId === point.id;
     context.beginPath();
     context.arc(screen.x, screen.y, POINT_RADIUS, 0, Math.PI * 2);
     context.fillStyle = isTarget ? colors.targetFill : colors.pointFill;
     context.fill();
-
-    context.lineWidth = isSelected || isPending || isRouteSelected || isTarget || isRouteStart ? 4 : 2;
-    context.strokeStyle = isRouteStart
-      ? colors.routeStart
-      : isTarget
-        ? colors.target
-        : isRouteSelected
-        ? colors.routeSelected
-        : isPending
-          ? colors.pendingPointStroke
-          : isSelected
-            ? colors.selected
-            : colors.pointBaseStroke;
-    context.stroke();
   }
 }
 
@@ -937,7 +961,7 @@ function renderActionButtons() {
   const pointPair = selectedPointPair();
   const targetCandidate = lastTargetableSelectedPoint();
   const routeStartCandidate = lastSelectedPoint();
-  const routeMatchesSelection = selectedPointIdsMatchRoute(pointIds);
+  const routePlan = routePlanFromCurrentSelection();
   const centerCandidateCount = pointIds.length;
   const restoreCandidateCount = deletedSnapshotItemCount();
   const editCandidate = editableSelectedPoint();
@@ -948,7 +972,7 @@ function renderActionButtons() {
 
   elements.actionRegisterButton.disabled = !hasPendingPoint;
   elements.actionLinkButton.disabled = !pointPair;
-  elements.actionRouteButton.disabled = pointIds.length === 0;
+  elements.actionRouteButton.disabled = !routePlan;
   elements.deletePointButton.disabled = !canDelete;
   elements.clearSelectionButton.disabled = state.selection.length === 0 && !hasPendingPoint;
   elements.actionTargetButton.disabled = !targetCandidate;
@@ -960,8 +984,8 @@ function renderActionButtons() {
 
   elements.actionRegisterButton.classList.remove("is-active");
   elements.actionLinkButton.classList.toggle("is-active", false);
-  elements.actionRouteButton.classList.toggle("is-active", routeMatchesSelection);
-  elements.actionRouteButton.title = routeMatchesSelection ? "選択中の巡回対象を解除" : "選択点を巡回対象にする";
+  elements.actionRouteButton.classList.toggle("is-active", false);
+  elements.actionRouteButton.title = routePlan ? "選択点を起点から巡回計算" : "複数選択と起点指定が必要";
   elements.deletePointButton.classList.toggle("is-active", false);
   elements.clearSelectionButton.classList.toggle("is-active", false);
   elements.actionTargetButton.classList.toggle("is-active", Boolean(targetCandidate && targetCandidate.id === state.targetPointId));
@@ -972,7 +996,7 @@ function renderActionButtons() {
   elements.actionMapButton.classList.toggle("is-active", false);
   elements.actionRestoreButton.title = restoreCandidateCount > 0 ? `直前の削除を復旧 (${restoreCandidateCount}件)` : "直前の削除を復旧";
   elements.pointSubmitButton.textContent = state.editingPointId ? "更新" : "登録";
-  elements.actionRouteLabel.textContent = routeMatchesSelection ? "解除" : "巡回";
+  elements.actionRouteLabel.textContent = "巡回";
   renderLocationFollowButton();
 }
 
@@ -1553,47 +1577,40 @@ function renderAnalysis() {
 
 function renderRoute() {
   normalizeRouteSelection();
-  const selectedPoints = selectedRoutePoints();
-  elements.routeSelectedCount.textContent = `${selectedPoints.length}点`;
+  const selectedPoints = selectedPointIds().map(findPoint).filter(Boolean);
+  const resultPoints = routeResultPoints();
+  const routePlan = routePlanFromCurrentSelection();
+  const start = routeStartPoint();
+  elements.routeSelectedCount.textContent = selectedPoints.length > 0 ? `${selectedPoints.length}点` : `${resultPoints.length}点`;
   elements.routeStartSelect.replaceChildren();
 
-  if (selectedPoints.length === 0) {
-    const option = document.createElement("option");
-    option.value = "";
-    option.textContent = "未選択";
-    elements.routeStartSelect.append(option);
-    elements.routeStartSelect.disabled = true;
-    elements.routeReturnToStart.disabled = true;
-    elements.routeReturnToStart.checked = state.routeReturnToStart;
-    elements.computeRouteButton.disabled = true;
-    elements.clearRouteSelectionButton.disabled = true;
-    elements.routeSummary.textContent = "地点を選んで巡回を押す";
-    elements.routeList.replaceChildren();
+  const option = document.createElement("option");
+  option.value = start?.id ?? "";
+  option.textContent = start?.title ?? "未指定";
+  elements.routeStartSelect.append(option);
+  elements.routeStartSelect.disabled = true;
+  elements.routeReturnToStart.disabled = !routePlan;
+  elements.routeReturnToStart.checked = state.routeReturnToStart;
+  elements.computeRouteButton.disabled = !routePlan;
+  elements.clearRouteSelectionButton.disabled = !state.routeResult;
+  elements.routeList.replaceChildren();
+
+  if (state.routeResult) {
+    renderRouteResultDetails();
     return;
   }
 
-  elements.routeStartSelect.disabled = false;
-  elements.routeReturnToStart.disabled = selectedPoints.length < 2;
-  elements.routeReturnToStart.checked = state.routeReturnToStart;
-  elements.computeRouteButton.disabled = selectedPoints.length < 2;
-  elements.clearRouteSelectionButton.disabled = false;
-
-  const routeStartPointId = effectiveRouteStartPointId();
-
-  for (const point of selectedPoints) {
-    const option = document.createElement("option");
-    option.value = point.id;
-    option.textContent = point.title;
-    elements.routeStartSelect.append(option);
+  if (!start) {
+    elements.routeSummary.textContent = "起点を指定して2点以上選択";
+    return;
   }
 
-  elements.routeStartSelect.value = routeStartPointId ?? "";
-  elements.routeList.replaceChildren();
-
+  elements.routeSummary.textContent = selectedPoints.length < 2
+    ? "2点以上を選択すると巡回を実行"
+    : "巡回で最適順を計算";
+}
+function renderRouteResultDetails() {
   if (!state.routeResult) {
-    elements.routeSummary.textContent = selectedPoints.length < 2
-      ? "2点以上を選択すると順番を計算"
-      : "スタート地点を選んで最適順を計算";
     return;
   }
 
@@ -1643,6 +1660,7 @@ function renderRoute() {
     elements.routeList.append(item);
   }
 }
+
 function findPoint(id) {
   return id === CURRENT_LOCATION_ID ? currentLocationPoint() : findPointIn(id, state.points);
 }
@@ -1908,6 +1926,7 @@ function clearSelection(options = {}) {
   state.selectedLinkId = null;
   state.pendingLinkPointId = null;
   state.editingPointId = null;
+  state.routeSelectionIds = [];
 
   if (options.clearPending !== false) {
     state.pendingGeo = null;
@@ -1942,28 +1961,40 @@ function effectiveRouteStartPointId() {
   return routeStartInSelection() ?? state.routeSelectionIds[0] ?? null;
 }
 
+function routePlanFromCurrentSelection() {
+  const selectedPoints = selectedPointIds().map(findPoint).filter(Boolean);
+  const start = routeStartPoint();
+  if (!start || selectedPoints.length < 2) {
+    return null;
+  }
+
+  const points = [];
+  const seen = new Set();
+  for (const point of [start, ...selectedPoints]) {
+    if (!point || seen.has(point.id)) {
+      continue;
+    }
+    seen.add(point.id);
+    points.push(point);
+  }
+
+  return points.length >= 2 ? { start, points } : null;
+}
+
 function findLinkBetween(a, b) {
   return state.links.find((link) => (link.a === a && link.b === b) || (link.a === b && link.b === a)) ?? null;
 }
 
 function setRouteFromSelectedPoints() {
-  const ids = selectedPointIds();
-  if (ids.length === 0) {
+  const plan = routePlanFromCurrentSelection();
+  if (!plan) {
     return;
   }
 
   state.mode = "inspect";
   state.pendingLinkPointId = null;
-
-  if (selectedPointIdsMatchRoute(ids)) {
-    state.routeSelectionIds = [];
-    state.routeResult = null;
-    render();
-    return;
-  }
-
-  state.routeSelectionIds = ids;
-  state.routeResult = null;
+  state.routeSelectionIds = [];
+  state.routeResult = optimizeVisitOrder(plan.points, plan.start.id, state.routeReturnToStart);
   render();
 }
 
@@ -2343,23 +2374,15 @@ function clearRouteSelection() {
 }
 
 function computeRouteFromSelection() {
-  normalizeRouteSelection();
-  const selectedPoints = selectedRoutePoints();
-
-  if (selectedPoints.length < 2) {
+  const plan = routePlanFromCurrentSelection();
+  if (!plan) {
     state.routeResult = null;
     render();
     return;
   }
 
-  const routeStartPointId = effectiveRouteStartPointId();
-  if (!routeStartPointId) {
-    state.routeResult = null;
-    render();
-    return;
-  }
-
-  state.routeResult = optimizeVisitOrder(selectedPoints, routeStartPointId, state.routeReturnToStart);
+  state.routeSelectionIds = [];
+  state.routeResult = optimizeVisitOrder(plan.points, plan.start.id, state.routeReturnToStart);
   render();
 }
 
@@ -2382,7 +2405,7 @@ function normalizeRouteSelection() {
     clearRouteStartState();
   }
 
-  if (state.routeResult && state.routeResult.pointIds.some((id) => !state.routeSelectionIds.includes(id))) {
+  if (state.routeResult && state.routeResult.pointIds.some((id) => !validIds.has(id))) {
     state.routeResult = null;
   }
 }
