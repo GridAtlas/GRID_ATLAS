@@ -699,12 +699,13 @@ function drawCurrentLocation() {
     context.fill();
   }
 
+  const isSelected = isPointSelected(CURRENT_LOCATION_ID);
   context.beginPath();
   context.arc(screen.x, screen.y, 9, 0, Math.PI * 2);
   context.fillStyle = colors.currentFill;
   context.fill();
-  context.lineWidth = 3;
-  context.strokeStyle = colors.currentStroke;
+  context.lineWidth = isSelected ? 4 : 3;
+  context.strokeStyle = isSelected ? colors.currentSelectedStroke : colors.currentStroke;
   context.stroke();
 
   context.beginPath();
@@ -759,10 +760,17 @@ function drawPoints() {
   for (const point of state.points) {
     const screen = worldToScreen(point);
     const isTarget = point.id === state.targetPointId;
+    const isSelected = isPointSelected(point.id);
     context.beginPath();
     context.arc(screen.x, screen.y, POINT_RADIUS, 0, Math.PI * 2);
     context.fillStyle = isTarget ? colors.targetFill : colors.pointFill;
     context.fill();
+
+    if (isSelected) {
+      context.lineWidth = 4;
+      context.strokeStyle = colors.selected;
+      context.stroke();
+    }
   }
 }
 
