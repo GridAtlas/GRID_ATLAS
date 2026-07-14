@@ -505,13 +505,13 @@ function drawLinks() {
 }
 
 function drawTargetLine() {
-  const current = currentLocationPoint();
+  const anchor = routeStartPoint() ?? currentLocationPoint();
   const target = targetPoint();
-  if (!current || !target) {
+  if (!anchor || !target) {
     return;
   }
 
-  const start = worldToScreen(current);
+  const start = worldToScreen(anchor);
   const end = worldToScreen(target);
   const colors = canvasPalette();
 
