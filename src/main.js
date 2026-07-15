@@ -890,10 +890,10 @@ function followStateInfoText() {
     return `観察中 ${start.title} → ${target.title}`;
   }
   if (target) {
-    return `追従中 現在地 → ${target.title}`;
+    return `追跡中 現在地 → ${target.title}`;
   }
 
-  return "追従中 現在地";
+  return "追跡中 現在地";
 }
 
 function pointSelectionInfo(point) {
@@ -3247,7 +3247,7 @@ function startLocationFollow(options = {}) {
         fillForm: state.locationFollowFillForm
       }),
       (error) => {
-        const message = locationErrorMessage(error, "追従エラー");
+        const message = locationErrorMessage(error, "追跡エラー");
         stopLocationFollow();
         elements.shareImportStatus.value = message;
       },
@@ -3260,7 +3260,7 @@ function startLocationFollow(options = {}) {
     state.locationFollowFillForm = false;
     state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
     renderLocationFollowButton();
-    elements.shareImportStatus.value = "追従エラー";
+    elements.shareImportStatus.value = "追跡エラー";
   }
 }
 
@@ -3300,7 +3300,7 @@ function renderLocationFollowButton() {
   elements.actionFollowButton.disabled = !isSupported;
   elements.actionFollowButton.classList.toggle("is-active", state.followCurrentLocation);
   elements.actionFollowButton.setAttribute("aria-pressed", String(state.followCurrentLocation));
-  elements.actionFollowButton.title = state.followCurrentLocation ? "現在地更新を停止" : "現在地更新を開始";
+  elements.actionFollowButton.title = state.followCurrentLocation ? "追跡を停止" : "追跡を開始";
   elements.originButton.title = state.followCurrentLocation ? "現在地へ" : "選択地点へ";
 }
 
