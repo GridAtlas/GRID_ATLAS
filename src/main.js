@@ -638,7 +638,7 @@ function drawObservationLayer(layer) {
   });
   context.strokeStyle = isSelected ? colors.selected : colors.observationTrail;
   context.lineWidth = layer.loaded ? (isSelected ? 4.2 : 2.8) : 3.4;
-  context.setLineDash(layer.loaded ? [4, 4] : []);
+  context.setLineDash([4, 4]);
   context.stroke();
   context.restore();
 }
