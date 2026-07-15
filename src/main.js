@@ -729,22 +729,6 @@ function drawRouteStartSnapshot() {
   const screen = worldToScreen(snapshot);
   context.save();
 
-  if (state.routeStartPointId === CURRENT_LOCATION_ID) {
-    context.beginPath();
-    context.arc(screen.x, screen.y, 9, 0, Math.PI * 2);
-    context.fillStyle = colors.routeStartSoft;
-    context.fill();
-    context.lineWidth = 3;
-    context.strokeStyle = colors.routeStart;
-    context.stroke();
-
-    context.beginPath();
-    context.arc(screen.x, screen.y, 3, 0, Math.PI * 2);
-    context.fillStyle = colors.routeStart;
-    context.fill();
-    context.restore();
-    return;
-  }
 
   context.beginPath();
   context.arc(screen.x, screen.y, 13, 0, Math.PI * 2);
