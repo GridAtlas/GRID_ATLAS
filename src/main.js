@@ -156,9 +156,6 @@ const CANVAS_PALETTES = {
     observationBaseline: "rgb(199 58 42 / 0.34)",
     observationTrail: "#c73a2a",
     currentFill: "#ffd436",
-    currentStroke: "#6b5a00",
-    currentSelectedStroke: "#2e7d32",
-    currentInner: "#fff7bf",
     pendingFill: "rgb(233 95 26 / 0.24)",
     pendingStroke: "rgb(233 95 26 / 0.62)",
     pointFill: "#116c6d",
@@ -185,9 +182,6 @@ const CANVAS_PALETTES = {
     observationBaseline: "rgb(214 255 224 / 0.28)",
     observationTrail: "#fff35a",
     currentFill: "#fff35a",
-    currentStroke: "#d8c900",
-    currentSelectedStroke: "#ffffff",
-    currentInner: "#021006",
     pendingFill: "rgb(44 255 100 / 0.18)",
     pendingStroke: "rgb(119 255 153 / 0.72)",
     pointFill: "#23ff5e",
@@ -690,21 +684,17 @@ function drawCurrentLocation() {
   const colors = canvasPalette();
   const screen = worldToScreen(location);
   const isSelected = isPointSelected(CURRENT_LOCATION_ID);
-  const markerRadius = isSelected ? POINT_RADIUS : POINT_RADIUS - 1;
-  const markerLineWidth = isSelected ? 4 : 2;
 
   context.beginPath();
-  context.arc(screen.x, screen.y, markerRadius, 0, Math.PI * 2);
+  context.arc(screen.x, screen.y, POINT_RADIUS, 0, Math.PI * 2);
   context.fillStyle = colors.currentFill;
   context.fill();
-  context.lineWidth = markerLineWidth;
-  context.strokeStyle = isSelected ? colors.currentSelectedStroke : colors.currentStroke;
-  context.stroke();
 
-  context.beginPath();
-  context.arc(screen.x, screen.y, Math.max(2.5, POINT_RADIUS * 0.32), 0, Math.PI * 2);
-  context.fillStyle = colors.currentInner;
-  context.fill();
+  if (isSelected) {
+    context.lineWidth = 4;
+    context.strokeStyle = colors.selected;
+    context.stroke();
+  }
 }
 
 function drawRouteStartSnapshot() {
@@ -796,9 +786,9 @@ function draw() {
   drawRouteResult();
   drawObservationPath();
   drawTargetLine();
-  drawCurrentLocation();
   drawRouteStartSnapshot();
   drawPoints();
+  drawCurrentLocation();
   drawPendingPoint();
   drawRouteBadges();
 }
