@@ -718,12 +718,13 @@ function drawCurrentLocation() {
 }
 
 function drawRouteStartSnapshot() {
-  if (state.routeStartPointId !== CURRENT_LOCATION_ID || !state.routeStartSnapshot) {
+  const snapshot = currentRouteStartSnapshot();
+  if (!snapshot) {
     return;
   }
 
   const colors = canvasPalette();
-  const screen = worldToScreen(state.routeStartSnapshot);
+  const screen = worldToScreen(snapshot);
   context.save();
   context.beginPath();
   context.arc(screen.x, screen.y, 13, 0, Math.PI * 2);
@@ -1191,11 +1192,30 @@ function cloneObservationPoint(point) {
 }
 
 function routeStartPoint() {
-  if (state.routeStartPointId === CURRENT_LOCATION_ID && state.routeStartSnapshot) {
-    return state.routeStartSnapshot;
+  if (state.routeStartPointId === CURRENT_LOCATION_ID) {
+    return currentRouteStartSnapshot() ?? currentLocationPoint();
   }
 
   return findPoint(state.routeStartPointId);
+}
+
+function currentRouteStartSnapshot() {
+  if (state.routeStartPointId !== CURRENT_LOCATION_ID) {
+    return null;
+  }
+
+  return state.routeStartSnapshot ?? state.observationStart ?? null;
+}
+
+function ensureCurrentRouteStartSnapshot() {
+  if (state.routeStartPointId !== CURRENT_LOCATION_ID || state.routeStartSnapshot) {
+    return;
+  }
+
+  const current = currentLocationPoint();
+  if (current) {
+    state.routeStartSnapshot = cloneObservationPoint(current);
+  }
 }
 
 function updateRouteStartSnapshot(point) {
@@ -1464,6 +1484,7 @@ function toggleTargetForSelection() {
     return;
   }
 
+  ensureCurrentRouteStartSnapshot();
   state.targetPointId = point.id;
   resetObservationTrail();
 
@@ -3183,6 +3204,7 @@ function startLocationFollow(options = {}) {
   state.pendingGeo = null;
   state.editingPointId = null;
   state.pendingLinkPointId = null;
+  ensureCurrentRouteStartSnapshot();
   resetObservationTrail();
   if (state.locationFollowScaleMode === FOLLOW_SCALE_MANUAL) {
     state.locationFollowScaleMode = state.targetPointId ? FOLLOW_SCALE_TARGET : FOLLOW_SCALE_CENTER;
