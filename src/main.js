@@ -732,15 +732,15 @@ function drawRouteStartSnapshot() {
   if (state.routeStartPointId === CURRENT_LOCATION_ID) {
     context.beginPath();
     context.arc(screen.x, screen.y, 9, 0, Math.PI * 2);
-    context.fillStyle = colors.routeStart;
+    context.fillStyle = colors.routeStartSoft;
     context.fill();
     context.lineWidth = 3;
-    context.strokeStyle = colors.currentStroke;
+    context.strokeStyle = colors.routeStart;
     context.stroke();
 
     context.beginPath();
     context.arc(screen.x, screen.y, 3, 0, Math.PI * 2);
-    context.fillStyle = colors.currentInner;
+    context.fillStyle = colors.routeStart;
     context.fill();
     context.restore();
     return;
