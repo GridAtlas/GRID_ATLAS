@@ -151,6 +151,7 @@ const CANVAS_PALETTES = {
     route: "#5a4aa0",
     target: "#ff7a1a",
     targetSoft: "rgb(255 122 26 / 0.18)",
+    targetGuide: "rgb(104 116 102 / 0.78)",
     targetFill: "#ff7a1a",
     observationBaseline: "rgb(199 58 42 / 0.34)",
     observationTrail: "#c73a2a",
@@ -180,6 +181,7 @@ const CANVAS_PALETTES = {
     route: "#7dff9b",
     target: "#ff8a1c",
     targetSoft: "rgb(255 138 28 / 0.18)",
+    targetGuide: "rgb(214 255 224 / 0.62)",
     targetFill: "#ff8a1c",
     observationBaseline: "rgb(214 255 224 / 0.28)",
     observationTrail: "#fff35a",
@@ -505,7 +507,7 @@ function drawLinks() {
 }
 
 function drawTargetLine() {
-  const anchor = routeStartPoint() ?? currentLocationPoint();
+  const anchor = routeStartPoint();
   const target = targetPoint();
   if (!anchor || !target) {
     return;
@@ -520,12 +522,13 @@ function drawTargetLine() {
   context.beginPath();
   context.moveTo(start.x, start.y);
   context.lineTo(lineEnd.x, lineEnd.y);
-  context.strokeStyle = colors.target;
+  const guideColor = colors.targetGuide ?? colors.target;
+  context.strokeStyle = guideColor;
   context.lineWidth = 2.8;
   context.setLineDash([7, 6]);
   context.stroke();
   context.setLineDash([]);
-  drawArrowHead(start, lineEnd, colors.target);
+  drawArrowHead(start, lineEnd, guideColor);
 
   context.beginPath();
   context.arc(end.x, end.y, POINT_RADIUS + 8, 0, Math.PI * 2);
@@ -970,6 +973,7 @@ function renderActionButtons() {
   const targetCandidate = lastTargetableSelectedPoint();
   const routeStartCandidate = lastSelectedPoint();
   const routePlan = routePlanFromCurrentSelection();
+  const routeActive = Boolean(state.routeResult);
   const centerCandidateCount = pointIds.length;
   const restoreCandidateCount = deletedSnapshotItemCount();
   const editCandidate = editableSelectedPoint();
@@ -980,7 +984,7 @@ function renderActionButtons() {
 
   elements.actionRegisterButton.disabled = !hasPendingPoint;
   elements.actionLinkButton.disabled = !pointPair;
-  elements.actionRouteButton.disabled = !routePlan;
+  elements.actionRouteButton.disabled = !routeActive && !routePlan;
   elements.deletePointButton.disabled = !canDelete;
   elements.clearSelectionButton.disabled = state.selection.length === 0 && !hasPendingPoint;
   elements.actionTargetButton.disabled = !targetCandidate;
@@ -992,8 +996,9 @@ function renderActionButtons() {
 
   elements.actionRegisterButton.classList.remove("is-active");
   elements.actionLinkButton.classList.toggle("is-active", false);
-  elements.actionRouteButton.classList.toggle("is-active", false);
-  elements.actionRouteButton.title = routePlan ? "選択点を起点から巡回計算" : "複数選択と起点指定が必要";
+  elements.actionRouteButton.classList.toggle("is-active", routeActive);
+  elements.actionRouteButton.setAttribute("aria-pressed", String(routeActive));
+  elements.actionRouteButton.title = routeActive ? "巡回表示を解除" : routePlan ? "選択点を起点から巡回計算" : "複数選択と起点指定が必要";
   elements.deletePointButton.classList.toggle("is-active", false);
   elements.clearSelectionButton.classList.toggle("is-active", false);
   elements.actionTargetButton.classList.toggle("is-active", Boolean(targetCandidate && targetCandidate.id === state.targetPointId));
@@ -1201,7 +1206,6 @@ function clearRouteStartState() {
   state.routeStartPointId = null;
   state.routeStartSnapshot = null;
   resetObservationTrail();
-  state.routeResult = null;
 }
 
 function observationStartPoint() {
@@ -1994,6 +1998,12 @@ function findLinkBetween(a, b) {
 }
 
 function setRouteFromSelectedPoints() {
+  if (state.routeResult) {
+    state.routeResult = null;
+    render();
+    return;
+  }
+
   const plan = routePlanFromCurrentSelection();
   if (!plan) {
     return;
@@ -2028,7 +2038,6 @@ function setRouteStartFromSelection() {
   resetObservationTrail();
   state.routeStartPointId = point.id;
   updateRouteStartSnapshot(point);
-  state.routeResult = null;
   render();
 }
 function findNearestPoint(screenPoint) {
@@ -2371,7 +2380,6 @@ function setRouteStart(pointId) {
   }
   state.routeStartPointId = pointId;
   updateRouteStartSnapshot(findPoint(pointId));
-  state.routeResult = null;
   render();
 }
 
@@ -3157,7 +3165,6 @@ function clearObservationAssignments() {
   state.routeStartPointId = null;
   state.routeStartSnapshot = null;
   state.targetPointId = null;
-  state.routeResult = null;
   resetObservationTrail();
 }
 
@@ -3988,7 +3995,9 @@ function deleteSelectedPoint() {
   if (pointIdSet.has(state.routeStartPointId)) {
     clearRouteStartState();
   }
-  state.routeResult = null;
+  if (state.routeResult?.pointIds?.some((id) => pointIdSet.has(id))) {
+    state.routeResult = null;
+  }
 
   if (pointIdSet.has(state.targetPointId)) {
     clearTarget({ render: false });
@@ -4037,7 +4046,6 @@ function bindEvents() {
   elements.routeStartSelect.addEventListener("change", () => setRouteStart(elements.routeStartSelect.value));
   elements.routeReturnToStart.addEventListener("change", () => {
     state.routeReturnToStart = elements.routeReturnToStart.checked;
-    state.routeResult = null;
     render();
   });
   elements.computeRouteButton.addEventListener("click", computeRouteFromSelection);
