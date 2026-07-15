@@ -155,7 +155,6 @@ const CANVAS_PALETTES = {
     targetFill: "#ff7a1a",
     observationBaseline: "rgb(199 58 42 / 0.34)",
     observationTrail: "#c73a2a",
-    currentAccuracy: "rgb(255 212 54 / 0.16)",
     currentFill: "#ffd436",
     currentStroke: "#6b5a00",
     currentSelectedStroke: "#2e7d32",
@@ -185,7 +184,6 @@ const CANVAS_PALETTES = {
     targetFill: "#ff8a1c",
     observationBaseline: "rgb(214 255 224 / 0.28)",
     observationTrail: "#fff35a",
-    currentAccuracy: "rgb(255 236 72 / 0.12)",
     currentFill: "#fff35a",
     currentStroke: "#d8c900",
     currentSelectedStroke: "#ffffff",
@@ -691,28 +689,20 @@ function drawCurrentLocation() {
 
   const colors = canvasPalette();
   const screen = worldToScreen(location);
-  const accuracyRadius = Number.isFinite(state.currentGeo.accuracy)
-    ? Math.min(160, Math.max(16, state.currentGeo.accuracy * state.viewport.scale))
-    : 0;
-
-  if (accuracyRadius > 0) {
-    context.beginPath();
-    context.arc(screen.x, screen.y, accuracyRadius, 0, Math.PI * 2);
-    context.fillStyle = colors.currentAccuracy;
-    context.fill();
-  }
-
   const isSelected = isPointSelected(CURRENT_LOCATION_ID);
+  const markerRadius = isSelected ? POINT_RADIUS : POINT_RADIUS - 1;
+  const markerLineWidth = isSelected ? 4 : 2;
+
   context.beginPath();
-  context.arc(screen.x, screen.y, 9, 0, Math.PI * 2);
+  context.arc(screen.x, screen.y, markerRadius, 0, Math.PI * 2);
   context.fillStyle = colors.currentFill;
   context.fill();
-  context.lineWidth = isSelected ? 4 : 3;
+  context.lineWidth = markerLineWidth;
   context.strokeStyle = isSelected ? colors.currentSelectedStroke : colors.currentStroke;
   context.stroke();
 
   context.beginPath();
-  context.arc(screen.x, screen.y, 3, 0, Math.PI * 2);
+  context.arc(screen.x, screen.y, Math.max(2.5, POINT_RADIUS * 0.32), 0, Math.PI * 2);
   context.fillStyle = colors.currentInner;
   context.fill();
 }
@@ -971,10 +961,10 @@ function renderActionButtons() {
   const routeActive = Boolean(state.routeResult);
   const routeStart = routeStartPoint();
   const target = targetPoint();
-  const targetBlockedByRouteStart = Boolean(
+  const targetSwitchesFromRouteStart = Boolean(
     targetCandidate && targetCandidate.id !== state.targetPointId && routeStart && !observationEndpointsDistinct(routeStart, targetCandidate)
   );
-  const routeStartBlockedByTarget = Boolean(
+  const routeStartSwitchesFromTarget = Boolean(
     routeStartCandidate && routeStartCandidate.id !== state.routeStartPointId && target && !observationEndpointsDistinct(routeStartCandidate, target)
   );
   const centerCandidateCount = pointIds.length;
@@ -990,8 +980,8 @@ function renderActionButtons() {
   elements.actionRouteButton.disabled = !routeActive && !routePlan;
   elements.deletePointButton.disabled = !canDelete;
   elements.clearSelectionButton.disabled = state.selection.length === 0 && !hasPendingPoint;
-  elements.actionTargetButton.disabled = !targetCandidate || targetBlockedByRouteStart;
-  elements.actionRouteStartButton.disabled = !routeStartCandidate || routeStartBlockedByTarget;
+  elements.actionTargetButton.disabled = !targetCandidate;
+  elements.actionRouteStartButton.disabled = !routeStartCandidate;
   elements.actionCenterButton.disabled = centerCandidateCount < 2;
   elements.actionRestoreButton.disabled = restoreCandidateCount === 0;
   elements.actionEditButton.disabled = !editCandidate;
@@ -1002,8 +992,8 @@ function renderActionButtons() {
   elements.actionRouteButton.classList.toggle("is-active", routeActive);
   elements.actionRouteButton.setAttribute("aria-pressed", String(routeActive));
   elements.actionRouteButton.title = routeActive ? "巡回表示を解除" : routePlan ? "選択点を起点から巡回計算" : "複数選択と起点指定が必要";
-  elements.actionTargetButton.title = targetBlockedByRouteStart ? "起点と同じ地点は対象にできません" : "選択地点を対象にする";
-  elements.actionRouteStartButton.title = routeStartBlockedByTarget ? "対象と同じ地点は起点にできません" : "選択地点を起点にする";
+  elements.actionTargetButton.title = targetSwitchesFromRouteStart ? "起点から対象に切り替え" : "選択地点を対象にする";
+  elements.actionRouteStartButton.title = routeStartSwitchesFromTarget ? "対象から起点に切り替え" : "選択地点を起点にする";
   elements.deletePointButton.classList.toggle("is-active", false);
   elements.clearSelectionButton.classList.toggle("is-active", false);
   elements.actionTargetButton.classList.toggle("is-active", Boolean(targetCandidate && targetCandidate.id === state.targetPointId));
@@ -1131,10 +1121,10 @@ function renderTargetActions(point) {
 
   const isTarget = point.id === state.targetPointId;
   const start = routeStartPoint();
-  const blockedByRouteStart = !isTarget && start && !observationEndpointsDistinct(start, point);
-  elements.targetPointButton.disabled = blockedByRouteStart;
+  const switchesFromRouteStart = !isTarget && start && !observationEndpointsDistinct(start, point);
+  elements.targetPointButton.disabled = false;
   elements.targetPointButton.textContent = isTarget ? "ターゲット解除" : "ターゲットにする";
-  elements.targetPointButton.title = blockedByRouteStart ? "起点と同じ地点は対象にできません" : "ターゲットにする";
+  elements.targetPointButton.title = switchesFromRouteStart ? "起点からターゲットに切り替え" : "ターゲットにする";
   elements.targetPointButton.classList.toggle("is-active", isTarget);
   elements.targetPointButton.setAttribute("aria-pressed", String(isTarget));
 }
@@ -1505,20 +1495,19 @@ function toggleTargetForSelection() {
   }
 
   const start = routeStartPoint();
-  if (start && !observationEndpointsDistinct(start, point)) {
-    elements.shareImportStatus.value = "起点と同じ地点は対象にできません";
-    render();
+  const switchesFromRouteStart = Boolean(start && !observationEndpointsDistinct(start, point));
+  const changesTarget = Boolean(state.targetPointId && state.targetPointId !== point.id);
+  if ((switchesFromRouteStart || changesTarget) && !confirmObservationReset(switchesFromRouteStart ? "起点から対象へ切り替え" : "対象を変更")) {
     return;
   }
 
-  if (state.targetPointId && !confirmObservationReset("対象を変更")) {
-    return;
+  if (switchesFromRouteStart) {
+    clearRouteStartState();
   }
 
   ensureCurrentRouteStartSnapshot();
   state.targetPointId = point.id;
   resetObservationTrail();
-
   if (!state.followCurrentLocation) {
     state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
     setSelection([], { render: false });
@@ -2089,14 +2078,14 @@ function setRouteStartFromSelection() {
   }
 
   const target = targetPoint();
-  if (target && !observationEndpointsDistinct(point, target)) {
-    elements.shareImportStatus.value = "対象と同じ地点は起点にできません";
-    render();
+  const switchesFromTarget = Boolean(target && !observationEndpointsDistinct(point, target));
+  const changesRouteStart = Boolean(state.routeStartPointId && state.routeStartPointId !== point.id);
+  if ((switchesFromTarget || changesRouteStart) && !confirmObservationReset(switchesFromTarget ? "対象から起点へ切り替え" : "起点を変更")) {
     return;
   }
 
-  if (state.routeStartPointId && !confirmObservationReset("起点を変更")) {
-    return;
+  if (switchesFromTarget) {
+    clearTarget({ render: false });
   }
 
   resetObservationTrail();
