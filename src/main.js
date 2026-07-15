@@ -165,7 +165,6 @@ const CANVAS_PALETTES = {
     pointFill: "#116c6d",
     pointBaseStroke: "#ffffff",
     routeStart: "#008fc7",
-    routeStartSoft: "rgb(0 143 199 / 0.18)",
     routeSelected: "#7b68c7",
     pendingPointStroke: "#116c6d",
     selected: "#2e7d32",
@@ -196,7 +195,6 @@ const CANVAS_PALETTES = {
     pointFill: "#23ff5e",
     pointBaseStroke: "#020806",
     routeStart: "#2ddfff",
-    routeStartSoft: "rgb(45 223 255 / 0.18)",
     routeSelected: "#8dffaa",
     pendingPointStroke: "#d6ffe0",
     selected: "#ffffff",
@@ -729,17 +727,8 @@ function drawRouteStartSnapshot() {
   const screen = worldToScreen(snapshot);
   context.save();
 
-
   context.beginPath();
-  context.arc(screen.x, screen.y, 13, 0, Math.PI * 2);
-  context.fillStyle = colors.routeStartSoft;
-  context.fill();
-  context.lineWidth = 4;
-  context.strokeStyle = colors.routeStart;
-  context.stroke();
-
-  context.beginPath();
-  context.arc(screen.x, screen.y, 5, 0, Math.PI * 2);
+  context.arc(screen.x, screen.y, POINT_RADIUS, 0, Math.PI * 2);
   context.fillStyle = colors.routeStart;
   context.fill();
   context.restore();
