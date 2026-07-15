@@ -1,4 +1,4 @@
-const CACHE_NAME = "grid-atlas-static-v73";
+const CACHE_NAME = "grid-atlas-static-v74";
 const STATIC_ASSETS = [
   "./",
   "./index.html",
@@ -24,14 +24,9 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    const oldStaticCaches = keys.filter((key) => key.startsWith("grid-atlas-static-") && key !== CACHE_NAME);
     await Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)));
     await self.clients.claim();
-
-    if (oldStaticCaches.length > 0) {
-      const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-      await Promise.all(clients.map((client) => client.navigate(client.url).catch(() => null)));
-    }
+    // The page handles update reloads; forcing client.navigate() here can freeze iOS PWA touch input.
   })());
 });
 
