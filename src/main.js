@@ -164,7 +164,8 @@ const CANVAS_PALETTES = {
     pendingStroke: "rgb(233 95 26 / 0.62)",
     pointFill: "#116c6d",
     pointBaseStroke: "#ffffff",
-    routeStart: "#5a4aa0",
+    routeStart: "#00a5a8",
+    routeStartSoft: "rgb(0 165 168 / 0.18)",
     routeSelected: "#7b68c7",
     pendingPointStroke: "#116c6d",
     selected: "#2e7d32",
@@ -194,7 +195,8 @@ const CANVAS_PALETTES = {
     pendingStroke: "rgb(119 255 153 / 0.72)",
     pointFill: "#23ff5e",
     pointBaseStroke: "#020806",
-    routeStart: "#d6ffe0",
+    routeStart: "#35ffc3",
+    routeStartSoft: "rgb(53 255 195 / 0.18)",
     routeSelected: "#8dffaa",
     pendingPointStroke: "#d6ffe0",
     selected: "#ffffff",
@@ -728,7 +730,7 @@ function drawRouteStartSnapshot() {
   context.save();
   context.beginPath();
   context.arc(screen.x, screen.y, 13, 0, Math.PI * 2);
-  context.fillStyle = colors.targetSoft;
+  context.fillStyle = colors.routeStartSoft;
   context.fill();
   context.lineWidth = 4;
   context.strokeStyle = colors.routeStart;
@@ -764,10 +766,11 @@ function drawPoints() {
   for (const point of state.points) {
     const screen = worldToScreen(point);
     const isTarget = point.id === state.targetPointId;
+    const isRouteStart = point.id === state.routeStartPointId;
     const isSelected = isPointSelected(point.id);
     context.beginPath();
     context.arc(screen.x, screen.y, POINT_RADIUS, 0, Math.PI * 2);
-    context.fillStyle = isTarget ? colors.targetFill : colors.pointFill;
+    context.fillStyle = isTarget ? colors.targetFill : isRouteStart ? colors.routeStart : colors.pointFill;
     context.fill();
 
     if (isSelected) {
