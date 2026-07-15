@@ -732,23 +732,36 @@ function drawPendingPoint() {
   context.stroke();
   context.restore();
 }
-function drawPoints() {
-  const colors = canvasPalette();
-  for (const point of state.points) {
-    const screen = worldToScreen(point);
-    const isTarget = point.id === state.targetPointId;
-    const isRouteStart = point.id === state.routeStartPointId;
-    const isSelected = isPointSelected(point.id);
-    context.beginPath();
-    context.arc(screen.x, screen.y, POINT_RADIUS, 0, Math.PI * 2);
-    context.fillStyle = isTarget ? colors.targetFill : isRouteStart ? colors.routeStart : colors.pointFill;
-    context.fill();
+function isPriorityPoint(point) {
+  return point.id === state.targetPointId || point.id === state.routeStartPointId;
+}
 
-    if (isSelected) {
-      context.lineWidth = 4;
-      context.strokeStyle = colors.selected;
-      context.stroke();
+function drawPointMarker(point, colors) {
+  const screen = worldToScreen(point);
+  const isTarget = point.id === state.targetPointId;
+  const isRouteStart = point.id === state.routeStartPointId;
+  const isSelected = isPointSelected(point.id);
+  context.beginPath();
+  context.arc(screen.x, screen.y, POINT_RADIUS, 0, Math.PI * 2);
+  context.fillStyle = isTarget ? colors.targetFill : isRouteStart ? colors.routeStart : colors.pointFill;
+  context.fill();
+
+  if (isSelected) {
+    context.lineWidth = 4;
+    context.strokeStyle = colors.selected;
+    context.stroke();
+  }
+}
+
+function drawPoints(options = {}) {
+  const colors = canvasPalette();
+  const priority = Boolean(options.priority);
+  for (const point of state.points) {
+    if (isPriorityPoint(point) !== priority) {
+      continue;
     }
+
+    drawPointMarker(point, colors);
   }
 }
 
@@ -786,10 +799,11 @@ function draw() {
   drawRouteResult();
   drawObservationPath();
   drawTargetLine();
-  drawRouteStartSnapshot();
   drawPoints();
   drawCurrentLocation();
   drawPendingPoint();
+  drawRouteStartSnapshot();
+  drawPoints({ priority: true });
   drawRouteBadges();
 }
 
