@@ -26,7 +26,7 @@ self.addEventListener("activate", (event) => {
     const keys = await caches.keys();
     await Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)));
     await self.clients.claim();
-    // The page handles update reloads; forcing client.navigate() here can freeze iOS PWA touch input.
+    // The page handles update reloads to avoid freezing iOS PWA touch input.
   })());
 });
 
