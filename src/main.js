@@ -1507,7 +1507,9 @@ function toggleTargetForSelection() {
     if (!confirmObservationReset("対象を解除")) {
       return;
     }
-    clearTarget();
+    clearTarget({ render: false });
+    setSelection([], { render: false });
+    render();
     return;
   }
 
@@ -1528,6 +1530,7 @@ function toggleTargetForSelection() {
 
   if (!state.followCurrentLocation) {
     state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
+    setSelection([], { render: false });
     render();
     return;
   }
@@ -1536,10 +1539,12 @@ function toggleTargetForSelection() {
   const current = currentLocationPoint();
   if (current) {
     recordObservationPoint(current);
+    setSelection([], { render: false });
     fitTargetFromCurrent(current, point);
     return;
   }
 
+  setSelection([], { render: false });
   render();
 }
 
@@ -2072,6 +2077,7 @@ function setRouteFromSelectedPoints() {
   state.pendingLinkPointId = null;
   state.routeSelectionIds = [];
   state.routeResult = optimizeVisitOrder(plan.points, plan.start.id, state.routeReturnToStart);
+  setSelection([], { render: false });
   render();
 }
 
@@ -2086,6 +2092,7 @@ function setRouteStartFromSelection() {
       return;
     }
     clearRouteStartState();
+    setSelection([], { render: false });
     render();
     return;
   }
@@ -2104,6 +2111,7 @@ function setRouteStartFromSelection() {
   resetObservationTrail();
   state.routeStartPointId = point.id;
   updateRouteStartSnapshot(point);
+  setSelection([], { render: false });
   render();
 }
 function findNearestPoint(screenPoint) {
@@ -2232,6 +2240,7 @@ function connectSelectedPoints() {
 
   state.mode = "inspect";
   state.pendingLinkPointId = null;
+  setSelection([], { render: false });
   render();
 }
 
@@ -2270,6 +2279,7 @@ function createCenterPendingPoint() {
   elements.pointNote.value = `${points.length}点の中心`;
   elements.pointPhoto.value = "";
   fillFormFromGeo(geo);
+  setSelection([], { clearPending: false, render: false });
   render();
 }
 
@@ -2465,6 +2475,7 @@ function computeRouteFromSelection() {
 
   state.routeSelectionIds = [];
   state.routeResult = optimizeVisitOrder(plan.points, plan.start.id, state.routeReturnToStart);
+  setSelection([], { render: false });
   render();
 }
 
