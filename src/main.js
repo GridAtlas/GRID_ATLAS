@@ -2985,9 +2985,6 @@ async function submitPoint(event) {
     state.mode = "inspect";
     elements.pointForm.reset();
     elements.shareImportStatus.value = "更新しました";
-    state.viewport.x = editedPoint.x;
-    state.viewport.y = editedPoint.y;
-    state.viewport.scale = Math.max(state.viewport.scale, 0.7);
     persistWorkspace();
     syncCanvasSize();
     render();
@@ -3012,9 +3009,6 @@ async function submitPoint(event) {
   state.pendingGeo = null;
   state.mode = "inspect";
   elements.pointForm.reset();
-  state.viewport.x = point.x;
-  state.viewport.y = point.y;
-  state.viewport.scale = Math.max(state.viewport.scale, 0.7);
   persistWorkspace();
   syncCanvasSize();
   render();
