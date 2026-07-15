@@ -2341,6 +2341,7 @@ function fillFormFromWorld(point) {
   state.mode = "add";
   state.pendingGeo = unprojectMercator(point.x, point.y);
   state.editingPointId = null;
+  state.pendingLinkPointId = null;
   fillFormFromGeo(state.pendingGeo);
 }
 
@@ -2402,13 +2403,8 @@ function handleCanvasClick(screenPoint) {
     return;
   }
 
-  if (state.selection.length > 0) {
-    return;
-  }
-
   pauseLocationFollowForManualView();
   state.mode = "inspect";
-  clearSelection({ render: false });
   fillFormFromWorld(screenToWorld(screenPoint));
   render();
 }
