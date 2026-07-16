@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-retro.png">
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("grid-atlas-theme")==="light"?"light":"retro"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=24">
-    <script src="src/main.js?v=81" type="module" defer></script>
+    <script src="src/main.js?v=82" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -39,7 +39,7 @@
               <button id="zoomInButton" class="icon-button" type="button" title="拡大">＋</button>
               <button id="zoomOutButton" class="icon-button" type="button" title="縮小">−</button>
               <button id="fitButton" class="icon-button" type="button" title="全体表示">□</button>
-              <button id="originButton" class="icon-button" type="button" title="選択地点へ">⌾</button>
+              <button id="originButton" class="icon-button" type="button" aria-pressed="false" title="現在地を中央にして画面追従">⌾</button>
             </div>
             <output id="statusLine" class="status-line" aria-live="polite"></output>
           </section>

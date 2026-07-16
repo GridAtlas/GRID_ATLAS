@@ -128,6 +128,7 @@ const state = {
   pendingGeo: null,
   currentGeo: null,
   followCurrentLocation: false,
+  screenFollowCurrentLocation: false,
   locationWatchId: null,
   locationFollowFillForm: false,
   locationFollowScaleMode: FOLLOW_SCALE_MANUAL,
@@ -2820,39 +2821,48 @@ function fitTargetPoints() {
   return points;
 }
 
-function centerOnSelectedPoint() {
-  syncCanvasSize();
-
-  if (state.followCurrentLocation) {
-    const current = currentLocationPoint();
-    if (current) {
-      state.locationFollowScaleMode = FOLLOW_SCALE_CENTER;
-      state.viewport.x = current.x;
-      state.viewport.y = current.y;
-      render();
-      return;
-    }
-  }
-
-  pauseLocationFollowForManualView();
-  const selected = lastSelectedPoint();
-
-  if (selected) {
-    state.viewport.x = selected.x;
-    state.viewport.y = selected.y;
-    render();
+function centerAndFollowCurrentLocation() {
+  if (!("geolocation" in navigator)) {
+    elements.shareImportStatus.value = "現在地を取得できません";
     return;
   }
+
+  syncCanvasSize();
+  state.screenFollowCurrentLocation = true;
+  state.locationFollowScaleMode = FOLLOW_SCALE_CENTER;
 
   const current = currentLocationPoint();
   if (current) {
     state.viewport.x = current.x;
     state.viewport.y = current.y;
+  }
+
+  if (state.locationWatchId !== null) {
     render();
     return;
   }
 
-  fitToPoints();
+  try {
+    state.locationWatchId = navigator.geolocation.watchPosition(
+      (position) => updateCurrentLocationFromPosition(position, {
+        center: state.followCurrentLocation || state.screenFollowCurrentLocation,
+        fillForm: state.locationFollowFillForm
+      }),
+      (error) => {
+        const message = locationErrorMessage(error, "現在地エラー");
+        stopScreenFollow({ render: false });
+        elements.shareImportStatus.value = message;
+        render();
+      },
+      geolocationOptions()
+    );
+    render();
+  } catch {
+    state.screenFollowCurrentLocation = false;
+    clearLocationWatchIfIdle();
+    renderLocationFollowButton();
+    elements.shareImportStatus.value = "現在地エラー";
+  }
 }
 
 function getCanvasPoint(event) {
@@ -3138,7 +3148,10 @@ function updateCurrentLocationFromPosition(position, options = {}) {
   }
 
   if (options.center) {
-    if (state.followCurrentLocation) {
+    if (state.screenFollowCurrentLocation) {
+      state.viewport.x = projected.x;
+      state.viewport.y = projected.y;
+    } else if (state.followCurrentLocation) {
       if (state.locationFollowScaleMode === FOLLOW_SCALE_CENTER) {
         state.viewport.x = projected.x;
         state.viewport.y = projected.y;
@@ -3301,14 +3314,20 @@ function startLocationFollow(options = {}) {
     state.locationFollowScaleMode = state.targetPointId ? FOLLOW_SCALE_TARGET : FOLLOW_SCALE_CENTER;
   }
 
+  if (state.locationWatchId !== null) {
+    render();
+    return;
+  }
+
   try {
     state.locationWatchId = navigator.geolocation.watchPosition(
       (position) => updateCurrentLocationFromPosition(position, {
-        center: state.followCurrentLocation,
+        center: state.followCurrentLocation || state.screenFollowCurrentLocation,
         fillForm: state.locationFollowFillForm
       }),
       (error) => {
         const message = locationErrorMessage(error, "追跡エラー");
+        state.screenFollowCurrentLocation = false;
         stopLocationFollow();
         if (autoRouteStart) {
           clearRouteStartState();
@@ -3331,15 +3350,34 @@ function startLocationFollow(options = {}) {
   }
 }
 
-function stopLocationFollow(options = {}) {
-  if (state.locationWatchId !== null && "geolocation" in navigator) {
-    navigator.geolocation.clearWatch(state.locationWatchId);
+function clearLocationWatchIfIdle() {
+  if (state.followCurrentLocation || state.screenFollowCurrentLocation || state.locationWatchId === null) {
+    return;
   }
 
+  if ("geolocation" in navigator) {
+    navigator.geolocation.clearWatch(state.locationWatchId);
+  }
   state.locationWatchId = null;
+}
+
+function stopScreenFollow(options = {}) {
+  state.screenFollowCurrentLocation = false;
+  clearLocationWatchIfIdle();
+
+  if (options.render !== false) {
+    render();
+    return;
+  }
+
+  renderLocationFollowButton();
+}
+
+function stopLocationFollow(options = {}) {
   state.followCurrentLocation = false;
   state.locationFollowFillForm = false;
   state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
+  clearLocationWatchIfIdle();
 
   if (options.render !== false) {
     render();
@@ -3350,8 +3388,18 @@ function stopLocationFollow(options = {}) {
 }
 
 function pauseLocationFollowForManualView() {
+  let changed = false;
+  if (state.screenFollowCurrentLocation) {
+    state.screenFollowCurrentLocation = false;
+    changed = true;
+  }
   if (state.followCurrentLocation) {
     state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
+    changed = true;
+  }
+
+  clearLocationWatchIfIdle();
+  if (changed) {
     renderLocationFollowButton();
   }
 }
@@ -3368,7 +3416,10 @@ function renderLocationFollowButton() {
   elements.actionFollowButton.classList.toggle("is-active", state.followCurrentLocation);
   elements.actionFollowButton.setAttribute("aria-pressed", String(state.followCurrentLocation));
   elements.actionFollowButton.title = state.followCurrentLocation ? "追跡を停止" : "追跡を開始";
-  elements.originButton.title = state.followCurrentLocation ? "現在地へ" : "選択地点へ";
+  elements.originButton.disabled = !isSupported;
+  elements.originButton.classList.toggle("is-active", state.screenFollowCurrentLocation);
+  elements.originButton.setAttribute("aria-pressed", String(state.screenFollowCurrentLocation));
+  elements.originButton.title = state.screenFollowCurrentLocation ? "画面追従中" : "現在地を中央にして画面追従";
 }
 
 function currentLocationPoint() {
@@ -4161,7 +4212,7 @@ function bindEvents() {
   elements.zoomInButton.addEventListener("click", () => zoomAt({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 1.25));
   elements.zoomOutButton.addEventListener("click", () => zoomAt({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 0.8));
   elements.fitButton.addEventListener("click", fitToPoints);
-  elements.originButton.addEventListener("click", centerOnSelectedPoint);
+  elements.originButton.addEventListener("click", centerAndFollowCurrentLocation);
   elements.routeStartSelect.addEventListener("change", () => setRouteStart(elements.routeStartSelect.value));
   elements.routeReturnToStart.addEventListener("change", () => {
     state.routeReturnToStart = elements.routeReturnToStart.checked;
