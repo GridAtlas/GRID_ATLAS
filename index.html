@@ -9,8 +9,8 @@
     <link rel="icon" href="assets/icon-retro.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-retro.png">
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("grid-atlas-theme")==="light"?"light":"retro"}catch{document.documentElement.dataset.theme="retro"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=24">
-    <script src="src/main.js?v=82" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=25">
+    <script src="src/main.js?v=83" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -101,7 +101,13 @@
             <span>選択中</span>
             <strong id="sidebarSelectedTitle">未選択</strong>
           </div>
-          <section class="panel">
+          <nav class="mobile-panel-tabs" aria-label="スマホ用パネル切替">
+            <button class="mobile-panel-tab is-active" type="button" data-mobile-tab="register" aria-pressed="true">登録</button>
+            <button class="mobile-panel-tab" type="button" data-mobile-tab="detail" aria-pressed="false">詳細</button>
+            <button class="mobile-panel-tab" type="button" data-mobile-tab="analysis" aria-pressed="false">分析</button>
+            <button class="mobile-panel-tab" type="button" data-mobile-tab="data" aria-pressed="false">データ</button>
+          </nav>
+          <section class="panel is-mobile-active" data-mobile-panel="register">
             <h2>地点登録</h2>
             <form id="pointForm" class="point-form">
               <label>
@@ -139,7 +145,7 @@
               <button id="pointSubmitButton" class="primary-button" type="submit">登録</button>
             </form>
           </section>
-          <section class="panel">
+          <section class="panel" data-mobile-panel="detail">
             <div class="panel-heading">
               <h2 id="selectionHeading">選択地点</h2>
             </div>
@@ -174,7 +180,7 @@
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel" data-mobile-panel="analysis">
             <h2>分析</h2>
             <div class="metric-grid">
               <div>
@@ -197,7 +203,7 @@
             <div id="linkList" class="link-list"></div>
           </section>
 
-          <section class="panel">
+          <section class="panel" data-mobile-panel="analysis">
             <div class="panel-heading">
               <h2>巡回ルート</h2>
               <span id="routeSelectedCount" class="panel-count">0点</span>
@@ -217,7 +223,7 @@
             <div id="routeSummary" class="route-summary">地点を選んで巡回を押す</div>
             <ol id="routeList" class="route-list"></ol>
           </section>
-          <section class="panel data-panel">
+          <section class="panel data-panel" data-mobile-panel="data">
             <h2>データ</h2>
             <div class="data-group">
               <h3>地点リスト</h3>

@@ -1,5 +1,6 @@
 const STORAGE_KEY = "grid-atlas-workspace-v2";
 const THEME_KEY = "grid-atlas-theme";
+const MOBILE_PANEL_KEY = "grid-atlas-mobile-panel";
 const LIGHT_THEME = "light";
 const RETRO_THEME = "retro";
 const POINT_RADIUS = 8;
@@ -48,6 +49,8 @@ const elements = {
   selectionInfoText: document.querySelector("#selectionInfoText"),
   mobileSelectedTitle: document.querySelector("#mobileSelectedTitle"),
   sidebarSelectedTitle: document.querySelector("#sidebarSelectedTitle"),
+  mobilePanelTabs: Array.from(document.querySelectorAll("[data-mobile-tab]")),
+  mobilePanels: Array.from(document.querySelectorAll("[data-mobile-panel]")),
   pointForm: document.querySelector("#pointForm"),
   pointTitle: document.querySelector("#pointTitle"),
   pointLat: document.querySelector("#pointLat"),
@@ -829,6 +832,45 @@ function renderSelectedSummary() {
     : "未選択";
   elements.mobileSelectedTitle.textContent = title;
   elements.sidebarSelectedTitle.textContent = title;
+}
+
+function validMobilePanelName(value) {
+  return ["register", "detail", "analysis", "data"].includes(value);
+}
+
+function storedMobilePanelName() {
+  try {
+    const value = localStorage.getItem(MOBILE_PANEL_KEY);
+    return validMobilePanelName(value) ? value : "register";
+  } catch {
+    return "register";
+  }
+}
+
+function setMobilePanel(name, options = {}) {
+  const panelName = validMobilePanelName(name) ? name : "register";
+
+  for (const tab of elements.mobilePanelTabs) {
+    const active = tab.dataset.mobileTab === panelName;
+    tab.classList.toggle("is-active", active);
+    tab.setAttribute("aria-pressed", String(active));
+  }
+
+  for (const panel of elements.mobilePanels) {
+    panel.classList.toggle("is-mobile-active", panel.dataset.mobilePanel === panelName);
+  }
+
+  if (options.persist !== false) {
+    try {
+      localStorage.setItem(MOBILE_PANEL_KEY, panelName);
+    } catch {
+      // Ignore storage failures; the visible tab has already been updated.
+    }
+  }
+}
+
+function initMobilePanels() {
+  setMobilePanel(storedMobilePanelName(), { persist: false });
 }
 
 function renderSelectionInfo() {
@@ -4257,6 +4299,9 @@ function bindEvents() {
     elements.observationImportFile.value = "";
   });
   elements.clearButton.addEventListener("click", clearWorkspace);
+  for (const tab of elements.mobilePanelTabs) {
+    tab.addEventListener("click", () => setMobilePanel(tab.dataset.mobileTab));
+  }
 
   canvas.addEventListener("pointerdown", (event) => {
     const point = getCanvasPoint(event);
@@ -4334,6 +4379,7 @@ function bindEvents() {
 loadTheme();
 loadWorkspace();
 bindEvents();
+initMobilePanels();
 resizeCanvas();
 handleIncomingShare();
 locateOnStartup();

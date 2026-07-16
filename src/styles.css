@@ -207,6 +207,25 @@ textarea:focus-visible {
   box-shadow: 0 8px 20px rgb(24 35 20 / 0.08);
 }
 
+.mobile-panel-tabs {
+  display: none;
+}
+
+.mobile-panel-tab {
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.mobile-panel-tab.is-active {
+  border-color: var(--accent);
+  background: var(--active-bg);
+  color: var(--accent-strong);
+}
+
 .selection-info {
   min-width: 0;
   display: grid;
@@ -715,6 +734,31 @@ textarea {
     border-left: 0;
     border-top: 1px solid var(--line);
     overflow: visible;
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .mobile-panel-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    padding: 0 0 2px;
+    background: var(--surface-strong);
+  }
+
+  .sidebar [data-mobile-panel]:not(.is-mobile-active) {
+    display: none;
+  }
+
+  .sidebar [data-mobile-panel].is-mobile-active {
+    display: block;
+  }
+
+  .sidebar [data-mobile-panel].data-panel.is-mobile-active {
+    display: grid;
   }
 }
 @media (min-width: 861px) {
