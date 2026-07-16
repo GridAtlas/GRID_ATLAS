@@ -578,7 +578,7 @@ function activeObservationLayer() {
   const target = targetPoint();
   const current = observationModeActive() ? currentLocationPoint() : null;
   const points = observationDisplayPathPoints(current);
-  if (!start || !target || points.length < 2) {
+  if (!start || points.length < 2) {
     return null;
   }
 
@@ -586,14 +586,14 @@ function activeObservationLayer() {
 }
 
 function loadedObservationLayer(observation) {
-  if (!observation || !observation.start || !observation.target || !Array.isArray(observation.trail) || observation.trail.length === 0) {
+  if (!observation || !observation.start || !Array.isArray(observation.trail) || observation.trail.length === 0) {
     return null;
   }
 
   return {
     id: observation.id,
     start: observation.start,
-    target: observation.target,
+    target: observation.target ?? null,
     points: [observation.start, ...observation.trail],
     loaded: true
   };
@@ -616,16 +616,18 @@ function drawObservationLayer(layer) {
   const colors = canvasPalette();
   const isSelected = layer.loaded && isLoadedObservationSelected(layer.id);
   const startScreen = worldToScreen(layer.start);
-  const targetScreen = worldToScreen(layer.target);
+  const targetScreen = layer.target ? worldToScreen(layer.target) : null;
 
   context.save();
-  context.beginPath();
-  context.moveTo(startScreen.x, startScreen.y);
-  context.lineTo(targetScreen.x, targetScreen.y);
-  context.strokeStyle = isSelected ? colors.selected : colors.observationBaseline;
-  context.lineWidth = isSelected ? 3 : 2.2;
-  context.setLineDash([12, 8]);
-  context.stroke();
+  if (targetScreen) {
+    context.beginPath();
+    context.moveTo(startScreen.x, startScreen.y);
+    context.lineTo(targetScreen.x, targetScreen.y);
+    context.strokeStyle = isSelected ? colors.selected : colors.observationBaseline;
+    context.lineWidth = isSelected ? 3 : 2.2;
+    context.setLineDash([12, 8]);
+    context.stroke();
+  }
 
   context.beginPath();
   layer.points.forEach((point, index) => {
@@ -898,16 +900,19 @@ function followStateInfoText() {
     return "";
   }
 
-  const start = routeStartPoint();
+  const start = observationStartPoint();
   const target = targetPoint();
   if (start && target) {
     return `観察中 ${start.title} → ${target.title}`;
   }
+  if (start) {
+    return `観察中 ${start.title}から`;
+  }
   if (target) {
-    return `追跡中 現在地 → ${target.title}`;
+    return `追跡準備中 現在地 → ${target.title}`;
   }
 
-  return "追跡中 現在地";
+  return "追跡準備中 現在地";
 }
 
 function pointSelectionInfo(point) {
@@ -1161,9 +1166,9 @@ function resetObservationTrail() {
 }
 
 function observationModeActive() {
-  const start = routeStartPoint();
+  const start = observationStartPoint();
   const target = targetPoint();
-  return state.followCurrentLocation && observationEndpointsDistinct(start, target);
+  return state.followCurrentLocation && observationScopeValid(start, target);
 }
 
 function observationResetNeedsConfirmation() {
@@ -1226,6 +1231,21 @@ function updateRouteStartSnapshot(point) {
   state.routeStartSnapshot = point?.id === CURRENT_LOCATION_ID ? cloneObservationPoint(point) : null;
 }
 
+function ensureTrackingObservationStart(current = currentLocationPoint()) {
+  if (routeStartPoint()) {
+    ensureCurrentRouteStartSnapshot();
+    return true;
+  }
+
+  state.routeStartPointId = CURRENT_LOCATION_ID;
+  if (!current) {
+    return false;
+  }
+
+  state.routeStartSnapshot = cloneObservationPoint(current);
+  return true;
+}
+
 function observationEndpointsDistinct(start, target) {
   if (!start || !target) {
     return false;
@@ -1236,6 +1256,10 @@ function observationEndpointsDistinct(start, target) {
   }
 
   return distanceBetween(start, target) > 1;
+}
+
+function observationScopeValid(start, target) {
+  return Boolean(start) && (!target || observationEndpointsDistinct(start, target));
 }
 
 function clearRouteStartState() {
@@ -1264,15 +1288,21 @@ function observationStepThreshold(previous, point) {
 }
 
 function recordObservationPoint(current) {
-  const target = targetPoint();
-  const start = routeStartPoint();
-  if (!state.followCurrentLocation || !current || !observationEndpointsDistinct(start, target)) {
+  if (!state.followCurrentLocation || !current) {
     return;
   }
 
-  if (state.observationStartId !== start.id || state.observationTargetId !== target.id || !state.observationStart) {
+  ensureTrackingObservationStart(current);
+  const target = targetPoint();
+  const start = observationStartPoint();
+  if (!observationScopeValid(start, target)) {
+    return;
+  }
+
+  const targetId = target?.id ?? null;
+  if (state.observationStartId !== start.id || state.observationTargetId !== targetId || !state.observationStart) {
     state.observationStartId = start.id;
-    state.observationTargetId = target.id;
+    state.observationTargetId = targetId;
     state.observationStart = cloneObservationPoint(start);
     state.observationTrail = [];
   }
@@ -1332,7 +1362,7 @@ function observationMetrics() {
   const target = targetPoint();
   const observing = observationModeActive();
   const current = observing ? currentLocationPoint() ?? state.observationTrail.at(-1) : state.observationTrail.at(-1);
-  if (!observationEndpointsDistinct(start, target) || !current || (!observing && state.observationTrail.length === 0)) {
+  if (!observationScopeValid(start, target) || !current || (!observing && state.observationTrail.length === 0)) {
     return null;
   }
 
@@ -1344,7 +1374,7 @@ function observationMetrics() {
     target,
     current,
     traveled,
-    remaining: distanceBetween(current, target),
+    remaining: target ? distanceBetween(current, target) : NaN,
     ratio: directToCurrent > 1 ? traveled / directToCurrent : NaN
   };
 }
@@ -1356,10 +1386,13 @@ function observationInfoText() {
   }
 
   const parts = [
-    `観察 ${metrics.start.title} → ${metrics.target.title}`,
-    `残 ${formatDistance(metrics.remaining)}`,
+    metrics.target ? `観察 ${metrics.start.title} → ${metrics.target.title}` : `観察 ${metrics.start.title}から`,
     `実 ${formatDistance(metrics.traveled)}`
   ];
+
+  if (Number.isFinite(metrics.remaining)) {
+    parts.splice(1, 0, `残 ${formatDistance(metrics.remaining)}`);
+  }
 
   if (Number.isFinite(metrics.ratio)) {
     parts.push(`道直比 ${metrics.ratio.toFixed(2)}`);
@@ -1384,7 +1417,8 @@ function observationDateLabel(value) {
 
 function observationRecordName(start, target, endedAt) {
   const label = observationDateLabel(endedAt);
-  return `${start.title} → ${target.title}${label ? ` ${label}` : ""}`;
+  const title = target ? `${start.title} → ${target.title}` : `${start.title}から`;
+  return `${title}${label ? ` ${label}` : ""}`;
 }
 
 function loadedObservationTitle(observation = selectedObservation()) {
@@ -1418,12 +1452,12 @@ function loadedObservationInfoText(observation = selectedObservation()) {
 function observationSnapshot(options = {}) {
   const start = observationStartPoint();
   const target = targetPoint();
-  if (!observationEndpointsDistinct(start, target)) {
+  if (!observationScopeValid(start, target)) {
     return null;
   }
 
   const trail = state.observationTrail.map(clonePlain);
-  if (options.includeTarget) {
+  if (options.includeTarget && target) {
     const finalTarget = cloneObservationPoint(target);
     const last = trail.at(-1);
     if (!last || distanceBetween(last, finalTarget) > 1) {
@@ -1449,10 +1483,10 @@ function observationSnapshot(options = {}) {
     startedAt: state.observationStart?.recordedAt ?? trail[0]?.recordedAt ?? new Date().toISOString(),
     endedAt,
     start: exportObservationPoint(start),
-    target: exportObservationPoint(target),
+    target: target ? exportObservationPoint(target) : null,
     trail: trail.map(exportObservationPoint),
     metrics: {
-      remaining: distanceBetween(current, target),
+      remaining: target ? distanceBetween(current, target) : NaN,
       traveled,
       ratio: directToCurrent > 1 ? traveled / directToCurrent : NaN
     }
@@ -2390,7 +2424,9 @@ function findNearestLoadedObservation(screenPoint) {
   };
 
   for (const layer of loadedObservationLayers()) {
-    measurePath(layer, [layer.start, layer.target]);
+    if (layer.target) {
+      measurePath(layer, [layer.start, layer.target]);
+    }
     measurePath(layer, layer.points);
   }
 
@@ -2750,7 +2786,11 @@ function followFitTargetPoints(current) {
 }
 
 function loadedObservationFitPoints() {
-  return state.loadedObservations.flatMap((observation) => [observation.start, observation.target, ...observation.trail]);
+  return state.loadedObservations.flatMap((observation) => [
+    observation.start,
+    ...(observation.target ? [observation.target] : []),
+    ...observation.trail
+  ]);
 }
 
 function fitTargetPoints() {
@@ -3086,6 +3126,9 @@ function updateCurrentLocationFromPosition(position, options = {}) {
   const projected = projectLatLng(geo.lat, geo.lng);
 
   state.currentGeo = geo;
+  if (state.followCurrentLocation) {
+    ensureTrackingObservationStart(currentLocationPoint());
+  }
   recordObservationPoint(currentLocationPoint());
 
   if (options.fillForm) {
@@ -3171,7 +3214,7 @@ function toggleLocationFollow(options = {}) {
       finishObservation({ includeTarget: action === "arrived" });
       stopLocationFollow({ render: false });
       clearObservationAssignments();
-      elements.shareImportStatus.value = action === "arrived" ? "到着として観察を終了しました" : "観察を中断終了しました";
+      elements.shareImportStatus.value = action === "arrived" ? "到着として観察を終了しました" : action === "finish" ? "観察を終了しました" : "観察を中断終了しました";
       render();
       return;
     }
@@ -3184,6 +3227,10 @@ function toggleLocationFollow(options = {}) {
 }
 
 function chooseObservationStopAction() {
+  if (!targetPoint()) {
+    return window.confirm("観察を終了しますか？") ? "finish" : "continue";
+  }
+
   const value = window.prompt("観察を終了しますか？\n1: 到着終了（対象へ接続）\n2: 中断終了（現在地まで）\n空欄/キャンセル: 継続", "1");
   if (value === null || value.trim() === "") {
     return "continue";
@@ -3229,20 +3276,26 @@ function startLocationFollow(options = {}) {
     return;
   }
 
-  const start = routeStartPoint();
-  const target = targetPoint();
-  if (start && target && !observationEndpointsDistinct(start, target)) {
-    elements.shareImportStatus.value = "起点と対象が同じです。別の地点を指定してください";
-    render();
-    return;
-  }
-
+  const autoRouteStart = !state.routeStartPointId;
   state.followCurrentLocation = true;
   state.locationFollowFillForm = Boolean(options.fillForm);
   state.pendingGeo = null;
   state.editingPointId = null;
   state.pendingLinkPointId = null;
-  ensureCurrentRouteStartSnapshot();
+  ensureTrackingObservationStart();
+
+  const start = observationStartPoint();
+  const target = targetPoint();
+  if (start && target && !observationEndpointsDistinct(start, target)) {
+    state.followCurrentLocation = false;
+    if (autoRouteStart) {
+      clearRouteStartState();
+    }
+    elements.shareImportStatus.value = "起点と対象が同じです。別の地点を指定してください";
+    render();
+    return;
+  }
+
   resetObservationTrail();
   if (state.locationFollowScaleMode === FOLLOW_SCALE_MANUAL) {
     state.locationFollowScaleMode = state.targetPointId ? FOLLOW_SCALE_TARGET : FOLLOW_SCALE_CENTER;
@@ -3257,6 +3310,9 @@ function startLocationFollow(options = {}) {
       (error) => {
         const message = locationErrorMessage(error, "追跡エラー");
         stopLocationFollow();
+        if (autoRouteStart) {
+          clearRouteStartState();
+        }
         elements.shareImportStatus.value = message;
       },
       geolocationOptions()
@@ -3267,6 +3323,9 @@ function startLocationFollow(options = {}) {
     state.locationWatchId = null;
     state.locationFollowFillForm = false;
     state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
+    if (autoRouteStart) {
+      clearRouteStartState();
+    }
     renderLocationFollowButton();
     elements.shareImportStatus.value = "追跡エラー";
   }
@@ -3894,9 +3953,9 @@ function normalizeObservationRecord(parsed) {
   }
 
   const start = normalizeObservationPoint(parsed.start, "起点");
-  const target = normalizeObservationPoint(parsed.target, "対象");
+  const target = parsed.target ? normalizeObservationPoint(parsed.target, "対象") : null;
   const trail = parsed.trail.map((point) => normalizeObservationPoint(point, "現在地")).filter(Boolean);
-  if (!start || !target || trail.length === 0) {
+  if (!start || trail.length === 0 || (parsed.target && !target)) {
     throw new Error("Invalid observation points");
   }
 
@@ -3917,7 +3976,7 @@ function normalizeObservationRecord(parsed) {
     target,
     trail,
     metrics: {
-      remaining: distanceBetween(current, target),
+      remaining: target ? distanceBetween(current, target) : NaN,
       traveled,
       ratio: directToCurrent > 1 ? traveled / directToCurrent : NaN
     }
