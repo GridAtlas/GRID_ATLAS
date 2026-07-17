@@ -122,6 +122,78 @@ textarea:focus-visible {
   border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
+.topbar-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 1 1 auto;
+}
+
+.settings-menu {
+  position: relative;
+  margin-left: auto;
+  z-index: 30;
+}
+
+.settings-menu-button {
+  width: 40px;
+  min-height: 34px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 800;
+}
+
+.settings-menu-button[aria-expanded="true"] {
+  border-color: var(--accent);
+  background: var(--active-bg);
+  color: var(--accent-strong);
+}
+
+.settings-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(290px, calc(100vw - 20px));
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.settings-panel h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.settings-panel label {
+  display: grid;
+  gap: 5px;
+}
+
+.settings-panel label > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.settings-panel select {
+  width: 100%;
+}
+
+.settings-check {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.settings-check input {
+  width: auto;
+}
 
 .brand {
   display: flex;
@@ -755,6 +827,10 @@ textarea {
     gap: 8px;
     flex: 0 0 auto;
     border-bottom: 0;
+  }
+
+  .topbar-main {
+    width: 100%;
   }
 
   .brand {

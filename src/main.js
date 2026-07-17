@@ -1,8 +1,15 @@
 const STORAGE_KEY = "grid-atlas-workspace-v2";
 const THEME_KEY = "grid-atlas-theme";
+const LANGUAGE_KEY = "grid-atlas-language";
+const DISTANCE_UNIT_KEY = "grid-atlas-distance-unit";
+const ROUTE_RETURN_KEY = "grid-atlas-route-return";
 const MOBILE_PAGE_KEY = "grid-atlas-mobile-page";
 const LIGHT_THEME = "light";
 const RETRO_THEME = "retro";
+const JA_LANGUAGE = "ja";
+const EN_LANGUAGE = "en";
+const METRIC_UNIT = "metric";
+const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
 const POINTER_MOVE_THRESHOLD = 3;
 const CURRENT_LOCATION_ID = "__current_location__";
@@ -46,6 +53,13 @@ const elements = {
   actionEditButton: document.querySelector("#actionEditButton"),
   actionMapButton: document.querySelector("#actionMapButton"),
   themeToggleButton: document.querySelector("#themeToggleButton"),
+  settingsMenu: document.querySelector("#settingsMenu"),
+  settingsMenuButton: document.querySelector("#settingsMenuButton"),
+  settingsPanel: document.querySelector("#settingsPanel"),
+  settingsThemeSelect: document.querySelector("#settingsThemeSelect"),
+  settingsLanguageSelect: document.querySelector("#settingsLanguageSelect"),
+  settingsUnitSelect: document.querySelector("#settingsUnitSelect"),
+  settingsRouteReturnToStart: document.querySelector("#settingsRouteReturnToStart"),
   statusLine: document.querySelector("#statusLine"),
   selectionInfoText: document.querySelector("#selectionInfoText"),
   mobileSelectedTitle: document.querySelector("#mobileSelectedTitle"),
@@ -113,6 +127,8 @@ const elements = {
 
 const state = {
   version: 3,
+  language: JA_LANGUAGE,
+  distanceUnit: METRIC_UNIT,
   points: [],
   pointLists: [],
   links: [],
@@ -206,6 +222,310 @@ const CANVAS_PALETTES = {
   }
 };
 
+const TRANSLATIONS = {
+  ja: {
+    "settings.title": "設定",
+    "settings.design": "デザイン",
+    "settings.language": "言語",
+    "settings.units": "距離単位",
+    "settings.routeReturn": "巡回で起点に戻る",
+    "settings.themeRetro": "レトロ",
+    "settings.themeLight": "ライト",
+    "settings.languageJa": "日本語",
+    "settings.languageEn": "English",
+    "settings.unitsMetric": "km",
+    "settings.unitsImperial": "mile",
+    "theme.toLight": "通常表示へ",
+    "theme.toRetro": "レトロ表示へ",
+    "page.analysis": "分析",
+    "page.data": "データ",
+    "summary.selected": "選択中",
+    "summary.info": "情報",
+    "state.unselected": "未選択",
+    "action.register": "登録",
+    "action.connect": "接続",
+    "action.center": "中心",
+    "action.clear": "解除",
+    "action.start": "起点",
+    "action.target": "対象",
+    "action.track": "追跡",
+    "action.route": "巡回",
+    "action.delete": "削除",
+    "action.restore": "復旧",
+    "action.edit": "編集",
+    "action.map": "地図",
+    "button.backToGrid": "← 格子に戻る",
+    "button.clipboard": "クリップ読取",
+    "button.currentLocation": "現在地",
+    "button.submitRegister": "登録",
+    "button.update": "更新",
+    "button.appleMaps": "Appleマップ",
+    "button.googleMaps": "Googleマップ",
+    "button.setTarget": "ターゲットにする",
+    "button.clearTarget": "ターゲット解除",
+    "button.optimize": "最適順",
+    "button.clear": "解除",
+    "button.save": "保存",
+    "button.load": "読込",
+    "button.replaceLoad": "新規読込",
+    "button.appendLoad": "追加読込",
+    "button.clearGrid": "グリッド初期化",
+    "panel.register": "地点登録",
+    "panel.details": "選択地点",
+    "panel.multiSelect": "複数選択",
+    "panel.selectedLine": "選択線",
+    "panel.observationResult": "観察結果",
+    "panel.analysis": "分析",
+    "panel.route": "巡回ルート",
+    "panel.data": "データ",
+    "field.title": "見出し",
+    "field.lat": "緯度",
+    "field.lng": "経度",
+    "field.photo": "写真",
+    "field.note": "コメント",
+    "field.coords": "緯度経度",
+    "field.created": "登録",
+    "field.count": "件数",
+    "field.order": "順序",
+    "field.operation": "操作",
+    "field.name": "名前",
+    "field.actualDistance": "実距離",
+    "field.record": "記録",
+    "field.result": "結果",
+    "field.line": "線",
+    "field.distance": "距離",
+    "field.endpoints": "端点",
+    "metric.points": "地点",
+    "metric.links": "線",
+    "metric.total": "合計",
+    "metric.longest": "最長",
+    "route.startPoint": "スタート地点",
+    "route.returnToStart": "最後にスタート地点へ戻る",
+    "route.summaryDefault": "地点を選んで巡回を押す",
+    "route.needStart": "起点を指定して2点以上選択",
+    "route.needTwo": "2点以上を選択すると巡回を実行",
+    "route.ready": "巡回で最適順を計算",
+    "route.exact": "厳密",
+    "route.heuristic": "近似",
+    "route.return": "戻る",
+    "route.total": "合計",
+    "route.start": "スタート",
+    "route.fromPrevious": "前地点から",
+    "route.toStart": "スタートへ",
+    "data.pointLists": "地点リスト",
+    "data.observations": "観察記録",
+    "data.grid": "グリッド",
+    "status.grid": "格子",
+    "label.points": "点",
+    "label.links": "線",
+    "label.observations": "観察",
+    "label.selected": "選択",
+    "label.sequence": "選択順",
+    "label.linkTotal": "線合計",
+    "label.betweenTwo": "2点間",
+    "label.fromCurrent": "現在地から",
+    "label.accuracy": "精度",
+    "label.none": "なし",
+    "message.loadedObservation": "読み込み観察",
+    "message.pointUnavailable": "地点を確認できません",
+    "message.linkUnavailable": "線を確認できません",
+    "message.quickHint": "接続、巡回、削除、解除をクイックボタンで実行できます。",
+    "message.currentLocation": "現在地"
+  },
+  en: {
+    "settings.title": "Settings",
+    "settings.design": "Design",
+    "settings.language": "Language",
+    "settings.units": "Distance Unit",
+    "settings.routeReturn": "Return to start in route",
+    "settings.themeRetro": "Retro",
+    "settings.themeLight": "Light",
+    "settings.languageJa": "Japanese",
+    "settings.languageEn": "English",
+    "settings.unitsMetric": "km",
+    "settings.unitsImperial": "mile",
+    "theme.toLight": "Switch to light",
+    "theme.toRetro": "Switch to retro",
+    "page.analysis": "Analysis",
+    "page.data": "Data",
+    "summary.selected": "Selected",
+    "summary.info": "Info",
+    "state.unselected": "None",
+    "action.register": "Add",
+    "action.connect": "Link",
+    "action.center": "Center",
+    "action.clear": "Clear",
+    "action.start": "Start",
+    "action.target": "Target",
+    "action.track": "Track",
+    "action.route": "Route",
+    "action.delete": "Delete",
+    "action.restore": "Restore",
+    "action.edit": "Edit",
+    "action.map": "Map",
+    "button.backToGrid": "← Back to grid",
+    "button.clipboard": "Read Clipboard",
+    "button.currentLocation": "Current",
+    "button.submitRegister": "Add",
+    "button.update": "Update",
+    "button.appleMaps": "Apple Maps",
+    "button.googleMaps": "Google Maps",
+    "button.setTarget": "Set Target",
+    "button.clearTarget": "Clear Target",
+    "button.optimize": "Optimize",
+    "button.clear": "Clear",
+    "button.save": "Save",
+    "button.load": "Load",
+    "button.replaceLoad": "Replace Load",
+    "button.appendLoad": "Add Load",
+    "button.clearGrid": "Reset Grid",
+    "panel.register": "Add Point",
+    "panel.details": "Selected Point",
+    "panel.multiSelect": "Multiple Selection",
+    "panel.selectedLine": "Selected Line",
+    "panel.observationResult": "Observation Result",
+    "panel.analysis": "Analysis",
+    "panel.route": "Route",
+    "panel.data": "Data",
+    "field.title": "Title",
+    "field.lat": "Latitude",
+    "field.lng": "Longitude",
+    "field.photo": "Photo",
+    "field.note": "Comment",
+    "field.coords": "Coordinates",
+    "field.created": "Created",
+    "field.count": "Count",
+    "field.order": "Order",
+    "field.operation": "Action",
+    "field.name": "Name",
+    "field.actualDistance": "Actual",
+    "field.record": "Record",
+    "field.result": "Result",
+    "field.line": "Line",
+    "field.distance": "Distance",
+    "field.endpoints": "Endpoints",
+    "metric.points": "Points",
+    "metric.links": "Lines",
+    "metric.total": "Total",
+    "metric.longest": "Longest",
+    "route.startPoint": "Start Point",
+    "route.returnToStart": "Return to start",
+    "route.summaryDefault": "Select points and tap Route",
+    "route.needStart": "Set a start and select 2+ points",
+    "route.needTwo": "Select 2+ points to route",
+    "route.ready": "Ready to optimize",
+    "route.exact": "Exact",
+    "route.heuristic": "Approx",
+    "route.return": "Return",
+    "route.total": "Total",
+    "route.start": "Start",
+    "route.fromPrevious": "From previous",
+    "route.toStart": "To start",
+    "data.pointLists": "Point Lists",
+    "data.observations": "Observation Records",
+    "data.grid": "Grid",
+    "status.grid": "Grid",
+    "label.points": "pts",
+    "label.links": "lines",
+    "label.observations": "observations",
+    "label.selected": "Selected",
+    "label.sequence": "Sequence",
+    "label.linkTotal": "Line total",
+    "label.betweenTwo": "Between",
+    "label.fromCurrent": "From current",
+    "label.accuracy": "Accuracy",
+    "label.none": "None",
+    "message.loadedObservation": "Loaded observation",
+    "message.pointUnavailable": "Point unavailable",
+    "message.linkUnavailable": "Line unavailable",
+    "message.quickHint": "Use quick buttons to link, route, delete, or clear.",
+    "message.currentLocation": "Current location"
+  }
+};
+
+function activeLanguage() {
+  return state.language === EN_LANGUAGE ? EN_LANGUAGE : JA_LANGUAGE;
+}
+
+function t(key) {
+  return TRANSLATIONS[activeLanguage()]?.[key] ?? TRANSLATIONS.ja[key] ?? key;
+}
+
+function applyStaticTranslations() {
+  document.documentElement.lang = activeLanguage();
+  for (const element of document.querySelectorAll("[data-i18n]")) {
+    element.textContent = t(element.dataset.i18n);
+  }
+  for (const element of document.querySelectorAll("[data-i18n-title]")) {
+    element.title = t(element.dataset.i18nTitle);
+  }
+  elements.settingsMenuButton.title = t("settings.title");
+  const isRetro = currentTheme() === RETRO_THEME;
+  elements.themeToggleButton.title = isRetro ? t("theme.toLight") : t("theme.toRetro");
+}
+
+function setLanguage(language, options = {}) {
+  state.language = language === EN_LANGUAGE ? EN_LANGUAGE : JA_LANGUAGE;
+  if (options.persist !== false) {
+    try {
+      localStorage.setItem(LANGUAGE_KEY, state.language);
+    } catch {}
+  }
+  applyStaticTranslations();
+  syncSettingsControls();
+}
+
+function setDistanceUnit(unit, options = {}) {
+  state.distanceUnit = unit === IMPERIAL_UNIT ? IMPERIAL_UNIT : METRIC_UNIT;
+  if (options.persist !== false) {
+    try {
+      localStorage.setItem(DISTANCE_UNIT_KEY, state.distanceUnit);
+    } catch {}
+  }
+  syncSettingsControls();
+}
+
+function setRouteReturnToStart(value, options = {}) {
+  state.routeReturnToStart = Boolean(value);
+  if (options.persist !== false) {
+    try {
+      localStorage.setItem(ROUTE_RETURN_KEY, String(state.routeReturnToStart));
+    } catch {}
+  }
+  syncSettingsControls();
+}
+
+function syncSettingsControls() {
+  elements.settingsThemeSelect.value = currentTheme();
+  elements.settingsLanguageSelect.value = activeLanguage();
+  elements.settingsUnitSelect.value = state.distanceUnit;
+  elements.settingsRouteReturnToStart.checked = state.routeReturnToStart;
+  elements.routeReturnToStart.checked = state.routeReturnToStart;
+}
+
+function loadPreferences() {
+  let language = JA_LANGUAGE;
+  let unit = METRIC_UNIT;
+  let returnToStart = false;
+  try {
+    language = localStorage.getItem(LANGUAGE_KEY) === EN_LANGUAGE ? EN_LANGUAGE : JA_LANGUAGE;
+    unit = localStorage.getItem(DISTANCE_UNIT_KEY) === IMPERIAL_UNIT ? IMPERIAL_UNIT : METRIC_UNIT;
+    returnToStart = localStorage.getItem(ROUTE_RETURN_KEY) === "true";
+  } catch {}
+
+  setLanguage(language, { persist: false });
+  setDistanceUnit(unit, { persist: false });
+  setRouteReturnToStart(returnToStart, { persist: false });
+}
+
+function setSettingsMenuOpen(open) {
+  elements.settingsPanel.hidden = !open;
+  elements.settingsMenuButton.setAttribute("aria-expanded", String(open));
+}
+
+function toggleSettingsMenu() {
+  setSettingsMenuOpen(elements.settingsPanel.hidden);
+}
 function currentTheme() {
   return document.documentElement.dataset.theme === RETRO_THEME ? RETRO_THEME : LIGHT_THEME;
 }
@@ -235,7 +555,10 @@ function setTheme(theme, options = {}) {
 
   elements.themeToggleButton.textContent = isRetro ? "LIGHT" : "RETRO";
   elements.themeToggleButton.setAttribute("aria-pressed", String(isRetro));
-  elements.themeToggleButton.title = isRetro ? "通常表示へ" : "レトロ表示へ";
+  elements.themeToggleButton.title = isRetro ? t("theme.toLight") : t("theme.toRetro");
+  if (elements.settingsThemeSelect) {
+    elements.settingsThemeSelect.value = normalized;
+  }
 }
 
 function toggleTheme() {
@@ -993,12 +1316,13 @@ function render() {
   renderSelectionInfo();
   renderStatus();
   renderActionButtons();
+  syncSettingsControls();
 }
 
 function renderSelectedSummary() {
   const title = state.selection.length > 0
     ? state.selection.map(selectionTitle).join(", ")
-    : "未選択";
+    : t("state.unselected");
   elements.mobileSelectedTitle.textContent = title;
   elements.sidebarSelectedTitle.textContent = title;
 }
@@ -1066,7 +1390,7 @@ function selectionInfoText() {
 
   const followText = followStateInfoText();
   if (state.selection.length === 0) {
-    return followText || "未選択";
+    return followText || t("state.unselected");
   }
 
   const points = selectedPointIds().map(findPoint).filter(Boolean);
@@ -1076,47 +1400,47 @@ function selectionInfoText() {
   if (state.selection.length === 1) {
     const entry = state.selection[0];
     if (entry.type === "observation") {
-      return loadedObservationInfoText(findLoadedObservation(entry.id)) || "読み込み観察";
+      return loadedObservationInfoText(findLoadedObservation(entry.id)) || t("message.loadedObservation");
     }
 
     if (entry.type === "point") {
       const point = findPoint(entry.id);
-      return point ? pointSelectionInfo(point) : "地点を確認できません";
+      return point ? pointSelectionInfo(point) : t("message.pointUnavailable");
     }
 
     const link = findLink(entry.id);
-    return link ? linkSelectionInfo(link) : "線を確認できません";
+    return link ? linkSelectionInfo(link) : t("message.linkUnavailable");
   }
 
   if (points.length === 2 && links.length === 0) {
-    return `${points[0].title} - ${points[1].title} | 2点間 ${formatDistance(distanceBetween(points[0], points[1]))}`;
+    return `${points[0].title} - ${points[1].title} | ${t("label.betweenTwo")} ${formatDistance(distanceBetween(points[0], points[1]))}`;
   }
 
   const parts = [];
   const countParts = [];
   if (points.length > 0) {
-    countParts.push(`${points.length}点`);
+    countParts.push(`${points.length}${t("label.points")}`);
   }
   if (links.length > 0) {
-    countParts.push(`${links.length}線`);
+    countParts.push(`${links.length}${t("label.links")}`);
   }
   if (observations.length > 0) {
-    countParts.push(`${observations.length}観察`);
+    countParts.push(`${observations.length}${t("label.observations")}`);
   }
   if (countParts.length > 0) {
-    parts.push(`選択 ${countParts.join(" / ")}`);
+    parts.push(`${t("label.selected")} ${countParts.join(" / ")}`);
   }
 
   if (points.length > 1) {
-    parts.push(`選択順 ${formatDistance(pointSequenceDistance(points))}`);
+    parts.push(`${t("label.sequence")} ${formatDistance(pointSequenceDistance(points))}`);
   }
 
   const linkTotal = selectedLinksDistance(links);
   if (Number.isFinite(linkTotal)) {
-    parts.push(`線合計 ${formatDistance(linkTotal)}`);
+    parts.push(`${t("label.linkTotal")} ${formatDistance(linkTotal)}`);
   }
 
-  return parts.join(" | ") || "選択中";
+  return parts.join(" | ") || t("summary.selected");
 }
 
 function followStateInfoText() {
@@ -1142,7 +1466,7 @@ function followStateInfoText() {
 function pointSelectionInfo(point) {
   const geo = pointGeo(point);
   const coords = `${formatCoordinate(geo.lat)}, ${formatCoordinate(geo.lng)}`;
-  const accuracy = Number.isFinite(geo.accuracy) ? ` | 精度 ±${formatDistance(geo.accuracy)}` : "";
+  const accuracy = Number.isFinite(geo.accuracy) ? ` | ${t("label.accuracy")} ±${formatDistance(geo.accuracy)}` : "";
 
   if (point.id === CURRENT_LOCATION_ID) {
     return `${point.title} | ${coords}${accuracy}`;
@@ -1150,7 +1474,7 @@ function pointSelectionInfo(point) {
 
   const current = currentLocationPoint();
   if (current) {
-    return `${point.title} | 現在地から ${formatDistance(distanceBetween(current, point))} | ${coords}`;
+    return `${point.title} | ${t("label.fromCurrent")} ${formatDistance(distanceBetween(current, point))} | ${coords}`;
   }
 
   return `${point.title} | ${coords}`;
@@ -1159,10 +1483,10 @@ function pointSelectionInfo(point) {
 function linkSelectionInfo(link) {
   const endpoints = linkEndpoints(link);
   if (!endpoints) {
-    return "線を確認できません";
+    return t("message.linkUnavailable");
   }
 
-  return `${linkTitle(link)} | 距離 ${formatDistance(distanceBetween(endpoints.a, endpoints.b))}`;
+  return `${linkTitle(link)} | ${t("field.distance")} ${formatDistance(distanceBetween(endpoints.a, endpoints.b))}`;
 }
 
 function pointSequenceDistance(points) {
@@ -1181,7 +1505,7 @@ function selectedLinksDistance(links) {
 }
 
 function renderStatus() {
-  elements.statusLine.value = `格子 ${formatDistance(chooseGridStep())}`;
+  elements.statusLine.value = `${t("status.grid")} ${formatDistance(chooseGridStep())}`;
 }
 
 function renderActionButtons() {
@@ -1239,8 +1563,8 @@ function renderActionButtons() {
   elements.actionEditButton.classList.toggle("is-active", Boolean(state.editingPointId));
   elements.actionMapButton.classList.toggle("is-active", false);
   elements.actionRestoreButton.title = restoreCandidateCount > 0 ? `直前の削除を復旧 (${restoreCandidateCount}件)` : "直前の削除を復旧";
-  elements.pointSubmitButton.textContent = state.editingPointId ? "更新" : "登録";
-  elements.actionRouteLabel.textContent = "巡回";
+  elements.pointSubmitButton.textContent = state.editingPointId ? t("button.update") : t("button.submitRegister");
+  elements.actionRouteLabel.textContent = t("action.route");
   renderLocationFollowButton();
 }
 
@@ -1267,40 +1591,40 @@ function renderDetails() {
     const counts = selectedCounts();
     const parts = [];
     if (counts.point > 0) {
-      parts.push(`${counts.point}点`);
+      parts.push(`${counts.point}${t("label.points")}`);
     }
     if (counts.link > 0) {
-      parts.push(`${counts.link}線`);
+      parts.push(`${counts.link}${t("label.links")}`);
     }
     if (counts.observation > 0) {
-      parts.push(`${counts.observation}観察`);
+      parts.push(`${counts.observation}${t("label.observations")}`);
     }
 
-    elements.selectionHeading.textContent = "複数選択";
-    elements.detailTitleLabel.textContent = "選択";
-    elements.detailCoordsLabel.textContent = "件数";
-    elements.detailCreatedLabel.textContent = "順序";
-    elements.detailNoteLabel.textContent = "操作";
+    elements.selectionHeading.textContent = t("panel.multiSelect");
+    elements.detailTitleLabel.textContent = t("label.selected");
+    elements.detailCoordsLabel.textContent = t("field.count");
+    elements.detailCreatedLabel.textContent = t("field.order");
+    elements.detailNoteLabel.textContent = t("field.operation");
     elements.detailTitle.textContent = state.selection.map(selectionTitle).join(", ");
     elements.detailCoords.textContent = parts.join(" / ");
     elements.detailCreated.textContent = state.selection.map((entry, index) => `${index + 1}. ${selectionTitle(entry)}`).join(" / ");
-    elements.detailNote.textContent = "接続、巡回、削除、解除をクイックボタンで実行できます。";
+    elements.detailNote.textContent = t("message.quickHint");
     elements.mapOpenActions.hidden = true;
     elements.targetActions.hidden = true;
     return;
   }
 
-  elements.selectionHeading.textContent = observation ? "観察結果" : link ? "選択線" : "選択地点";
+  elements.selectionHeading.textContent = observation ? t("panel.observationResult") : link ? t("panel.selectedLine") : t("panel.details");
 
   if (observation) {
-    elements.detailTitleLabel.textContent = "名前";
-    elements.detailCoordsLabel.textContent = "実距離";
-    elements.detailCreatedLabel.textContent = "記録";
-    elements.detailNoteLabel.textContent = "結果";
+    elements.detailTitleLabel.textContent = t("field.name");
+    elements.detailCoordsLabel.textContent = t("field.actualDistance");
+    elements.detailCreatedLabel.textContent = t("field.record");
+    elements.detailNoteLabel.textContent = t("field.result");
     elements.detailTitle.textContent = loadedObservationTitle(observation);
     elements.detailCoords.textContent = formatDistance(observation.metrics.traveled);
     elements.detailCreated.textContent = `${formatDate(observation.startedAt)} - ${formatDate(observation.endedAt)}`;
-    elements.detailNote.textContent = loadedObservationInfoText(observation) || "読み込み観察";
+    elements.detailNote.textContent = loadedObservationInfoText(observation) || t("message.loadedObservation");
     elements.mapOpenActions.hidden = true;
     elements.targetActions.hidden = true;
     return;
@@ -1312,10 +1636,10 @@ function renderDetails() {
       return;
     }
 
-    elements.detailTitleLabel.textContent = "線";
-    elements.detailCoordsLabel.textContent = "距離";
-    elements.detailCreatedLabel.textContent = "登録";
-    elements.detailNoteLabel.textContent = "端点";
+    elements.detailTitleLabel.textContent = t("field.line");
+    elements.detailCoordsLabel.textContent = t("field.distance");
+    elements.detailCreatedLabel.textContent = t("field.created");
+    elements.detailNoteLabel.textContent = t("field.endpoints");
     elements.detailTitle.textContent = linkTitle(link);
     elements.detailCoords.textContent = formatDistance(distanceBetween(endpoints.a, endpoints.b));
     elements.detailCreated.textContent = formatDate(link.createdAt);
@@ -1331,14 +1655,14 @@ function renderDetails() {
 
   const geo = pointGeo(point);
   const accuracy = Number.isFinite(geo.accuracy) ? ` / ±${formatDistance(geo.accuracy)}` : "";
-  elements.detailTitleLabel.textContent = "見出し";
-  elements.detailCoordsLabel.textContent = "緯度経度";
-  elements.detailCreatedLabel.textContent = "登録";
-  elements.detailNoteLabel.textContent = "コメント";
+  elements.detailTitleLabel.textContent = t("field.title");
+  elements.detailCoordsLabel.textContent = t("field.coords");
+  elements.detailCreatedLabel.textContent = t("field.created");
+  elements.detailNoteLabel.textContent = t("field.note");
   elements.detailTitle.textContent = point.title;
   elements.detailCoords.textContent = `${formatCoordinate(geo.lat)}, ${formatCoordinate(geo.lng)}${accuracy}`;
-  elements.detailCreated.textContent = point.isVirtual ? "現在地" : formatDate(point.createdAt);
-  elements.detailNote.textContent = point.note || "なし";
+  elements.detailCreated.textContent = point.isVirtual ? t("message.currentLocation") : formatDate(point.createdAt);
+  elements.detailNote.textContent = point.note || t("label.none");
   elements.mapOpenActions.hidden = false;
   renderTargetActions(point);
 
@@ -1359,7 +1683,7 @@ function renderTargetActions(point) {
   const start = routeStartPoint();
   const switchesFromRouteStart = !isTarget && start && !observationEndpointsDistinct(start, point);
   elements.targetPointButton.disabled = false;
-  elements.targetPointButton.textContent = isTarget ? "ターゲット解除" : "ターゲットにする";
+  elements.targetPointButton.textContent = isTarget ? t("button.clearTarget") : t("button.setTarget");
   elements.targetPointButton.title = switchesFromRouteStart ? "起点からターゲットに切り替え" : "ターゲットにする";
   elements.targetPointButton.classList.toggle("is-active", isTarget);
   elements.targetPointButton.setAttribute("aria-pressed", String(isTarget));
@@ -1634,7 +1958,7 @@ function observationDateLabel(value) {
     return "";
   }
 
-  return new Intl.DateTimeFormat("ja-JP", {
+  return new Intl.DateTimeFormat(localeName(), {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -2000,7 +2324,7 @@ function renderRoute() {
   }
 
   if (!start) {
-    elements.routeSummary.textContent = "起点を指定して2点以上選択";
+    elements.routeSummary.textContent = t("route.needStart");
     return;
   }
 
@@ -2013,9 +2337,9 @@ function renderRouteResultDetails() {
     return;
   }
 
-  const method = state.routeResult.exact ? "厳密" : "近似";
-  const returnLabel = state.routeResult.returnToStart ? " | 戻る" : "";
-  elements.routeSummary.textContent = `${method}計算 | ${state.routeResult.pointIds.length}点${returnLabel} | 合計 ${formatDistance(state.routeResult.totalDistance)}`;
+  const method = state.routeResult.exact ? t("route.exact") : t("route.heuristic");
+  const returnLabel = state.routeResult.returnToStart ? ` | ${t("route.return")}` : "";
+  elements.routeSummary.textContent = `${method} | ${state.routeResult.pointIds.length}${t("label.points")}${returnLabel} | ${t("route.total")} ${formatDistance(state.routeResult.totalDistance)}`;
 
   const routePoints = routeResultPoints();
   routePoints.forEach((point, index) => {
@@ -2028,11 +2352,11 @@ function renderRouteResultDetails() {
     const title = document.createElement("strong");
     const segment = document.createElement("small");
     title.textContent = point.title;
-    segment.textContent = index === 0 ? "スタート" : `前地点から ${formatDistance(state.routeResult.segmentDistances[index - 1])}`;
+    segment.textContent = index === 0 ? t("route.start") : `${t("route.fromPrevious")} ${formatDistance(state.routeResult.segmentDistances[index - 1])}`;
     text.append(title, segment);
 
     const cumulative = document.createElement("span");
-    cumulative.textContent = index === 0 ? "0 m" : formatDistance(sumDistances(state.routeResult.segmentDistances.slice(0, index)));
+    cumulative.textContent = index === 0 ? formatDistance(0) : formatDistance(sumDistances(state.routeResult.segmentDistances.slice(0, index)));
 
     item.append(number, text, cumulative);
     elements.routeList.append(item);
@@ -2049,7 +2373,7 @@ function renderRouteResultDetails() {
     const title = document.createElement("strong");
     const segment = document.createElement("small");
     title.textContent = `${routePoints.at(-1).title} - ${routePoints[0].title}`;
-    segment.textContent = `スタートへ ${formatDistance(returnDistance)}`;
+    segment.textContent = `${t("route.toStart")} ${formatDistance(returnDistance)}`;
     text.append(title, segment);
 
     const cumulative = document.createElement("span");
@@ -2521,6 +2845,20 @@ function formatDistance(distance) {
     return "-";
   }
 
+  if (state.distanceUnit === IMPERIAL_UNIT) {
+    const feet = distance * 3.280839895;
+    if (distance < 1609.344) {
+      return `${Math.round(feet).toLocaleString(localeName())} ft`;
+    }
+
+    const miles = distance / 1609.344;
+    if (distance < 1609344) {
+      return `${miles.toFixed(2)} mi`;
+    }
+
+    return `${Math.round(miles).toLocaleString(localeName())} mi`;
+  }
+
   if (distance < 1000) {
     return `${distance.toFixed(1)} m`;
   }
@@ -2529,7 +2867,11 @@ function formatDistance(distance) {
     return `${(distance / 1000).toFixed(2)} km`;
   }
 
-  return `${Math.round(distance / 1000).toLocaleString("ja-JP")} km`;
+  return `${Math.round(distance / 1000).toLocaleString(localeName())} km`;
+}
+
+function localeName() {
+  return activeLanguage() === EN_LANGUAGE ? "en-US" : "ja-JP";
 }
 
 function formatCoordinate(value) {
@@ -2537,7 +2879,7 @@ function formatCoordinate(value) {
 }
 
 function formatDate(value) {
-  return new Intl.DateTimeFormat("ja-JP", {
+  return new Intl.DateTimeFormat(localeName(), {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -4502,6 +4844,33 @@ function bindEvents() {
   }
 
   elements.themeToggleButton.addEventListener("click", toggleTheme);
+  elements.settingsMenuButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleSettingsMenu();
+  });
+  elements.settingsMenu.addEventListener("click", (event) => event.stopPropagation());
+  elements.settingsThemeSelect.addEventListener("change", () => {
+    setTheme(elements.settingsThemeSelect.value);
+    render();
+  });
+  elements.settingsLanguageSelect.addEventListener("change", () => {
+    setLanguage(elements.settingsLanguageSelect.value);
+    render();
+  });
+  elements.settingsUnitSelect.addEventListener("change", () => {
+    setDistanceUnit(elements.settingsUnitSelect.value);
+    render();
+  });
+  elements.settingsRouteReturnToStart.addEventListener("change", () => {
+    setRouteReturnToStart(elements.settingsRouteReturnToStart.checked);
+    render();
+  });
+  document.addEventListener("click", () => setSettingsMenuOpen(false));
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      setSettingsMenuOpen(false);
+    }
+  });
   elements.actionLinkButton.addEventListener("click", connectSelectedPoints);
   elements.actionRegisterButton.addEventListener("click", submitPendingPoint);
   elements.actionRouteButton.addEventListener("click", setRouteFromSelectedPoints);
@@ -4523,7 +4892,7 @@ function bindEvents() {
   elements.originButton.addEventListener("click", centerAndFollowCurrentLocation);
   elements.routeStartSelect.addEventListener("change", () => setRouteStart(elements.routeStartSelect.value));
   elements.routeReturnToStart.addEventListener("change", () => {
-    state.routeReturnToStart = elements.routeReturnToStart.checked;
+    setRouteReturnToStart(elements.routeReturnToStart.checked);
     render();
   });
   elements.computeRouteButton.addEventListener("click", computeRouteFromSelection);
@@ -4643,6 +5012,7 @@ function bindEvents() {
 
 loadTheme();
 loadWorkspace();
+loadPreferences();
 bindEvents();
 initMobilePages();
 resizeCanvas();
