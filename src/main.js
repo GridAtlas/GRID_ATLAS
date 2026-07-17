@@ -1,6 +1,6 @@
 const STORAGE_KEY = "grid-atlas-workspace-v2";
 const THEME_KEY = "grid-atlas-theme";
-const MOBILE_PANEL_KEY = "grid-atlas-mobile-panel";
+const MOBILE_PAGE_KEY = "grid-atlas-mobile-page";
 const LIGHT_THEME = "light";
 const RETRO_THEME = "retro";
 const POINT_RADIUS = 8;
@@ -49,7 +49,9 @@ const elements = {
   selectionInfoText: document.querySelector("#selectionInfoText"),
   mobileSelectedTitle: document.querySelector("#mobileSelectedTitle"),
   sidebarSelectedTitle: document.querySelector("#sidebarSelectedTitle"),
-  mobilePanelTabs: Array.from(document.querySelectorAll("[data-mobile-tab]")),
+  mapColumn: document.querySelector(".map-column"),
+  sidebar: document.querySelector(".sidebar"),
+  mobilePageTabs: Array.from(document.querySelectorAll("[data-mobile-page]")),
   mobilePanels: Array.from(document.querySelectorAll("[data-mobile-panel]")),
   pointForm: document.querySelector("#pointForm"),
   pointTitle: document.querySelector("#pointTitle"),
@@ -834,43 +836,51 @@ function renderSelectedSummary() {
   elements.sidebarSelectedTitle.textContent = title;
 }
 
-function validMobilePanelName(value) {
-  return ["register", "detail", "analysis", "data"].includes(value);
+function validMobilePageName(value) {
+  return ["map", "register", "detail", "analysis", "data"].includes(value);
 }
 
-function storedMobilePanelName() {
+function storedMobilePageName() {
   try {
-    const value = localStorage.getItem(MOBILE_PANEL_KEY);
-    return validMobilePanelName(value) ? value : "register";
+    const value = localStorage.getItem(MOBILE_PAGE_KEY);
+    return validMobilePageName(value) ? value : "map";
   } catch {
-    return "register";
+    return "map";
   }
 }
 
-function setMobilePanel(name, options = {}) {
-  const panelName = validMobilePanelName(name) ? name : "register";
+function setMobilePage(name, options = {}) {
+  const pageName = validMobilePageName(name) ? name : "map";
+  const mapActive = pageName === "map";
 
-  for (const tab of elements.mobilePanelTabs) {
-    const active = tab.dataset.mobileTab === panelName;
+  for (const tab of elements.mobilePageTabs) {
+    const active = tab.dataset.mobilePage === pageName;
     tab.classList.toggle("is-active", active);
     tab.setAttribute("aria-pressed", String(active));
   }
 
+  elements.mapColumn.classList.toggle("is-mobile-page-active", mapActive);
+  elements.sidebar.classList.toggle("is-mobile-page-active", !mapActive);
+
   for (const panel of elements.mobilePanels) {
-    panel.classList.toggle("is-mobile-active", panel.dataset.mobilePanel === panelName);
+    panel.classList.toggle("is-mobile-active", !mapActive && panel.dataset.mobilePanel === pageName);
+  }
+
+  if (mapActive) {
+    scheduleCanvasResize();
   }
 
   if (options.persist !== false) {
     try {
-      localStorage.setItem(MOBILE_PANEL_KEY, panelName);
+      localStorage.setItem(MOBILE_PAGE_KEY, pageName);
     } catch {
-      // Ignore storage failures; the visible tab has already been updated.
+      // Ignore storage failures; the visible page has already been updated.
     }
   }
 }
 
-function initMobilePanels() {
-  setMobilePanel(storedMobilePanelName(), { persist: false });
+function initMobilePages() {
+  setMobilePage(storedMobilePageName(), { persist: false });
 }
 
 function renderSelectionInfo() {
@@ -4289,8 +4299,8 @@ function bindEvents() {
     elements.observationImportFile.value = "";
   });
   elements.clearButton.addEventListener("click", clearWorkspace);
-  for (const tab of elements.mobilePanelTabs) {
-    tab.addEventListener("click", () => setMobilePanel(tab.dataset.mobileTab));
+  for (const tab of elements.mobilePageTabs) {
+    tab.addEventListener("click", () => setMobilePage(tab.dataset.mobilePage));
   }
 
   canvas.addEventListener("pointerdown", (event) => {
@@ -4369,7 +4379,7 @@ function bindEvents() {
 loadTheme();
 loadWorkspace();
 bindEvents();
-initMobilePanels();
+initMobilePages();
 resizeCanvas();
 handleIncomingShare();
 locateOnStartup();

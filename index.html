@@ -9,8 +9,8 @@
     <link rel="icon" href="assets/icon-retro.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-retro.png">
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("grid-atlas-theme")==="light"?"light":"retro"}catch{document.documentElement.dataset.theme="retro"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=25">
-    <script src="src/main.js?v=85" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=26">
+    <script src="src/main.js?v=86" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -26,8 +26,16 @@
         </div>
       </header>
 
+      <nav class="mobile-page-tabs" aria-label="スマホ用ページ切替">
+        <button class="mobile-page-tab is-active" type="button" data-mobile-page="map" aria-pressed="true">格子</button>
+        <button class="mobile-page-tab" type="button" data-mobile-page="register" aria-pressed="false">登録</button>
+        <button class="mobile-page-tab" type="button" data-mobile-page="detail" aria-pressed="false">詳細</button>
+        <button class="mobile-page-tab" type="button" data-mobile-page="analysis" aria-pressed="false">分析</button>
+        <button class="mobile-page-tab" type="button" data-mobile-page="data" aria-pressed="false">データ</button>
+      </nav>
+
       <main class="workspace">
-        <div class="map-column">
+        <div class="map-column is-mobile-page-active">
           <div class="selection-info" aria-live="polite">
             <span>情報</span>
             <strong id="selectionInfoText">未選択</strong>
@@ -101,12 +109,7 @@
             <span>選択中</span>
             <strong id="sidebarSelectedTitle">未選択</strong>
           </div>
-          <nav class="mobile-panel-tabs" aria-label="スマホ用パネル切替">
-            <button class="mobile-panel-tab is-active" type="button" data-mobile-tab="register" aria-pressed="true">登録</button>
-            <button class="mobile-panel-tab" type="button" data-mobile-tab="detail" aria-pressed="false">詳細</button>
-            <button class="mobile-panel-tab" type="button" data-mobile-tab="analysis" aria-pressed="false">分析</button>
-            <button class="mobile-panel-tab" type="button" data-mobile-tab="data" aria-pressed="false">データ</button>
-          </nav>
+
           <section class="panel is-mobile-active" data-mobile-panel="register">
             <h2>地点登録</h2>
             <form id="pointForm" class="point-form">
