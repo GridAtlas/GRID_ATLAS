@@ -709,6 +709,7 @@ textarea {
     flex-direction: column;
     gap: 8px;
     flex: 0 0 auto;
+    border-bottom: 0;
   }
 
   .brand {
