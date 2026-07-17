@@ -219,6 +219,11 @@ textarea:focus-visible {
 
 .theme-toggle {
   min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--accent);
+  background: var(--active-bg);
+  color: var(--accent-strong);
   padding: 0 9px;
   border-radius: 999px;
   font-size: 11px;
@@ -226,11 +231,6 @@ textarea:focus-visible {
   letter-spacing: 0.08em;
 }
 
-.theme-toggle[aria-pressed="true"] {
-  border-color: var(--accent);
-  background: var(--active-bg);
-  color: var(--accent-strong);
-}
 
 :root[data-theme="retro"] .brand h1,
 :root[data-theme="retro"] .theme-toggle,

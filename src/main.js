@@ -52,7 +52,7 @@ const elements = {
   actionRestoreButton: document.querySelector("#actionRestoreButton"),
   actionEditButton: document.querySelector("#actionEditButton"),
   actionMapButton: document.querySelector("#actionMapButton"),
-  themeToggleButton: document.querySelector("#themeToggleButton"),
+  editionBadge: document.querySelector("#editionBadge"),
   settingsMenu: document.querySelector("#settingsMenu"),
   settingsMenuButton: document.querySelector("#settingsMenuButton"),
   settingsPanel: document.querySelector("#settingsPanel"),
@@ -235,8 +235,7 @@ const TRANSLATIONS = {
     "settings.languageEn": "English",
     "settings.unitsMetric": "km",
     "settings.unitsImperial": "mile",
-    "theme.toLight": "通常表示へ",
-    "theme.toRetro": "レトロ表示へ",
+    "edition.web": "WEB版",
     "page.analysis": "分析",
     "page.data": "データ",
     "summary.selected": "選択中",
@@ -344,8 +343,7 @@ const TRANSLATIONS = {
     "settings.languageEn": "English",
     "settings.unitsMetric": "km",
     "settings.unitsImperial": "mile",
-    "theme.toLight": "Switch to light",
-    "theme.toRetro": "Switch to retro",
+    "edition.web": "Web",
     "page.analysis": "Analysis",
     "page.data": "Data",
     "summary.selected": "Selected",
@@ -460,8 +458,9 @@ function applyStaticTranslations() {
     element.title = t(element.dataset.i18nTitle);
   }
   elements.settingsMenuButton.title = t("settings.title");
-  const isRetro = currentTheme() === RETRO_THEME;
-  elements.themeToggleButton.title = isRetro ? t("theme.toLight") : t("theme.toRetro");
+  if (elements.editionBadge) {
+    elements.editionBadge.textContent = t("edition.web");
+  }
 }
 
 function setLanguage(language, options = {}) {
@@ -553,9 +552,9 @@ function setTheme(theme, options = {}) {
     localStorage.setItem(THEME_KEY, normalized);
   }
 
-  elements.themeToggleButton.textContent = isRetro ? "LIGHT" : "RETRO";
-  elements.themeToggleButton.setAttribute("aria-pressed", String(isRetro));
-  elements.themeToggleButton.title = isRetro ? t("theme.toLight") : t("theme.toRetro");
+  if (elements.editionBadge) {
+    elements.editionBadge.textContent = t("edition.web");
+  }
   if (elements.settingsThemeSelect) {
     elements.settingsThemeSelect.value = normalized;
   }
@@ -4843,7 +4842,6 @@ function bindEvents() {
     }
   }
 
-  elements.themeToggleButton.addEventListener("click", toggleTheme);
   elements.settingsMenuButton.addEventListener("click", (event) => {
     event.stopPropagation();
     toggleSettingsMenu();
