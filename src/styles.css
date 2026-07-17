@@ -108,7 +108,7 @@ textarea:focus-visible {
 .app-shell {
   min-height: 100%;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .topbar {
@@ -727,11 +727,11 @@ textarea {
 
   .mobile-page-tabs {
     display: grid;
+    width: 100%;
     grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 6px;
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--line);
-    background: var(--surface);
+    padding: 0;
+    background: transparent;
   }
 
   .mobile-page-tab {
