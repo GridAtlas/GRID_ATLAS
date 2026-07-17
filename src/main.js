@@ -3282,24 +3282,18 @@ function toggleLocationFollow(options = {}) {
 }
 
 function chooseObservationStopAction() {
-  if (!targetPoint()) {
-    return window.confirm("観察を終了しますか？") ? "finish" : "continue";
-  }
-
-  const value = window.prompt("観察を終了しますか？\n1: 到着終了（対象へ接続）\n2: 中断終了（現在地まで）\n空欄/キャンセル: 継続", "1");
-  if (value === null || value.trim() === "") {
+  const shouldStop = window.confirm("観察を終了しますか？");
+  if (!shouldStop) {
     return "continue";
   }
 
-  const normalized = value.trim();
-  if (normalized === "1") {
-    return "arrived";
-  }
-  if (normalized === "2") {
-    return "abort";
+  if (!targetPoint()) {
+    return "finish";
   }
 
-  return "continue";
+  return window.confirm("対象に到着しましたか？\nOK: はい（対象へ接続）\nキャンセル: いいえ（現在地まで）")
+    ? "arrived"
+    : "abort";
 }
 
 function finishObservation(options = {}) {
