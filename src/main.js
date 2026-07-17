@@ -51,6 +51,7 @@ const elements = {
   sidebarSelectedTitle: document.querySelector("#sidebarSelectedTitle"),
   mapColumn: document.querySelector(".map-column"),
   sidebar: document.querySelector(".sidebar"),
+  mobileBackButton: document.querySelector("#mobileBackButton"),
   mobilePageTabs: Array.from(document.querySelectorAll("[data-mobile-page]")),
   mobilePanels: Array.from(document.querySelectorAll("[data-mobile-panel]")),
   pointForm: document.querySelector("#pointForm"),
@@ -837,7 +838,7 @@ function renderSelectedSummary() {
 }
 
 function validMobilePageName(value) {
-  return ["map", "register", "detail", "analysis", "data"].includes(value);
+  return ["map", "register", "analysis", "data"].includes(value);
 }
 
 function storedMobilePageName() {
@@ -881,6 +882,10 @@ function setMobilePage(name, options = {}) {
 
 function initMobilePages() {
   setMobilePage(storedMobilePageName(), { persist: false });
+}
+
+function mobilePageUiActive() {
+  return typeof window.matchMedia === "function" && window.matchMedia("(max-width: 860px)").matches;
 }
 
 function renderSelectionInfo() {
@@ -970,18 +975,19 @@ function followStateInfoText() {
 
 function pointSelectionInfo(point) {
   const geo = pointGeo(point);
+  const coords = `${formatCoordinate(geo.lat)}, ${formatCoordinate(geo.lng)}`;
   const accuracy = Number.isFinite(geo.accuracy) ? ` | 精度 ±${formatDistance(geo.accuracy)}` : "";
 
   if (point.id === CURRENT_LOCATION_ID) {
-    return `${point.title} | 現在地${accuracy}`;
+    return `${point.title} | ${coords}${accuracy}`;
   }
 
   const current = currentLocationPoint();
   if (current) {
-    return `${point.title} | 現在地から ${formatDistance(distanceBetween(current, point))}`;
+    return `${point.title} | 現在地から ${formatDistance(distanceBetween(current, point))} | ${coords}`;
   }
 
-  return `${point.title} | ${formatCoordinate(geo.lat)}, ${formatCoordinate(geo.lng)}`;
+  return `${point.title} | ${coords}`;
 }
 
 function linkSelectionInfo(link) {
@@ -1037,7 +1043,8 @@ function renderActionButtons() {
   const observationSelected = isLoadedObservationSelected();
   const canDelete = deletablePointCount + linkIds.length > 0 || observationSelected;
 
-  elements.actionRegisterButton.disabled = !hasPendingPoint;
+  const canOpenRegisterPage = !hasPendingPoint && state.selection.length === 0 && mobilePageUiActive();
+  elements.actionRegisterButton.disabled = !hasPendingPoint && !canOpenRegisterPage;
   elements.actionLinkButton.disabled = !pointPair;
   elements.actionRouteButton.disabled = !routeActive && !routePlan;
   elements.deletePointButton.disabled = !canDelete;
@@ -1050,6 +1057,7 @@ function renderActionButtons() {
   elements.actionMapButton.disabled = !mapCandidate;
 
   elements.actionRegisterButton.classList.remove("is-active");
+  elements.actionRegisterButton.title = hasPendingPoint ? "仮ポイントを登録" : canOpenRegisterPage ? "地点登録画面を開く" : "仮ポイントを作成すると登録できます";
   elements.actionLinkButton.classList.toggle("is-active", false);
   elements.actionRouteButton.classList.toggle("is-active", routeActive);
   elements.actionRouteButton.setAttribute("aria-pressed", String(routeActive));
@@ -2317,6 +2325,13 @@ function connectSelectedPoints() {
 
 function submitPendingPoint() {
   if (!validGeo(state.pendingGeo)) {
+    if (state.selection.length === 0 && mobilePageUiActive()) {
+      state.mode = "add";
+      state.editingPointId = null;
+      state.pendingLinkPointId = null;
+      elements.shareImportStatus.value = "地点情報を入力できます";
+      setMobilePage("register");
+    }
     return;
   }
 
@@ -2370,6 +2385,9 @@ function startEditingSelectedPoint() {
   elements.pointPhoto.value = "";
   fillFormFromGeo(geo);
   elements.shareImportStatus.value = "編集: 内容を更新できます";
+  if (mobilePageUiActive()) {
+    setMobilePage("register");
+  }
   render();
 }
 
@@ -4299,6 +4317,7 @@ function bindEvents() {
     elements.observationImportFile.value = "";
   });
   elements.clearButton.addEventListener("click", clearWorkspace);
+  elements.mobileBackButton.addEventListener("click", () => setMobilePage("map"));
   for (const tab of elements.mobilePageTabs) {
     tab.addEventListener("click", () => setMobilePage(tab.dataset.mobilePage));
   }
