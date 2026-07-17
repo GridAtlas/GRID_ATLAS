@@ -811,7 +811,7 @@ textarea {
   }
 
   .actionbar {
-    padding: 10px 10px max(16px, calc(10px + env(safe-area-inset-bottom)));
+    padding: 10px 14px max(32px, calc(18px + env(safe-area-inset-bottom)));
   }
 
   .selection-info {
