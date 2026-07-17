@@ -7,6 +7,7 @@ const POINT_RADIUS = 8;
 const POINTER_MOVE_THRESHOLD = 3;
 const CURRENT_LOCATION_ID = "__current_location__";
 const LOADED_OBSERVATION_PREFIX = "__loaded_observation__";
+const DEFAULT_POINT_LIST_ID = "local";
 const FOLLOW_SCALE_MANUAL = "manual";
 const FOLLOW_SCALE_CENTER = "center";
 const FOLLOW_SCALE_TARGET = "target";
@@ -102,6 +103,7 @@ const elements = {
   replacePointsButton: document.querySelector("#replacePointsButton"),
   appendPointsButton: document.querySelector("#appendPointsButton"),
   pointImportFile: document.querySelector("#pointImportFile"),
+  pointListItems: document.querySelector("#pointListItems"),
   exportObservationButton: document.querySelector("#exportObservationButton"),
   replaceObservationButton: document.querySelector("#replaceObservationButton"),
   appendObservationButton: document.querySelector("#appendObservationButton"),
@@ -110,8 +112,9 @@ const elements = {
 };
 
 const state = {
-  version: 2,
+  version: 3,
   points: [],
+  pointLists: [],
   links: [],
   mode: "inspect",
   selection: [],
@@ -146,7 +149,6 @@ const state = {
   pointer: createPointerGestureState()
 };
 
-let pendingPointImportMode = "replace";
 let pendingObservationImportMode = "replace";
 
 const CANVAS_PALETTES = {
@@ -264,10 +266,28 @@ function loadWorkspace() {
 
 function applyWorkspace(workspace) {
   const origin = validGeo(workspace.origin) ? workspace.origin : null;
-  state.version = 2;
-  state.points = Array.isArray(workspace.points)
-    ? workspace.points.map((point) => normalizePoint(point, origin)).filter(Boolean)
-    : [];
+  const existingPointIds = new Set();
+  state.version = 3;
+
+  if (Array.isArray(workspace.pointLists)) {
+    state.pointLists = workspace.pointLists
+      .map((list, index) => normalizePointList(list, existingPointIds, index === 0 ? "マイ地点" : `地点リスト ${index + 1}`))
+      .filter(Boolean);
+  } else {
+    const points = Array.isArray(workspace.points)
+      ? workspace.points.map((point) => normalizePoint(point, origin)).filter(Boolean)
+      : [];
+    for (const point of points) {
+      while (existingPointIds.has(point.id)) {
+        point.id = createId();
+      }
+      existingPointIds.add(point.id);
+    }
+    state.pointLists = [createLocalPointList(points)];
+  }
+
+  ensurePointLists();
+  refreshVisiblePoints();
   state.links = Array.isArray(workspace.links)
     ? workspace.links.filter((link) => validLinkEndpointId(link.a) && validLinkEndpointId(link.b))
     : [];
@@ -307,6 +327,148 @@ function normalizePoint(point, origin) {
   };
 }
 
+function createPointList(options = {}) {
+  const now = new Date().toISOString();
+  return {
+    id: typeof options.id === "string" && options.id ? options.id : createId(),
+    name: typeof options.name === "string" && options.name.trim() ? options.name.trim() : "地点リスト",
+    description: typeof options.description === "string" ? options.description : "",
+    author: typeof options.author === "string" ? options.author : "",
+    visible: options.visible !== false,
+    editable: Boolean(options.editable),
+    source: typeof options.source === "string" ? options.source : "import",
+    importedAt: typeof options.importedAt === "string" ? options.importedAt : now,
+    createdAt: typeof options.createdAt === "string" ? options.createdAt : now,
+    updatedAt: typeof options.updatedAt === "string" ? options.updatedAt : now,
+    points: Array.isArray(options.points) ? options.points : []
+  };
+}
+
+function createLocalPointList(points = []) {
+  return createPointList({
+    id: DEFAULT_POINT_LIST_ID,
+    name: "マイ地点",
+    visible: true,
+    editable: true,
+    source: "local",
+    importedAt: "",
+    points
+  });
+}
+
+function ensurePointLists() {
+  if (!Array.isArray(state.pointLists)) {
+    state.pointLists = [];
+  }
+
+  if (state.pointLists.length === 0) {
+    state.pointLists = [createLocalPointList(Array.isArray(state.points) ? state.points : [])];
+  }
+
+  if (!state.pointLists.some((list) => list.id === DEFAULT_POINT_LIST_ID)) {
+    state.pointLists.unshift(createLocalPointList());
+  }
+}
+
+function visiblePointLists() {
+  ensurePointLists();
+  return state.pointLists.filter((list) => list.visible !== false);
+}
+
+function allPointListPoints() {
+  ensurePointLists();
+  return state.pointLists.flatMap((list) => list.points);
+}
+
+function visiblePointIdSet() {
+  return new Set(visiblePointLists().flatMap((list) => list.points.map((point) => point.id)));
+}
+
+function refreshVisiblePoints() {
+  state.points = visiblePointLists().flatMap((list) => list.points);
+}
+
+function localPointList() {
+  ensurePointLists();
+  let list = state.pointLists.find((item) => item.id === DEFAULT_POINT_LIST_ID);
+  if (!list) {
+    list = createLocalPointList();
+    state.pointLists.unshift(list);
+  }
+  return list;
+}
+
+function pointListForPoint(pointId) {
+  ensurePointLists();
+  return state.pointLists.find((list) => list.points.some((point) => point.id === pointId)) ?? null;
+}
+
+function findPointAny(pointId) {
+  return allPointListPoints().find((point) => point.id === pointId) ?? null;
+}
+
+function pointEditable(pointId) {
+  return Boolean(pointListForPoint(pointId)?.editable);
+}
+
+function normalizePointList(list, existingPointIds = new Set(), fallbackName = "地点リスト") {
+  const rawPoints = Array.isArray(list?.points) ? list.points : [];
+  const points = rawPoints.map((point) => normalizePoint(point, null)).filter(Boolean);
+  for (const point of points) {
+    while (existingPointIds.has(point.id)) {
+      point.id = createId();
+    }
+    existingPointIds.add(point.id);
+  }
+
+  const normalized = createPointList({
+    id: typeof list?.id === "string" && list.id ? list.id : createId(),
+    name: typeof list?.name === "string" && list.name.trim() ? list.name.trim() : fallbackName,
+    description: typeof list?.description === "string" ? list.description : "",
+    author: typeof list?.author === "string" ? list.author : "",
+    visible: list?.visible !== false,
+    editable: Boolean(list?.editable),
+    source: typeof list?.source === "string" ? list.source : "import",
+    importedAt: typeof list?.importedAt === "string" ? list.importedAt : new Date().toISOString(),
+    createdAt: typeof list?.createdAt === "string" ? list.createdAt : new Date().toISOString(),
+    updatedAt: typeof list?.updatedAt === "string" ? list.updatedAt : new Date().toISOString(),
+    points
+  });
+
+  if (normalized.id === DEFAULT_POINT_LIST_ID) {
+    normalized.name = normalized.name || "マイ地点";
+    normalized.editable = true;
+    normalized.source = "local";
+  }
+
+  return normalized;
+}
+
+function pruneHiddenPointReferences() {
+  const visibleIds = visiblePointIdSet();
+  state.selection = state.selection.filter((entry) => entry.type !== "point" || visibleIds.has(entry.id));
+  state.routeSelectionIds = state.routeSelectionIds.filter((id) => visibleIds.has(id));
+
+  if (state.routeStartPointId && state.routeStartPointId !== CURRENT_LOCATION_ID && !visibleIds.has(state.routeStartPointId)) {
+    clearRouteStartState();
+  }
+
+  if (state.targetPointId && !visibleIds.has(state.targetPointId)) {
+    clearTarget({ render: false });
+  }
+
+  if (state.routeResult?.pointIds?.some((id) => !visibleIds.has(id))) {
+    state.routeResult = null;
+  }
+}
+
+function safeFilenamePart(value) {
+  return String(value || "list")
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, "-")
+    .replace(/\s+/g, "-")
+    .slice(0, 60) || "list";
+}
 function pointGeoFromAny(point, origin) {
   if (validGeo(point.geo)) {
     return normalizeGeo(point.geo);
@@ -330,10 +492,11 @@ function pointGeoFromAny(point, origin) {
 }
 
 function workspaceSnapshot() {
+  ensurePointLists();
   return {
-    version: 2,
+    version: 3,
     projection: "web-mercator",
-    points: state.points,
+    pointLists: state.pointLists,
     links: state.links
   };
 }
@@ -817,12 +980,15 @@ function draw() {
 }
 
 function render() {
+  refreshVisiblePoints();
+  pruneHiddenPointReferences();
   normalizeSelection();
   syncCanvasSize();
   draw();
   renderDetails();
   renderAnalysis();
   renderRoute();
+  renderPointLists();
   renderSelectedSummary();
   renderSelectionInfo();
   renderStatus();
@@ -1039,7 +1205,7 @@ function renderActionButtons() {
   const restoreCandidateCount = deletedSnapshotItemCount();
   const editCandidate = editableSelectedPoint();
   const mapCandidate = mapPointForSelection();
-  const deletablePointCount = pointIds.filter((id) => id !== CURRENT_LOCATION_ID).length;
+  const deletablePointCount = pointIds.filter((id) => id !== CURRENT_LOCATION_ID && pointEditable(id)).length;
   const observationSelected = isLoadedObservationSelected();
   const canDelete = deletablePointCount + linkIds.length > 0 || observationSelected;
 
@@ -1675,7 +1841,6 @@ function externalMapUrl(provider, geo, title) {
 }
 function renderAnalysis() {
   elements.pointCount.textContent = String(state.points.length);
-  elements.linkCount.textContent = String(state.links.length);
 
   const linkDistances = state.links
     .map((link) => {
@@ -1685,6 +1850,7 @@ function renderAnalysis() {
     })
     .filter(Boolean);
 
+  elements.linkCount.textContent = String(linkDistances.length);
   const total = linkDistances.reduce((sum, item) => sum + item.distance, 0);
   const longest = linkDistances.reduce((max, item) => Math.max(max, item.distance), 0);
 
@@ -1729,6 +1895,84 @@ function renderAnalysis() {
   }
 }
 
+
+function renderPointLists() {
+  ensurePointLists();
+  elements.pointListItems.replaceChildren();
+
+  for (const list of state.pointLists) {
+    const row = document.createElement("div");
+    row.className = "point-list-row";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = list.visible !== false;
+    checkbox.title = "グリッドに表示";
+    checkbox.addEventListener("change", () => setPointListVisible(list.id, checkbox.checked));
+
+    const name = document.createElement("div");
+    name.className = "point-list-name";
+    const title = document.createElement("strong");
+    title.textContent = list.name || "地点リスト";
+    const meta = document.createElement("span");
+    const source = list.editable ? "編集可" : "共有リスト";
+    meta.textContent = `${list.points.length}点 / ${source}`;
+    name.append(title, meta);
+
+    const save = document.createElement("button");
+    save.type = "button";
+    save.textContent = "保存";
+    save.addEventListener("click", () => exportPointList(list.id));
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "danger-button";
+    remove.textContent = "削除";
+    remove.disabled = list.id === DEFAULT_POINT_LIST_ID;
+    remove.title = remove.disabled ? "マイ地点は削除できません" : "リストを削除";
+    remove.addEventListener("click", () => deletePointList(list.id));
+
+    row.append(checkbox, name, save, remove);
+    elements.pointListItems.append(row);
+  }
+}
+
+function setPointListVisible(listId, visible) {
+  const list = state.pointLists.find((item) => item.id === listId);
+  if (!list) {
+    return;
+  }
+
+  list.visible = Boolean(visible);
+  list.updatedAt = new Date().toISOString();
+  refreshVisiblePoints();
+  pruneHiddenPointReferences();
+  persistWorkspace();
+  render();
+}
+
+function deletePointList(listId) {
+  const list = state.pointLists.find((item) => item.id === listId);
+  if (!list || list.id === DEFAULT_POINT_LIST_ID) {
+    return;
+  }
+
+  const confirmed = window.confirm(`${list.name || "地点リスト"}を削除しますか。`);
+  if (!confirmed) {
+    return;
+  }
+
+  const pointIds = new Set(list.points.map((point) => point.id));
+  state.pointLists = state.pointLists.filter((item) => item.id !== listId);
+  state.links = state.links.filter((link) => !pointIds.has(link.a) && !pointIds.has(link.b));
+  ensurePointLists();
+  refreshVisiblePoints();
+  pruneHiddenPointReferences();
+  state.selection = state.selection.filter((entry) => entry.type !== "point" || !pointIds.has(entry.id));
+  normalizeSelection();
+  persistWorkspace();
+  render();
+}
 
 function renderRoute() {
   normalizeRouteSelection();
@@ -1825,7 +2069,7 @@ function findPointIn(id, points) {
 }
 
 function validLinkEndpointId(id) {
-  return id === CURRENT_LOCATION_ID || Boolean(findPointIn(id, state.points));
+  return id === CURRENT_LOCATION_ID || Boolean(findPointAny(id));
 }
 
 function findLink(id) {
@@ -1856,7 +2100,8 @@ function isValidSelectionEntry(entry) {
   }
 
   if (entry.type === "link") {
-    return Boolean(findLink(entry.id));
+    const link = findLink(entry.id);
+    return Boolean(link && linkEndpoints(link));
   }
 
   if (entry.type === "observation") {
@@ -1912,7 +2157,13 @@ function selectedPointIds() {
 }
 
 function selectedLinkIds() {
-  return state.selection.filter((entry) => entry.type === "link" && findLink(entry.id)).map((entry) => entry.id);
+  return state.selection.filter((entry) => {
+    if (entry.type !== "link") {
+      return false;
+    }
+    const link = findLink(entry.id);
+    return Boolean(link && linkEndpoints(link));
+  }).map((entry) => entry.id);
 }
 
 function selectedObservationIds() {
@@ -1931,8 +2182,8 @@ function selectedCounts() {
 }
 
 function editableSelectedPoint() {
-  const pointIds = selectedPointIds().filter((id) => id !== CURRENT_LOCATION_ID);
-  return pointIds.length === 1 && selectedCounts().total === 1 ? findPointIn(pointIds[0], state.points) : null;
+  const pointIds = selectedPointIds().filter((id) => id !== CURRENT_LOCATION_ID && pointEditable(id));
+  return pointIds.length === 1 && selectedCounts().total === 1 && pointEditable(pointIds[0]) ? findPointIn(pointIds[0], state.points) : null;
 }
 
 function mapPointForSelection() {
@@ -2417,13 +2668,18 @@ function restoreLastDeleted() {
   }
 
   const restoredSelection = [];
-  const existingPointIds = new Set(state.points.map((point) => point.id));
+  const localList = localPointList();
+  if (snapshotPoints.length > 0) {
+    localList.visible = true;
+  }
+
+  const existingPointIds = new Set(allPointListPoints().map((point) => point.id));
   for (const point of snapshotPoints) {
     if (existingPointIds.has(point.id)) {
       continue;
     }
 
-    state.points.push(clonePlain(point));
+    localList.points.push(clonePlain(point));
     existingPointIds.add(point.id);
     restoredSelection.push({ type: "point", id: point.id });
   }
@@ -2447,6 +2703,7 @@ function restoreLastDeleted() {
   }
 
   state.lastDeleted = null;
+  refreshVisiblePoints();
   state.selection = restoredSelection;
   normalizeSelection();
   state.routeResult = null;
@@ -3095,7 +3352,7 @@ async function submitPoint(event) {
   const file = elements.pointPhoto.files[0] ?? null;
   const photo = file ? await readPhoto(file) : null;
   const createdAt = new Date().toISOString();
-  const fallbackTitle = `Point ${state.points.length + 1}`;
+  const fallbackTitle = `Point ${localPointList().points.length + 1}`;
 
   pauseLocationFollowForManualView();
 
@@ -3137,7 +3394,10 @@ async function submitPoint(event) {
     createdAt
   };
 
-  state.points.push(point);
+  const list = localPointList();
+  list.visible = true;
+  list.points.push(point);
+  refreshVisiblePoints();
   state.selection = [{ type: "point", id: point.id }];
   normalizeSelection();
   state.pendingGeo = null;
@@ -3898,98 +4158,80 @@ function readJsonFile(file) {
   });
 }
 
-function pointListSnapshot() {
+function pointListSnapshot(listId = DEFAULT_POINT_LIST_ID) {
+  ensurePointLists();
+  const list = state.pointLists.find((item) => item.id === listId) ?? localPointList();
   return {
-    type: "grid-atlas-points",
-    version: 1,
+    type: "grid-atlas-point-list",
+    version: 2,
     exportedAt: new Date().toISOString(),
-    points: state.points.map((point) => ({
+    list: {
+      name: list.name || "地点リスト",
+      description: list.description || "",
+      author: list.author || ""
+    },
+    points: list.points.map((point) => ({
       id: point.id,
       title: point.title,
       note: point.note,
       photo: point.photo,
       photoName: point.photoName,
       geo: pointGeo(point),
-      createdAt: point.createdAt
+      createdAt: point.createdAt,
+      updatedAt: point.updatedAt
     }))
   };
 }
 
-function exportPointList() {
-  downloadJson(pointListSnapshot(), `grid-atlas-points-${dateStamp()}.json`);
+function exportPointList(listId = DEFAULT_POINT_LIST_ID) {
+  const list = state.pointLists.find((item) => item.id === listId) ?? localPointList();
+  downloadJson(pointListSnapshot(list.id), `grid-atlas-list-${safeFilenamePart(list.name)}-${dateStamp()}.json`);
 }
 
-function normalizeImportedPoints(points, existingIds = new Set()) {
-  const ids = new Set(existingIds);
-  return points.map((point) => {
-    if (!point || typeof point !== "object") {
-      return null;
-    }
-
-    const normalized = normalizePoint(point, null);
-    if (!normalized) {
-      return null;
-    }
-
-    if (ids.has(normalized.id)) {
-      normalized.id = createId();
-    }
-    ids.add(normalized.id);
-    return normalized;
-  }).filter(Boolean);
-}
-
-function pointListPointsFromPayload(parsed) {
-  if (parsed?.type !== "grid-atlas-points" || !Array.isArray(parsed.points)) {
+function pointListFromPayload(parsed, fileName, existingIds) {
+  if (parsed?.type !== "grid-atlas-point-list" || parsed.version !== 2 || !Array.isArray(parsed.points)) {
     throw new Error("Invalid point list");
   }
 
-  return parsed.points;
+  const listMeta = parsed.list && typeof parsed.list === "object" ? parsed.list : {};
+  const fallbackName = safeFilenamePart(String(fileName || "").replace(/\.json$/i, "")).replace(/-/g, " ") || "読み込みリスト";
+  return normalizePointList({
+    name: typeof listMeta.name === "string" && listMeta.name.trim() ? listMeta.name.trim() : fallbackName,
+    description: typeof listMeta.description === "string" ? listMeta.description : "",
+    author: typeof listMeta.author === "string" ? listMeta.author : "",
+    visible: true,
+    editable: false,
+    source: "import",
+    importedAt: new Date().toISOString(),
+    points: parsed.points
+  }, existingIds, fallbackName);
 }
 
-async function importPointListFiles(files, mode) {
+async function importPointListFiles(files) {
   const fileItems = selectedFiles(files);
   if (fileItems.length === 0) {
     return;
   }
 
   try {
-    const parsedFiles = await Promise.all(fileItems.map(readJsonFile));
-    const rawPoints = parsedFiles.flatMap(pointListPointsFromPayload);
-    const existingIds = mode === "append" ? new Set(state.points.map((point) => point.id)) : new Set();
-    const importedPoints = normalizeImportedPoints(rawPoints, existingIds);
-
-    if (mode === "replace") {
-      if (!confirmObservationReset("地点リストを新規読み込み")) {
-        return;
-      }
-
-      state.points = importedPoints;
-      state.links = [];
-      state.selection = [];
-      state.selectedPointId = null;
-      state.selectedLinkId = null;
-      state.pendingLinkPointId = null;
-      state.routeSelectionIds = [];
-      clearRouteStartState();
-      state.routeReturnToStart = false;
-      state.routeResult = null;
-      state.loadedObservations = [];
-      clearTarget({ render: false });
-    } else {
-      state.points.push(...importedPoints);
-      state.selection = importedPoints.map((point) => ({ type: "point", id: point.id }));
-      normalizeSelection();
+    const existingIds = new Set(allPointListPoints().map((point) => point.id));
+    const importedLists = [];
+    for (const file of fileItems) {
+      const parsed = await readJsonFile(file);
+      importedLists.push(pointListFromPayload(parsed, file.name, existingIds));
     }
 
+    state.pointLists.push(...importedLists);
+    refreshVisiblePoints();
+    state.selection = importedLists.flatMap((list) => list.points.map((point) => ({ type: "point", id: point.id })));
+    normalizeSelection();
     persistWorkspace();
-    elements.shareImportStatus.value = mode === "replace" ? "地点リストを新規読み込みしました" : "地点リストを追加しました";
+    elements.shareImportStatus.value = `${importedLists.length}リストを読み込みました`;
     fitToPoints();
   } catch {
-    elements.shareImportStatus.value = "読み込みエラー";
+    elements.shareImportStatus.value = "地点リスト読み込みエラー";
   }
 }
-
 function observationExportRecords() {
   const records = state.loadedObservations.map((observation) => ({
     ...clonePlain(observation),
@@ -4150,7 +4392,8 @@ function clearWorkspace() {
     return;
   }
 
-  state.points = [];
+  state.pointLists = [createLocalPointList()];
+  refreshVisiblePoints();
   state.links = [];
   state.selection = [];
   state.selectedPointId = null;
@@ -4171,7 +4414,7 @@ function clearWorkspace() {
 
 function deleteSelectedPoint() {
   normalizeSelection();
-  const pointIds = selectedPointIds().filter((id) => id !== CURRENT_LOCATION_ID);
+  const pointIds = selectedPointIds().filter((id) => id !== CURRENT_LOCATION_ID && pointEditable(id));
   const explicitLinkIds = selectedLinkIds();
   const selectedObservations = selectedLoadedObservations();
   const selectedObservationIdSet = new Set(selectedObservations.map((observation) => observation.id));
@@ -4212,7 +4455,12 @@ function deleteSelectedPoint() {
   if (selectedObservationIdSet.size > 0) {
     state.loadedObservations = state.loadedObservations.filter((observation) => !selectedObservationIdSet.has(observation.id));
   }
-  state.points = state.points.filter((item) => !pointIdSet.has(item.id));
+  for (const list of state.pointLists) {
+    if (list.editable) {
+      list.points = list.points.filter((item) => !pointIdSet.has(item.id));
+    }
+  }
+  refreshVisiblePoints();
   state.links = state.links.filter((item) => !linkIdSet.has(item.id));
   state.selection = [];
   state.selectedPointId = null;
@@ -4286,17 +4534,15 @@ function bindEvents() {
   elements.deletePointButton.addEventListener("click", deleteSelectedPoint);
   elements.exportPointsButton.addEventListener("click", exportPointList);
   elements.replacePointsButton.addEventListener("click", () => {
-    pendingPointImportMode = "replace";
     elements.pointImportFile.click();
   });
   elements.appendPointsButton.addEventListener("click", () => {
-    pendingPointImportMode = "append";
     elements.pointImportFile.click();
   });
   elements.pointImportFile.addEventListener("change", () => {
     const files = selectedFiles(elements.pointImportFile.files);
     if (files.length > 0) {
-      void importPointListFiles(files, pendingPointImportMode);
+      void importPointListFiles(files);
     }
     elements.pointImportFile.value = "";
   });
