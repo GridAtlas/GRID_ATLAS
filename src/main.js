@@ -3321,10 +3321,6 @@ function startLocationFollow(options = {}) {
     return;
   }
 
-  if (state.locationWatchId !== null) {
-    return;
-  }
-
   const autoRouteStart = !state.routeStartPointId;
   state.followCurrentLocation = true;
   state.locationFollowFillForm = Boolean(options.fillForm);
