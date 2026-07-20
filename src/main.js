@@ -28,6 +28,7 @@ const OBSERVATION_ACCURACY_FACTOR = 1.5;
 const OBSERVATION_MAX_ACCURACY_METERS = 50;
 const OBSERVATION_MAX_POINTS = 2000;
 const DEFAULT_CENTER = projectLatLng(35.681236, 139.767125);
+const MOBILE_GRID_PAGES = ["grid", "points", "lists"];
 
 const canvas = document.querySelector("#gridCanvas");
 const context = canvas.getContext("2d");
@@ -69,6 +70,10 @@ const elements = {
   mobileBackButton: document.querySelector("#mobileBackButton"),
   mobilePageTabs: Array.from(document.querySelectorAll("[data-mobile-page]")),
   mobilePanels: Array.from(document.querySelectorAll("[data-mobile-panel]")),
+  mobileGridTabs: Array.from(document.querySelectorAll("[data-mobile-grid-page]")),
+  mobileGridPanels: Array.from(document.querySelectorAll("[data-mobile-grid-panel]")),
+  mobilePointCount: document.querySelector("#mobilePointCount"),
+  mobilePointItems: document.querySelector("#mobilePointItems"),
   pointForm: document.querySelector("#pointForm"),
   pointTitle: document.querySelector("#pointTitle"),
   pointLat: document.querySelector("#pointLat"),
@@ -117,7 +122,7 @@ const elements = {
   replacePointsButton: document.querySelector("#replacePointsButton"),
   appendPointsButton: document.querySelector("#appendPointsButton"),
   pointImportFile: document.querySelector("#pointImportFile"),
-  pointListItems: document.querySelector("#pointListItems"),
+  pointListItemContainers: Array.from(document.querySelectorAll("[data-point-list-items]")),
   exportObservationButton: document.querySelector("#exportObservationButton"),
   replaceObservationButton: document.querySelector("#replaceObservationButton"),
   appendObservationButton: document.querySelector("#appendObservationButton"),
@@ -133,6 +138,7 @@ const state = {
   pointLists: [],
   links: [],
   mode: "inspect",
+  mobileGridPage: "grid",
   selection: [],
   selectedPointId: null,
   selectedLinkId: null,
@@ -225,6 +231,7 @@ const CANVAS_PALETTES = {
 const TRANSLATIONS = {
   ja: {
     "settings.title": "設定",
+    "settings.menu": "メニュー",
     "settings.design": "デザイン",
     "settings.language": "言語",
     "settings.units": "距離単位",
@@ -238,9 +245,13 @@ const TRANSLATIONS = {
     "edition.web": "WEB版",
     "page.analysis": "分析",
     "page.data": "データ",
+    "page.grid": "グリッド",
+    "page.points": "地点一覧",
+    "page.lists": "リスト一覧",
     "summary.selected": "選択中",
     "summary.info": "情報",
     "state.unselected": "未選択",
+    "state.noPoints": "地点なし",
     "action.register": "登録",
     "action.connect": "接続",
     "action.center": "中心",
@@ -277,6 +288,8 @@ const TRANSLATIONS = {
     "panel.analysis": "分析",
     "panel.route": "巡回ルート",
     "panel.data": "データ",
+    "panel.points": "地点一覧",
+    "panel.lists": "リスト一覧",
     "field.title": "見出し",
     "field.lat": "緯度",
     "field.lng": "経度",
@@ -333,6 +346,7 @@ const TRANSLATIONS = {
   },
   en: {
     "settings.title": "Settings",
+    "settings.menu": "Menu",
     "settings.design": "Design",
     "settings.language": "Language",
     "settings.units": "Distance Unit",
@@ -346,9 +360,13 @@ const TRANSLATIONS = {
     "edition.web": "Web",
     "page.analysis": "Analysis",
     "page.data": "Data",
+    "page.grid": "Grid",
+    "page.points": "Points",
+    "page.lists": "Lists",
     "summary.selected": "Selected",
     "summary.info": "Info",
     "state.unselected": "None",
+    "state.noPoints": "No points",
     "action.register": "Add",
     "action.connect": "Link",
     "action.center": "Center",
@@ -385,6 +403,8 @@ const TRANSLATIONS = {
     "panel.analysis": "Analysis",
     "panel.route": "Route",
     "panel.data": "Data",
+    "panel.points": "Points",
+    "panel.lists": "Lists",
     "field.title": "Title",
     "field.lat": "Latitude",
     "field.lng": "Longitude",
@@ -1311,6 +1331,8 @@ function render() {
   renderAnalysis();
   renderRoute();
   renderPointLists();
+  renderPointIndex();
+  renderMobileGridTabs();
   renderSelectedSummary();
   renderSelectionInfo();
   renderStatus();
@@ -1327,7 +1349,7 @@ function renderSelectedSummary() {
 }
 
 function validMobilePageName(value) {
-  return ["map", "register", "analysis", "data"].includes(value);
+  return ["map", "register", "data"].includes(value);
 }
 
 function storedMobilePageName() {
@@ -1369,8 +1391,36 @@ function setMobilePage(name, options = {}) {
   }
 }
 
+function validMobileGridPageName(value) {
+  return MOBILE_GRID_PAGES.includes(value);
+}
+
+function setMobileGridPage(name) {
+  const pageName = validMobileGridPageName(name) ? name : "grid";
+  state.mobileGridPage = pageName;
+
+  for (const tab of elements.mobileGridTabs) {
+    const active = tab.dataset.mobileGridPage === pageName;
+    tab.classList.toggle("is-active", active);
+    tab.setAttribute("aria-pressed", String(active));
+  }
+
+  for (const panel of elements.mobileGridPanels) {
+    panel.classList.toggle("is-mobile-grid-active", panel.dataset.mobileGridPanel === pageName);
+  }
+
+  if (pageName === "grid") {
+    scheduleCanvasResize();
+  }
+}
+
+function renderMobileGridTabs() {
+  setMobileGridPage(state.mobileGridPage);
+}
+
 function initMobilePages() {
   setMobilePage(storedMobilePageName(), { persist: false });
+  setMobileGridPage("grid");
 }
 
 function mobilePageUiActive() {
@@ -1512,8 +1562,9 @@ function renderActionButtons() {
   const pointIds = selectedPointIds();
   const linkIds = selectedLinkIds();
   const pointPair = selectedPointPair();
-  const targetCandidate = lastTargetableSelectedPoint();
-  const routeStartCandidate = lastSelectedPoint();
+  const singlePointCandidate = singleSelectedPoint();
+  const targetCandidate = singleTargetableSelectedPoint();
+  const routeStartCandidate = singlePointCandidate;
   const routePlan = routePlanFromCurrentSelection();
   const routeActive = Boolean(state.routeResult);
   const routeStart = routeStartPoint();
@@ -2067,7 +2118,7 @@ function maybeSaveObservationRecord() {
 }
 
 function toggleTargetForSelection() {
-  const point = lastTargetableSelectedPoint();
+  const point = singleTargetableSelectedPoint();
   if (!point) {
     return;
   }
@@ -2219,47 +2270,96 @@ function renderAnalysis() {
 }
 
 
-function renderPointLists() {
+function renderPointIndex() {
+  if (!elements.mobilePointItems || !elements.mobilePointCount) {
+    return;
+  }
+
   ensurePointLists();
-  elements.pointListItems.replaceChildren();
+  const rows = visiblePointLists().flatMap((list) => list.points.map((point) => ({ point, list })));
+  elements.mobilePointCount.textContent = `${rows.length}${t("label.points")}`;
+  elements.mobilePointItems.replaceChildren();
 
-  for (const list of state.pointLists) {
-    const row = document.createElement("div");
-    row.className = "point-list-row";
+  if (rows.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = t("state.noPoints");
+    elements.mobilePointItems.append(empty);
+    return;
+  }
 
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = list.visible !== false;
-    checkbox.title = "グリッドに表示";
-    checkbox.addEventListener("change", () => setPointListVisible(list.id, checkbox.checked));
+  const current = currentLocationPoint();
+  for (const { point, list } of rows) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "point-index-row";
+    row.classList.toggle("is-active", isPointSelected(point.id));
+    row.setAttribute("aria-pressed", String(isPointSelected(point.id)));
 
-    const name = document.createElement("div");
-    name.className = "point-list-name";
+    const name = document.createElement("span");
+    name.className = "point-index-name";
     const title = document.createElement("strong");
-    title.textContent = list.name || "地点リスト";
+    title.textContent = point.title || "Point";
     const meta = document.createElement("span");
-    const source = list.editable ? "編集可" : "共有リスト";
-    meta.textContent = `${list.points.length}点 / ${source}`;
+    meta.textContent = list.name || t("data.pointLists");
     name.append(title, meta);
 
-    const save = document.createElement("button");
-    save.type = "button";
-    save.textContent = "保存";
-    save.addEventListener("click", () => exportPointList(list.id));
+    const distance = document.createElement("span");
+    distance.className = "point-index-distance";
+    distance.textContent = current ? formatDistance(distanceBetween(current, point)) : `${formatCoordinate(pointGeo(point).lat)}, ${formatCoordinate(pointGeo(point).lng)}`;
 
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "danger-button";
-    remove.textContent = "削除";
-    remove.disabled = list.id === DEFAULT_POINT_LIST_ID;
-    remove.title = remove.disabled ? "マイ地点は削除できません" : "リストを削除";
-    remove.addEventListener("click", () => deletePointList(list.id));
-
-    row.append(checkbox, name, save, remove);
-    elements.pointListItems.append(row);
+    row.append(name, distance);
+    row.addEventListener("click", () => toggleSelection("point", point.id));
+    elements.mobilePointItems.append(row);
   }
 }
 
+function createPointListRow(list) {
+  const row = document.createElement("div");
+  row.className = "point-list-row";
+
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.checked = list.visible !== false;
+  checkbox.title = "グリッドに表示";
+  checkbox.addEventListener("change", () => setPointListVisible(list.id, checkbox.checked));
+
+  const name = document.createElement("div");
+  name.className = "point-list-name";
+  const title = document.createElement("strong");
+  title.textContent = list.name || "地点リスト";
+  const meta = document.createElement("span");
+  const source = list.editable ? "編集可" : "共有リスト";
+  meta.textContent = `${list.points.length}${t("label.points")} / ${source}`;
+  name.append(title, meta);
+
+  const save = document.createElement("button");
+  save.type = "button";
+  save.textContent = t("button.save");
+  save.addEventListener("click", () => exportPointList(list.id));
+
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "danger-button";
+  remove.textContent = "削除";
+  remove.disabled = list.id === DEFAULT_POINT_LIST_ID;
+  remove.title = remove.disabled ? "マイ地点は削除できません" : "リストを削除";
+  remove.addEventListener("click", () => deletePointList(list.id));
+
+  row.append(checkbox, name, save, remove);
+  return row;
+}
+
+function renderPointLists() {
+  ensurePointLists();
+
+  for (const container of elements.pointListItemContainers) {
+    container.replaceChildren();
+    for (const list of state.pointLists) {
+      container.append(createPointListRow(list));
+    }
+  }
+}
 function setPointListVisible(listId, visible) {
   const list = state.pointLists.find((item) => item.id === listId);
   if (!list) {
@@ -2510,7 +2610,7 @@ function editableSelectedPoint() {
 }
 
 function mapPointForSelection() {
-  return lastSelectedPoint();
+  return singleSelectedPoint();
 }
 
 function deletedSnapshotItemCount() {
@@ -2584,6 +2684,21 @@ function selectedObservation() {
 function selectedPoint() {
   const primary = primarySelection();
   return primary?.type === "point" ? findPoint(primary.id) : null;
+}
+
+function singleSelectedPoint() {
+  const counts = selectedCounts();
+  if (counts.total !== 1 || counts.point !== 1) {
+    return null;
+  }
+
+  const entry = state.selection[0];
+  return entry?.type === "point" ? findPoint(entry.id) : null;
+}
+
+function singleTargetableSelectedPoint() {
+  const point = singleSelectedPoint();
+  return point && !point.isVirtual ? point : null;
 }
 
 function lastSelectedPoint() {
@@ -2735,7 +2850,7 @@ function setRouteFromSelectedPoints() {
 }
 
 function setRouteStartFromSelection() {
-  const point = lastSelectedPoint();
+  const point = singleSelectedPoint();
   if (!point) {
     return;
   }
@@ -4932,7 +5047,13 @@ function bindEvents() {
   elements.clearButton.addEventListener("click", clearWorkspace);
   elements.mobileBackButton.addEventListener("click", () => setMobilePage("map"));
   for (const tab of elements.mobilePageTabs) {
-    tab.addEventListener("click", () => setMobilePage(tab.dataset.mobilePage));
+    tab.addEventListener("click", () => {
+      setMobilePage(tab.dataset.mobilePage);
+      setSettingsMenuOpen(false);
+    });
+  }
+  for (const tab of elements.mobileGridTabs) {
+    tab.addEventListener("click", () => setMobileGridPage(tab.dataset.mobileGridPage));
   }
 
   canvas.addEventListener("pointerdown", (event) => {

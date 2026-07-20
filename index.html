@@ -9,8 +9,8 @@
     <link rel="icon" href="assets/icon-retro.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-retro.png">
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("grid-atlas-theme")==="light"?"light":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=34">
-    <script src="src/main.js?v=90" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=35">
+    <script src="src/main.js?v=91" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -24,6 +24,10 @@
           <div class="settings-menu" id="settingsMenu">
             <button id="settingsMenuButton" class="settings-menu-button" type="button" aria-expanded="false" aria-controls="settingsPanel" title="設定">☰</button>
             <div id="settingsPanel" class="settings-panel" hidden>
+              <div class="settings-nav">
+                <span class="settings-nav-title" data-i18n="settings.menu">メニュー</span>
+                <button class="settings-nav-button" type="button" data-mobile-page="data" aria-pressed="false" data-i18n="page.data">データ</button>
+              </div>
               <h2 data-i18n="settings.title">設定</h2>
               <label>
                 <span data-i18n="settings.design">デザイン</span>
@@ -53,10 +57,8 @@
             </div>
           </div>
         </div>
-        <nav class="mobile-page-tabs" aria-label="スマホ用ページ切替">
-          <button class="mobile-page-tab" type="button" data-mobile-page="analysis" aria-pressed="false" data-i18n="page.analysis">分析</button>
-          <button class="mobile-page-tab" type="button" data-mobile-page="data" aria-pressed="false" data-i18n="page.data">データ</button>
-        </nav>
+
+
         <div class="selected-summary selected-summary-mobile" aria-live="polite">
           <span data-i18n="summary.selected">選択中</span>
           <strong id="mobileSelectedTitle">未選択</strong>
@@ -70,16 +72,33 @@
             <strong id="selectionInfoText">未選択</strong>
           </div>
 
-          <section class="grid-stage" aria-label="格子">
-            <canvas id="gridCanvas" aria-label="地点格子"></canvas>
-            <div class="canvas-tools" aria-label="表示操作">
-              <button id="zoomInButton" class="icon-button" type="button" title="拡大">＋</button>
-              <button id="zoomOutButton" class="icon-button" type="button" title="縮小">−</button>
-              <button id="fitButton" class="icon-button" type="button" title="全体表示">□</button>
-              <button id="originButton" class="icon-button" type="button" aria-pressed="false" title="現在地を中央にして画面追従">⌾</button>
-            </div>
-            <output id="statusLine" class="status-line" aria-live="polite"></output>
-          </section>
+          <div class="map-content">
+            <section class="grid-stage is-mobile-grid-active" data-mobile-grid-panel="grid" aria-label="格子">
+              <canvas id="gridCanvas" aria-label="地点格子"></canvas>
+              <div class="canvas-tools" aria-label="表示操作">
+                <button id="zoomInButton" class="icon-button" type="button" title="拡大">＋</button>
+                <button id="zoomOutButton" class="icon-button" type="button" title="縮小">−</button>
+                <button id="fitButton" class="icon-button" type="button" title="全体表示">□</button>
+                <button id="originButton" class="icon-button" type="button" aria-pressed="false" title="現在地を中央にして画面追従">⌾</button>
+              </div>
+              <output id="statusLine" class="status-line" aria-live="polite"></output>
+            </section>
+
+            <section class="mobile-content-panel" data-mobile-grid-panel="points" aria-label="地点一覧">
+              <div class="mobile-content-heading">
+                <h2 data-i18n="panel.points">地点一覧</h2>
+                <span id="mobilePointCount" class="panel-count">0点</span>
+              </div>
+              <div id="mobilePointItems" class="mobile-point-items"></div>
+            </section>
+
+            <section class="mobile-content-panel" data-mobile-grid-panel="lists" aria-label="リスト一覧">
+              <div class="mobile-content-heading">
+                <h2 data-i18n="panel.lists">リスト一覧</h2>
+              </div>
+              <div id="mobilePointListItems" class="point-list-items" data-point-list-items></div>
+            </section>
+          </div>
 
           <nav class="actionbar" aria-label="地点操作">
             <button id="actionRegisterButton" class="action-button" type="button" title="この位置を登録" disabled>
@@ -130,6 +149,11 @@
               <span aria-hidden="true">↗</span>
               <span data-i18n="action.map">地図</span>
             </button>
+          </nav>
+          <nav class="mobile-grid-tabs" aria-label="表示切替">
+            <button class="mobile-grid-tab is-active" type="button" data-mobile-grid-page="grid" aria-pressed="true" data-i18n="page.grid">グリッド</button>
+            <button class="mobile-grid-tab" type="button" data-mobile-grid-page="points" aria-pressed="false" data-i18n="page.points">地点一覧</button>
+            <button class="mobile-grid-tab" type="button" data-mobile-grid-page="lists" aria-pressed="false" data-i18n="page.lists">リスト一覧</button>
           </nav>
         </div>
 
@@ -260,7 +284,7 @@
             <h2 data-i18n="panel.data">データ</h2>
             <div class="data-group">
               <h3 data-i18n="data.pointLists">地点リスト</h3>
-              <div id="pointListItems" class="point-list-items"></div>
+              <div id="pointListItems" class="point-list-items" data-point-list-items></div>
               <div class="button-row">
                 <button id="exportPointsButton" type="button" hidden data-i18n="button.save">保存</button>
                 <button id="replacePointsButton" type="button" data-i18n="button.load">読込</button>
