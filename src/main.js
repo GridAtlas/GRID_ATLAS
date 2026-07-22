@@ -3650,9 +3650,11 @@ function fitTargetPoints() {
   }
 
   const points = [...state.points, ...routeStartSnapshot, ...loadedPoints];
-  const current = currentLocationPoint();
-  if (current) {
-    points.push(current);
+  if (state.followCurrentLocation || points.length === 0) {
+    const current = currentLocationPoint();
+    if (current) {
+      points.push(current);
+    }
   }
 
   if (validGeo(state.pendingGeo)) {
