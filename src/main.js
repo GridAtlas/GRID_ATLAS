@@ -3,6 +3,9 @@ const THEME_KEY = "grid-atlas-theme";
 const LANGUAGE_KEY = "grid-atlas-language";
 const DISTANCE_UNIT_KEY = "grid-atlas-distance-unit";
 const ROUTE_RETURN_KEY = "grid-atlas-route-return";
+const MAP_PROVIDER_KEY = "grid-atlas-map-provider";
+const MAP_PROVIDER_GOOGLE = "google";
+const MAP_PROVIDER_APPLE = "apple";
 const GPS_ENABLED_KEY = "grid-atlas-gps-enabled";
 const MOBILE_PAGE_KEY = "grid-atlas-mobile-page";
 const LIGHT_THEME = "light";
@@ -65,6 +68,7 @@ const elements = {
   settingsUnitSelect: document.querySelector("#settingsUnitSelect"),
   settingsRouteReturnToStart: document.querySelector("#settingsRouteReturnToStart"),
   settingsGpsEnabled: document.querySelector("#settingsGpsEnabled"),
+  settingsMapProviderSelect: document.querySelector("#settingsMapProviderSelect"),
   statusLine: document.querySelector("#statusLine"),
   selectionInfoText: document.querySelector("#selectionInfoText"),
   mobileSelectedTitle: document.querySelector("#mobileSelectedTitle"),
@@ -138,6 +142,7 @@ const state = {
   version: 3,
   language: JA_LANGUAGE,
   distanceUnit: METRIC_UNIT,
+  mapProvider: MAP_PROVIDER_GOOGLE,
   points: [],
   pointLists: [],
   links: [],
@@ -246,6 +251,9 @@ const TRANSLATIONS = {
     "settings.units": "距離単位",
     "settings.routeReturn": "巡回で起点に戻る",
     "settings.gps": "GPS機能を使用",
+    "settings.mapProvider": "地図サービス",
+    "settings.mapGoogle": "Googleマップ",
+    "settings.mapApple": "Appleマップ",
     "settings.themeRetro": "レトロ",
     "settings.themeLight": "ライト",
     "settings.languageJa": "日本語",
@@ -362,6 +370,9 @@ const TRANSLATIONS = {
     "settings.units": "Distance Unit",
     "settings.routeReturn": "Return to start in route",
     "settings.gps": "Use GPS",
+    "settings.mapProvider": "Map service",
+    "settings.mapGoogle": "Google Maps",
+    "settings.mapApple": "Apple Maps",
     "settings.themeRetro": "Retro",
     "settings.themeLight": "Light",
     "settings.languageJa": "Japanese",
@@ -525,6 +536,16 @@ function setRouteReturnToStart(value, options = {}) {
   syncSettingsControls();
 }
 
+function setMapProvider(provider, options = {}) {
+  state.mapProvider = provider === MAP_PROVIDER_APPLE ? MAP_PROVIDER_APPLE : MAP_PROVIDER_GOOGLE;
+  if (options.persist !== false) {
+    try {
+      localStorage.setItem(MAP_PROVIDER_KEY, state.mapProvider);
+    } catch {}
+  }
+  syncSettingsControls();
+}
+
 function setGpsEnabled(value, options = {}) {
   const enabled = Boolean(value);
   if (enabled === state.gpsEnabled && options.force !== true) {
@@ -576,6 +597,7 @@ function syncSettingsControls() {
   elements.settingsUnitSelect.value = state.distanceUnit;
   elements.settingsRouteReturnToStart.checked = state.routeReturnToStart;
   elements.settingsGpsEnabled.checked = state.gpsEnabled;
+  elements.settingsMapProviderSelect.value = state.mapProvider;
   elements.routeReturnToStart.checked = state.routeReturnToStart;
 }
 
@@ -584,16 +606,22 @@ function loadPreferences() {
   let unit = METRIC_UNIT;
   let returnToStart = false;
   let gpsEnabled = false;
+  let mapProvider = defaultMapProvider();
   try {
     language = localStorage.getItem(LANGUAGE_KEY) === EN_LANGUAGE ? EN_LANGUAGE : JA_LANGUAGE;
     unit = localStorage.getItem(DISTANCE_UNIT_KEY) === IMPERIAL_UNIT ? IMPERIAL_UNIT : METRIC_UNIT;
     returnToStart = localStorage.getItem(ROUTE_RETURN_KEY) === "true";
     gpsEnabled = localStorage.getItem(GPS_ENABLED_KEY) === "true";
+    const savedMapProvider = localStorage.getItem(MAP_PROVIDER_KEY);
+    if (savedMapProvider === MAP_PROVIDER_APPLE || savedMapProvider === MAP_PROVIDER_GOOGLE) {
+      mapProvider = savedMapProvider;
+    }
   } catch {}
 
   setLanguage(language, { persist: false });
   setDistanceUnit(unit, { persist: false });
   setRouteReturnToStart(returnToStart, { persist: false });
+  setMapProvider(mapProvider, { persist: false });
   state.gpsEnabled = gpsEnabled;
 }
 
@@ -1268,8 +1296,12 @@ function drawRouteResult() {
   context.restore();
 }
 
+function currentLocationGlowActive() {
+  return Boolean(currentLocationPoint()) && (state.followCurrentLocation || state.screenFollowCurrentLocation);
+}
+
 function drawCurrentLocationGlow(screen, colors) {
-  if (!state.followCurrentLocation) {
+  if (!currentLocationGlowActive()) {
     return;
   }
 
@@ -1293,7 +1325,7 @@ function drawCurrentLocationGlow(screen, colors) {
 
 function syncLocationGlowAnimation() {
   const reducedMotion = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const shouldAnimate = state.followCurrentLocation && Boolean(currentLocationPoint()) && !reducedMotion;
+  const shouldAnimate = currentLocationGlowActive() && !reducedMotion;
   if (!shouldAnimate) {
     if (locationGlowFrame) {
       cancelAnimationFrame(locationGlowFrame);
@@ -1307,7 +1339,7 @@ function syncLocationGlowAnimation() {
   }
 
   const animate = () => {
-    if (!state.followCurrentLocation || !currentLocationPoint()) {
+    if (!currentLocationGlowActive()) {
       locationGlowFrame = 0;
       return;
     }
@@ -1529,6 +1561,7 @@ function validMobileGridPageName(value) {
 function setMobileGridPage(name) {
   const pageName = validMobileGridPageName(name) ? name : "grid";
   state.mobileGridPage = pageName;
+  document.documentElement.classList.toggle("is-mobile-list-page", pageName === "lists");
 
   for (const tab of elements.mobileGridTabs) {
     const active = tab.dataset.mobileGridPage === pageName;
@@ -2795,8 +2828,12 @@ function findLoadedObservation(id) {
   return state.loadedObservations.find((observation) => observation.id === id) ?? null;
 }
 
+function defaultMapProvider() {
+  return /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent) ? MAP_PROVIDER_APPLE : MAP_PROVIDER_GOOGLE;
+}
+
 function preferredMapProvider() {
-  return /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent) ? "apple" : "google";
+  return state.mapProvider;
 }
 
 function isPointSelected(pointId) {
@@ -5265,6 +5302,10 @@ function bindEvents() {
   });
   elements.settingsRouteReturnToStart.addEventListener("change", () => {
     setRouteReturnToStart(elements.settingsRouteReturnToStart.checked);
+    render();
+  });
+  elements.settingsMapProviderSelect.addEventListener("change", () => {
+    setMapProvider(elements.settingsMapProviderSelect.value);
     render();
   });
   elements.settingsGpsEnabled.addEventListener("change", () => {

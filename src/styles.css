@@ -1124,3 +1124,15 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 860px) {
+  :root.is-mobile-list-page .selected-summary-mobile,
+  :root.is-mobile-list-page .map-column .selection-info,
+  :root.is-mobile-list-page .map-column .actionbar {
+    display: none;
+  }
+
+  :root.is-mobile-list-page .map-column {
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+}

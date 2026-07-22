@@ -9,8 +9,8 @@
     <link rel="icon" href="assets/icon-retro.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-retro.png">
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("grid-atlas-theme")==="light"?"light":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=35">
-    <script src="src/main.js?v=95" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=36">
+    <script src="src/main.js?v=96" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -53,6 +53,13 @@
               <label class="settings-check">
                 <input id="settingsRouteReturnToStart" type="checkbox">
                 <span data-i18n="settings.routeReturn">巡回で起点に戻る</span>
+              </label>
+              <label>
+                <span data-i18n="settings.mapProvider">地図サービス</span>
+                <select id="settingsMapProviderSelect">
+                  <option value="google" data-i18n="settings.mapGoogle">Googleマップ</option>
+                  <option value="apple" data-i18n="settings.mapApple">Appleマップ</option>
+                </select>
               </label>
               <label class="settings-check">
                 <input id="settingsGpsEnabled" type="checkbox">
