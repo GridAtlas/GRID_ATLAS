@@ -3,6 +3,7 @@ const THEME_KEY = "grid-atlas-theme";
 const LANGUAGE_KEY = "grid-atlas-language";
 const DISTANCE_UNIT_KEY = "grid-atlas-distance-unit";
 const ROUTE_RETURN_KEY = "grid-atlas-route-return";
+const GPS_ENABLED_KEY = "grid-atlas-gps-enabled";
 const MOBILE_PAGE_KEY = "grid-atlas-mobile-page";
 const LIGHT_THEME = "light";
 const RETRO_THEME = "retro";
@@ -40,6 +41,7 @@ let canvasMetrics = {
 };
 let canvasResizeFrame = 0;
 let canvasResizeObserver = null;
+let locationGlowFrame = 0;
 
 const elements = {
   actionLinkButton: document.querySelector("#actionLinkButton"),
@@ -62,6 +64,7 @@ const elements = {
   settingsLanguageSelect: document.querySelector("#settingsLanguageSelect"),
   settingsUnitSelect: document.querySelector("#settingsUnitSelect"),
   settingsRouteReturnToStart: document.querySelector("#settingsRouteReturnToStart"),
+  settingsGpsEnabled: document.querySelector("#settingsGpsEnabled"),
   statusLine: document.querySelector("#statusLine"),
   selectionInfoText: document.querySelector("#selectionInfoText"),
   mobileSelectedTitle: document.querySelector("#mobileSelectedTitle"),
@@ -242,6 +245,7 @@ const TRANSLATIONS = {
     "settings.language": "言語",
     "settings.units": "距離単位",
     "settings.routeReturn": "巡回で起点に戻る",
+    "settings.gps": "GPS機能を使用",
     "settings.themeRetro": "レトロ",
     "settings.themeLight": "ライト",
     "settings.languageJa": "日本語",
@@ -357,6 +361,7 @@ const TRANSLATIONS = {
     "settings.language": "Language",
     "settings.units": "Distance Unit",
     "settings.routeReturn": "Return to start in route",
+    "settings.gps": "Use GPS",
     "settings.themeRetro": "Retro",
     "settings.themeLight": "Light",
     "settings.languageJa": "Japanese",
@@ -1263,6 +1268,55 @@ function drawRouteResult() {
   context.restore();
 }
 
+function drawCurrentLocationGlow(screen, colors) {
+  if (!state.followCurrentLocation) {
+    return;
+  }
+
+  const reduceMotion = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const phase = reduceMotion ? 0.5 : (performance.now() % 1500) / 1500;
+  const pulse = reduceMotion ? 0.35 : (Math.sin(phase * Math.PI * 2) + 1) / 2;
+  context.save();
+  context.fillStyle = colors.currentFill;
+  context.globalAlpha = 0.08 + pulse * 0.1;
+  context.beginPath();
+  context.arc(screen.x, screen.y, POINT_RADIUS + 9 + pulse * 7, 0, Math.PI * 2);
+  context.fill();
+  context.globalAlpha = 0.28 + pulse * 0.2;
+  context.lineWidth = 2;
+  context.strokeStyle = colors.currentFill;
+  context.beginPath();
+  context.arc(screen.x, screen.y, POINT_RADIUS + 4 + pulse * 4, 0, Math.PI * 2);
+  context.stroke();
+  context.restore();
+}
+
+function syncLocationGlowAnimation() {
+  const reducedMotion = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const shouldAnimate = state.followCurrentLocation && Boolean(currentLocationPoint()) && !reducedMotion;
+  if (!shouldAnimate) {
+    if (locationGlowFrame) {
+      cancelAnimationFrame(locationGlowFrame);
+      locationGlowFrame = 0;
+    }
+    return;
+  }
+
+  if (locationGlowFrame) {
+    return;
+  }
+
+  const animate = () => {
+    if (!state.followCurrentLocation || !currentLocationPoint()) {
+      locationGlowFrame = 0;
+      return;
+    }
+    draw();
+    locationGlowFrame = requestAnimationFrame(animate);
+  };
+  locationGlowFrame = requestAnimationFrame(animate);
+}
+
 function drawCurrentLocation() {
   const location = currentLocationPoint();
   if (!location) {
@@ -1272,6 +1326,8 @@ function drawCurrentLocation() {
   const colors = canvasPalette();
   const screen = worldToScreen(location);
   const isSelected = isPointSelected(CURRENT_LOCATION_ID);
+
+  drawCurrentLocationGlow(screen, colors);
 
   context.beginPath();
   context.arc(screen.x, screen.y, POINT_RADIUS, 0, Math.PI * 2);
@@ -1412,6 +1468,7 @@ function render() {
   renderStatus();
   renderActionButtons();
   syncSettingsControls();
+  syncLocationGlowAnimation();
 }
 
 function renderSelectedSummary() {
