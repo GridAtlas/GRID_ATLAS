@@ -27,7 +27,8 @@ const OBSERVATION_MIN_STEP_METERS = 15;
 const OBSERVATION_ACCURACY_FACTOR = 1.5;
 const OBSERVATION_MAX_ACCURACY_METERS = 50;
 const OBSERVATION_MAX_POINTS = 2000;
-const DEFAULT_CENTER = projectLatLng(35.681236, 139.767125);
+const DEFAULT_GEO = { lat: 35.681236, lng: 139.767125 };
+const DEFAULT_CENTER = { x: 0, y: 0 };
 const MOBILE_GRID_PAGES = ["grid", "points", "lists"];
 
 const canvas = document.querySelector("#gridCanvas");
@@ -163,6 +164,11 @@ const state = {
   locationWatchId: null,
   locationFollowFillForm: false,
   locationFollowScaleMode: FOLLOW_SCALE_MANUAL,
+  projection: {
+    mode: "local",
+    centerGeo: DEFAULT_GEO,
+    version: 1
+  },
   viewport: {
     x: DEFAULT_CENTER.x,
     y: DEFAULT_CENTER.y,
@@ -811,6 +817,46 @@ function safeFilenamePart(value) {
     .replace(/\s+/g, "-")
     .slice(0, 60) || "list";
 }
+
+function syncProjectedPoint(point) {
+  if (!point || typeof point !== "object") {
+    return null;
+  }
+
+  const geo = pointGeoFromAny(point, null);
+  if (!geo) {
+    return null;
+  }
+
+  const projected = projectGeo(geo);
+  point.geo = geo;
+  point.x = projected.x;
+  point.y = projected.y;
+  return point;
+}
+
+function syncProjectedCoordinates() {
+  ensurePointLists();
+  for (const point of allPointListPoints()) {
+    syncProjectedPoint(point);
+  }
+
+  syncProjectedPoint(state.routeStartSnapshot);
+  syncProjectedPoint(state.observationStart);
+  for (const point of state.observationTrail) {
+    syncProjectedPoint(point);
+  }
+
+  for (const observation of state.loadedObservations) {
+    syncProjectedPoint(observation.start);
+    syncProjectedPoint(observation.target);
+    if (Array.isArray(observation.trail)) {
+      for (const point of observation.trail) {
+        syncProjectedPoint(point);
+      }
+    }
+  }
+}
 function pointGeoFromAny(point, origin) {
   if (validGeo(point.geo)) {
     return normalizeGeo(point.geo);
@@ -837,7 +883,7 @@ function workspaceSnapshot() {
   ensurePointLists();
   return {
     version: 3,
-    projection: "web-mercator",
+    projection: { mode: "local", version: 1 },
     pointLists: state.pointLists,
     links: state.links
   };
@@ -917,43 +963,22 @@ function screenToWorld(point) {
 }
 
 function chooseGridStep() {
-  const latitude = gridReferenceLatitude();
   const candidates = [
     1, 2, 5, 10, 20, 50, 100, 200, 500,
     1000, 2000, 5000, 10000, 20000, 50000,
     100000, 200000, 500000, 1000000, 2000000,
     5000000, 10000000
   ];
-  return candidates.find((step) => groundDistanceToMercator(step, latitude) * state.viewport.scale >= 48) ?? 20000000;
+  return candidates.find((step) => step * state.viewport.scale >= 48) ?? 20000000;
 }
 
-function gridReferenceLatitude() {
-  const latitudes = state.points.map((point) => pointGeo(point).lat);
-
-  if (validGeo(state.currentGeo)) {
-    latitudes.push(normalizeGeo(state.currentGeo).lat);
-  }
-
-  if (latitudes.length === 0) {
-    return viewportCenterLatitude();
-  }
-
-  return (Math.min(...latitudes) + Math.max(...latitudes)) / 2;
-}
-
-function viewportCenterLatitude() {
-  return unprojectMercator(state.viewport.x, state.viewport.y).lat;
-}
-
-function groundDistanceToMercator(distance, latitude) {
-  const cosine = Math.max(0.02, Math.cos(toRadians(clampLatitude(latitude))));
-  return distance / cosine;
+function viewportCenterGeo() {
+  return unprojectWorld(state.viewport.x, state.viewport.y);
 }
 
 function drawGrid(width, height) {
-  const latitude = gridReferenceLatitude();
   const majorGroundStep = chooseGridStep();
-  const majorStep = groundDistanceToMercator(majorGroundStep, latitude);
+  const majorStep = majorGroundStep;
   const minorStep = majorStep / 5;
   const topLeft = screenToWorld({ x: 0, y: 0 });
   const bottomRight = screenToWorld({ x: width, y: height });
@@ -2949,7 +2974,7 @@ function distanceBetween(a, b) {
   const lat1 = toRadians(geoA.lat);
   const lat2 = toRadians(geoB.lat);
   const dLat = toRadians(geoB.lat - geoA.lat);
-  const dLng = toRadians(geoB.lng - geoA.lng);
+  const dLng = toRadians(shortestLongitudeDelta(geoA.lng, geoB.lng));
   const haversine = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
   return 2 * EARTH_RADIUS_METERS * Math.asin(Math.min(1, Math.sqrt(haversine)));
 }
@@ -3056,14 +3081,10 @@ function createCenterPendingPoint() {
     return;
   }
 
-  const center = points.reduce((total, point) => ({
-    x: total.x + point.x,
-    y: total.y + point.y
-  }), { x: 0, y: 0 });
-  center.x /= points.length;
-  center.y /= points.length;
-
-  const geo = unprojectMercator(center.x, center.y);
+  const geo = geographicCenter(points);
+  if (!geo) {
+    return;
+  }
   state.mode = "add";
   state.pendingGeo = geo;
   state.editingPointId = null;
@@ -3171,7 +3192,7 @@ function restoreLastDeleted() {
 
 function fillFormFromWorld(point) {
   state.mode = "add";
-  state.pendingGeo = unprojectMercator(point.x, point.y);
+  state.pendingGeo = unprojectWorld(point.x, point.y);
   state.editingPointId = null;
   state.pendingLinkPointId = null;
   fillFormFromGeo(state.pendingGeo);
@@ -3474,14 +3495,21 @@ function fitToPoints() {
   syncCanvasSize();
   pauseLocationFollowForManualView();
 
-  const fitPoints = fitTargetPoints();
+  let fitPoints = fitTargetPoints();
 
   if (fitPoints.length === 0) {
+    setProjectionCenterGeo(DEFAULT_GEO);
     state.viewport.x = DEFAULT_CENTER.x;
     state.viewport.y = DEFAULT_CENTER.y;
     state.viewport.scale = 0.7;
     render();
     return;
+  }
+
+  const centerGeo = geographicCenter(fitPoints);
+  if (centerGeo) {
+    setProjectionCenterGeo(centerGeo);
+    fitPoints = fitTargetPoints();
   }
 
   const size = canvasSize();
@@ -3541,7 +3569,7 @@ function fitTargetFromCurrent(current, target) {
   const distance = distanceBetween(current, target);
   const accuracy = Number.isFinite(geo.accuracy) ? geo.accuracy : 0;
   const range = targetRangeForDistance(Math.max(distance, accuracy * 2));
-  const mercatorRange = groundDistanceToMercator(range, geo.lat);
+
   const size = canvasSize();
   const padding = Math.min(110, Math.max(34, Math.min(size.width, size.height) * 0.16));
   const availableWidth = Math.max(64, size.width - padding * 2);
@@ -3549,13 +3577,44 @@ function fitTargetFromCurrent(current, target) {
 
   state.viewport.x = current.x;
   state.viewport.y = current.y;
-  state.viewport.scale = clampScale(Math.min(availableWidth, availableHeight) / (mercatorRange * 2));
+  state.viewport.scale = clampScale(Math.min(availableWidth, availableHeight) / (range * 2));
   render();
 }
 
 function targetRangeForDistance(distance) {
   const desired = Math.max(TARGET_ARRIVAL_METERS, distance);
   return TARGET_DISTANCE_STEPS.find((step) => step >= desired) ?? desired;
+}
+
+function geographicCenter(points) {
+  const geos = points.map(pointGeo).filter(validGeo);
+  if (geos.length === 0) {
+    return null;
+  }
+
+  let x = 0;
+  let y = 0;
+  let z = 0;
+  for (const geo of geos) {
+    const lat = toRadians(geo.lat);
+    const lng = toRadians(geo.lng);
+    x += Math.cos(lat) * Math.cos(lng);
+    y += Math.cos(lat) * Math.sin(lng);
+    z += Math.sin(lat);
+  }
+
+  const length = Math.hypot(x, y, z);
+  if (length < 1e-9) {
+    const first = geos[0];
+    const lat = geos.reduce((sum, geo) => sum + geo.lat, 0) / geos.length;
+    const lng = first.lng + geos.reduce((sum, geo) => sum + shortestLongitudeDelta(first.lng, geo.lng), 0) / geos.length;
+    return normalizeGeo({ lat, lng });
+  }
+
+  return normalizeGeo({
+    lat: toDegrees(Math.atan2(z, Math.hypot(x, y))),
+    lng: toDegrees(Math.atan2(y, x))
+  });
 }
 
 function followFitTargetPoints(current) {
@@ -3616,8 +3675,10 @@ function centerAndFollowCurrentLocation() {
 
   const current = currentLocationPoint();
   if (current) {
-    state.viewport.x = current.x;
-    state.viewport.y = current.y;
+    setProjectionCenterGeo(pointGeo(current));
+    const centeredCurrent = currentLocationPoint();
+    state.viewport.x = centeredCurrent.x;
+    state.viewport.y = centeredCurrent.y;
   }
 
   if (state.locationWatchId !== null) {
@@ -3898,7 +3959,7 @@ function resizeImage(dataUrl) {
 }
 
 function useCurrentLocation() {
-  requestCurrentLocation({ fillForm: true, center: true, showButtonState: true });
+  requestCurrentLocation({ fillForm: true, center: false, showButtonState: true });
 }
 
 function locateOnStartup() {
@@ -3919,13 +3980,17 @@ function updateCurrentLocationFromPosition(position, options = {}) {
     lng: position.coords.longitude,
     accuracy: position.coords.accuracy
   });
-  const projected = projectLatLng(geo.lat, geo.lng);
 
   state.currentGeo = geo;
-  if (state.followCurrentLocation) {
-    ensureTrackingObservationStart(currentLocationPoint());
+  if (options.center && !state.followCurrentLocation && !state.screenFollowCurrentLocation) {
+    setProjectionCenterGeo(geo);
   }
-  recordObservationPoint(currentLocationPoint());
+
+  const current = currentLocationPoint();
+  if (state.followCurrentLocation) {
+    ensureTrackingObservationStart(current);
+  }
+  recordObservationPoint(current);
 
   if (options.fillForm) {
     state.mode = "add";
@@ -3935,26 +4000,25 @@ function updateCurrentLocationFromPosition(position, options = {}) {
 
   if (options.center) {
     if (state.screenFollowCurrentLocation) {
-      state.viewport.x = projected.x;
-      state.viewport.y = projected.y;
+      state.viewport.x = current.x;
+      state.viewport.y = current.y;
     } else if (state.followCurrentLocation) {
       if (state.locationFollowScaleMode === FOLLOW_SCALE_CENTER) {
-        state.viewport.x = projected.x;
-        state.viewport.y = projected.y;
+        state.viewport.x = current.x;
+        state.viewport.y = current.y;
       } else if (state.locationFollowScaleMode !== FOLLOW_SCALE_MANUAL) {
-        fitFollowViewport(currentLocationPoint());
+        fitFollowViewport(current);
         return;
       }
     } else {
-      state.viewport.x = projected.x;
-      state.viewport.y = projected.y;
+      state.viewport.x = current.x;
+      state.viewport.y = current.y;
       state.viewport.scale = Math.max(state.viewport.scale, 0.7);
     }
   }
 
   render();
 }
-
 function locationErrorMessage(error, fallback) {
   if (error?.code === 1) {
     return "位置情報を許可してください";
@@ -4218,8 +4282,92 @@ function currentLocationPoint() {
   };
 }
 function projectLatLng(lat, lng) {
-  const safeLat = clampLatitude(lat);
-  const normalizedLng = normalizeLongitude(lng);
+  return projectGeo({ lat, lng });
+}
+
+function projectGeo(geo, projection = state.projection) {
+  const normalized = normalizeGeo(geo);
+  if (projection?.mode === "local") {
+    return projectLocalAeqd(normalized, projectionCenterGeo(projection));
+  }
+
+  return projectWorldMercator(normalized);
+}
+
+function unprojectWorld(x, y, projection = state.projection) {
+  if (projection?.mode === "local") {
+    return unprojectLocalAeqd({ x, y }, projectionCenterGeo(projection));
+  }
+
+  return unprojectMercator(x, y);
+}
+
+function projectionCenterGeo(projection = state.projection) {
+  return validGeo(projection?.centerGeo) ? normalizeGeo(projection.centerGeo) : normalizeGeo(DEFAULT_GEO);
+}
+
+function setProjectionCenterGeo(geo, options = {}) {
+  if (!validGeo(geo)) {
+    return false;
+  }
+
+  const next = normalizeGeo(geo);
+  const current = projectionCenterGeo();
+  if (isSameGeo(current, next)) {
+    return false;
+  }
+
+  state.projection.centerGeo = next;
+  state.projection.version += 1;
+  if (options.sync !== false) {
+    syncProjectedCoordinates();
+  }
+  return true;
+}
+
+function projectLocalAeqd(geo, centerGeo) {
+  const lat = toRadians(geo.lat);
+  const lngDelta = toRadians(shortestLongitudeDelta(centerGeo.lng, geo.lng));
+  const lat0 = toRadians(centerGeo.lat);
+  const sinLat = Math.sin(lat);
+  const cosLat = Math.cos(lat);
+  const sinLat0 = Math.sin(lat0);
+  const cosLat0 = Math.cos(lat0);
+  const cosC = Math.max(-1, Math.min(1, sinLat0 * sinLat + cosLat0 * cosLat * Math.cos(lngDelta)));
+  const c = Math.acos(cosC);
+  if (Math.PI - c < 1e-8) {
+    return { x: 0, y: EARTH_RADIUS_METERS * Math.PI };
+  }
+  const k = Math.abs(c) < 1e-12 ? 1 : c / Math.sin(c);
+
+  return {
+    x: EARTH_RADIUS_METERS * k * cosLat * Math.sin(lngDelta),
+    y: EARTH_RADIUS_METERS * k * (cosLat0 * sinLat - sinLat0 * cosLat * Math.cos(lngDelta))
+  };
+}
+
+function unprojectLocalAeqd(point, centerGeo) {
+  const rho = Math.hypot(point.x, point.y);
+  const lat0 = toRadians(centerGeo.lat);
+  const lng0 = toRadians(centerGeo.lng);
+  if (rho < 1e-9) {
+    return normalizeGeo(centerGeo);
+  }
+
+  const c = rho / EARTH_RADIUS_METERS;
+  const sinC = Math.sin(c);
+  const cosC = Math.cos(c);
+  const sinLat0 = Math.sin(lat0);
+  const cosLat0 = Math.cos(lat0);
+  const lat = Math.asin(Math.max(-1, Math.min(1, cosC * sinLat0 + (point.y * sinC * cosLat0) / rho)));
+  const lng = lng0 + Math.atan2(point.x * sinC, rho * cosLat0 * cosC - point.y * sinLat0 * sinC);
+
+  return normalizeGeo({ lat: toDegrees(lat), lng: toDegrees(lng) });
+}
+
+function projectWorldMercator(geo) {
+  const safeLat = clampMercatorLatitude(geo.lat);
+  const normalizedLng = normalizeLongitude(geo.lng);
   const latRadians = toRadians(safeLat);
   return {
     x: MERCATOR_RADIUS * toRadians(normalizedLng),
@@ -4255,11 +4403,19 @@ function pointGeo(point) {
 }
 
 function clampLatitude(lat) {
+  return Math.min(90, Math.max(-90, lat));
+}
+
+function clampMercatorLatitude(lat) {
   return Math.min(MAX_MERCATOR_LAT, Math.max(-MAX_MERCATOR_LAT, lat));
 }
 
 function normalizeLongitude(lng) {
   return ((((lng + 180) % 360) + 360) % 360) - 180;
+}
+
+function shortestLongitudeDelta(fromLng, toLng) {
+  return ((((toLng - fromLng) + 540) % 360) + 360) % 360 - 180;
 }
 
 function toRadians(degrees) {
