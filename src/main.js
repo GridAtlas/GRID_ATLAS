@@ -158,7 +158,7 @@ const state = {
   editingPointId: null,
   lastDeleted: null,
   pendingGeo: null,
-  currentGeo: null,
+  gpsEnabled: false,
   followCurrentLocation: false,
   screenFollowCurrentLocation: false,
   locationWatchId: null,
@@ -520,11 +520,57 @@ function setRouteReturnToStart(value, options = {}) {
   syncSettingsControls();
 }
 
+function setGpsEnabled(value, options = {}) {
+  const enabled = Boolean(value);
+  if (enabled === state.gpsEnabled && options.force !== true) {
+    syncSettingsControls();
+    return true;
+  }
+
+  if (!enabled) {
+    if (state.followCurrentLocation) {
+      toggleLocationFollow();
+      if (state.followCurrentLocation) {
+        syncSettingsControls();
+        return false;
+      }
+    }
+    if (state.screenFollowCurrentLocation) {
+      stopScreenFollow({ render: false });
+    }
+    state.gpsEnabled = false;
+    if (state.locationWatchId !== null && "geolocation" in navigator) {
+      navigator.geolocation.clearWatch(state.locationWatchId);
+    }
+    state.locationWatchId = null;
+    state.currentGeo = null;
+    state.selection = state.selection.filter((entry) => entry.id !== CURRENT_LOCATION_ID);
+    normalizeSelection();
+  } else {
+    state.gpsEnabled = true;
+  }
+
+  if (options.persist !== false) {
+    try {
+      localStorage.setItem(GPS_ENABLED_KEY, String(state.gpsEnabled));
+    } catch {}
+  }
+
+  syncSettingsControls();
+  if (state.gpsEnabled && options.request !== false) {
+    requestCurrentLocation({ fillForm: false, center: false, showButtonState: false });
+  }
+  if (options.render !== false) {
+    render();
+  }
+  return true;
+}
 function syncSettingsControls() {
   elements.settingsThemeSelect.value = currentTheme();
   elements.settingsLanguageSelect.value = activeLanguage();
   elements.settingsUnitSelect.value = state.distanceUnit;
   elements.settingsRouteReturnToStart.checked = state.routeReturnToStart;
+  elements.settingsGpsEnabled.checked = state.gpsEnabled;
   elements.routeReturnToStart.checked = state.routeReturnToStart;
 }
 
@@ -532,15 +578,18 @@ function loadPreferences() {
   let language = JA_LANGUAGE;
   let unit = METRIC_UNIT;
   let returnToStart = false;
+  let gpsEnabled = false;
   try {
     language = localStorage.getItem(LANGUAGE_KEY) === EN_LANGUAGE ? EN_LANGUAGE : JA_LANGUAGE;
     unit = localStorage.getItem(DISTANCE_UNIT_KEY) === IMPERIAL_UNIT ? IMPERIAL_UNIT : METRIC_UNIT;
     returnToStart = localStorage.getItem(ROUTE_RETURN_KEY) === "true";
+    gpsEnabled = localStorage.getItem(GPS_ENABLED_KEY) === "true";
   } catch {}
 
   setLanguage(language, { persist: false });
   setDistanceUnit(unit, { persist: false });
   setRouteReturnToStart(returnToStart, { persist: false });
+  state.gpsEnabled = gpsEnabled;
 }
 
 function setSettingsMenuOpen(open) {
@@ -2295,13 +2344,31 @@ function renderAnalysis() {
 }
 
 
+function pointRoleMarker(point) {
+  const markers = [];
+  if (point.id === CURRENT_LOCATION_ID) {
+    markers.push("🟡");
+  }
+  if (point.id === state.routeStartPointId) {
+    markers.push("🔵");
+  }
+  if (point.id === state.targetPointId) {
+    markers.push("🟠");
+  }
+  return markers.length > 0 ? `${markers.join("")} ` : "";
+}
+
 function renderPointIndex() {
   if (!elements.mobilePointItems || !elements.mobilePointCount) {
     return;
   }
 
   ensurePointLists();
+  const current = state.gpsEnabled ? currentLocationPoint() : null;
   const rows = visiblePointLists().flatMap((list) => list.points.map((point) => ({ point, list })));
+  if (current) {
+    rows.unshift({ point: current, list: null });
+  }
   elements.mobilePointCount.textContent = `${rows.length}${t("label.points")}`;
   elements.mobilePointItems.replaceChildren();
 
@@ -2313,7 +2380,6 @@ function renderPointIndex() {
     return;
   }
 
-  const current = currentLocationPoint();
   for (const { point, list } of rows) {
     const row = document.createElement("button");
     row.type = "button";
@@ -2324,14 +2390,14 @@ function renderPointIndex() {
     const name = document.createElement("span");
     name.className = "point-index-name";
     const title = document.createElement("strong");
-    title.textContent = point.title || "Point";
+    title.textContent = `${pointRoleMarker(point)}${point.title || "Point"}`;
     const meta = document.createElement("span");
-    meta.textContent = list.name || t("data.pointLists");
+    meta.textContent = list?.name || t("label.gps");
     name.append(title, meta);
 
     const distance = document.createElement("span");
     distance.className = "point-index-distance";
-    distance.textContent = current ? formatDistance(distanceBetween(current, point)) : `${formatCoordinate(pointGeo(point).lat)}, ${formatCoordinate(pointGeo(point).lng)}`;
+    distance.textContent = point.id === CURRENT_LOCATION_ID ? t("message.currentLocation") : current ? formatDistance(distanceBetween(current, point)) : `${formatCoordinate(pointGeo(point).lat)}, ${formatCoordinate(pointGeo(point).lng)}`;
 
     row.append(name, distance);
     row.addEventListener("click", () => toggleSelection("point", point.id));
@@ -3666,7 +3732,7 @@ function fitTargetPoints() {
 }
 
 function centerAndFollowCurrentLocation() {
-  if (!("geolocation" in navigator)) {
+  if (!state.gpsEnabled || !("geolocation" in navigator)) {
     elements.shareImportStatus.value = "現在地を取得できません";
     return;
   }
@@ -3965,6 +4031,10 @@ function useCurrentLocation() {
 }
 
 function locateOnStartup() {
+  if (!state.gpsEnabled) {
+    return;
+  }
+
   requestCurrentLocation({ fillForm: false, center: true, showButtonState: false, startup: true });
 }
 
@@ -3977,6 +4047,10 @@ function geolocationOptions(options = {}) {
 }
 
 function updateCurrentLocationFromPosition(position, options = {}) {
+  if (!state.gpsEnabled) {
+    return;
+  }
+
   const geo = normalizeGeo({
     lat: position.coords.latitude,
     lng: position.coords.longitude,
@@ -4030,7 +4104,7 @@ function locationErrorMessage(error, fallback) {
 }
 
 function requestCurrentLocation(options = {}) {
-  if (!("geolocation" in navigator)) {
+  if (!state.gpsEnabled || !("geolocation" in navigator)) {
     if (!options.startup) {
       elements.shareImportStatus.value = "現在地を取得できません";
     }
@@ -4126,7 +4200,7 @@ function clearObservationAssignments() {
 }
 
 function startLocationFollow(options = {}) {
-  if (!("geolocation" in navigator)) {
+  if (!state.gpsEnabled || !("geolocation" in navigator)) {
     elements.shareImportStatus.value = "現在地を取得できません";
     return;
   }
@@ -4247,21 +4321,21 @@ function pauseLocationFollowForManualView() {
 }
 
 function renderLocationFollowButton() {
-  const isSupported = "geolocation" in navigator;
+  const isSupported = state.gpsEnabled && "geolocation" in navigator;
   elements.useLocationButton.disabled = !isSupported;
   elements.useLocationButton.classList.remove("is-active");
   elements.useLocationButton.setAttribute("aria-pressed", "false");
   elements.useLocationButton.textContent = "現在地";
-  elements.useLocationButton.title = isSupported ? "現在地を登録フォームへ入力" : "現在地を取得できません";
+  elements.useLocationButton.title = !state.gpsEnabled ? "設定でGPSを有効にしてください" : isSupported ? "現在地を登録フォームへ入力" : "現在地を取得できません";
 
   elements.actionFollowButton.disabled = !isSupported;
   elements.actionFollowButton.classList.toggle("is-active", state.followCurrentLocation);
   elements.actionFollowButton.setAttribute("aria-pressed", String(state.followCurrentLocation));
-  elements.actionFollowButton.title = state.followCurrentLocation ? "追跡を停止" : "追跡を開始";
+  elements.actionFollowButton.title = !state.gpsEnabled ? "設定でGPSを有効にしてください" : state.followCurrentLocation ? "追跡を停止" : "追跡を開始";
   elements.originButton.disabled = !isSupported;
   elements.originButton.classList.toggle("is-active", state.screenFollowCurrentLocation);
   elements.originButton.setAttribute("aria-pressed", String(state.screenFollowCurrentLocation));
-  elements.originButton.title = state.screenFollowCurrentLocation ? "画面追従中" : "現在地を中央にして画面追従";
+  elements.originButton.title = !state.gpsEnabled ? "設定でGPSを有効にしてください" : state.screenFollowCurrentLocation ? "画面追従中" : "現在地を中央にして画面追従";
 }
 
 function currentLocationPoint() {
@@ -5135,6 +5209,9 @@ function bindEvents() {
   elements.settingsRouteReturnToStart.addEventListener("change", () => {
     setRouteReturnToStart(elements.settingsRouteReturnToStart.checked);
     render();
+  });
+  elements.settingsGpsEnabled.addEventListener("change", () => {
+    setGpsEnabled(elements.settingsGpsEnabled.checked);
   });
   document.addEventListener("click", () => setSettingsMenuOpen(false));
   document.addEventListener("keydown", (event) => {
