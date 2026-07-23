@@ -355,6 +355,7 @@ const TRANSLATIONS = {
     "label.betweenTwo": "2点間",
     "label.fromCurrent": "現在地から",
     "label.accuracy": "精度",
+    "label.gps": "GPS",
     "label.none": "なし",
     "message.loadedObservation": "読み込み観察",
     "message.pointUnavailable": "地点を確認できません",
@@ -474,6 +475,7 @@ const TRANSLATIONS = {
     "label.betweenTwo": "Between",
     "label.fromCurrent": "From current",
     "label.accuracy": "Accuracy",
+    "label.gps": "GPS",
     "label.none": "None",
     "message.loadedObservation": "Loaded observation",
     "message.pointUnavailable": "Point unavailable",
@@ -875,7 +877,11 @@ function normalizePointList(list, existingPointIds = new Set(), fallbackName = "
 }
 
 function pruneHiddenPointReferences() {
+  const current = currentLocationPoint();
   const visibleIds = visiblePointIdSet();
+  if (current) {
+    visibleIds.add(CURRENT_LOCATION_ID);
+  }
   state.selection = state.selection.filter((entry) => entry.type !== "point" || visibleIds.has(entry.id));
   state.routeSelectionIds = state.routeSelectionIds.filter((id) => visibleIds.has(id));
 
