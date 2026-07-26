@@ -1,0 +1,44 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "grid-atlas-cloud-local",
+  "main": "cloud/worker.js",
+  "compatibility_date": "2026-07-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "WEB_ORIGINS": "http://localhost:4173,http://127.0.0.1:4173",
+    "AUTH_JWKS_URL": "",
+    "AUTH_ISSUER": "",
+    "AUTH_AUDIENCE": ""
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "grid-atlas-cloud-local",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "cloud/migrations"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "env": {
+    "staging": {
+      "name": "grid-atlas-cloud-staging",
+      "vars": {
+        "WEB_ORIGINS": "https://gridatlas.github.io",
+        "AUTH_JWKS_URL": "",
+        "AUTH_ISSUER": "",
+        "AUTH_AUDIENCE": ""
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "grid-atlas-cloud-staging",
+          "database_id": "11111111-1111-1111-1111-111111111111",
+          "migrations_dir": "cloud/migrations"
+        }
+      ]
+    }
+  }
+}

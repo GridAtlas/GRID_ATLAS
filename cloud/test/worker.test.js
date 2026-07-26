@@ -1,0 +1,249 @@
+import { env } from "cloudflare:workers";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import worker from "../worker.js";
+
+const JWKS_URL = "https://auth.test/.well-known/jwks.json";
+const ISSUER = "https://auth.test/";
+const AUDIENCE = "grid-atlas-test";
+let signingKey;
+let publicJwk;
+
+beforeAll(async () => {
+  const keyPair = await crypto.subtle.generateKey(
+    { name: "ECDSA", namedCurve: "P-256" },
+    true,
+    ["sign", "verify"]
+  );
+  signingKey = keyPair.privateKey;
+  publicJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
+  publicJwk.alg = "ES256";
+  publicJwk.kid = "test-key";
+  publicJwk.use = "sig";
+
+  vi.stubGlobal("fetch", vi.fn(async (input) => {
+    const url = typeof input === "string" ? input : input.url;
+    if (url !== JWKS_URL) throw new Error(`Unexpected outbound request: ${url}`);
+    return new Response(JSON.stringify({ keys: [publicJwk] }), {
+      headers: { "Content-Type": "application/json" }
+    });
+  }));
+});
+
+beforeEach(async () => {
+  await env.DB.prepare("DELETE FROM cloud_lists").run();
+});
+
+afterAll(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("GRID ATLAS Cloud API", () => {
+  it("handles authentication, CORS, malformed routes, and private response headers", async () => {
+    const unauthenticated = await api("/v1/me/lists", { token: null });
+    expect(unauthenticated.status).toBe(401);
+    expect(unauthenticated.headers.get("Cache-Control")).toBe("no-store");
+    expect(unauthenticated.headers.get("X-Content-Type-Options")).toBe("nosniff");
+
+    const preflight = await worker.fetch(new Request("https://api.test/v1/me/lists", {
+      method: "OPTIONS",
+      headers: {
+        Origin: "http://localhost:4173",
+        "Access-Control-Request-Method": "POST"
+      }
+    }), env);
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get("Access-Control-Allow-Origin")).toBe("http://localhost:4173");
+
+    const disallowed = await api("/v1/me/lists", { token: null, origin: "https://evil.test" });
+    expect(disallowed.status).toBe(403);
+
+    const malformed = await api("/v1/me/lists/%ZZ", { token: null });
+    expect(malformed.status).toBe(400);
+  });
+
+  it("isolates owners and protects updates with revisions", async () => {
+    const ownerAToken = await issueToken("owner-a");
+    const ownerBToken = await issueToken("owner-b");
+    const payload = samplePayload();
+
+    const created = await api("/v1/me/lists", { method: "POST", token: ownerAToken, body: payload });
+    expect(created.status).toBe(201);
+    const createdBody = await created.json();
+    expect(createdBody.revision).toBe(1);
+    expect(createdBody.list.list.createdAt).toBe("2026-07-23T15:00:00.000Z");
+    expect(createdBody.list).not.toHaveProperty("currentLocation");
+    expect(createdBody.list.points[0]).not.toHaveProperty("selected");
+
+    const hiddenFromOtherOwner = await api("/v1/me/lists/list-1", { token: ownerBToken });
+    expect(hiddenFromOtherOwner.status).toBe(404);
+
+    const otherOwnerCreate = await api("/v1/me/lists", {
+      method: "POST",
+      token: ownerBToken,
+      body: samplePayload({ name: "別ユーザーのリスト" })
+    });
+    expect(otherOwnerCreate.status).toBe(201);
+
+    const collection = await api("/v1/me/lists", { token: ownerAToken });
+    const collectionBody = await collection.json();
+    expect(collectionBody.lists).toHaveLength(1);
+    expect(collectionBody.lists[0]).toMatchObject({ id: "list-1", revision: 1 });
+
+    const updatedPayload = samplePayload({ name: "更新後のリスト" });
+    const updated = await api("/v1/me/lists/list-1", {
+      method: "PUT",
+      token: ownerAToken,
+      body: { expectedRevision: 1, payload: updatedPayload }
+    });
+    expect(updated.status).toBe(200);
+    expect((await updated.json()).revision).toBe(2);
+
+    const stale = await api("/v1/me/lists/list-1", {
+      method: "PUT",
+      token: ownerAToken,
+      body: { expectedRevision: 1, payload }
+    });
+    expect(stale.status).toBe(409);
+    const staleBody = await stale.json();
+    expect(staleBody.revision).toBe(2);
+    expect(staleBody.current.list.name).toBe("更新後のリスト");
+
+    const staleDelete = await api("/v1/me/lists/list-1", {
+      method: "DELETE",
+      token: ownerAToken,
+      body: { expectedRevision: 1 }
+    });
+    expect(staleDelete.status).toBe(409);
+
+    const deleted = await api("/v1/me/lists/list-1", {
+      method: "DELETE",
+      token: ownerAToken,
+      body: { expectedRevision: 2 }
+    });
+    expect(deleted.status).toBe(204);
+
+    const missing = await api("/v1/me/lists/list-1", { token: ownerAToken });
+    expect(missing.status).toBe(404);
+  });
+
+  it("rejects malformed tokens, payloads, oversized bodies, and unsupported methods", async () => {
+    const expiredToken = await issueToken("owner-a", { expiresIn: -1 });
+    expect((await api("/v1/me/lists", { token: expiredToken })).status).toBe(401);
+
+    const validToken = await issueToken("owner-a");
+    const tokenParts = validToken.split(".");
+    tokenParts[2] = `${tokenParts[2][0] === "A" ? "B" : "A"}${tokenParts[2].slice(1)}`;
+    expect((await api("/v1/me/lists", { token: tokenParts.join(".") })).status).toBe(401);
+
+    const primitive = await api("/v1/me/lists", { method: "POST", token: validToken, body: null });
+    expect(primitive.status).toBe(400);
+
+    const invalidTimestamp = samplePayload();
+    invalidTimestamp.list.createdAt = "not-a-date";
+    expect((await api("/v1/me/lists", {
+      method: "POST",
+      token: validToken,
+      body: invalidTimestamp
+    })).status).toBe(400);
+
+    const dateWithoutTime = samplePayload();
+    dateWithoutTime.list.createdAt = "2026-07-24";
+    expect((await api("/v1/me/lists", {
+      method: "POST",
+      token: validToken,
+      body: dateWithoutTime
+    })).status).toBe(400);
+
+    const impossibleDate = samplePayload();
+    impossibleDate.list.createdAt = "2026-02-30T00:00:00Z";
+    expect((await api("/v1/me/lists", {
+      method: "POST",
+      token: validToken,
+      body: impossibleDate
+    })).status).toBe(400);
+
+    const duplicatePoint = samplePayload();
+    duplicatePoint.points.push({ ...duplicatePoint.points[0] });
+    expect((await api("/v1/me/lists", {
+      method: "POST",
+      token: validToken,
+      body: duplicatePoint
+    })).status).toBe(400);
+
+    const oversized = samplePayload();
+    oversized.list.description = "x".repeat(256 * 1024);
+    expect((await api("/v1/me/lists", {
+      method: "POST",
+      token: validToken,
+      body: oversized
+    })).status).toBe(413);
+
+    const unsupported = await api("/v1/me/lists", { method: "PATCH", token: validToken });
+    expect(unsupported.status).toBe(405);
+    expect(unsupported.headers.get("Allow")).toBe("GET, POST");
+  });
+});
+
+async function api(path, { method = "GET", token, body, origin } = {}) {
+  const headers = new Headers();
+  const bearer = token === undefined ? await issueToken("owner-a") : token;
+  if (bearer) headers.set("Authorization", `Bearer ${bearer}`);
+  if (origin) headers.set("Origin", origin);
+  if (body !== undefined) headers.set("Content-Type", "application/json");
+  return worker.fetch(new Request(`https://api.test${path}`, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body)
+  }), env);
+}
+
+async function issueToken(subject, { expiresIn = 3600, audience = AUDIENCE } = {}) {
+  const now = Math.floor(Date.now() / 1000);
+  const encodedHeader = base64UrlEncode(JSON.stringify({ alg: "ES256", kid: "test-key", typ: "JWT" }));
+  const encodedClaims = base64UrlEncode(JSON.stringify({
+    iss: ISSUER,
+    aud: audience,
+    sub: subject,
+    iat: now,
+    exp: now + expiresIn
+  }));
+  const signingInput = `${encodedHeader}.${encodedClaims}`;
+  const signature = await crypto.subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" },
+    signingKey,
+    new TextEncoder().encode(signingInput)
+  );
+  return `${signingInput}.${base64UrlEncode(signature)}`;
+}
+
+function base64UrlEncode(value) {
+  const bytes = typeof value === "string" ? new TextEncoder().encode(value) : new Uint8Array(value);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function samplePayload({ name = "テスト地点リスト" } = {}) {
+  return {
+    type: "grid-atlas-share",
+    schemaVersion: 1,
+    kind: "point-list",
+    list: {
+      id: "list-1",
+      name,
+      description: "API統合テスト",
+      createdAt: "2026-07-24T00:00:00+09:00"
+    },
+    points: [
+      {
+        id: "point-1",
+        name: "東京駅",
+        latitude: 35.681236,
+        longitude: 139.767125,
+        comment: "集合地点",
+        selected: true
+      }
+    ],
+    currentLocation: { latitude: 35, longitude: 139 }
+  };
+}
