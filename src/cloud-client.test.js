@@ -4,7 +4,8 @@ import {
   cloudPayloadToPointList,
   createCloudClient,
   normalizeCloudBaseUrl,
-  pointListToCloudPayload
+  pointListToCloudPayload,
+  resolveCloudApiUrlSetting
 } from "./cloud-client.js";
 
 describe("Cloud client", () => {
@@ -12,6 +13,33 @@ describe("Cloud client", () => {
     expect(normalizeCloudBaseUrl("https://api.example.com/base").href).toBe("https://api.example.com/base/");
     expect(normalizeCloudBaseUrl("http://127.0.0.1:8787").href).toBe("http://127.0.0.1:8787/");
     expect(() => normalizeCloudBaseUrl("http://api.example.com")).toThrowError(CloudApiError);
+  });
+
+  it("replaces stale local or insecure API settings on the published app", () => {
+    const options = {
+      defaultUrl: "https://cloud.example.com",
+      pageUrl: "https://gridatlas.github.io/GRID_ATLAS/"
+    };
+
+    expect(resolveCloudApiUrlSetting("http://127.0.0.1:8787", options)).toEqual({
+      url: "https://cloud.example.com",
+      replaced: true
+    });
+    expect(resolveCloudApiUrlSetting("not a url", options)).toEqual({
+      url: "https://cloud.example.com",
+      replaced: true
+    });
+    expect(resolveCloudApiUrlSetting("https://custom.example.com", options)).toEqual({
+      url: "https://custom.example.com",
+      replaced: false
+    });
+    expect(resolveCloudApiUrlSetting("http://127.0.0.1:8787", {
+      ...options,
+      pageUrl: "http://127.0.0.1:5177/"
+    })).toEqual({
+      url: "http://127.0.0.1:8787",
+      replaced: false
+    });
   });
 
   it("adds bearer auth and sends JSON requests", async () => {

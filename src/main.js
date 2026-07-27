@@ -2,7 +2,8 @@ import {
   CloudApiError,
   cloudPayloadToPointList,
   createCloudClient,
-  pointListToCloudPayload
+  pointListToCloudPayload,
+  resolveCloudApiUrlSetting
 } from "./cloud-client.js";
 
 const STORAGE_KEY = "grid-atlas-workspace-v2";
@@ -2613,7 +2614,13 @@ function loadCloudSettings() {
   let apiUrl = defaultCloudApiUrl();
   let token = "";
   try {
-    apiUrl = localStorage.getItem(CLOUD_API_URL_KEY) || apiUrl;
+    const storedApiUrl = localStorage.getItem(CLOUD_API_URL_KEY);
+    const resolved = resolveCloudApiUrlSetting(storedApiUrl, {
+      defaultUrl: apiUrl,
+      pageUrl: window.location.href
+    });
+    apiUrl = resolved.url;
+    if (resolved.replaced) localStorage.removeItem(CLOUD_API_URL_KEY);
     token = sessionStorage.getItem(CLOUD_ACCESS_TOKEN_KEY) || "";
   } catch {}
 

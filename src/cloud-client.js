@@ -90,6 +90,29 @@ export function normalizeCloudBaseUrl(value) {
   return url;
 }
 
+export function resolveCloudApiUrlSetting(storedValue, { defaultUrl, pageUrl } = {}) {
+  const fallback = String(defaultUrl || "").trim();
+  const stored = String(storedValue || "").trim();
+  if (!stored) return { url: fallback, replaced: false };
+
+  let endpoint;
+  let page;
+  try {
+    endpoint = normalizeCloudBaseUrl(stored);
+    page = new URL(String(pageUrl || ""));
+  } catch {
+    return { url: fallback, replaced: true };
+  }
+
+  const publishedPage = !LOCAL_HOSTS.has(page.hostname);
+  const localEndpoint = LOCAL_HOSTS.has(endpoint.hostname);
+  if (publishedPage && (endpoint.protocol !== "https:" || localEndpoint)) {
+    return { url: fallback, replaced: true };
+  }
+
+  return { url: stored, replaced: false };
+}
+
 export function pointListToCloudPayload(list, getCoordinates) {
   if (!list || typeof list !== "object") throw new CloudApiError("保存する地点リストがありません");
   const now = new Date().toISOString();
