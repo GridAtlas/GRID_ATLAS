@@ -1,6 +1,6 @@
 # GRID ATLAS Cloud API
 
-Cloudflare Workers + D1で動く、自分用地点リストCloudベータです。
+Cloudflare Workers + D1で動く、アクセスコード式の地点リストCloudベータです。
 
 - Worker: `https://grid-atlas-cloud-staging.kazki1981.workers.dev`
 - D1: `grid-atlas-cloud-staging`（APAC）
@@ -10,7 +10,7 @@ Cloudflare Workers + D1で動く、自分用地点リストCloudベータです�
 
 ## 認証
 
-- 自分用ベータでは、Bearer値をCloudflare Worker Secrets `PERSONAL_ACCESS_CODE` / `FRIEND_ACCESS_CODE`と照合する。
+- アクセスコード式ベータでは、Bearer値をCloudflare Worker Secrets `PERSONAL_ACCESS_CODE` / `FRIEND_ACCESS_CODE`と照合する。
 - SecretはSHA-256へ揃えた後に定数時間比較し、ソース・`wrangler.jsonc`・Gitへ保存しない。
 - ローカル控えはGit管理外の `GRID_ATLAS_CLOUD_ACCESS_CODE_PRIVATE.txt`。値を変更する場合はSecretも同時に更新する。
 - 将来の複数ユーザー化に備え、Secret未設定環境では既存のJWT/JWKS検証へフォールバックする。

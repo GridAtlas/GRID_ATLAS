@@ -15,7 +15,7 @@ const MAP_PROVIDER_KEY = "grid-atlas-map-provider";
 const MAP_PROVIDER_GOOGLE = "google";
 const MAP_PROVIDER_APPLE = "apple";
 const GPS_ENABLED_KEY = "grid-atlas-gps-enabled";
-const MOBILE_PAGE_KEY = "grid-atlas-mobile-page";
+
 const CLOUD_API_URL_KEY = "grid-atlas-cloud-api-url";
 const CLOUD_ACCESS_TOKEN_KEY = "grid-atlas-cloud-access-token";
 const CLOUD_PRODUCTION_API_URL = "https://grid-atlas-cloud-staging.kazki1981.workers.dev";
@@ -156,7 +156,7 @@ const elements = {
   cloudReplaceLoadButton: document.querySelector("#cloudReplaceLoadButton"),
   cloudAppendLoadButton: document.querySelector("#cloudAppendLoadButton"),
   cloudDeleteButton: document.querySelector("#cloudDeleteButton"),
-  cloudStatus: document.querySelector("#cloudStatus"),
+  cloudStatuses: Array.from(document.querySelectorAll("[data-cloud-status]")),
   clearButton: document.querySelector("#clearButton")
 };
 
@@ -171,6 +171,7 @@ const state = {
     connected: false,
     busy: false,
     lists: [],
+    pointRows: [],
     selectedIds: new Set()
   },
   links: [],
@@ -371,10 +372,13 @@ const TRANSLATIONS = {
     "route.fromPrevious": "前地点から",
     "route.toStart": "スタートへ",
     "data.pointLists": "地点リスト",
-    "data.cloud": "自分用クラウド（ベータ）",
+    "data.cloud": "クラウドリスト（ベータ）",
     "data.observations": "観察記録",
     "data.grid": "グリッド",
-    "cloud.notice": "PCとスマホで地点リストを共有できます。アクセスコードはこのタブ内だけに保持します。",
+    "cloud.menuTitle": "クラウド接続",
+    "cloud.notice": "アクセスコードをこのブラウザに保存します。切断すると保存コードを削除します。",
+    "cloud.dataNotice": "接続中のクラウドにある地点リストです。",
+    "cloud.pointSource": "クラウド",
     "cloud.apiUrl": "Cloud API URL",
     "cloud.accessToken": "アクセスコード",
     "cloud.connect": "クラウドに接続",
@@ -502,10 +506,13 @@ const TRANSLATIONS = {
     "route.fromPrevious": "From previous",
     "route.toStart": "To start",
     "data.pointLists": "Point Lists",
-    "data.cloud": "Personal Cloud (Beta)",
+    "data.cloud": "Cloud Lists (Beta)",
     "data.observations": "Observation Records",
     "data.grid": "Grid",
-    "cloud.notice": "Share point lists between your PC and phone. The access code stays in this tab only.",
+    "cloud.menuTitle": "Cloud connection",
+    "cloud.notice": "The access code is saved in this browser. Disconnecting removes it.",
+    "cloud.dataNotice": "Point lists in the connected cloud.",
+    "cloud.pointSource": "Cloud",
     "cloud.apiUrl": "Cloud API URL",
     "cloud.accessToken": "Access code",
     "cloud.connect": "Connect to cloud",
@@ -1578,16 +1585,7 @@ function validMobilePageName(value) {
   return ["map", "register", "data"].includes(value);
 }
 
-function storedMobilePageName() {
-  try {
-    const value = localStorage.getItem(MOBILE_PAGE_KEY);
-    return validMobilePageName(value) ? value : "map";
-  } catch {
-    return "map";
-  }
-}
-
-function setMobilePage(name, options = {}) {
+function setMobilePage(name) {
   const pageName = validMobilePageName(name) ? name : "map";
   const mapActive = pageName === "map";
 
@@ -1608,13 +1606,6 @@ function setMobilePage(name, options = {}) {
     scheduleCanvasResize();
   }
 
-  if (options.persist !== false) {
-    try {
-      localStorage.setItem(MOBILE_PAGE_KEY, pageName);
-    } catch {
-      // Ignore storage failures; the visible page has already been updated.
-    }
-  }
 }
 
 function validMobileGridPageName(value) {
@@ -1646,7 +1637,7 @@ function renderMobileGridTabs() {
 }
 
 function initMobilePages() {
-  setMobilePage(storedMobilePageName(), { persist: false });
+  setMobilePage("map");
   setMobileGridPage("grid");
 }
 
@@ -2518,9 +2509,14 @@ function renderPointIndex() {
 
   ensurePointLists();
   const current = state.gpsEnabled ? currentLocationPoint() : null;
-  const rows = visiblePointLists().flatMap((list) => list.points.map((point) => ({ point, list })));
+  const rows = visiblePointLists().flatMap((list) => (
+    list.points.map((point) => ({ point, list, isCloud: false }))
+  ));
+  if (state.cloud.connected) {
+    rows.push(...state.cloud.pointRows);
+  }
   if (current) {
-    rows.unshift({ point: current, list: null });
+    rows.unshift({ point: current, list: null, isCloud: false });
   }
   elements.mobilePointCount.textContent = `${rows.length}${t("label.points")}`;
   elements.mobilePointItems.replaceChildren();
@@ -2533,31 +2529,43 @@ function renderPointIndex() {
     return;
   }
 
-  for (const { point, list } of rows) {
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "point-index-row";
-    row.classList.toggle("is-active", isPointSelected(point.id));
-    row.setAttribute("aria-pressed", String(isPointSelected(point.id)));
+  for (const { point, list, isCloud = false } of rows) {
+    const row = document.createElement(isCloud ? "div" : "button");
+    if (!isCloud) {
+      row.type = "button";
+      row.classList.toggle("is-active", isPointSelected(point.id));
+      row.setAttribute("aria-pressed", String(isPointSelected(point.id)));
+    }
+    row.classList.add("point-index-row");
+    row.classList.toggle("is-cloud", isCloud);
 
     const name = document.createElement("span");
     name.className = "point-index-name";
     const title = document.createElement("strong");
-    title.textContent = `${pointRoleMarker(point)}${point.title || "Point"}`;
+    title.textContent = isCloud
+      ? `☁ ${point.title || "Point"}`
+      : `${pointRoleMarker(point)}${point.title || "Point"}`;
     const meta = document.createElement("span");
-    meta.textContent = list?.name || t("label.gps");
+    meta.textContent = isCloud
+      ? `${t("cloud.pointSource")} / ${list?.name || "地点リスト"}`
+      : list?.name || t("label.gps");
     name.append(title, meta);
 
     const distance = document.createElement("span");
     distance.className = "point-index-distance";
-    distance.textContent = point.id === CURRENT_LOCATION_ID ? t("message.currentLocation") : current ? formatDistance(distanceBetween(current, point)) : `${formatCoordinate(pointGeo(point).lat)}, ${formatCoordinate(pointGeo(point).lng)}`;
+    distance.textContent = point.id === CURRENT_LOCATION_ID
+      ? t("message.currentLocation")
+      : current
+        ? formatDistance(distanceBetween(current, point))
+        : `${formatCoordinate(pointGeo(point).lat)}, ${formatCoordinate(pointGeo(point).lng)}`;
 
     row.append(name, distance);
-    row.addEventListener("click", () => toggleSelection("point", point.id));
+    if (!isCloud) {
+      row.addEventListener("click", () => toggleSelection("point", point.id));
+    }
     elements.mobilePointItems.append(row);
   }
 }
-
 function createPointListRow(list) {
   const row = document.createElement("div");
   row.className = "point-list-row";
@@ -2621,14 +2629,20 @@ function loadCloudSettings() {
     });
     apiUrl = resolved.url;
     if (resolved.replaced) localStorage.removeItem(CLOUD_API_URL_KEY);
-    token = sessionStorage.getItem(CLOUD_ACCESS_TOKEN_KEY) || "";
+    token = localStorage.getItem(CLOUD_ACCESS_TOKEN_KEY) || "";
+  } catch {}
+
+  try {
+    const sessionToken = sessionStorage.getItem(CLOUD_ACCESS_TOKEN_KEY) || "";
+    if (!token && sessionToken) token = sessionToken;
+    if (token) localStorage.setItem(CLOUD_ACCESS_TOKEN_KEY, token);
+    sessionStorage.removeItem(CLOUD_ACCESS_TOKEN_KEY);
   } catch {}
 
   elements.cloudApiUrl.value = apiUrl;
   elements.cloudAccessToken.value = token;
   state.cloud.connected = Boolean(apiUrl && token);
 }
-
 function cloudText(ja, en) {
   return activeLanguage() === EN_LANGUAGE ? en : ja;
 }
@@ -2641,10 +2655,11 @@ function cloudClientFromInputs() {
 }
 
 function setCloudStatus(message, options = {}) {
-  elements.cloudStatus.value = message || "";
-  elements.cloudStatus.classList.toggle("is-error", options.error === true);
+  for (const status of elements.cloudStatuses) {
+    status.value = message || "";
+    status.classList.toggle("is-error", options.error === true);
+  }
 }
-
 function setCloudBusy(busy) {
   state.cloud.busy = Boolean(busy);
   renderCloudPanel();
@@ -2740,38 +2755,55 @@ async function connectCloud() {
     const token = elements.cloudAccessToken.value.trim();
     if (!token) throw new CloudApiError(cloudText("アクセスコードを入力してください", "Enter an access code"), { status: 401 });
     localStorage.setItem(CLOUD_API_URL_KEY, apiUrl);
-    sessionStorage.setItem(CLOUD_ACCESS_TOKEN_KEY, token);
+    localStorage.setItem(CLOUD_ACCESS_TOKEN_KEY, token);
+    sessionStorage.removeItem(CLOUD_ACCESS_TOKEN_KEY);
     state.cloud.connected = true;
     await refreshCloudLists();
   } catch (error) {
     state.cloud.connected = false;
+    state.cloud.lists = [];
+    state.cloud.pointRows = [];
+    state.cloud.selectedIds.clear();
     setCloudStatus(cloudErrorMessage(error), { error: true });
     renderCloudPanel();
+    renderPointIndex();
   }
 }
-
 function disconnectCloud() {
   try {
+    localStorage.removeItem(CLOUD_ACCESS_TOKEN_KEY);
     sessionStorage.removeItem(CLOUD_ACCESS_TOKEN_KEY);
   } catch {}
   elements.cloudAccessToken.value = "";
   state.cloud.connected = false;
   state.cloud.lists = [];
+  state.cloud.pointRows = [];
   state.cloud.selectedIds.clear();
   setCloudStatus(cloudText("切断しました", "Disconnected"));
   renderCloudPanel();
+  renderPointIndex();
 }
-
 async function refreshCloudLists(options = {}) {
   setCloudBusy(true);
   try {
-    const response = await cloudClientFromInputs().listLists();
+    const client = cloudClientFromInputs();
+    const response = await client.listLists();
     if (!Array.isArray(response?.lists)) throw new CloudApiError(cloudText("クラウド一覧の形式が不正です", "Invalid cloud list response"));
     state.cloud.lists = response.lists.filter((list) => (
       list && typeof list.id === "string" && Number.isInteger(list.revision)
     ));
     const visibleIds = new Set(state.cloud.lists.map((list) => list.id));
     state.cloud.selectedIds = new Set([...state.cloud.selectedIds].filter((id) => visibleIds.has(id)));
+
+    const details = await Promise.all(state.cloud.lists.map((list) => client.getList(list.id)));
+    state.cloud.pointRows = details.flatMap((result) => {
+      const imported = cloudPayloadToPointList(result.list, {
+        localId: `cloud-preview:${result.list.list.id}`,
+        revision: result.revision,
+        editable: false
+      });
+      return imported.points.map((point) => ({ point, list: imported, isCloud: true }));
+    });
     state.cloud.connected = true;
     if (options.quiet !== true) {
       setCloudStatus(cloudText(
@@ -2782,13 +2814,14 @@ async function refreshCloudLists(options = {}) {
   } catch (error) {
     state.cloud.connected = false;
     state.cloud.lists = [];
+    state.cloud.pointRows = [];
     state.cloud.selectedIds.clear();
     setCloudStatus(cloudErrorMessage(error), { error: true });
   } finally {
     setCloudBusy(false);
+    renderPointIndex();
   }
 }
-
 function cloudSaveConfirmation(list, payload, updating) {
   const pointNames = payload.points.slice(0, 5).map((point) => point.name).join("、");
   const remainder = Math.max(0, payload.points.length - 5);

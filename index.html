@@ -9,8 +9,8 @@
     <link rel="icon" href="assets/icon-retro.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-retro.png">
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("grid-atlas-theme")==="light"?"light":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=38">
-    <script src="src/main.js?v=102" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=39">
+    <script src="src/main.js?v=103" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -28,6 +28,26 @@
                 <span class="settings-nav-title" data-i18n="settings.menu">メニュー</span>
                 <button class="settings-nav-button" type="button" data-mobile-page="data" aria-pressed="false" data-i18n="page.data">データ</button>
               </div>
+              <section class="cloud-menu-section">
+                <h2 data-i18n="cloud.menuTitle">クラウド接続</h2>
+                <p class="cloud-note" data-i18n="cloud.notice">アクセスコードをこのブラウザに保存します。切断すると保存コードを削除します。</p>
+                <label class="cloud-access-code-label">
+                  <span data-i18n="cloud.accessToken">アクセスコード</span>
+                  <input id="cloudAccessToken" type="password" autocomplete="off" spellcheck="false" placeholder="ga_ から始まるコード">
+                </label>
+                <div class="button-row">
+                  <button id="cloudConnectButton" class="primary-button" type="button" data-i18n="cloud.connect">クラウドに接続</button>
+                  <button id="cloudDisconnectButton" type="button" data-i18n="cloud.disconnect">切断</button>
+                </div>
+                <details class="cloud-advanced">
+                  <summary data-i18n="cloud.advanced">接続設定</summary>
+                  <label>
+                    <span data-i18n="cloud.apiUrl">Cloud API URL</span>
+                    <input id="cloudApiUrl" type="url" inputmode="url" autocomplete="url">
+                  </label>
+                </details>
+                <output id="cloudMenuStatus" class="form-status cloud-status" data-cloud-status aria-live="polite"></output>
+              </section>
               <h2 data-i18n="settings.title">設定</h2>
               <label>
                 <span data-i18n="settings.design">デザイン</span>
@@ -303,23 +323,8 @@
               </div>
             </div>
             <div class="data-group cloud-data-group">
-              <h3 data-i18n="data.cloud">自分用クラウド（ベータ）</h3>
-              <p class="cloud-note" data-i18n="cloud.notice">PCとスマホで地点リストを共有できます。アクセスコードはこのタブ内だけに保持します。</p>
-              <label class="cloud-access-code-label">
-                <span data-i18n="cloud.accessToken">アクセスコード</span>
-                <input id="cloudAccessToken" type="password" autocomplete="off" spellcheck="false" placeholder="ga_ から始まるコード">
-              </label>
-              <div class="button-row">
-                <button id="cloudConnectButton" class="primary-button" type="button" data-i18n="cloud.connect">クラウドに接続</button>
-                <button id="cloudDisconnectButton" type="button" data-i18n="cloud.disconnect">切断</button>
-              </div>
-              <details class="cloud-advanced">
-                <summary data-i18n="cloud.advanced">接続設定</summary>
-                <label>
-                  <span data-i18n="cloud.apiUrl">Cloud API URL</span>
-                  <input id="cloudApiUrl" type="url" inputmode="url" autocomplete="url">
-                </label>
-              </details>
+              <h3 data-i18n="data.cloud">クラウドリスト（ベータ）</h3>
+              <p class="cloud-note" data-i18n="cloud.dataNotice">接続中のクラウドにある地点リストです。</p>
               <label class="cloud-local-list-label">
                 <span data-i18n="cloud.localList">保存するローカルリスト</span>
                 <select id="cloudLocalListSelect"></select>
@@ -333,7 +338,7 @@
                 <button id="cloudAppendLoadButton" type="button" data-i18n="button.appendLoad">追加読込</button>
                 <button id="cloudDeleteButton" class="danger-button" type="button" data-i18n="cloud.delete">クラウド削除</button>
               </div>
-              <output id="cloudStatus" class="form-status cloud-status" aria-live="polite"></output>
+              <output id="cloudStatus" class="form-status cloud-status" data-cloud-status aria-live="polite"></output>
             </div>
             <div class="data-group">
               <h3 data-i18n="data.observations">観察記録</h3>

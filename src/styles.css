@@ -164,6 +164,9 @@ textarea:focus-visible {
   border-radius: 8px;
   background: var(--surface);
   box-shadow: var(--shadow);
+  max-height: calc(100vh - 70px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .settings-panel h2 {
@@ -195,6 +198,14 @@ textarea:focus-visible {
   border-color: var(--accent);
   background: var(--active-bg);
   color: var(--accent-strong);
+}
+
+.cloud-menu-section {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
 }
 
 .settings-panel label {
@@ -1018,6 +1029,17 @@ textarea {
 .point-index-row.is-active {
   border-color: var(--accent);
   background: var(--active-bg);
+  color: var(--accent-strong);
+}
+
+.point-index-row.is-cloud {
+  border-style: dashed;
+  border-left: 4px solid var(--accent);
+  background: color-mix(in srgb, var(--active-bg) 54%, var(--field-bg));
+  cursor: default;
+}
+
+.point-index-row.is-cloud .point-index-name strong {
   color: var(--accent-strong);
 }
 
