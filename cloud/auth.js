@@ -38,7 +38,7 @@ const JWT_ALGORITHMS = {
 };
 
 const JWKS_CACHE_TTL_MS = 5 * 60 * 1000;
-const MAX_JWT_CHARS = 16 * 1024;
+const MAX_TOKEN_CHARS = 16 * 1024;
 const MAX_JWKS_BYTES = 64 * 1024;
 const MAX_JWKS_KEYS = 100;
 let jwksCache = null;
@@ -54,8 +54,14 @@ export class AuthError extends Error {
 export async function authenticateRequest(request, env) {
   const authorization = request.headers.get("Authorization") || "";
   const match = authorization.match(/^Bearer\s+(.+)$/i);
-  if (!match || match[1].length > MAX_JWT_CHARS) {
+  if (!match || match[1].length > MAX_TOKEN_CHARS) {
     throw new AuthError("ログインが必要です", 401);
+  }
+
+  if (env.PERSONAL_ACCESS_CODE) {
+    const valid = await secretsMatch(match[1], env.PERSONAL_ACCESS_CODE);
+    if (!valid) throw new AuthError("アクセスコードが違います", 401);
+    return { id: env.PERSONAL_OWNER_ID || "personal-beta" };
   }
 
   const requiredConfig = ["AUTH_JWKS_URL", "AUTH_ISSUER", "AUTH_AUDIENCE"];
@@ -65,6 +71,15 @@ export async function authenticateRequest(request, env) {
 
   const claims = await verifyJwt(match[1], env);
   return { id: claims.sub };
+}
+
+async function secretsMatch(provided, expected) {
+  const encoder = new TextEncoder();
+  const [providedHash, expectedHash] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(provided)),
+    crypto.subtle.digest("SHA-256", encoder.encode(expected))
+  ]);
+  return crypto.subtle.timingSafeEqual(providedHash, expectedHash);
 }
 
 async function verifyJwt(token, env) {

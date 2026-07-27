@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "../worker.js";
+import { authenticateRequest } from "../auth.js";
 
 const JWKS_URL = "https://auth.test/.well-known/jwks.json";
 const ISSUER = "https://auth.test/";
@@ -38,6 +39,21 @@ afterAll(() => {
 });
 
 describe("GRID ATLAS Cloud API", () => {
+  it("supports a personal beta access code stored as a Worker secret", async () => {
+    const personalEnv = {
+      PERSONAL_ACCESS_CODE: "ga_personal_test",
+      PERSONAL_OWNER_ID: "personal-test"
+    };
+    const authorized = await authenticateRequest(new Request("https://api.test/v1/me/lists", {
+      headers: { Authorization: "Bearer ga_personal_test" }
+    }), personalEnv);
+    expect(authorized).toEqual({ id: "personal-test" });
+
+    await expect(authenticateRequest(new Request("https://api.test/v1/me/lists", {
+      headers: { Authorization: "Bearer wrong-code" }
+    }), personalEnv)).rejects.toMatchObject({ status: 401, message: "アクセスコードが違います" });
+  });
+
   it("handles authentication, CORS, malformed routes, and private response headers", async () => {
     const unauthenticated = await api("/v1/me/lists", { token: null });
     expect(unauthenticated.status).toBe(401);

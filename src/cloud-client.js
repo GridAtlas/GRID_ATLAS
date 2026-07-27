@@ -16,7 +16,7 @@ export function createCloudClient({ baseUrl, getAccessToken, fetchImpl = globalT
 
   async function request(path, options = {}) {
     const token = String(await getAccessToken?.() || "").trim();
-    if (!token) throw new CloudApiError("アクセストークンを入力してください", { status: 401 });
+    if (!token) throw new CloudApiError("アクセスコードを入力してください", { status: 401 });
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);

@@ -26,20 +26,26 @@
   "env": {
     "staging": {
       "name": "grid-atlas-cloud-staging",
+      "workers_dev": true,
+      "preview_urls": false,
       "vars": {
         "WEB_ORIGINS": "https://gridatlas.github.io",
         "AUTH_JWKS_URL": "",
         "AUTH_ISSUER": "",
-        "AUTH_AUDIENCE": ""
+        "AUTH_AUDIENCE": "",
+        "PERSONAL_OWNER_ID": "personal-beta"
       },
       "d1_databases": [
         {
           "binding": "DB",
           "database_name": "grid-atlas-cloud-staging",
-          "database_id": "11111111-1111-1111-1111-111111111111",
+          "database_id": "dcf00f6a-8380-49e9-9589-009a0198914a",
           "migrations_dir": "cloud/migrations"
         }
-      ]
+      ],
+      "secrets": {
+        "required": ["PERSONAL_ACCESS_CODE"]
+      }
     }
   }
 }

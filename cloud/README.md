@@ -1,57 +1,44 @@
 # GRID ATLAS Cloud API
 
-Cloudflare Workers + D1で動く、ユーザー専用地点リストAPIのローカル／staging骨格です。
-Web UIにはまだ接続せず、実Cloudflare環境にもまだデプロイしません。
+Cloudflare Workers + D1で動く、自分用地点リストCloudベータです。
 
-共通形式の `grid-atlas-share` v1は現在も **proposed** です。ここにあるAPIは、その案を検証するためのWeb先行実装であり、共通契約をAcceptedへ変更するものではありません。
+- Worker: `https://grid-atlas-cloud-staging.kazki1981.workers.dev`
+- D1: `grid-atlas-cloud-staging`（APAC）
+- Web: `https://gridatlas.github.io/GRID_ATLAS/`
 
-## 守っている境界
+共通形式の `grid-atlas-share` v1は現在も **proposed** です。このベータはWeb先行の検証であり、Cloudflareの正式採用や共通契約のAccepted化を意味しません。
 
-- ログインなしのWebローカル機能は従来どおり利用できる
-- クラウド保存は明示的なAPI操作だけで行う
-- 現在地、追跡状態、選択状態、画面状態は保存しない
-- D1はWorkerの `DB` bindingからだけ利用する
-- 全APIでBearer JWTを検証し、`owner_id`でデータを分離する
-- 更新と削除は `expectedRevision` が一致した場合だけ成功する
-- 認証未設定時に開発用バイパスは作らず503を返す
+## 認証
 
-## セットアップ
+- 自分用ベータでは、Bearer値をCloudflare Worker Secret `PERSONAL_ACCESS_CODE`と照合する。
+- SecretはSHA-256へ揃えた後に定数時間比較し、ソース・`wrangler.jsonc`・Gitへ保存しない。
+- ローカル控えはGit管理外の `.cloud-access-code`。値を変更する場合はSecretも同時に更新する。
+- 将来の複数ユーザー化に備え、Secret未設定環境では既存のJWT/JWKS検証へフォールバックする。
+- 個人ベータのownerは `PERSONAL_OWNER_ID=personal-beta` に固定する。
 
-```powershell
-npm install
-npm test
-```
+## データ境界
 
-`wrangler.jsonc` がWorker設定の正本です。トップレベル設定はローカル開発用、`staging` environmentは将来の実環境用です。
-`0000...` と `1111...` のD1 IDは意図的なプレースホルダーなので、実環境作成前に置き換えてください。
+- クラウド保存はユーザーが明示的に実行した場合だけ。
+- 地点リスト名、説明、地点名、緯度経度、コメントだけを送る。
+- 写真、現在地、追跡、選択、画面状態、線は送らない。
+- 更新と削除は `expectedRevision` による楽観ロックを使う。
+- 基本のローカル機能はアクセスコードなしでも利用できる。
 
-認証プロバイダ決定後、環境ごとに宣言済みの次の空値を実値へ置き換えます。
-
-- `AUTH_JWKS_URL`: 公開JWKSエンドポイント
-- `AUTH_ISSUER`: JWT issuer
-- `AUTH_AUDIENCE`: GRID ATLAS APIのaudience
-- `WEB_ORIGINS`: 許可するブラウザoriginのカンマ区切り一覧
-
-アクセストークン、秘密鍵、クライアントシークレットはソースや `wrangler.jsonc` に保存しません。ローカル秘密値が必要になった場合は、Git管理外の `.dev.vars` を使います。
-
-## 開発コマンド
+## 開発・検証
 
 ```powershell
-npm run cloud:types    # binding型を cloud/worker-configuration.d.ts に生成
-npm run cloud:dev      # ローカルWorker + ローカルD1
-npm test               # Workers runtime + D1 + JWT統合テスト
-npm run cloud:dry-run  # デプロイせずbundleとbindingを検証
-npm run check          # Web構文チェック + Cloud API統合テスト
+npm run check
+npm run cloud:types
+npm run cloud:dry-run
+npx wrangler d1 migrations apply grid-atlas-cloud-staging --remote --env staging
+npx wrangler deploy --env staging
 ```
 
-統合テストは実ネットワークを使わず、一時ECDSA鍵、モックJWKS、ローカルD1 migrationで次を検証します。
+Secretの設定・ローテーションは、値をコマンド引数やログへ出さずに行う。
 
-- JWT署名、有効期限、未認証
-- CORSと機密レスポンスの `no-store`
-- 所有者間のデータ分離
-- 作成・一覧・取得・更新・論理削除
-- revision競合
-- Schema、ID、日時、座標、本文サイズの入力検証
+```powershell
+Get-Content -LiteralPath .cloud-access-code -Raw | npx wrangler secret put PERSONAL_ACCESS_CODE --env staging
+```
 
 ## API
 
@@ -63,45 +50,11 @@ PUT    /v1/me/lists/:listId
 DELETE /v1/me/lists/:listId
 ```
 
-すべてBearerトークンが必要です。
+作成は `grid-atlas-share` v1ペイロード、更新・削除は `expectedRevision` を受け取る。競合時は409を返し、自動マージしない。削除は現在は論理削除。
 
-### 作成
+## 未決事項
 
-POST本文は `grid-atlas-share` v1ペイロードそのもの、または `{ "payload": <payload> }` を受け取ります。
-
-### 更新
-
-```json
-{
-  "expectedRevision": 3,
-  "payload": {
-    "type": "grid-atlas-share",
-    "schemaVersion": 1,
-    "kind": "point-list",
-    "list": {
-      "id": "stable-list-id",
-      "name": "地点リスト"
-    },
-    "points": []
-  }
-}
-```
-
-revisionが古い場合は409を返し、クラウド側の現在値とrevisionを返します。自動マージはしません。
-
-### 削除
-
-```json
-{ "expectedRevision": 4 }
-```
-
-初期版は論理削除です。復旧APIと保持期間は未決定です。
-
-## stagingへ進む前に必要な決定
-
-- `grid-atlas-share` SchemaとWeb／Native変換規則
-- 認証プロバイダ、issuer、audience
-- Cloudflareアカウントの所有・課金運用
-- D1削除保持期間と容量上限
-
-これらをユーザーが決定した後にD1を作成し、`cloud/migrations` を適用して `wrangler deploy --env staging` へ進みます。
+- 正式な認証プロバイダーと複数ユーザーログイン
+- Cloudflareを正式Backendとして採用するか
+- Web／Native間のSchema・ID・同期ルール
+- 削除保持期間、容量上限、料金運用

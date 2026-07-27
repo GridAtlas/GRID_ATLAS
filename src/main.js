@@ -17,6 +17,7 @@ const GPS_ENABLED_KEY = "grid-atlas-gps-enabled";
 const MOBILE_PAGE_KEY = "grid-atlas-mobile-page";
 const CLOUD_API_URL_KEY = "grid-atlas-cloud-api-url";
 const CLOUD_ACCESS_TOKEN_KEY = "grid-atlas-cloud-access-token";
+const CLOUD_PRODUCTION_API_URL = "https://grid-atlas-cloud-staging.kazki1981.workers.dev";
 const LIGHT_THEME = "light";
 const RETRO_THEME = "retro";
 const JA_LANGUAGE = "ja";
@@ -369,14 +370,15 @@ const TRANSLATIONS = {
     "route.fromPrevious": "前地点から",
     "route.toStart": "スタートへ",
     "data.pointLists": "地点リスト",
-    "data.cloud": "クラウド（試験接続）",
+    "data.cloud": "自分用クラウド（ベータ）",
     "data.observations": "観察記録",
     "data.grid": "グリッド",
-    "cloud.notice": "認証方式が確定するまでの試験画面です。アクセストークンはこのタブ内だけに保持します。",
+    "cloud.notice": "PCとスマホで地点リストを共有できます。アクセスコードはこのタブ内だけに保持します。",
     "cloud.apiUrl": "Cloud API URL",
-    "cloud.accessToken": "アクセストークン",
-    "cloud.connect": "接続・更新",
+    "cloud.accessToken": "アクセスコード",
+    "cloud.connect": "クラウドに接続",
     "cloud.disconnect": "切断",
+    "cloud.advanced": "接続設定",
     "cloud.localList": "保存するローカルリスト",
     "cloud.save": "クラウドへ保存",
     "cloud.delete": "クラウド削除",
@@ -499,14 +501,15 @@ const TRANSLATIONS = {
     "route.fromPrevious": "From previous",
     "route.toStart": "To start",
     "data.pointLists": "Point Lists",
-    "data.cloud": "Cloud (Test Connection)",
+    "data.cloud": "Personal Cloud (Beta)",
     "data.observations": "Observation Records",
     "data.grid": "Grid",
-    "cloud.notice": "This is a test connection until authentication is finalized. The access token stays in this tab only.",
+    "cloud.notice": "Share point lists between your PC and phone. The access code stays in this tab only.",
     "cloud.apiUrl": "Cloud API URL",
-    "cloud.accessToken": "Access token",
-    "cloud.connect": "Connect / Refresh",
+    "cloud.accessToken": "Access code",
+    "cloud.connect": "Connect to cloud",
     "cloud.disconnect": "Disconnect",
+    "cloud.advanced": "Connection settings",
     "cloud.localList": "Local list to save",
     "cloud.save": "Save to cloud",
     "cloud.delete": "Delete from cloud",
@@ -2603,7 +2606,7 @@ function renderPointLists() {
 function defaultCloudApiUrl() {
   return ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname)
     ? "http://127.0.0.1:8787"
-    : "";
+    : CLOUD_PRODUCTION_API_URL;
 }
 
 function loadCloudSettings() {
@@ -2728,7 +2731,7 @@ async function connectCloud() {
     cloudClientFromInputs();
     const apiUrl = elements.cloudApiUrl.value.trim();
     const token = elements.cloudAccessToken.value.trim();
-    if (!token) throw new CloudApiError(cloudText("アクセストークンを入力してください", "Enter an access token"), { status: 401 });
+    if (!token) throw new CloudApiError(cloudText("アクセスコードを入力してください", "Enter an access code"), { status: 401 });
     localStorage.setItem(CLOUD_API_URL_KEY, apiUrl);
     sessionStorage.setItem(CLOUD_ACCESS_TOKEN_KEY, token);
     state.cloud.connected = true;

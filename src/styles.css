@@ -871,6 +871,30 @@ textarea {
   line-height: 1.55;
 }
 
+.cloud-access-code-label,
+.cloud-advanced label {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.cloud-advanced {
+  padding: 8px 10px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.cloud-advanced summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.cloud-advanced[open] summary {
+  margin-bottom: 8px;
+}
+
 .cloud-config-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
