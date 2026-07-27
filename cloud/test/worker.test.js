@@ -87,16 +87,23 @@ describe("GRID ATLAS Cloud API", () => {
     const collection = await api("/v1/me/lists", { token: ownerAToken });
     const collectionBody = await collection.json();
     expect(collectionBody.lists).toHaveLength(1);
-    expect(collectionBody.lists[0]).toMatchObject({ id: "list-1", revision: 1 });
+    expect(collectionBody.lists[0]).toMatchObject({
+      id: "list-1",
+      revision: 1,
+      createdAt: "2026-07-23T15:00:00.000Z"
+    });
 
     const updatedPayload = samplePayload({ name: "更新後のリスト" });
+    updatedPayload.list.createdAt = "2020-01-01T00:00:00Z";
     const updated = await api("/v1/me/lists/list-1", {
       method: "PUT",
       token: ownerAToken,
       body: { expectedRevision: 1, payload: updatedPayload }
     });
     expect(updated.status).toBe(200);
-    expect((await updated.json()).revision).toBe(2);
+    const updatedBody = await updated.json();
+    expect(updatedBody.revision).toBe(2);
+    expect(updatedBody.list.list.createdAt).toBe("2026-07-23T15:00:00.000Z");
 
     const stale = await api("/v1/me/lists/list-1", {
       method: "PUT",
@@ -134,6 +141,17 @@ describe("GRID ATLAS Cloud API", () => {
     const tokenParts = validToken.split(".");
     tokenParts[2] = `${tokenParts[2][0] === "A" ? "B" : "A"}${tokenParts[2].slice(1)}`;
     expect((await api("/v1/me/lists", { token: tokenParts.join(".") })).status).toBe(401);
+    expect((await api("/v1/me/lists", {
+      token: await issueToken("owner-a", { audience: "another-app" })
+    })).status).toBe(401);
+
+    const missingContentType = await api("/v1/me/lists", {
+      method: "POST",
+      token: validToken,
+      body: samplePayload(),
+      contentType: null
+    });
+    expect(missingContentType.status).toBe(415);
 
     const primitive = await api("/v1/me/lists", { method: "POST", token: validToken, body: null });
     expect(primitive.status).toBe(400);
@@ -184,12 +202,12 @@ describe("GRID ATLAS Cloud API", () => {
   });
 });
 
-async function api(path, { method = "GET", token, body, origin } = {}) {
+async function api(path, { method = "GET", token, body, origin, contentType = "application/json" } = {}) {
   const headers = new Headers();
   const bearer = token === undefined ? await issueToken("owner-a") : token;
   if (bearer) headers.set("Authorization", `Bearer ${bearer}`);
   if (origin) headers.set("Origin", origin);
-  if (body !== undefined) headers.set("Content-Type", "application/json");
+  if (body !== undefined && contentType) headers.set("Content-Type", contentType);
   return worker.fetch(new Request(`https://api.test${path}`, {
     method,
     headers,

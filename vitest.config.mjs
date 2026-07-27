@@ -23,7 +23,7 @@ export default defineConfig({
     })
   ],
   test: {
-    include: ["cloud/test/**/*.test.js"],
+    include: ["cloud/test/**/*.test.js", "src/**/*.test.js"],
     setupFiles: ["./cloud/test/setup.js"]
   }
 });

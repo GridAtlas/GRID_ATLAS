@@ -859,6 +859,93 @@ textarea {
   padding: 0 8px;
 }
 
+.cloud-data-group {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.cloud-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.cloud-config-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.cloud-config-grid label,
+.cloud-local-list-label {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.cloud-list-items {
+  display: grid;
+  gap: 8px;
+}
+
+.cloud-list-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field-bg);
+  color: var(--text);
+}
+
+.cloud-list-row:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--active-bg);
+}
+
+.cloud-list-row input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.cloud-list-name {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.cloud-list-name strong,
+.cloud-list-name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloud-list-name span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cloud-empty-state {
+  min-height: 58px;
+}
+
+.cloud-status.is-error {
+  color: var(--danger);
+}
+
+@media (max-width: 560px) {
+  .cloud-config-grid {
+    grid-template-columns: 1fr;
+  }
+}
 .mobile-content-panel {
   min-width: 0;
   min-height: 0;

@@ -1,3 +1,10 @@
+import {
+  CloudApiError,
+  cloudPayloadToPointList,
+  createCloudClient,
+  pointListToCloudPayload
+} from "./cloud-client.js";
+
 const STORAGE_KEY = "grid-atlas-workspace-v2";
 const THEME_KEY = "grid-atlas-theme";
 const LANGUAGE_KEY = "grid-atlas-language";
@@ -8,6 +15,8 @@ const MAP_PROVIDER_GOOGLE = "google";
 const MAP_PROVIDER_APPLE = "apple";
 const GPS_ENABLED_KEY = "grid-atlas-gps-enabled";
 const MOBILE_PAGE_KEY = "grid-atlas-mobile-page";
+const CLOUD_API_URL_KEY = "grid-atlas-cloud-api-url";
+const CLOUD_ACCESS_TOKEN_KEY = "grid-atlas-cloud-access-token";
 const LIGHT_THEME = "light";
 const RETRO_THEME = "retro";
 const JA_LANGUAGE = "ja";
@@ -135,6 +144,17 @@ const elements = {
   replaceObservationButton: document.querySelector("#replaceObservationButton"),
   appendObservationButton: document.querySelector("#appendObservationButton"),
   observationImportFile: document.querySelector("#observationImportFile"),
+  cloudApiUrl: document.querySelector("#cloudApiUrl"),
+  cloudAccessToken: document.querySelector("#cloudAccessToken"),
+  cloudConnectButton: document.querySelector("#cloudConnectButton"),
+  cloudDisconnectButton: document.querySelector("#cloudDisconnectButton"),
+  cloudLocalListSelect: document.querySelector("#cloudLocalListSelect"),
+  cloudSaveButton: document.querySelector("#cloudSaveButton"),
+  cloudListItems: document.querySelector("#cloudListItems"),
+  cloudReplaceLoadButton: document.querySelector("#cloudReplaceLoadButton"),
+  cloudAppendLoadButton: document.querySelector("#cloudAppendLoadButton"),
+  cloudDeleteButton: document.querySelector("#cloudDeleteButton"),
+  cloudStatus: document.querySelector("#cloudStatus"),
   clearButton: document.querySelector("#clearButton")
 };
 
@@ -145,6 +165,12 @@ const state = {
   mapProvider: MAP_PROVIDER_GOOGLE,
   points: [],
   pointLists: [],
+  cloud: {
+    connected: false,
+    busy: false,
+    lists: [],
+    selectedIds: new Set()
+  },
   links: [],
   mode: "inspect",
   mobileGridPage: "grid",
@@ -343,8 +369,18 @@ const TRANSLATIONS = {
     "route.fromPrevious": "前地点から",
     "route.toStart": "スタートへ",
     "data.pointLists": "地点リスト",
+    "data.cloud": "クラウド（試験接続）",
     "data.observations": "観察記録",
     "data.grid": "グリッド",
+    "cloud.notice": "認証方式が確定するまでの試験画面です。アクセストークンはこのタブ内だけに保持します。",
+    "cloud.apiUrl": "Cloud API URL",
+    "cloud.accessToken": "アクセストークン",
+    "cloud.connect": "接続・更新",
+    "cloud.disconnect": "切断",
+    "cloud.localList": "保存するローカルリスト",
+    "cloud.save": "クラウドへ保存",
+    "cloud.delete": "クラウド削除",
+    "cloud.empty": "クラウドリストなし",
     "status.grid": "格子",
     "label.points": "点",
     "label.links": "線",
@@ -463,8 +499,18 @@ const TRANSLATIONS = {
     "route.fromPrevious": "From previous",
     "route.toStart": "To start",
     "data.pointLists": "Point Lists",
+    "data.cloud": "Cloud (Test Connection)",
     "data.observations": "Observation Records",
     "data.grid": "Grid",
+    "cloud.notice": "This is a test connection until authentication is finalized. The access token stays in this tab only.",
+    "cloud.apiUrl": "Cloud API URL",
+    "cloud.accessToken": "Access token",
+    "cloud.connect": "Connect / Refresh",
+    "cloud.disconnect": "Disconnect",
+    "cloud.localList": "Local list to save",
+    "cloud.save": "Save to cloud",
+    "cloud.delete": "Delete from cloud",
+    "cloud.empty": "No cloud lists",
     "status.grid": "Grid",
     "label.points": "pts",
     "label.links": "lines",
@@ -769,6 +815,9 @@ function createPointList(options = {}) {
     visible: options.visible !== false,
     editable: Boolean(options.editable),
     source: typeof options.source === "string" ? options.source : "import",
+    cloudId: typeof options.cloudId === "string" ? options.cloudId : "",
+    cloudRevision: Number.isInteger(options.cloudRevision) ? options.cloudRevision : null,
+    cloudUpdatedAt: typeof options.cloudUpdatedAt === "string" ? options.cloudUpdatedAt : "",
     importedAt: typeof options.importedAt === "string" ? options.importedAt : now,
     createdAt: typeof options.createdAt === "string" ? options.createdAt : now,
     updatedAt: typeof options.updatedAt === "string" ? options.updatedAt : now,
@@ -861,6 +910,9 @@ function normalizePointList(list, existingPointIds = new Set(), fallbackName = "
     visible: list?.visible !== false,
     editable: Boolean(list?.editable),
     source: typeof list?.source === "string" ? list.source : "import",
+    cloudId: typeof list?.cloudId === "string" ? list.cloudId : "",
+    cloudRevision: Number.isInteger(list?.cloudRevision) ? list.cloudRevision : null,
+    cloudUpdatedAt: typeof list?.cloudUpdatedAt === "string" ? list.cloudUpdatedAt : "",
     importedAt: typeof list?.importedAt === "string" ? list.importedAt : new Date().toISOString(),
     createdAt: typeof list?.createdAt === "string" ? list.createdAt : new Date().toISOString(),
     updatedAt: typeof list?.updatedAt === "string" ? list.updatedAt : new Date().toISOString(),
@@ -1499,6 +1551,7 @@ function render() {
   renderAnalysis();
   renderRoute();
   renderPointLists();
+  renderCloudPanel();
   renderPointIndex();
   renderMobileGridTabs();
   renderSelectedSummary();
@@ -2546,6 +2599,355 @@ function renderPointLists() {
       container.append(createPointListRow(list));
     }
   }
+}
+function defaultCloudApiUrl() {
+  return ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname)
+    ? "http://127.0.0.1:8787"
+    : "";
+}
+
+function loadCloudSettings() {
+  let apiUrl = defaultCloudApiUrl();
+  let token = "";
+  try {
+    apiUrl = localStorage.getItem(CLOUD_API_URL_KEY) || apiUrl;
+    token = sessionStorage.getItem(CLOUD_ACCESS_TOKEN_KEY) || "";
+  } catch {}
+
+  elements.cloudApiUrl.value = apiUrl;
+  elements.cloudAccessToken.value = token;
+  state.cloud.connected = Boolean(apiUrl && token);
+}
+
+function cloudText(ja, en) {
+  return activeLanguage() === EN_LANGUAGE ? en : ja;
+}
+
+function cloudClientFromInputs() {
+  return createCloudClient({
+    baseUrl: elements.cloudApiUrl.value,
+    getAccessToken: () => elements.cloudAccessToken.value
+  });
+}
+
+function setCloudStatus(message, options = {}) {
+  elements.cloudStatus.value = message || "";
+  elements.cloudStatus.classList.toggle("is-error", options.error === true);
+}
+
+function setCloudBusy(busy) {
+  state.cloud.busy = Boolean(busy);
+  renderCloudPanel();
+}
+
+function selectedCloudListMeta() {
+  return state.cloud.lists.filter((list) => state.cloud.selectedIds.has(list.id));
+}
+
+function formatCloudDate(value) {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return "-";
+  return new Intl.DateTimeFormat(activeLanguage() === EN_LANGUAGE ? "en" : "ja", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(timestamp));
+}
+
+function renderCloudPanel() {
+  if (!elements.cloudListItems) return;
+
+  ensurePointLists();
+  const previousLocalId = elements.cloudLocalListSelect.value;
+  elements.cloudLocalListSelect.replaceChildren();
+  for (const list of state.pointLists) {
+    const option = document.createElement("option");
+    option.value = list.id;
+    option.textContent = `${list.name || "地点リスト"} (${list.points.length}${t("label.points")})`;
+    elements.cloudLocalListSelect.append(option);
+  }
+  if (state.pointLists.some((list) => list.id === previousLocalId)) {
+    elements.cloudLocalListSelect.value = previousLocalId;
+  } else {
+    elements.cloudLocalListSelect.value = DEFAULT_POINT_LIST_ID;
+  }
+
+  elements.cloudListItems.replaceChildren();
+  if (state.cloud.lists.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state cloud-empty-state";
+    empty.textContent = state.cloud.connected ? t("cloud.empty") : cloudText("未接続", "Not connected");
+    elements.cloudListItems.append(empty);
+  } else {
+    for (const list of state.cloud.lists) {
+      const row = document.createElement("label");
+      row.className = "cloud-list-row";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = state.cloud.selectedIds.has(list.id);
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) state.cloud.selectedIds.add(list.id);
+        else state.cloud.selectedIds.delete(list.id);
+        syncCloudControls();
+      });
+
+      const name = document.createElement("span");
+      name.className = "cloud-list-name";
+      const title = document.createElement("strong");
+      title.textContent = list.name || "地点リスト";
+      const meta = document.createElement("span");
+      meta.textContent = `rev.${list.revision} / ${formatCloudDate(list.updatedAt)}`;
+      name.append(title, meta);
+      row.append(checkbox, name);
+      elements.cloudListItems.append(row);
+    }
+  }
+
+  syncCloudControls();
+}
+
+function syncCloudControls() {
+  const selectedCount = selectedCloudListMeta().length;
+  const disabled = state.cloud.busy || !state.cloud.connected;
+  elements.cloudApiUrl.disabled = state.cloud.busy;
+  elements.cloudAccessToken.disabled = state.cloud.busy;
+  elements.cloudConnectButton.disabled = state.cloud.busy;
+  elements.cloudDisconnectButton.disabled = state.cloud.busy || (!state.cloud.connected && !elements.cloudAccessToken.value);
+  elements.cloudLocalListSelect.disabled = disabled || state.pointLists.length === 0;
+  elements.cloudSaveButton.disabled = disabled || state.pointLists.length === 0;
+  elements.cloudReplaceLoadButton.disabled = disabled || selectedCount !== 1;
+  elements.cloudAppendLoadButton.disabled = disabled || selectedCount === 0;
+  elements.cloudDeleteButton.disabled = disabled || selectedCount === 0;
+}
+
+async function connectCloud() {
+  try {
+    cloudClientFromInputs();
+    const apiUrl = elements.cloudApiUrl.value.trim();
+    const token = elements.cloudAccessToken.value.trim();
+    if (!token) throw new CloudApiError(cloudText("アクセストークンを入力してください", "Enter an access token"), { status: 401 });
+    localStorage.setItem(CLOUD_API_URL_KEY, apiUrl);
+    sessionStorage.setItem(CLOUD_ACCESS_TOKEN_KEY, token);
+    state.cloud.connected = true;
+    await refreshCloudLists();
+  } catch (error) {
+    state.cloud.connected = false;
+    setCloudStatus(cloudErrorMessage(error), { error: true });
+    renderCloudPanel();
+  }
+}
+
+function disconnectCloud() {
+  try {
+    sessionStorage.removeItem(CLOUD_ACCESS_TOKEN_KEY);
+  } catch {}
+  elements.cloudAccessToken.value = "";
+  state.cloud.connected = false;
+  state.cloud.lists = [];
+  state.cloud.selectedIds.clear();
+  setCloudStatus(cloudText("切断しました", "Disconnected"));
+  renderCloudPanel();
+}
+
+async function refreshCloudLists(options = {}) {
+  setCloudBusy(true);
+  try {
+    const response = await cloudClientFromInputs().listLists();
+    if (!Array.isArray(response?.lists)) throw new CloudApiError(cloudText("クラウド一覧の形式が不正です", "Invalid cloud list response"));
+    state.cloud.lists = response.lists.filter((list) => (
+      list && typeof list.id === "string" && Number.isInteger(list.revision)
+    ));
+    const visibleIds = new Set(state.cloud.lists.map((list) => list.id));
+    state.cloud.selectedIds = new Set([...state.cloud.selectedIds].filter((id) => visibleIds.has(id)));
+    state.cloud.connected = true;
+    if (options.quiet !== true) {
+      setCloudStatus(cloudText(
+        `${state.cloud.lists.length}件のクラウドリストを読み込みました`,
+        `Loaded ${state.cloud.lists.length} cloud list(s)`
+      ));
+    }
+  } catch (error) {
+    state.cloud.connected = false;
+    state.cloud.lists = [];
+    state.cloud.selectedIds.clear();
+    setCloudStatus(cloudErrorMessage(error), { error: true });
+  } finally {
+    setCloudBusy(false);
+  }
+}
+
+function cloudSaveConfirmation(list, payload, updating) {
+  const pointNames = payload.points.slice(0, 5).map((point) => point.name).join("、");
+  const remainder = Math.max(0, payload.points.length - 5);
+  const photoCount = list.points.filter((point) => Boolean(point.photo)).length;
+  return cloudText(
+    `${updating ? "更新" : "保存"}: ${payload.list.name}\n地点数: ${payload.points.length}\n地点名: ${pointNames || "なし"}${remainder ? ` ほか${remainder}件` : ""}\n位置情報をクラウドへ送信します。${photoCount ? `\n写真${photoCount}件は送信しません。` : ""}`,
+    `${updating ? "Update" : "Save"}: ${payload.list.name}\nPoints: ${payload.points.length}\nNames: ${pointNames || "None"}${remainder ? ` and ${remainder} more` : ""}\nThis sends location data to the cloud.${photoCount ? `\n${photoCount} photo(s) will not be sent.` : ""}`
+  );
+}
+
+async function saveLocalListToCloud() {
+  const list = state.pointLists.find((item) => item.id === elements.cloudLocalListSelect.value);
+  if (!list) return;
+
+  let payload;
+  try {
+    payload = pointListToCloudPayload(list, pointGeo);
+  } catch (error) {
+    setCloudStatus(cloudErrorMessage(error), { error: true });
+    return;
+  }
+
+  const remoteMeta = state.cloud.lists.find((item) => item.id === payload.list.id) ?? null;
+  if (!window.confirm(cloudSaveConfirmation(list, payload, Boolean(remoteMeta)))) return;
+
+  let refreshAfter = false;
+  setCloudBusy(true);
+  try {
+    const client = cloudClientFromInputs();
+    const expectedRevision = list.cloudId === payload.list.id && Number.isInteger(list.cloudRevision)
+      ? list.cloudRevision
+      : remoteMeta?.revision;
+    const result = remoteMeta
+      ? await client.updateList(payload.list.id, expectedRevision, payload)
+      : await client.createList(payload);
+    list.cloudId = result.list.list.id;
+    list.cloudRevision = result.revision;
+    list.cloudUpdatedAt = result.list.list.updatedAt;
+    list.createdAt = result.list.list.createdAt;
+    list.updatedAt = result.list.list.updatedAt;
+    persistWorkspace();
+    state.cloud.connected = true;
+    refreshAfter = true;
+    setCloudStatus(cloudText("クラウドへ保存しました", "Saved to cloud"));
+  } catch (error) {
+    refreshAfter = error instanceof CloudApiError && error.status === 409;
+    setCloudStatus(
+      error instanceof CloudApiError && error.status === 409
+        ? cloudText("他の端末で更新されています。一覧を更新しました。", "Updated on another device. The list was refreshed.")
+        : cloudErrorMessage(error),
+      { error: true }
+    );
+  } finally {
+    setCloudBusy(false);
+  }
+  if (refreshAfter) await refreshCloudLists({ quiet: true });
+}
+
+async function replaceFromCloud() {
+  const selected = selectedCloudListMeta();
+  if (selected.length !== 1) return;
+  if (!window.confirm(cloudText(
+    "現在のローカル地点リストと線を、選択したクラウドリストで置き換えますか？",
+    "Replace local point lists and lines with the selected cloud list?"
+  ))) return;
+
+  setCloudBusy(true);
+  try {
+    const result = await cloudClientFromInputs().getList(selected[0].id);
+    const imported = cloudPayloadToPointList(result.list, {
+      localId: DEFAULT_POINT_LIST_ID,
+      revision: result.revision,
+      editable: true
+    });
+    applyWorkspace({ pointLists: [imported], links: [] });
+    persistWorkspace();
+    render();
+    fitToPoints();
+    setCloudStatus(cloudText("クラウドリストを新規読み込みしました", "Replaced with the cloud list"));
+  } catch (error) {
+    setCloudStatus(cloudErrorMessage(error), { error: true });
+  } finally {
+    setCloudBusy(false);
+  }
+}
+
+function uniqueLocalListId(preferredId) {
+  const existingIds = new Set(state.pointLists.map((list) => list.id));
+  if (preferredId !== DEFAULT_POINT_LIST_ID && !existingIds.has(preferredId)) return preferredId;
+  let nextId = createId();
+  while (existingIds.has(nextId)) nextId = createId();
+  return nextId;
+}
+
+async function appendFromCloud() {
+  const selected = selectedCloudListMeta();
+  if (selected.length === 0) return;
+  if (!window.confirm(cloudText(
+    `${selected.length}件のクラウドリストをローカルへ追加しますか？`,
+    `Add ${selected.length} cloud list(s) locally?`
+  ))) return;
+
+  setCloudBusy(true);
+  try {
+    const client = cloudClientFromInputs();
+    const results = await Promise.all(selected.map((item) => client.getList(item.id)));
+    const existingPointIds = new Set(allPointListPoints().map((point) => point.id));
+    const existingCloudIds = new Set(state.pointLists.map((list) => list.cloudId).filter(Boolean));
+    let added = 0;
+    for (const result of results) {
+      if (existingCloudIds.has(result.list.list.id)) continue;
+      const imported = cloudPayloadToPointList(result.list, {
+        localId: uniqueLocalListId(result.list.list.id),
+        revision: result.revision,
+        editable: false
+      });
+      state.pointLists.push(normalizePointList(imported, existingPointIds, imported.name));
+      existingCloudIds.add(result.list.list.id);
+      added += 1;
+    }
+    if (added > 0) {
+      refreshVisiblePoints();
+      persistWorkspace();
+      render();
+      fitToPoints();
+    }
+    setCloudStatus(cloudText(
+      `${added}件のクラウドリストを追加しました`,
+      `Added ${added} cloud list(s)`
+    ));
+  } catch (error) {
+    setCloudStatus(cloudErrorMessage(error), { error: true });
+  } finally {
+    setCloudBusy(false);
+  }
+}
+
+async function deleteSelectedCloudLists() {
+  const selected = selectedCloudListMeta();
+  if (selected.length === 0) return;
+  const names = selected.map((list) => list.name).join("、");
+  if (!window.confirm(cloudText(
+    `クラウドから削除しますか？\n${names}\n端末内のリストは削除しません。`,
+    `Delete from the cloud?\n${names}\nLocal lists will remain.`
+  ))) return;
+
+  setCloudBusy(true);
+  let results = [];
+  try {
+    const client = cloudClientFromInputs();
+    results = await Promise.allSettled(selected.map((list) => client.deleteList(list.id, list.revision)));
+  } catch (error) {
+    results = [{ status: "rejected", reason: error }];
+  } finally {
+    setCloudBusy(false);
+  }
+  await refreshCloudLists({ quiet: true });
+  const failed = results.filter((result) => result.status === "rejected");
+  setCloudStatus(
+    failed.length === 0
+      ? cloudText("クラウドから削除しました", "Deleted from cloud")
+      : cloudText(`${failed.length}件を削除できませんでした`, `Could not delete ${failed.length} list(s)`),
+    { error: failed.length > 0 }
+  );
+}
+
+function cloudErrorMessage(error) {
+  if (error instanceof CloudApiError && error.message) return error.message;
+  return cloudText("クラウド操作に失敗しました", "Cloud operation failed");
 }
 function setPointListVisible(listId, visible) {
   const list = state.pointLists.find((item) => item.id === listId);
@@ -5317,6 +5719,14 @@ function bindEvents() {
   elements.settingsGpsEnabled.addEventListener("change", () => {
     setGpsEnabled(elements.settingsGpsEnabled.checked);
   });
+  elements.cloudConnectButton.addEventListener("click", () => void connectCloud());
+  elements.cloudDisconnectButton.addEventListener("click", disconnectCloud);
+  elements.cloudSaveButton.addEventListener("click", () => void saveLocalListToCloud());
+  elements.cloudReplaceLoadButton.addEventListener("click", () => void replaceFromCloud());
+  elements.cloudAppendLoadButton.addEventListener("click", () => void appendFromCloud());
+  elements.cloudDeleteButton.addEventListener("click", () => void deleteSelectedCloudLists());
+  elements.cloudAccessToken.addEventListener("input", renderCloudPanel);
+  elements.cloudApiUrl.addEventListener("input", renderCloudPanel);
   document.addEventListener("click", () => setSettingsMenuOpen(false));
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
@@ -5471,6 +5881,7 @@ function bindEvents() {
 loadTheme();
 loadWorkspace();
 loadPreferences();
+loadCloudSettings();
 bindEvents();
 initMobilePages();
 resizeCanvas();
@@ -5478,3 +5889,4 @@ handleIncomingShare();
 locateOnStartup();
 registerServiceWorker();
 render();
+if (state.cloud.connected) void refreshCloudLists();

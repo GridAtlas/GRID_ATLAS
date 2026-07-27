@@ -79,13 +79,14 @@ async function handleListCollection(request, env, cors, ownerId) {
       await env.DB.prepare(
         `INSERT INTO cloud_lists
           (id, owner_id, name, description, payload_json, revision, created_at, updated_at, deleted_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6, NULL)`
+         VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?7, NULL)`
       ).bind(
         normalized.list.id,
         ownerId,
         normalized.list.name,
         normalized.list.description || "",
         JSON.stringify(normalized),
+        normalized.list.createdAt,
         now
       ).run();
     } catch (error) {
@@ -113,8 +114,14 @@ async function handleListItem(request, env, cors, ownerId, listId) {
     if (!Number.isInteger(body.expectedRevision) || body.expectedRevision < 1) {
       throw new HttpError("expectedRevisionが必要です", 400);
     }
+    const existing = await findList(env.DB, ownerId, listId);
+    if (!existing) return jsonResponse({ error: "リストが見つかりません" }, 404, cors);
+
+    const existingPayload = parseStoredPayload(existing.payload_json);
     const now = new Date().toISOString();
-    const normalized = normalizePayload(body.payload, now);
+    const normalized = normalizePayload(body.payload, now, {
+      createdAt: existingPayload?.list?.createdAt || existing.created_at
+    });
     if (normalized.list.id !== listId) throw new HttpError("リストIDが一致しません", 400);
 
     const result = await env.DB.prepare(
@@ -186,6 +193,10 @@ async function readJsonObject(request) {
 }
 
 async function readJson(request) {
+  const contentType = (request.headers.get("Content-Type") || "").split(";", 1)[0].trim().toLowerCase();
+  if (contentType !== "application/json" && !contentType.endsWith("+json")) {
+    throw new HttpError("Content-Typeはapplication/jsonにしてください", 415);
+  }
   const contentLengthValue = request.headers.get("Content-Length");
   if (contentLengthValue) {
     const contentLength = Number(contentLengthValue);
@@ -233,7 +244,7 @@ async function readLimitedText(request) {
   return new TextDecoder().decode(bytes);
 }
 
-function normalizePayload(payload, now) {
+function normalizePayload(payload, now, options = {}) {
   if (!payload || typeof payload !== "object") throw new HttpError("地点リストがありません", 400);
   if (payload.type !== "grid-atlas-share" || payload.schemaVersion !== 1 || payload.kind !== "point-list") {
     throw new HttpError("対応していない地点リスト形式です", 400);
@@ -277,9 +288,7 @@ function normalizePayload(payload, now) {
       id: payload.list.id,
       name: payload.list.name,
       ...(payload.list.description === undefined ? {} : { description: payload.list.description }),
-      ...(payload.list.createdAt
-        ? { createdAt: validateTimestamp(payload.list.createdAt, "作成日時") }
-        : { createdAt: now }),
+      createdAt: validateTimestamp(options.createdAt || payload.list.createdAt || now, "作成日時"),
       updatedAt: now
     },
     points
@@ -345,6 +354,14 @@ function toListMeta(row) {
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
+}
+
+function parseStoredPayload(value) {
+  const parsed = JSON.parse(value);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Stored cloud list payload is invalid");
+  }
+  return parsed;
 }
 
 function corsHeaders(origin, env) {

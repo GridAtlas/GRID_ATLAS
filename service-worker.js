@@ -1,9 +1,10 @@
-const CACHE_NAME = "grid-atlas-static-v102";
+const CACHE_NAME = "grid-atlas-static-v104";
 const STATIC_ASSETS = [
   "./",
   "./index.html",
-  "./src/styles.css?v=35",
-  "./src/main.js?v=91",
+  "./src/styles.css?v=37",
+  "./src/main.js?v=99",
+  "./src/cloud-client.js",
   "./manifest.webmanifest",
   "./assets/icon-retro.svg",
   "./assets/icon-retro-192.png",
@@ -31,7 +32,7 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET") {
+  if (event.request.method !== "GET" || new URL(event.request.url).origin !== self.location.origin) {
     return;
   }
 
@@ -39,9 +40,14 @@ self.addEventListener("fetch", (event) => {
     fetch(event.request)
       .then((response) => {
         const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy)));
         return response;
       })
-      .catch(() => caches.match(event.request).then((cached) => cached || caches.match("./")))
+      .catch(async () => {
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
+        if (event.request.mode === "navigate") return (await caches.match("./")) || Response.error();
+        return Response.error();
+      })
   );
 });

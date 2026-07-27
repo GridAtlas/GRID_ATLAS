@@ -40,6 +40,7 @@ const JWT_ALGORITHMS = {
 const JWKS_CACHE_TTL_MS = 5 * 60 * 1000;
 const MAX_JWT_CHARS = 16 * 1024;
 const MAX_JWKS_BYTES = 64 * 1024;
+const MAX_JWKS_KEYS = 100;
 let jwksCache = null;
 
 export class AuthError extends Error {
@@ -75,16 +76,23 @@ async function verifyJwt(token, env) {
   const header = decodeJson(parts[0]);
   const claims = decodeJson(parts[1]);
   const algorithm = JWT_ALGORITHMS[header.alg];
-  if (!algorithm || typeof header.kid !== "string") {
+  if (
+    !algorithm ||
+    typeof header.kid !== "string" ||
+    !header.kid ||
+    header.kid.length > 200 ||
+    (Array.isArray(header.crit) && header.crit.length > 0) ||
+    header.b64 === false
+  ) {
     throw new AuthError("認証方式に対応していません", 401);
   }
 
   const keys = await loadJwks(env.AUTH_JWKS_URL);
-  const jwk = keys.find((key) => key.kid === header.kid);
+  const jwk = findVerificationKey(keys, header);
   if (!jwk) {
     jwksCache = null;
     const refreshedKeys = await loadJwks(env.AUTH_JWKS_URL);
-    const refreshedJwk = refreshedKeys.find((key) => key.kid === header.kid);
+    const refreshedJwk = findVerificationKey(refreshedKeys, header);
     if (!refreshedJwk) {
       throw new AuthError("認証鍵が見つかりません", 401);
     }
@@ -97,14 +105,17 @@ async function verifyJwt(token, env) {
   if (claims.iss !== env.AUTH_ISSUER || !audienceIncludes(claims.aud, env.AUTH_AUDIENCE)) {
     throw new AuthError("認証対象が一致しません", 401);
   }
-  if (typeof claims.sub !== "string" || !claims.sub) {
+  if (typeof claims.sub !== "string" || !claims.sub || claims.sub.length > 512) {
     throw new AuthError("ユーザー情報がありません", 401);
   }
-  if (typeof claims.exp !== "number" || claims.exp <= now) {
+  if (!Number.isFinite(claims.exp) || claims.exp <= now) {
     throw new AuthError("認証の有効期限が切れています", 401);
   }
-  if (typeof claims.nbf === "number" && claims.nbf > now + 60) {
+  if (claims.nbf !== undefined && (!Number.isFinite(claims.nbf) || claims.nbf > now + 60)) {
     throw new AuthError("認証をまだ利用できません", 401);
+  }
+  if (claims.iat !== undefined && (!Number.isFinite(claims.iat) || claims.iat > now + 60)) {
+    throw new AuthError("認証情報の発行日時が不正です", 401);
   }
 
   return claims;
@@ -142,7 +153,10 @@ async function loadJwks(url) {
 
   let response;
   try {
-    response = await fetch(url, { headers: { Accept: "application/json" } });
+    response = await fetch(url, {
+      headers: { Accept: "application/json" },
+      redirect: "error"
+    });
   } catch {
     throw new AuthError("認証鍵を取得できません", 503);
   }
@@ -150,11 +164,15 @@ async function loadJwks(url) {
     throw new AuthError("認証鍵を取得できません", 503);
   }
   const body = await readLimitedJson(response);
-  if (!Array.isArray(body.keys)) {
+  if (!Array.isArray(body.keys) || body.keys.length === 0 || body.keys.length > MAX_JWKS_KEYS) {
     throw new AuthError("認証鍵の形式が不正です", 503);
   }
-  jwksCache = { url, keys: body.keys, expiresAt: now + JWKS_CACHE_TTL_MS };
-  return body.keys;
+  const keys = body.keys.filter((key) => key && typeof key === "object" && !Array.isArray(key));
+  if (keys.length !== body.keys.length) {
+    throw new AuthError("認証鍵の形式が不正です", 503);
+  }
+  jwksCache = { url, keys, expiresAt: now + JWKS_CACHE_TTL_MS };
+  return keys;
 }
 
 async function readLimitedJson(response) {
@@ -205,9 +223,22 @@ function audienceIncludes(audience, expected) {
   return Array.isArray(audience) ? audience.includes(expected) : audience === expected;
 }
 
+function findVerificationKey(keys, header) {
+  return keys.find((key) => (
+    key.kid === header.kid &&
+    (key.alg === undefined || key.alg === header.alg) &&
+    (key.use === undefined || key.use === "sig") &&
+    (key.key_ops === undefined || (Array.isArray(key.key_ops) && key.key_ops.includes("verify")))
+  ));
+}
+
 function decodeJson(value) {
   try {
-    return JSON.parse(new TextDecoder().decode(base64UrlDecode(value)));
+    const parsed = JSON.parse(new TextDecoder().decode(base64UrlDecode(value)));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("JWT part must be an object");
+    }
+    return parsed;
   } catch {
     throw new AuthError("認証情報の形式が不正です", 401);
   }
