@@ -1,27 +1,28 @@
-:root {
+:root,
+:root[data-theme="pastel"] {
   color-scheme: light;
-  --bg: #f6f7f2;
-  --surface: #ffffff;
-  --surface-strong: #f0f2ea;
-  --line: #d7ddcf;
-  --line-strong: #abb7a2;
-  --text: #1e2620;
-  --muted: #687466;
-  --accent: #e95f1a;
-  --accent-strong: #ba4311;
-  --teal: #116c6d;
-  --green: #2e7d32;
-  --danger: #a7332a;
-  --shadow: 0 12px 30px rgb(24 35 20 / 0.12);
-  --field-bg: #ffffff;
-  --canvas-bg: #f9faf6;
-  --status-bg: rgb(255 255 255 / 0.92);
-  --active-bg: rgb(233 95 26 / 0.11);
-  --focus-ring: rgb(233 95 26 / 0.28);
-  --brand-glow: 0 0 0 5px rgb(233 95 26 / 0.14);
-  --route: #5a4aa0;
-  --route-soft: rgb(90 74 160 / 0.08);
-  --route-text: #473985;
+  --bg: #f8f2f7;
+  --surface: #fffafd;
+  --surface-strong: #f2e9f5;
+  --line: #decfe2;
+  --line-strong: #b8a4c0;
+  --text: #433a49;
+  --muted: #7c6c83;
+  --accent: #d86f9b;
+  --accent-strong: #9f4772;
+  --teal: #5e9f9a;
+  --green: #6f9b78;
+  --danger: #b85c6b;
+  --shadow: 0 12px 30px rgb(100 72 110 / 0.12);
+  --field-bg: #fffafd;
+  --canvas-bg: #fbf7fb;
+  --status-bg: rgb(255 250 253 / 0.92);
+  --active-bg: rgb(216 111 155 / 0.14);
+  --focus-ring: rgb(216 111 155 / 0.3);
+  --brand-glow: 0 0 0 5px rgb(216 111 155 / 0.15);
+  --route: #8f7cbd;
+  --route-soft: rgb(143 124 189 / 0.1);
+  --route-text: #67548f;
   --on-accent: #ffffff;
   --on-route: #ffffff;
 }
@@ -362,7 +363,6 @@ textarea:focus-visible {
 .mobile-page-tabs,
 .mobile-panel-tabs,
 .mobile-grid-tabs,
-.mobile-back-button,
 .mobile-content-panel {
   display: none;
 }
@@ -1211,6 +1211,23 @@ textarea {
   color: var(--accent-strong);
 }
 
+.point-index-row.has-route-order {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.point-index-route-order {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--route);
+  color: var(--on-route);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+}
+
 
 .point-index-name {
   min-width: 0;
@@ -1360,14 +1377,9 @@ textarea {
 
   .sidebar.is-mobile-page-active {
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
-    gap: 8px;
-  }
-
-  .mobile-back-button {
-    display: block;
-    width: 100%;
-    min-height: 36px;
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 0;
+    padding: 10px 10px 0;
   }
 
   .mobile-panel-tabs {

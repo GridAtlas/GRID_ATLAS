@@ -8,9 +8,9 @@
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="assets/icon-retro.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-retro.png">
-    <script>try{document.documentElement.dataset.theme=localStorage.getItem("grid-atlas-theme")==="light"?"light":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=45">
-    <script src="src/main.js?v=112" type="module" defer></script>
+    <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
+    <link rel="stylesheet" href="src/styles.css?v=46">
+    <script src="src/main.js?v=113" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -25,8 +25,7 @@
             <button id="settingsMenuButton" class="settings-menu-button" type="button" aria-expanded="false" aria-controls="settingsPanel" title="設定">☰</button>
             <div id="settingsPanel" class="settings-panel" hidden>
               <section class="cloud-menu-section">
-                <h2 data-i18n="cloud.menuTitle">クラウド接続</h2>
-                <p class="cloud-note" data-i18n="cloud.notice">アクセスコードをこのブラウザに保存します。切断すると保存コードを削除します。</p>
+                <h2 data-i18n="cloud.menuTitle">クラウド機能</h2>
                 <label class="cloud-access-code-label">
                   <span data-i18n="cloud.accessToken">アクセスコード</span>
                   <input id="cloudAccessToken" type="password" autocomplete="off" spellcheck="false" placeholder="ga_ から始まるコード">
@@ -43,7 +42,7 @@
                 <span data-i18n="settings.design">デザイン</span>
                 <select id="settingsThemeSelect">
                   <option value="retro" data-i18n="settings.themeRetro">レトロ</option>
-                  <option value="light" data-i18n="settings.themeLight">ライト</option>
+                  <option value="pastel" data-i18n="settings.themePastel">パステル</option>
                 </select>
               </label>
               <label>
@@ -221,8 +220,6 @@
             <span data-i18n="summary.selected">選択中</span>
             <strong id="sidebarSelectedTitle">未選択</strong>
           </div>
-          <button id="mobileBackButton" class="mobile-back-button" type="button" data-i18n="button.backToGrid">← 格子に戻る</button>
-
           <section class="panel is-mobile-active" data-mobile-panel="register">
             <h2 data-i18n="panel.register">地点登録</h2>
             <form id="pointForm" class="point-form">
@@ -354,6 +351,11 @@
             <input id="pointImportFile" type="file" accept="application/json,.json" multiple hidden>
             <input id="observationImportFile" type="file" accept="application/json,.json" multiple hidden>
           </section>
+          <nav class="mobile-grid-tabs mobile-sidebar-grid-tabs" aria-label="表示切替">
+            <button class="mobile-grid-tab is-active" type="button" data-mobile-grid-page="grid" aria-pressed="true" data-i18n="page.grid">グリッド</button>
+            <button class="mobile-grid-tab" type="button" data-mobile-grid-page="points" aria-pressed="false" data-i18n="page.points">地点</button>
+            <button class="mobile-grid-tab" type="button" data-mobile-grid-page="lists" aria-pressed="false" data-i18n="page.lists">リスト</button>
+          </nav>
         </aside>
       </main>
     </div>

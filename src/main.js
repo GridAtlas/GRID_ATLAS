@@ -18,7 +18,7 @@ const GPS_ENABLED_KEY = "grid-atlas-gps-enabled";
 
 const CLOUD_ACCESS_TOKEN_KEY = "grid-atlas-cloud-access-token";
 const CLOUD_PRODUCTION_API_URL = "https://grid-atlas-cloud-staging.kazki1981.workers.dev";
-const LIGHT_THEME = "light";
+const PASTEL_THEME = "pastel";
 const RETRO_THEME = "retro";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
@@ -85,7 +85,6 @@ const elements = {
   sidebarSelectedTitle: document.querySelector("#sidebarSelectedTitle"),
   mapColumn: document.querySelector(".map-column"),
   sidebar: document.querySelector(".sidebar"),
-  mobileBackButton: document.querySelector("#mobileBackButton"),
   mobilePageTabs: Array.from(document.querySelectorAll("[data-mobile-page]")),
   mobilePanels: Array.from(document.querySelectorAll("[data-mobile-panel]")),
   mobileGridTabs: Array.from(document.querySelectorAll("[data-mobile-grid-page]")),
@@ -217,30 +216,30 @@ const state = {
 let pendingObservationImportMode = "replace";
 
 const CANVAS_PALETTES = {
-  light: {
-    gridMinor: "#edf0e8",
-    gridMajor: "#d8ded1",
-    link: "#116c6d",
-    linkSelected: "#2e7d32",
-    route: "#5a4aa0",
-    target: "#ff7a1a",
-    targetSoft: "rgb(255 122 26 / 0.18)",
-    targetGuide: "rgb(104 116 102 / 0.78)",
-    targetFill: "#ff7a1a",
-    observationBaseline: "rgb(199 58 42 / 0.34)",
-    observationTrail: "#c73a2a",
-    currentFill: "#ffd436",
-    pendingFill: "rgb(233 95 26 / 0.24)",
-    pendingStroke: "rgb(233 95 26 / 0.62)",
-    pointFill: "#116c6d",
-    pointBaseStroke: "#ffffff",
-    routeStart: "#008fc7",
-    routeSelected: "#7b68c7",
-    pendingPointStroke: "#116c6d",
-    selected: "#2e7d32",
-    badgeFill: "#ffffff",
-    badgeText: "#5a4aa0",
-    badgeStartFill: "#5a4aa0",
+  pastel: {
+    gridMinor: "#eee5f0",
+    gridMajor: "#d9c9df",
+    link: "#5e9f9a",
+    linkSelected: "#6f9b78",
+    route: "#8f7cbd",
+    target: "#e8907e",
+    targetSoft: "rgb(232 144 126 / 0.2)",
+    targetGuide: "rgb(124 108 131 / 0.72)",
+    targetFill: "#e8907e",
+    observationBaseline: "rgb(197 111 133 / 0.34)",
+    observationTrail: "#c56f85",
+    currentFill: "#f5ce6a",
+    pendingFill: "rgb(216 111 155 / 0.22)",
+    pendingStroke: "rgb(216 111 155 / 0.62)",
+    pointFill: "#5e9f9a",
+    pointBaseStroke: "#fffafd",
+    routeStart: "#6d9bc3",
+    routeSelected: "#9b8bc7",
+    pendingPointStroke: "#5e9f9a",
+    selected: "#9f4772",
+    badgeFill: "#fffafd",
+    badgeText: "#67548f",
+    badgeStartFill: "#8f7cbd",
     badgeStartText: "#ffffff"
   },
   retro: {
@@ -284,7 +283,7 @@ const TRANSLATIONS = {
     "settings.mapGoogle": "Googleマップ",
     "settings.mapApple": "Appleマップ",
     "settings.themeRetro": "レトロ",
-    "settings.themeLight": "ライト",
+    "settings.themePastel": "パステル",
     "settings.languageJa": "日本語",
     "settings.languageEn": "English",
     "settings.unitsMetric": "km",
@@ -311,7 +310,6 @@ const TRANSLATIONS = {
     "action.restore": "復旧",
     "action.edit": "編集",
     "action.map": "地図",
-    "button.backToGrid": "← 格子に戻る",
     "button.clipboard": "クリップ読取",
     "button.currentLocation": "現在地",
     "button.submitRegister": "登録",
@@ -375,8 +373,7 @@ const TRANSLATIONS = {
     "data.cloud": "クラウドリスト（ベータ）",
     "data.observations": "観察記録",
     "data.grid": "グリッド",
-    "cloud.menuTitle": "クラウド接続",
-    "cloud.notice": "アクセスコードをこのブラウザに保存します。切断すると保存コードを削除します。",
+    "cloud.menuTitle": "クラウド機能",
     "cloud.dataNotice": "接続中のクラウドにある地点リストです。",
     "cloud.pointSource": "クラウド",
     "cloud.apiUrl": "Cloud API URL",
@@ -445,7 +442,7 @@ const TRANSLATIONS = {
     "settings.mapGoogle": "Google Maps",
     "settings.mapApple": "Apple Maps",
     "settings.themeRetro": "Retro",
-    "settings.themeLight": "Light",
+    "settings.themePastel": "Pastel",
     "settings.languageJa": "Japanese",
     "settings.languageEn": "English",
     "settings.unitsMetric": "km",
@@ -472,7 +469,6 @@ const TRANSLATIONS = {
     "action.restore": "Restore",
     "action.edit": "Edit",
     "action.map": "Map",
-    "button.backToGrid": "← Back to grid",
     "button.clipboard": "Read Clipboard",
     "button.currentLocation": "Current",
     "button.submitRegister": "Add",
@@ -536,8 +532,7 @@ const TRANSLATIONS = {
     "data.cloud": "Cloud Lists (Beta)",
     "data.observations": "Observation Records",
     "data.grid": "Grid",
-    "cloud.menuTitle": "Cloud connection",
-    "cloud.notice": "The access code is saved in this browser. Disconnecting removes it.",
+    "cloud.menuTitle": "Cloud features",
     "cloud.dataNotice": "Point lists in the connected cloud.",
     "cloud.pointSource": "Cloud",
     "cloud.apiUrl": "Cloud API URL",
@@ -747,7 +742,7 @@ function toggleSettingsMenu() {
   setSettingsMenuOpen(elements.settingsPanel.hidden);
 }
 function currentTheme() {
-  return document.documentElement.dataset.theme === RETRO_THEME ? RETRO_THEME : LIGHT_THEME;
+  return document.documentElement.dataset.theme === RETRO_THEME ? RETRO_THEME : PASTEL_THEME;
 }
 
 function canvasPalette() {
@@ -760,14 +755,14 @@ function loadTheme() {
     saved = localStorage.getItem(THEME_KEY);
   } catch {}
 
-  setTheme(saved === LIGHT_THEME ? LIGHT_THEME : RETRO_THEME, { persist: false });
+  setTheme(saved === PASTEL_THEME || saved === "light" ? PASTEL_THEME : RETRO_THEME, { persist: false });
 }
 
 function setTheme(theme, options = {}) {
-  const normalized = theme === RETRO_THEME ? RETRO_THEME : LIGHT_THEME;
+  const normalized = theme === RETRO_THEME ? RETRO_THEME : PASTEL_THEME;
   const isRetro = normalized === RETRO_THEME;
   document.documentElement.dataset.theme = normalized;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", isRetro ? "#020806" : "#e95f1a");
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", isRetro ? "#020806" : "#d86f9b");
 
   if (options.persist !== false) {
     localStorage.setItem(THEME_KEY, normalized);
@@ -782,7 +777,7 @@ function setTheme(theme, options = {}) {
 }
 
 function toggleTheme() {
-  setTheme(currentTheme() === RETRO_THEME ? LIGHT_THEME : RETRO_THEME);
+  setTheme(currentTheme() === RETRO_THEME ? PASTEL_THEME : RETRO_THEME);
   render();
 }
 
@@ -2708,6 +2703,11 @@ function pointRoleMarker(point) {
   return markers.length > 0 ? `${markers.join("")} ` : "";
 }
 
+function pointRouteOrder(pointId) {
+  const index = state.routeResult?.pointIds?.indexOf(pointId) ?? -1;
+  return index >= 0 ? index + 1 : null;
+}
+
 function renderPointIndex() {
   if (!elements.mobilePointItems || !elements.mobilePointCount) {
     return;
@@ -2741,6 +2741,16 @@ function renderPointIndex() {
     row.classList.toggle("is-active", isPointSelected(point.id));
     row.setAttribute("aria-pressed", String(isPointSelected(point.id)));
     row.classList.add("point-index-row");
+
+    const routeOrder = pointRouteOrder(point.id);
+    if (routeOrder !== null) {
+      const order = document.createElement("span");
+      order.className = "point-index-route-order";
+      order.textContent = String(routeOrder);
+      order.setAttribute("aria-label", `${t("panel.route")} ${routeOrder}`);
+      row.classList.add("has-route-order");
+      row.append(order);
+    }
 
     const name = document.createElement("span");
     name.className = "point-index-name";
@@ -2901,7 +2911,7 @@ function createStorageListRow(entry) {
   gridVisibility.addEventListener("click", () => {
     const nextVisible = !visible;
     setStorageListVisible(entry.storageId, nextVisible);
-    setCloudStatus(t(nextVisible ? "list.visible" : "list.hidden"));
+    setCloudStatus(t(nextVisible ? "list.visible" : "list.hidden"), { menu: false });
   });
 
   rowActions.append(rename, gridVisibility);
@@ -2977,6 +2987,9 @@ function cloudClientFromInputs() {
 }
 function setCloudStatus(message, options = {}) {
   for (const status of elements.cloudStatuses) {
+    if (options.menu === false && status.id === "cloudMenuStatus") {
+      continue;
+    }
     status.value = message || "";
     status.classList.toggle("is-error", options.error === true);
   }
@@ -6256,7 +6269,6 @@ function bindEvents() {
     elements.observationImportFile.value = "";
   });
   elements.clearButton.addEventListener("click", clearWorkspace);
-  elements.mobileBackButton.addEventListener("click", () => setMobilePage("map"));
   for (const tab of elements.mobilePageTabs) {
     tab.addEventListener("click", () => {
       setMobilePage(tab.dataset.mobilePage);
@@ -6264,7 +6276,12 @@ function bindEvents() {
     });
   }
   for (const tab of elements.mobileGridTabs) {
-    tab.addEventListener("click", () => setMobileGridPage(tab.dataset.mobileGridPage));
+    tab.addEventListener("click", () => {
+      setMobileGridPage(tab.dataset.mobileGridPage);
+      if (tab.closest(".sidebar")) {
+        setMobilePage("map");
+      }
+    });
   }
 
   canvas.addEventListener("pointerdown", (event) => {
