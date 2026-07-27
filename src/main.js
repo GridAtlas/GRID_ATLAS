@@ -2928,8 +2928,11 @@ async function moveListToCloud(storageId) {
   }
 
   const list = entry.local;
-  const defaultIdCollision = list.id === DEFAULT_POINT_LIST_ID && (list.cloudId || list.id) === DEFAULT_POINT_LIST_ID;
-  const targetCloudId = defaultIdCollision ? `cloud:${createId()}` : (list.cloudId || list.id);
+  const preferredCloudId = list.cloudId || list.id;
+  const remoteIdIsActive = state.cloud.lists.some((item) => item.id === preferredCloudId);
+  const needsFreshCloudId = preferredCloudId === DEFAULT_POINT_LIST_ID
+    || (Boolean(list.cloudId) && !remoteIdIsActive);
+  const targetCloudId = needsFreshCloudId ? `cloud:${createId()}` : preferredCloudId;
   const transferList = { ...list, cloudId: targetCloudId };
   let payload;
   try {
@@ -2966,7 +2969,7 @@ async function moveListToCloud(storageId) {
     if (remoteMeta) await client.updateList(targetCloudId, remoteMeta.revision, payload);
     else await client.createList(payload);
 
-    if (defaultIdCollision && entry.cloud && entry.cloud.id !== targetCloudId) {
+    if (needsFreshCloudId && entry.cloud && entry.cloud.id !== targetCloudId) {
       try {
         await client.deleteList(entry.cloud.id, entry.cloud.revision);
       } catch {
