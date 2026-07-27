@@ -293,8 +293,8 @@ const TRANSLATIONS = {
     "page.analysis": "分析",
     "page.data": "データ",
     "page.grid": "グリッド",
-    "page.points": "地点一覧",
-    "page.lists": "リスト一覧",
+    "page.points": "地点",
+    "page.lists": "リスト",
     "summary.selected": "選択中",
     "summary.info": "情報",
     "state.unselected": "未選択",
@@ -405,7 +405,6 @@ const TRANSLATIONS = {
     "list.rename": "リスト名変更",
     "list.renamePrompt": "新しいリスト名",
     "list.showOnGrid": "グリッドに表示",
-    "list.toggleVisibility": "表示切替",
     "list.selectForAction": "操作対象に選択",
     "list.visible": "グリッドに表示中",
     "list.hidden": "グリッドで非表示",
@@ -567,7 +566,6 @@ const TRANSLATIONS = {
     "list.rename": "Rename list",
     "list.renamePrompt": "New list name",
     "list.showOnGrid": "Show on grid",
-    "list.toggleVisibility": "Show / hide",
     "list.selectForAction": "Select for actions",
     "list.visible": "Shown on grid",
     "list.hidden": "Hidden from grid",
@@ -846,7 +844,7 @@ function applyWorkspace(workspace) {
     : DEFAULT_POINT_LIST_ID;
   refreshVisiblePoints();
   state.links = Array.isArray(workspace.links)
-    ? workspace.links.filter((link) => validLinkEndpointId(link.a) && validLinkEndpointId(link.b))
+    ? workspace.links.filter((link) => validStoredLinkEndpointId(link.a) && validStoredLinkEndpointId(link.b))
     : [];
   state.selection = [];
   state.selectedPointId = null;
@@ -942,7 +940,7 @@ function allPointListPoints() {
 }
 
 function visiblePointIdSet() {
-  return new Set(visiblePointLists().flatMap((list) => list.points.map((point) => point.id)));
+  return new Set(visibleSelectablePoints().map((point) => point.id));
 }
 
 function refreshVisiblePoints() {
@@ -963,6 +961,37 @@ function visibleCloudPointRows() {
   return visibleCloudPointLists().flatMap((list) => (
     list.points.map((point) => ({ point, list, isCloud: true }))
   ));
+}
+
+function findCloudPointInLists(pointId, lists) {
+  for (const list of lists) {
+    const point = findPointIn(pointId, list.points);
+    if (point) {
+      return point;
+    }
+  }
+  return null;
+}
+
+function findVisibleCloudPoint(pointId) {
+  return findCloudPointInLists(pointId, visibleCloudPointLists());
+}
+
+function findCloudPointAny(pointId) {
+  return findCloudPointInLists(pointId, state.cloud.pointLists);
+}
+
+function visibleCloudPoints() {
+  const localPointIds = new Set(state.points.map((point) => point.id));
+  return visibleCloudPointLists()
+    .flatMap((list) => list.points)
+    .map(syncProjectedPoint)
+    .filter(Boolean)
+    .filter((point) => !localPointIds.has(point.id));
+}
+
+function visibleSelectablePoints() {
+  return [...state.points, ...visibleCloudPoints()];
 }
 
 function localPointList() {
@@ -1675,18 +1704,14 @@ function drawPoints(options = {}) {
   }
 }
 
-function drawCloudPoints() {
+function drawCloudPoints(options = {}) {
   const colors = canvasPalette();
-  for (const list of visibleCloudPointLists()) {
-    for (const point of list.points) {
-      const projected = syncProjectedPoint(point);
-      if (!projected) continue;
-      const screen = worldToScreen(projected);
-      context.beginPath();
-      context.arc(screen.x, screen.y, POINT_RADIUS, 0, Math.PI * 2);
-      context.fillStyle = colors.pointFill;
-      context.fill();
+  const priority = Boolean(options.priority);
+  for (const point of visibleCloudPoints()) {
+    if (isPriorityPoint(point) !== priority) {
+      continue;
     }
+    drawPointMarker(point, colors);
   }
 }
 
@@ -1729,6 +1754,7 @@ function draw() {
   drawCurrentLocation();
   drawPendingPoint();
   drawRouteStartSnapshot();
+  drawCloudPoints({ priority: true });
   drawPoints({ priority: true });
   drawRouteBadges();
 }
@@ -2612,7 +2638,7 @@ function externalMapUrl(provider, geo, title) {
   return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 }
 function renderAnalysis() {
-  elements.pointCount.textContent = String(state.points.length);
+  elements.pointCount.textContent = String(visibleSelectablePoints().length);
 
   const linkDistances = state.links
     .map((link) => {
@@ -2710,20 +2736,16 @@ function renderPointIndex() {
   }
 
   for (const { point, list, isCloud = false } of rows) {
-    const row = document.createElement(isCloud ? "div" : "button");
-    if (!isCloud) {
-      row.type = "button";
-      row.classList.toggle("is-active", isPointSelected(point.id));
-      row.setAttribute("aria-pressed", String(isPointSelected(point.id)));
-    }
+    const row = document.createElement("button");
+    row.type = "button";
+    row.classList.toggle("is-active", isPointSelected(point.id));
+    row.setAttribute("aria-pressed", String(isPointSelected(point.id)));
     row.classList.add("point-index-row");
 
     const name = document.createElement("span");
     name.className = "point-index-name";
     const title = document.createElement("strong");
-    title.textContent = isCloud
-      ? point.title || "Point"
-      : `${pointRoleMarker(point)}${point.title || "Point"}`;
+    title.textContent = `${pointRoleMarker(point)}${point.title || "Point"}`;
     const meta = document.createElement("span");
     meta.textContent = isCloud
       ? `☁ ${list?.name || "地点リスト"}`
@@ -2739,9 +2761,7 @@ function renderPointIndex() {
         : `${formatCoordinate(pointGeo(point).lat)}, ${formatCoordinate(pointGeo(point).lng)}`;
 
     row.append(name, distance);
-    if (!isCloud) {
-      row.addEventListener("click", () => toggleSelection("point", point.id));
-    }
+    row.addEventListener("click", () => toggleSelection("point", point.id));
     elements.mobilePointItems.append(row);
   }
 }
@@ -3355,18 +3375,6 @@ async function runStorageListAction(action) {
   }
   const storageIds = entries.map((entry) => entry.storageId);
 
-  if (action === "visibility") {
-    const nextVisible = entries.some((entry) => !storageListIsVisible(entry));
-    for (const storageId of storageIds) {
-      setStorageListVisible(storageId, nextVisible, { persist: false, render: false });
-    }
-    persistWorkspace();
-    clearStorageListSelection();
-    setCloudStatus(t(nextVisible ? "list.visible" : "list.hidden"));
-    render();
-    return;
-  }
-
   if (action === "copy") {
     for (const storageId of storageIds) copyStorageList(storageId);
     clearStorageListSelection();
@@ -3515,7 +3523,10 @@ function renderRouteResultDetails() {
 }
 
 function findPoint(id) {
-  return id === CURRENT_LOCATION_ID ? currentLocationPoint() : findPointIn(id, state.points);
+  if (id === CURRENT_LOCATION_ID) {
+    return currentLocationPoint();
+  }
+  return findPointIn(id, state.points) ?? syncProjectedPoint(findVisibleCloudPoint(id));
 }
 
 function findPointIn(id, points) {
@@ -3523,7 +3534,11 @@ function findPointIn(id, points) {
 }
 
 function validLinkEndpointId(id) {
-  return id === CURRENT_LOCATION_ID || Boolean(findPointAny(id));
+  return id === CURRENT_LOCATION_ID || Boolean(findPointAny(id)) || Boolean(findCloudPointAny(id));
+}
+
+function validStoredLinkEndpointId(id) {
+  return typeof id === "string" && id.length > 0;
 }
 
 function findLink(id) {
@@ -3920,7 +3935,7 @@ function setRouteStartFromSelection() {
 function findNearestPoint(screenPoint) {
   let nearest = null;
   let nearestDistance = Infinity;
-  const candidates = [...state.points];
+  const candidates = visibleSelectablePoints();
   const current = currentLocationPoint();
 
   if (current) {
@@ -4311,7 +4326,7 @@ function computeRouteFromSelection() {
 }
 
 function normalizeRouteSelection() {
-  const validIds = new Set(state.points.map((point) => point.id));
+  const validIds = visiblePointIdSet();
   if (currentLocationPoint()) {
     validIds.add(CURRENT_LOCATION_ID);
   }
@@ -4628,7 +4643,7 @@ function geographicCenter(points) {
 }
 
 function followFitTargetPoints(current) {
-  const points = [...state.points, current];
+  const points = [...visibleSelectablePoints(), current];
 
   if (validGeo(state.pendingGeo)) {
     const pending = normalizeGeo(state.pendingGeo);
