@@ -9,8 +9,8 @@
     <link rel="icon" href="assets/icon-retro.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-retro.png">
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("grid-atlas-theme")==="light"?"light":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=43">
-    <script src="src/main.js?v=109" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=44">
+    <script src="src/main.js?v=110" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -146,9 +146,15 @@
             </section>
 
             <section class="mobile-content-panel" data-mobile-grid-panel="lists" aria-label="リスト一覧">
-              <div class="mobile-content-heading">
+              <div class="mobile-content-heading list-management-heading">
                 <h2 data-i18n="panel.lists">リスト一覧</h2>
-                <button class="compact-button" type="button" data-new-point-list data-i18n="list.new">＋ 新規作成</button>
+                <div class="list-management-actions">
+                  <button class="compact-button" type="button" data-new-point-list data-i18n="list.new">＋ 新規作成</button>
+                  <button class="compact-button" type="button" data-storage-list-action="visibility" data-i18n="list.toggleVisibility">表示切替</button>
+                  <button class="compact-button" type="button" data-storage-list-action="copy" data-i18n="list.copy">コピー</button>
+                  <button class="compact-button" type="button" data-storage-list-action="move" data-i18n="storage.move">移動</button>
+                  <button class="compact-button danger-button" type="button" data-storage-list-action="delete" data-i18n="action.delete">削除</button>
+                </div>
               </div>
               <div id="mobilePointListItems" class="storage-list-items" data-storage-list-items></div>
             </section>
@@ -335,9 +341,15 @@
             <ol id="routeList" class="route-list"></ol>
           </section>
           <section class="panel data-panel list-management-panel" data-mobile-panel="data">
-            <div class="panel-heading">
+            <div class="panel-heading list-management-heading">
               <h2 data-i18n="panel.lists">リスト一覧</h2>
-              <button class="compact-button" type="button" data-new-point-list data-i18n="list.new">＋ 新規作成</button>
+              <div class="list-management-actions">
+                <button class="compact-button" type="button" data-new-point-list data-i18n="list.new">＋ 新規作成</button>
+                <button class="compact-button" type="button" data-storage-list-action="visibility" data-i18n="list.toggleVisibility">表示切替</button>
+                <button class="compact-button" type="button" data-storage-list-action="copy" data-i18n="list.copy">コピー</button>
+                <button class="compact-button" type="button" data-storage-list-action="move" data-i18n="storage.move">移動</button>
+                <button class="compact-button danger-button" type="button" data-storage-list-action="delete" data-i18n="action.delete">削除</button>
+              </div>
             </div>
             <div id="pointListItems" class="storage-list-items" data-storage-list-items></div>
             <output id="cloudStatus" class="form-status cloud-status" data-cloud-status aria-live="polite"></output>

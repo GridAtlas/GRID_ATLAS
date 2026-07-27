@@ -137,6 +137,7 @@ const elements = {
   routeSummary: document.querySelector("#routeSummary"),
   routeList: document.querySelector("#routeList"),
   newPointListButtons: Array.from(document.querySelectorAll("[data-new-point-list]")),
+  storageListActionButtons: Array.from(document.querySelectorAll("[data-storage-list-action]")),
   backupListSelect: document.querySelector("#backupListSelect"),
   backupExportButton: document.querySelector("#backupExportButton"),
   replacePointsButton: document.querySelector("#replacePointsButton"),
@@ -163,6 +164,7 @@ const state = {
   points: [],
   pointLists: [],
   activePointListId: DEFAULT_POINT_LIST_ID,
+  selectedStorageListIds: new Set(),
   cloud: {
     connected: false,
     busy: false,
@@ -392,6 +394,7 @@ const TRANSLATIONS = {
     "storage.cloud": "クラウド",
     "storage.both": "端末＋クラウド",
     "storage.moveCloud": "クラウドに移動",
+    "storage.move": "移動",
     "storage.moveDevice": "端末に移動",
     "storage.connectFirst": "先にクラウドへ接続してください",
     "list.new": "＋ 新規作成",
@@ -402,6 +405,11 @@ const TRANSLATIONS = {
     "list.rename": "リスト名変更",
     "list.renamePrompt": "新しいリスト名",
     "list.showOnGrid": "グリッドに表示",
+    "list.toggleVisibility": "表示切替",
+    "list.selectForAction": "操作対象に選択",
+    "list.visible": "グリッドに表示中",
+    "list.hidden": "グリッドで非表示",
+    "list.noSelection": "操作するリストを選択してください",
     "maintenance.title": "バックアップ・初期化",
     "backup.title": "バックアップ",
     "backup.notice": "端末のリストを保存・復元できます。",
@@ -548,6 +556,7 @@ const TRANSLATIONS = {
     "storage.cloud": "Cloud",
     "storage.both": "Device + Cloud",
     "storage.moveCloud": "Move to cloud",
+    "storage.move": "Move",
     "storage.moveDevice": "Move to device",
     "storage.connectFirst": "Connect to the cloud first",
     "list.new": "+ New",
@@ -558,6 +567,11 @@ const TRANSLATIONS = {
     "list.rename": "Rename list",
     "list.renamePrompt": "New list name",
     "list.showOnGrid": "Show on grid",
+    "list.toggleVisibility": "Show / hide",
+    "list.selectForAction": "Select for actions",
+    "list.visible": "Shown on grid",
+    "list.hidden": "Hidden from grid",
+    "list.noSelection": "Select a list first",
     "maintenance.title": "Backup & reset",
     "backup.title": "Backup",
     "backup.notice": "Save or restore lists stored on this device.",
@@ -2765,34 +2779,83 @@ function findStorageListEntry(storageId) {
 }
 
 
+function storageListIsVisible(entry) {
+  return entry?.local
+    ? entry.local.visible !== false
+    : cloudListVisible(entry?.cloud?.id);
+}
+
+function selectedStorageListEntries(entries = storageListEntries()) {
+  return entries.filter((entry) => state.selectedStorageListIds.has(entry.storageId));
+}
+
+function syncStorageListActionButtons(entries = storageListEntries()) {
+  const selected = selectedStorageListEntries(entries);
+  const needsCloudConnection = selected.some((entry) => entry.local) && !state.cloud.connected;
+  for (const button of elements.storageListActionButtons) {
+    const action = button.dataset.storageListAction;
+    button.disabled = state.cloud.busy
+      || selected.length === 0
+      || (action === "move" && needsCloudConnection);
+    button.title = selected.length > 0
+      ? cloudText(`${selected.length}件を操作`, `Apply to ${selected.length} selected list(s)`)
+      : t("list.noSelection");
+  }
+}
+
+function setStorageListSelected(storageId, selected) {
+  if (selected) state.selectedStorageListIds.add(storageId);
+  else state.selectedStorageListIds.delete(storageId);
+  for (const marker of document.querySelectorAll("[data-storage-list-select]")) {
+    if (marker.dataset.storageListSelect !== storageId) continue;
+    marker.checked = Boolean(selected);
+    marker.closest(".storage-list-row")?.classList.toggle("is-selected", Boolean(selected));
+  }
+  syncStorageListActionButtons();
+}
+
+function clearStorageListSelection() {
+  state.selectedStorageListIds.clear();
+  renderStorageLists();
+}
+
 function createStorageListRow(entry) {
   const row = document.createElement("div");
   row.className = "storage-list-row";
   row.classList.toggle("is-active-list", entry.local?.id === state.activePointListId);
+  row.classList.toggle("is-selected", state.selectedStorageListIds.has(entry.storageId));
+  const listName = entry.local?.name || entry.cloud?.name || "地点リスト";
+  const visible = storageListIsVisible(entry);
 
   const marker = document.createElement("input");
   marker.type = "checkbox";
-  marker.checked = entry.local
-    ? entry.local.visible !== false
-    : cloudListVisible(entry.cloud?.id);
-  marker.title = t("list.showOnGrid");
-  marker.setAttribute("aria-label", t("list.showOnGrid"));
-  marker.addEventListener("change", () => setStorageListVisible(entry.storageId, marker.checked));
+  marker.checked = state.selectedStorageListIds.has(entry.storageId);
+  marker.dataset.storageListSelect = entry.storageId;
+  marker.title = t("list.selectForAction");
+  marker.setAttribute("aria-label", cloudText(`「${listName}」を選択`, `Select “${listName}”`));
+  marker.addEventListener("change", () => setStorageListSelected(entry.storageId, marker.checked));
 
   const name = document.createElement("button");
   name.type = "button";
   name.className = "point-list-name point-list-select";
   name.disabled = !entry.local?.editable;
+  name.title = listName;
   if (entry.local?.editable) {
     name.addEventListener("click", () => setActivePointList(entry.local.id));
   }
   const title = document.createElement("strong");
-  title.textContent = `${entry.cloud ? "☁ " : ""}${entry.local?.name || entry.cloud?.name || "地点リスト"}`;
+  title.textContent = `${entry.cloud ? "☁ " : ""}${listName}`;
   const meta = document.createElement("span");
+  const visibility = document.createElement("span");
+  visibility.className = "storage-visibility-indicator";
+  visibility.classList.toggle("is-visible", visible);
+  visibility.textContent = visible ? "●" : "○";
+  visibility.title = t(visible ? "list.visible" : "list.hidden");
+  visibility.setAttribute("aria-label", t(visible ? "list.visible" : "list.hidden"));
   const pointCount = entry.local?.points.length ?? entry.preview?.points.length ?? 0;
   const metaParts = [`${pointCount}${t("label.points")}`];
   if (entry.local?.id === state.activePointListId) metaParts.push(t("list.active"));
-  meta.textContent = metaParts.join(" · ");
+  meta.append(visibility, document.createTextNode(` ${metaParts.join(" · ")}`));
   name.append(title, meta);
 
   const rename = document.createElement("button");
@@ -2800,39 +2863,20 @@ function createStorageListRow(entry) {
   rename.className = "storage-rename-button";
   rename.textContent = "✎";
   rename.title = t("list.rename");
-  rename.setAttribute("aria-label", t("list.rename"));
+  rename.setAttribute("aria-label", cloudText(`「${listName}」の名前を変更`, `Rename “${listName}”`));
   rename.disabled = state.cloud.busy;
   rename.addEventListener("click", () => void renameStorageList(entry.storageId));
 
-  const copy = document.createElement("button");
-  copy.type = "button";
-  copy.className = "storage-copy-button";
-  copy.textContent = t("list.copy");
-  copy.disabled = state.cloud.busy || !(entry.local || entry.preview);
-  copy.addEventListener("click", () => copyStorageList(entry.storageId));
-
-  const move = document.createElement("button");
-  move.type = "button";
-  move.className = "storage-move-button";
-  move.textContent = t(entry.local ? "storage.moveCloud" : "storage.moveDevice");
-  move.disabled = state.cloud.busy;
-  move.addEventListener("click", () => void (entry.local
-    ? moveListToCloud(entry.storageId)
-    : moveListToDevice(entry.storageId)));
-
-  const remove = document.createElement("button");
-  remove.type = "button";
-  remove.className = "danger-button storage-delete-button";
-  remove.textContent = t("action.delete");
-  remove.disabled = state.cloud.busy;
-  remove.addEventListener("click", () => void deleteStoredList(entry.storageId));
-
-  row.append(marker, name, rename, copy, move, remove);
+  row.append(marker, name, rename);
   return row;
 }
 
 function renderStorageLists() {
   const entries = storageListEntries();
+  const availableIds = new Set(entries.map((entry) => entry.storageId));
+  for (const storageId of state.selectedStorageListIds) {
+    if (!availableIds.has(storageId)) state.selectedStorageListIds.delete(storageId);
+  }
   for (const container of elements.storageListContainers) {
     container.replaceChildren();
     for (const entry of entries) {
@@ -2857,6 +2901,7 @@ function renderStorageLists() {
   elements.backupListSelect.disabled = localEntries.length === 0 || state.cloud.busy;
   elements.backupExportButton.disabled = localEntries.length === 0 || state.cloud.busy;
   syncCloudControls();
+  syncStorageListActionButtons(entries);
 }
 function defaultCloudApiUrl() {
   return ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname)
@@ -2907,9 +2952,10 @@ function syncCloudControls() {
   elements.cloudAccessToken.disabled = state.cloud.busy;
   elements.cloudConnectButton.disabled = state.cloud.busy;
   elements.cloudDisconnectButton.disabled = state.cloud.busy || (!state.cloud.connected && !elements.cloudAccessToken.value);
-  for (const button of document.querySelectorAll(".storage-rename-button, .storage-copy-button, .storage-move-button, .storage-delete-button")) {
+  for (const button of document.querySelectorAll(".storage-rename-button")) {
     button.disabled = state.cloud.busy;
   }
+  syncStorageListActionButtons();
 }
 async function connectCloud() {
   try {
@@ -3065,7 +3111,7 @@ function removeLocalListForStorageChange(listId) {
   render();
 }
 
-async function moveListToCloud(storageId) {
+async function moveListToCloud(storageId, options = {}) {
   const entry = findStorageListEntry(storageId);
   if (!entry?.local) {
     renderStorageLists();
@@ -3102,7 +3148,7 @@ async function moveListToCloud(storageId) {
     renderStorageLists();
     return;
   }
-  if (!window.confirm(cloudText(
+  if (options.confirm !== false && !window.confirm(cloudText(
     `${list.name || "地点リスト"}の保存場所をクラウドへ変更しますか？\n地点数: ${list.points.length}\n完了後、端末側の保存データを削除します。`,
     `Move ${list.name || "Point list"} to cloud storage?\nPoints: ${list.points.length}\nThe device copy will be removed after upload.`
   ))) {
@@ -3154,7 +3200,7 @@ function uniqueLocalListId(preferredId) {
   return nextId;
 }
 
-async function moveListToDevice(storageId) {
+async function moveListToDevice(storageId, options = {}) {
   const entry = findStorageListEntry(storageId);
   if (!entry?.cloud || !state.cloud.connected) {
     setCloudStatus(t("storage.connectFirst"), { error: true });
@@ -3162,7 +3208,7 @@ async function moveListToDevice(storageId) {
     return;
   }
   const name = entry.local?.name || entry.cloud.name || "地点リスト";
-  if (!window.confirm(cloudText(
+  if (options.confirm !== false && !window.confirm(cloudText(
     `${name}の保存場所を端末へ変更しますか？\n端末への保存完了後、クラウド側を削除します。`,
     `Move ${name} to device storage?\nThe cloud copy will be removed after the device save completes.`
   ))) {
@@ -3228,14 +3274,14 @@ async function moveListToDevice(storageId) {
   }
 }
 
-async function deleteStoredList(storageId) {
+async function deleteStoredList(storageId, options = {}) {
   const entry = findStorageListEntry(storageId);
   if (!entry) {
     renderStorageLists();
     return;
   }
   const name = entry.local?.name || entry.cloud?.name || "地点リスト";
-  if (!window.confirm(cloudText(
+  if (options.confirm !== false && !window.confirm(cloudText(
     `${name}を削除しますか？\n保存されている場所すべてから削除します。`,
     `Delete ${name}?\nIt will be removed from every storage location.`
   ))) return;
@@ -3265,7 +3311,7 @@ function cloudErrorMessage(error) {
   if (error instanceof CloudApiError && error.message) return error.message;
   return cloudText("クラウド操作に失敗しました", "Cloud operation failed");
 }
-function setStorageListVisible(storageId, visible) {
+function setStorageListVisible(storageId, visible, options = {}) {
   const entry = findStorageListEntry(storageId);
   if (!entry) return;
   const nextVisible = Boolean(visible);
@@ -3279,8 +3325,66 @@ function setStorageListVisible(storageId, visible) {
   }
   refreshVisiblePoints();
   pruneHiddenPointReferences();
-  persistWorkspace();
-  render();
+  if (options.persist !== false) persistWorkspace();
+  if (options.render !== false) render();
+}
+
+async function runStorageListAction(action) {
+  const entries = selectedStorageListEntries();
+  if (entries.length === 0) {
+    setCloudStatus(t("list.noSelection"), { error: true });
+    return;
+  }
+  const storageIds = entries.map((entry) => entry.storageId);
+
+  if (action === "visibility") {
+    const nextVisible = entries.some((entry) => !storageListIsVisible(entry));
+    for (const storageId of storageIds) {
+      setStorageListVisible(storageId, nextVisible, { persist: false, render: false });
+    }
+    persistWorkspace();
+    clearStorageListSelection();
+    setCloudStatus(t(nextVisible ? "list.visible" : "list.hidden"));
+    render();
+    return;
+  }
+
+  if (action === "copy") {
+    for (const storageId of storageIds) copyStorageList(storageId);
+    clearStorageListSelection();
+    return;
+  }
+
+  if (action === "move") {
+    if (entries.some((entry) => entry.local) && !state.cloud.connected) {
+      setCloudStatus(t("storage.connectFirst"), { error: true });
+      return;
+    }
+    const confirmed = window.confirm(cloudText(
+      `選択した${entries.length}件の保存場所を移動しますか？\n端末のリストはクラウドへ、クラウドのリストは端末へ移動します。`,
+      `Move ${entries.length} selected list(s)?\nDevice lists move to cloud; cloud lists move to this device.`
+    ));
+    if (!confirmed) return;
+    for (const storageId of storageIds) {
+      const current = findStorageListEntry(storageId);
+      if (current?.local) await moveListToCloud(storageId, { confirm: false });
+      else if (current?.cloud) await moveListToDevice(storageId, { confirm: false });
+    }
+    clearStorageListSelection();
+    return;
+  }
+
+  if (action === "delete") {
+    const confirmed = window.confirm(cloudText(
+      `選択した${entries.length}件を削除しますか？\n保存されている場所すべてから削除します。`,
+      `Delete ${entries.length} selected list(s)?\nThey will be removed from every storage location.`
+    ));
+    if (!confirmed) return;
+    for (const storageId of storageIds) {
+      await deleteStoredList(storageId, { confirm: false });
+    }
+    clearStorageListSelection();
+  }
 }
 
 function deletePointList(listId) {
@@ -6085,6 +6189,9 @@ function bindEvents() {
   elements.deletePointButton.addEventListener("click", deleteSelectedPoint);
   for (const button of elements.newPointListButtons) {
     button.addEventListener("click", createNewPointList);
+  }
+  for (const button of elements.storageListActionButtons) {
+    button.addEventListener("click", () => void runStorageListAction(button.dataset.storageListAction));
   }
   elements.backupExportButton.addEventListener("click", () => {
     if (elements.backupListSelect.value) exportPointList(elements.backupListSelect.value);
