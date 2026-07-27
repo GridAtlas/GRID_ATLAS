@@ -2822,7 +2822,6 @@ function clearStorageListSelection() {
 function createStorageListRow(entry) {
   const row = document.createElement("div");
   row.className = "storage-list-row";
-  row.classList.toggle("is-active-list", entry.local?.id === state.activePointListId);
   row.classList.toggle("is-selected", state.selectedStorageListIds.has(entry.storageId));
   const listName = entry.local?.name || entry.cloud?.name || "地点リスト";
   const visible = storageListIsVisible(entry);
@@ -2846,17 +2845,14 @@ function createStorageListRow(entry) {
   const title = document.createElement("strong");
   title.textContent = `${entry.cloud ? "☁ " : ""}${listName}`;
   const meta = document.createElement("span");
-  const visibility = document.createElement("span");
-  visibility.className = "storage-visibility-indicator";
-  visibility.classList.toggle("is-visible", visible);
-  visibility.textContent = visible ? "●" : "○";
-  visibility.title = t(visible ? "list.visible" : "list.hidden");
-  visibility.setAttribute("aria-label", t(visible ? "list.visible" : "list.hidden"));
   const pointCount = entry.local?.points.length ?? entry.preview?.points.length ?? 0;
   const metaParts = [`${pointCount}${t("label.points")}`];
   if (entry.local?.id === state.activePointListId) metaParts.push(t("list.active"));
-  meta.append(visibility, document.createTextNode(` ${metaParts.join(" · ")}`));
+  meta.textContent = metaParts.join(" · ");
   name.append(title, meta);
+
+  const rowActions = document.createElement("div");
+  rowActions.className = "storage-list-row-actions";
 
   const rename = document.createElement("button");
   rename.type = "button";
@@ -2867,7 +2863,29 @@ function createStorageListRow(entry) {
   rename.disabled = state.cloud.busy;
   rename.addEventListener("click", () => void renameStorageList(entry.storageId));
 
-  row.append(marker, name, rename);
+  const gridVisibility = document.createElement("button");
+  gridVisibility.type = "button";
+  gridVisibility.className = "storage-grid-button";
+  gridVisibility.classList.toggle("is-active", visible);
+  gridVisibility.textContent = "▦";
+  gridVisibility.title = t(visible ? "list.visible" : "list.hidden");
+  gridVisibility.setAttribute("aria-pressed", String(visible));
+  gridVisibility.setAttribute("aria-label", cloudText(
+    visible
+      ? `「${listName}」をグリッドから非表示にする`
+      : `「${listName}」をグリッドに表示する`,
+    visible
+      ? `Hide “${listName}” from the grid`
+      : `Show “${listName}” on the grid`
+  ));
+  gridVisibility.addEventListener("click", () => {
+    const nextVisible = !visible;
+    setStorageListVisible(entry.storageId, nextVisible);
+    setCloudStatus(t(nextVisible ? "list.visible" : "list.hidden"));
+  });
+
+  rowActions.append(rename, gridVisibility);
+  row.append(marker, name, rowActions);
   return row;
 }
 

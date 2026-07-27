@@ -931,11 +931,6 @@ textarea {
   background: var(--field-bg);
 }
 
-.storage-list-row.is-active-list {
-  border-color: var(--accent);
-  box-shadow: inset 3px 0 0 var(--accent);
-}
-
 .storage-list-row.is-selected {
   background: var(--active-bg);
 }
@@ -982,7 +977,7 @@ textarea {
   font-weight: 700;
 }
 
-.storage-list-row > .storage-rename-button,
+.storage-list-row-actions button,
 .compact-button {
   min-height: 32px;
   padding: 0 8px;
@@ -991,17 +986,25 @@ textarea {
   font-weight: 800;
 }
 
-.storage-list-row > .storage-rename-button {
+.storage-list-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.storage-list-row-actions button {
   width: 32px;
   padding: 0;
   font-size: 17px;
 }
 
-.storage-visibility-indicator {
+.storage-grid-button {
   color: var(--muted);
 }
 
-.storage-visibility-indicator.is-visible {
+.storage-grid-button.is-active {
+  border-color: var(--accent);
+  background: var(--active-bg);
   color: var(--accent-strong);
 }
 
