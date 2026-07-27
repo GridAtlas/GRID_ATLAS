@@ -25,8 +25,7 @@ const EN_LANGUAGE = "en";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
-const POINTER_TAP_SLOP = 8;
-const PINCH_MOVE_THRESHOLD = 3;
+const POINTER_MOVE_THRESHOLD = 3;
 const CURRENT_LOCATION_ID = "__current_location__";
 const LOADED_OBSERVATION_PREFIX = "__loaded_observation__";
 const DEFAULT_POINT_LIST_ID = "local";
@@ -4785,21 +4784,15 @@ function pointerMidpoint(a, b) {
   };
 }
 
-function setCanvasPanning(panning) {
-  canvas.classList.toggle("is-panning", Boolean(panning));
-}
-
 function startDragGesture(pointerId, point, options = {}) {
-  const moved = Boolean(options.moved);
   state.pointer.drag = {
     id: pointerId,
     start: point,
     last: point,
     viewportX: state.viewport.x,
     viewportY: state.viewport.y,
-    moved
+    moved: Boolean(options.moved)
   };
-  setCanvasPanning(moved);
 }
 
 function startPinchGesture() {
@@ -4840,7 +4833,7 @@ function updatePinchGesture() {
   const movedDistance = Math.abs(distance - pinch.startDistance);
   const movedCenter = pointerDistance(midpoint, pinch.startMidpoint);
 
-  if (movedDistance > PINCH_MOVE_THRESHOLD || movedCenter > PINCH_MOVE_THRESHOLD) {
+  if (movedDistance > POINTER_MOVE_THRESHOLD || movedCenter > POINTER_MOVE_THRESHOLD) {
     pinch.moved = true;
   }
 
@@ -4889,13 +4882,11 @@ function removePointer(event, options = {}) {
       startDragGesture(remaining[0], remaining[1], { moved: true });
     } else {
       state.pointer.drag = null;
-      setCanvasPanning(false);
     }
     return;
   }
 
   state.pointer.drag = null;
-  setCanvasPanning(false);
 
   if (wasTap) {
     handleCanvasClick(point);
@@ -6294,10 +6285,6 @@ function bindEvents() {
   }
 
   canvas.addEventListener("pointerdown", (event) => {
-    if (event.pointerType === "mouse" && event.button !== 0) {
-      return;
-    }
-    event.preventDefault();
     const point = getCanvasPoint(event);
     state.pointer.active.set(event.pointerId, point);
 
@@ -6321,7 +6308,6 @@ function bindEvents() {
     if (!state.pointer.active.has(event.pointerId)) {
       return;
     }
-    event.preventDefault();
 
     const point = getCanvasPoint(event);
     state.pointer.active.set(event.pointerId, point);
@@ -6339,10 +6325,9 @@ function bindEvents() {
     const dx = point.x - drag.start.x;
     const dy = point.y - drag.start.y;
 
-    if (Math.hypot(dx, dy) > POINTER_TAP_SLOP) {
+    if (Math.hypot(dx, dy) > POINTER_MOVE_THRESHOLD) {
       if (!drag.moved) {
         pauseLocationFollowForManualView();
-        setCanvasPanning(true);
       }
       drag.moved = true;
     }
