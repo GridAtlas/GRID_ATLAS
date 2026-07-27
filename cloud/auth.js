@@ -58,10 +58,17 @@ export async function authenticateRequest(request, env) {
     throw new AuthError("ログインが必要です", 401);
   }
 
-  if (env.PERSONAL_ACCESS_CODE) {
-    const valid = await secretsMatch(match[1], env.PERSONAL_ACCESS_CODE);
-    if (!valid) throw new AuthError("アクセスコードが違います", 401);
-    return { id: env.PERSONAL_OWNER_ID || "personal-beta" };
+  const accessCodeOwners = [
+    { code: env.PERSONAL_ACCESS_CODE, ownerId: env.PERSONAL_OWNER_ID || "personal-beta" },
+    { code: env.FRIEND_ACCESS_CODE, ownerId: env.FRIEND_OWNER_ID || "friend-beta" }
+  ].filter((entry) => entry.code);
+  if (accessCodeOwners.length > 0) {
+    const matches = await Promise.all(
+      accessCodeOwners.map((entry) => secretsMatch(match[1], entry.code))
+    );
+    const matchedIndex = matches.indexOf(true);
+    if (matchedIndex < 0) throw new AuthError("アクセスコードが違います", 401);
+    return { id: accessCodeOwners[matchedIndex].ownerId };
   }
 
   const requiredConfig = ["AUTH_JWKS_URL", "AUTH_ISSUER", "AUTH_AUDIENCE"];

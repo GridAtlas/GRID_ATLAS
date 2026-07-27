@@ -39,21 +39,56 @@ afterAll(() => {
 });
 
 describe("GRID ATLAS Cloud API", () => {
-  it("supports a personal beta access code stored as a Worker secret", async () => {
+  it("maps personal and friend access codes to separate owners", async () => {
     const personalEnv = {
       PERSONAL_ACCESS_CODE: "ga_personal_test",
-      PERSONAL_OWNER_ID: "personal-test"
+      PERSONAL_OWNER_ID: "personal-test",
+      FRIEND_ACCESS_CODE: "ga_friend_test",
+      FRIEND_OWNER_ID: "friend-test"
     };
     const authorized = await authenticateRequest(new Request("https://api.test/v1/me/lists", {
       headers: { Authorization: "Bearer ga_personal_test" }
     }), personalEnv);
     expect(authorized).toEqual({ id: "personal-test" });
 
+    const friend = await authenticateRequest(new Request("https://api.test/v1/me/lists", {
+      headers: { Authorization: "Bearer ga_friend_test" }
+    }), personalEnv);
+    expect(friend).toEqual({ id: "friend-test" });
+
     await expect(authenticateRequest(new Request("https://api.test/v1/me/lists", {
       headers: { Authorization: "Bearer wrong-code" }
     }), personalEnv)).rejects.toMatchObject({ status: 401, message: "アクセスコードが違います" });
   });
 
+  it("keeps personal and friend access-code data separate", async () => {
+    const accessEnv = {
+      DB: env.DB,
+      WEB_ORIGINS: "https://gridatlas.github.io",
+      PERSONAL_ACCESS_CODE: "ga_personal_test",
+      PERSONAL_OWNER_ID: "personal-test",
+      FRIEND_ACCESS_CODE: "ga_friend_test",
+      FRIEND_OWNER_ID: "friend-test"
+    };
+    const request = (token, method = "GET", body) => worker.fetch(new Request("https://api.test/v1/me/lists", {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(body === undefined ? {} : { "Content-Type": "application/json" })
+      },
+      body: body === undefined ? undefined : JSON.stringify(body)
+    }), accessEnv);
+
+    expect((await request("ga_personal_test", "POST", samplePayload({ name: "個人用" }))).status).toBe(201);
+    expect((await request("ga_friend_test", "POST", samplePayload({ name: "友達用" }))).status).toBe(201);
+
+    const personalLists = await (await request("ga_personal_test")).json();
+    const friendLists = await (await request("ga_friend_test")).json();
+    expect(personalLists.lists).toHaveLength(1);
+    expect(personalLists.lists[0].name).toBe("個人用");
+    expect(friendLists.lists).toHaveLength(1);
+    expect(friendLists.lists[0].name).toBe("友達用");
+  });
   it("handles authentication, CORS, malformed routes, and private response headers", async () => {
     const unauthenticated = await api("/v1/me/lists", { token: null });
     expect(unauthenticated.status).toBe(401);

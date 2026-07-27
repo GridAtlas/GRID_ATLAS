@@ -33,7 +33,8 @@
         "AUTH_JWKS_URL": "",
         "AUTH_ISSUER": "",
         "AUTH_AUDIENCE": "",
-        "PERSONAL_OWNER_ID": "personal-beta"
+        "PERSONAL_OWNER_ID": "personal-beta",
+        "FRIEND_OWNER_ID": "friend-beta"
       },
       "d1_databases": [
         {
@@ -44,7 +45,7 @@
         }
       ],
       "secrets": {
-        "required": ["PERSONAL_ACCESS_CODE"]
+        "required": ["PERSONAL_ACCESS_CODE", "FRIEND_ACCESS_CODE"]
       }
     }
   }
