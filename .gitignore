@@ -10,3 +10,4 @@ coverage/
 .DS_Store
 Thumbs.db
 .cloud-access-code
+GRID_ATLAS_CLOUD_ACCESS_CODE_PRIVATE.txt

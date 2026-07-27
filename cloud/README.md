@@ -12,7 +12,7 @@ Cloudflare Workers + D1で動く、自分用地点リストCloudベータです�
 
 - 自分用ベータでは、Bearer値をCloudflare Worker Secret `PERSONAL_ACCESS_CODE`と照合する。
 - SecretはSHA-256へ揃えた後に定数時間比較し、ソース・`wrangler.jsonc`・Gitへ保存しない。
-- ローカル控えはGit管理外の `.cloud-access-code`。値を変更する場合はSecretも同時に更新する。
+- ローカル控えはGit管理外の `GRID_ATLAS_CLOUD_ACCESS_CODE_PRIVATE.txt`。値を変更する場合はSecretも同時に更新する。
 - 将来の複数ユーザー化に備え、Secret未設定環境では既存のJWT/JWKS検証へフォールバックする。
 - 個人ベータのownerは `PERSONAL_OWNER_ID=personal-beta` に固定する。
 
@@ -37,7 +37,7 @@ npx wrangler deploy --env staging
 Secretの設定・ローテーションは、値をコマンド引数やログへ出さずに行う。
 
 ```powershell
-Get-Content -LiteralPath .cloud-access-code -Raw | npx wrangler secret put PERSONAL_ACCESS_CODE --env staging
+Get-Content -LiteralPath GRID_ATLAS_CLOUD_ACCESS_CODE_PRIVATE.txt -Raw | npx wrangler secret put PERSONAL_ACCESS_CODE --env staging
 ```
 
 ## API
