@@ -397,6 +397,8 @@ const TRANSLATIONS = {
     "list.newPrompt": "新しいリストの名前",
     "list.created": "新しいリストを作成し、登録先にしました",
     "list.active": "登録先",
+    "list.copy": "コピー",
+    "maintenance.title": "バックアップ・初期化",
     "backup.title": "バックアップ",
     "backup.notice": "端末のリストを保存・復元できます。",
     "backup.list": "対象リスト",
@@ -548,6 +550,8 @@ const TRANSLATIONS = {
     "list.newPrompt": "Name the new list",
     "list.created": "Created a new list and set it as the destination",
     "list.active": "Destination",
+    "list.copy": "Copy",
+    "maintenance.title": "Backup & reset",
     "backup.title": "Backup",
     "backup.notice": "Save or restore lists stored on this device.",
     "backup.list": "List",
@@ -958,6 +962,46 @@ function createNewPointList() {
   state.activePointListId = list.id;
   persistWorkspace();
   setCloudStatus(t("list.created"));
+  render();
+}
+
+function uniqueCopiedListName(sourceName) {
+  const baseName = String(sourceName || cloudText("地点リスト", "Point list")).trim();
+  const stem = activeLanguage() === EN_LANGUAGE ? `${baseName} copy` : `${baseName} のコピー`;
+  const existingNames = new Set(state.pointLists.map((list) => list.name));
+  if (!existingNames.has(stem)) return stem;
+  let index = 2;
+  while (existingNames.has(`${stem} ${index}`)) index += 1;
+  return `${stem} ${index}`;
+}
+
+function copyStorageList(storageId) {
+  const entry = findStorageListEntry(storageId);
+  const source = entry?.local ?? entry?.preview ?? null;
+  if (!source) return;
+  const now = new Date().toISOString();
+  const points = source.points.map((point) => ({
+    ...clonePlain(point),
+    id: createId(),
+    updatedAt: now
+  }));
+  const copy = createPointList({
+    name: uniqueCopiedListName(source.name),
+    description: source.description,
+    author: source.author,
+    visible: true,
+    editable: true,
+    source: "local",
+    importedAt: "",
+    createdAt: now,
+    updatedAt: now,
+    points
+  });
+  state.pointLists.push(copy);
+  state.activePointListId = copy.id;
+  refreshVisiblePoints();
+  persistWorkspace();
+  setCloudStatus(cloudText(`「${copy.name}」を作成し、登録先にしました`, `Created “${copy.name}” and set it as the destination`));
   render();
 }
 
@@ -2711,6 +2755,13 @@ function createStorageListRow(entry) {
   meta.textContent = metaParts.join(" · ");
   name.append(title, meta);
 
+  const copy = document.createElement("button");
+  copy.type = "button";
+  copy.className = "storage-copy-button";
+  copy.textContent = t("list.copy");
+  copy.disabled = state.cloud.busy || !(entry.local || entry.preview);
+  copy.addEventListener("click", () => copyStorageList(entry.storageId));
+
   const move = document.createElement("button");
   move.type = "button";
   move.className = "storage-move-button";
@@ -2727,7 +2778,7 @@ function createStorageListRow(entry) {
   remove.disabled = state.cloud.busy;
   remove.addEventListener("click", () => void deleteStoredList(entry.storageId));
 
-  row.append(marker, name, move, remove);
+  row.append(marker, name, copy, move, remove);
   return row;
 }
 
@@ -2807,7 +2858,7 @@ function syncCloudControls() {
   elements.cloudAccessToken.disabled = state.cloud.busy;
   elements.cloudConnectButton.disabled = state.cloud.busy;
   elements.cloudDisconnectButton.disabled = state.cloud.busy || (!state.cloud.connected && !elements.cloudAccessToken.value);
-  for (const button of document.querySelectorAll(".storage-move-button, .storage-delete-button")) {
+  for (const button of document.querySelectorAll(".storage-copy-button, .storage-move-button, .storage-delete-button")) {
     button.disabled = state.cloud.busy;
   }
 }

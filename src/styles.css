@@ -223,6 +223,49 @@ textarea:focus-visible {
   width: 100%;
 }
 
+.settings-maintenance {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.settings-maintenance summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.settings-maintenance-content {
+  display: grid;
+  gap: 12px;
+  padding-top: 10px;
+}
+
+.settings-maintenance h3 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.settings-nav-subtle {
+  gap: 0;
+  padding: 10px 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.settings-nav-subtle .settings-nav-button {
+  width: 100%;
+  min-height: 30px;
+  padding: 0 2px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  font-size: 12px;
+}
+
 .settings-check {
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
@@ -879,7 +922,7 @@ textarea {
   min-width: 0;
   min-height: 48px;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 6px;
   padding: 5px 7px;
@@ -942,6 +985,7 @@ textarea {
   font-weight: 700;
 }
 
+.storage-list-row > .storage-copy-button,
 .storage-list-row > .storage-move-button,
 .storage-list-row > .storage-delete-button,
 .compact-button {
@@ -1333,6 +1377,14 @@ textarea {
 }
 
 @media (min-width: 861px) {
+  .desktop-secondary-panel {
+    display: none !important;
+  }
+
+  .list-management-panel .panel-heading {
+    margin-bottom: 0;
+  }
+
   .app-shell {
     height: 100vh;
     height: 100dvh;

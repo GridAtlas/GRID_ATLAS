@@ -9,8 +9,8 @@
     <link rel="icon" href="assets/icon-retro.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-retro.png">
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("grid-atlas-theme")==="light"?"light":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=41">
-    <script src="src/main.js?v=107" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=42">
+    <script src="src/main.js?v=108" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -24,10 +24,6 @@
           <div class="settings-menu" id="settingsMenu">
             <button id="settingsMenuButton" class="settings-menu-button" type="button" aria-expanded="false" aria-controls="settingsPanel" title="設定">☰</button>
             <div id="settingsPanel" class="settings-panel" hidden>
-              <div class="settings-nav">
-                <span class="settings-nav-title" data-i18n="settings.menu">メニュー</span>
-                <button class="settings-nav-button" type="button" data-mobile-page="data" aria-pressed="false" data-i18n="page.data">データ</button>
-              </div>
               <section class="cloud-menu-section">
                 <h2 data-i18n="cloud.menuTitle">クラウド接続</h2>
                 <p class="cloud-note" data-i18n="cloud.notice">アクセスコードをこのブラウザに保存します。切断すると保存コードを削除します。</p>
@@ -79,6 +75,38 @@
                 <input id="settingsGpsEnabled" type="checkbox">
                 <span data-i18n="settings.gps">GPS機能を使用</span>
               </label>
+              <details class="settings-maintenance">
+                <summary data-i18n="maintenance.title">バックアップ・初期化</summary>
+                <div class="settings-maintenance-content">
+                  <div class="data-group">
+                    <h3 data-i18n="backup.title">バックアップ</h3>
+                    <p class="cloud-note" data-i18n="backup.notice">端末のリストを保存・復元できます。</p>
+                    <label>
+                      <span data-i18n="backup.list">対象リスト</span>
+                      <select id="backupListSelect"></select>
+                    </label>
+                    <div class="button-row">
+                      <button id="backupExportButton" type="button" data-i18n="backup.export">バックアップ保存</button>
+                      <button id="replacePointsButton" type="button" data-i18n="backup.restore">バックアップから復元</button>
+                    </div>
+                  </div>
+                  <div class="data-group">
+                    <h3 data-i18n="data.observations">観察記録</h3>
+                    <div class="button-row">
+                      <button id="exportObservationButton" type="button" data-i18n="button.save">保存</button>
+                      <button id="replaceObservationButton" type="button" data-i18n="button.replaceLoad">新規読込</button>
+                      <button id="appendObservationButton" type="button" data-i18n="button.appendLoad">追加読込</button>
+                    </div>
+                  </div>
+                  <div class="data-group">
+                    <h3 data-i18n="data.grid">グリッド</h3>
+                    <button id="clearButton" class="danger-button compact-button" type="button" data-i18n="button.clearGrid">グリッド初期化</button>
+                  </div>
+                </div>
+              </details>
+              <div class="settings-nav settings-nav-subtle">
+                <button class="settings-nav-button" type="button" data-mobile-page="data" aria-pressed="false" data-i18n="page.lists">リスト一覧</button>
+              </div>
             </div>
           </div>
         </div>
@@ -183,8 +211,8 @@
           </nav>
         </div>
 
-        <aside class="sidebar" aria-label="地点と分析">
-          <div class="selected-summary selected-summary-sidebar" aria-live="polite">
+        <aside class="sidebar" aria-label="地点登録とリスト一覧">
+          <div class="selected-summary selected-summary-sidebar desktop-secondary-panel" aria-live="polite">
             <span data-i18n="summary.selected">選択中</span>
             <strong id="sidebarSelectedTitle">未選択</strong>
           </div>
@@ -228,7 +256,7 @@
               <button id="pointSubmitButton" class="primary-button" type="submit" data-i18n="button.submitRegister">登録</button>
             </form>
           </section>
-          <section class="panel" data-mobile-panel="detail">
+          <section class="panel desktop-secondary-panel" data-mobile-panel="detail">
             <div class="panel-heading">
               <h2 id="selectionHeading">選択地点</h2>
             </div>
@@ -263,7 +291,7 @@
             </div>
           </section>
 
-          <section class="panel" data-mobile-panel="analysis">
+          <section class="panel desktop-secondary-panel" data-mobile-panel="analysis">
             <h2 data-i18n="panel.analysis">分析</h2>
             <div class="metric-grid">
               <div>
@@ -286,7 +314,7 @@
             <div id="linkList" class="link-list"></div>
           </section>
 
-          <section class="panel" data-mobile-panel="analysis">
+          <section class="panel desktop-secondary-panel" data-mobile-panel="analysis">
             <div class="panel-heading">
               <h2 data-i18n="panel.route">巡回ルート</h2>
               <span id="routeSelectedCount" class="panel-count">0点</span>
@@ -306,42 +334,13 @@
             <div id="routeSummary" class="route-summary" data-i18n="route.summaryDefault">地点を選んで巡回を押す</div>
             <ol id="routeList" class="route-list"></ol>
           </section>
-          <section class="panel data-panel" data-mobile-panel="data">
-            <h2 data-i18n="panel.data">データ</h2>
-            <div class="data-group">
-              <div class="data-group-heading">
-                <h3 data-i18n="data.pointLists">地点リスト</h3>
-                <button class="compact-button" type="button" data-new-point-list data-i18n="list.new">＋ 新規作成</button>
-              </div>
-              <div id="pointListItems" class="storage-list-items" data-storage-list-items></div>
-              <output id="cloudStatus" class="form-status cloud-status" data-cloud-status aria-live="polite"></output>
+          <section class="panel data-panel list-management-panel" data-mobile-panel="data">
+            <div class="panel-heading">
+              <h2 data-i18n="panel.lists">リスト一覧</h2>
+              <button class="compact-button" type="button" data-new-point-list data-i18n="list.new">＋ 新規作成</button>
             </div>
-            <details class="data-group backup-group">
-              <summary data-i18n="backup.title">バックアップ</summary>
-              <p class="cloud-note" data-i18n="backup.notice">端末のリストを保存・復元できます。</p>
-              <label>
-                <span data-i18n="backup.list">対象リスト</span>
-                <select id="backupListSelect"></select>
-              </label>
-              <div class="button-row">
-                <button id="backupExportButton" type="button" data-i18n="backup.export">バックアップ保存</button>
-                <button id="replacePointsButton" type="button" data-i18n="backup.restore">バックアップから復元</button>
-              </div>
-            </details>
-            <div class="data-group">
-              <h3 data-i18n="data.observations">観察記録</h3>
-              <div class="button-row">
-                <button id="exportObservationButton" type="button" data-i18n="button.save">保存</button>
-                <button id="replaceObservationButton" type="button" data-i18n="button.replaceLoad">新規読込</button>
-                <button id="appendObservationButton" type="button" data-i18n="button.appendLoad">追加読込</button>
-              </div>
-            </div>
-            <div class="data-group">
-              <h3 data-i18n="data.grid">グリッド</h3>
-              <div class="button-row">
-                <button id="clearButton" class="danger-button" type="button" data-i18n="button.clearGrid">グリッド初期化</button>
-              </div>
-            </div>
+            <div id="pointListItems" class="storage-list-items" data-storage-list-items></div>
+            <output id="cloudStatus" class="form-status cloud-status" data-cloud-status aria-live="polite"></output>
             <input id="pointImportFile" type="file" accept="application/json,.json" multiple hidden>
             <input id="observationImportFile" type="file" accept="application/json,.json" multiple hidden>
           </section>
