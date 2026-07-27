@@ -872,28 +872,25 @@ textarea {
 
 .storage-list-items {
   display: grid;
-  gap: 8px;
+  gap: 5px;
 }
 
 .storage-list-row {
   min-width: 0;
+  min-height: 48px;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  grid-template-areas:
-    "marker name"
-    "storage storage"
-    "actions actions";
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 8px 10px;
-  padding: 10px;
+  gap: 6px;
+  padding: 5px 7px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--field-bg);
 }
 
-.storage-list-row > input,
-.storage-cloud-marker {
-  grid-area: marker;
+.storage-list-row.is-active-list {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .storage-list-row > input {
@@ -910,43 +907,78 @@ textarea {
   font-size: 16px;
 }
 
-.storage-list-row .point-list-name {
-  grid-area: name;
+.point-list-select {
+  min-width: 0;
+  min-height: 34px;
+  display: grid;
+  align-content: center;
+  gap: 1px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  text-align: left;
 }
 
-.storage-location-control {
-  grid-area: storage;
-  min-width: 0;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+.point-list-select:disabled {
+  color: var(--text);
+  cursor: default;
+  opacity: 1;
+}
+
+.point-list-select strong,
+.point-list-select span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.point-list-select strong {
+  font-size: 13px;
+}
+
+.point-list-select span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.storage-list-row > .storage-move-button,
+.storage-list-row > .storage-delete-button,
+.compact-button {
+  min-height: 32px;
+  padding: 0 8px;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.data-group-heading {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
 }
 
-.storage-location-control > span {
+.backup-group {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.backup-group summary {
   color: var(--muted);
+  cursor: pointer;
   font-size: 12px;
   font-weight: 800;
 }
 
-.storage-location-control select {
-  width: 100%;
-  min-width: 0;
+.backup-group[open] summary {
+  margin-bottom: 8px;
 }
 
-.storage-list-actions {
-  grid-area: actions;
-  display: flex;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 8px;
+.backup-group label {
+  display: grid;
+  gap: 6px;
 }
-
-.storage-list-actions button {
-  min-height: 32px;
-  padding: 0 9px;
-}
-
 .cloud-data-group {
   padding-top: 10px;
   border-top: 1px solid var(--line);

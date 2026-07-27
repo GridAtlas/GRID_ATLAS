@@ -9,8 +9,8 @@
     <link rel="icon" href="assets/icon-retro.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-retro.png">
     <script>try{document.documentElement.dataset.theme=localStorage.getItem("grid-atlas-theme")==="light"?"light":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=40">
-    <script src="src/main.js?v=105" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=41">
+    <script src="src/main.js?v=106" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -120,6 +120,7 @@
             <section class="mobile-content-panel" data-mobile-grid-panel="lists" aria-label="リスト一覧">
               <div class="mobile-content-heading">
                 <h2 data-i18n="panel.lists">リスト一覧</h2>
+                <button class="compact-button" type="button" data-new-point-list data-i18n="list.new">＋ 新規作成</button>
               </div>
               <div id="mobilePointListItems" class="storage-list-items" data-storage-list-items></div>
             </section>
@@ -308,16 +309,25 @@
           <section class="panel data-panel" data-mobile-panel="data">
             <h2 data-i18n="panel.data">データ</h2>
             <div class="data-group">
-              <h3 data-i18n="data.pointLists">地点リスト</h3>
-              <p class="cloud-note" data-i18n="storage.notice">各リストの保存場所を端末またはクラウドへ移動できます。</p>
-              <div id="pointListItems" class="storage-list-items" data-storage-list-items></div>
-              <div class="button-row">
-                <button id="exportPointsButton" type="button" hidden data-i18n="button.save">保存</button>
-                <button id="replacePointsButton" type="button" data-i18n="storage.import">ファイルから読込</button>
-                <button id="appendPointsButton" type="button" hidden data-i18n="button.appendLoad">追加読込</button>
+              <div class="data-group-heading">
+                <h3 data-i18n="data.pointLists">地点リスト</h3>
+                <button class="compact-button" type="button" data-new-point-list data-i18n="list.new">＋ 新規作成</button>
               </div>
+              <div id="pointListItems" class="storage-list-items" data-storage-list-items></div>
               <output id="cloudStatus" class="form-status cloud-status" data-cloud-status aria-live="polite"></output>
             </div>
+            <details class="data-group backup-group">
+              <summary data-i18n="backup.title">バックアップ</summary>
+              <p class="cloud-note" data-i18n="backup.notice">端末のリストを保存・復元できます。</p>
+              <label>
+                <span data-i18n="backup.list">対象リスト</span>
+                <select id="backupListSelect"></select>
+              </label>
+              <div class="button-row">
+                <button id="backupExportButton" type="button" data-i18n="backup.export">バックアップ保存</button>
+                <button id="replacePointsButton" type="button" data-i18n="backup.restore">バックアップから復元</button>
+              </div>
+            </details>
             <div class="data-group">
               <h3 data-i18n="data.observations">観察記録</h3>
               <div class="button-row">
