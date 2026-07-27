@@ -4,7 +4,7 @@ import {
   createCloudClient,
   pointListToCloudPayload,
   resolveCloudApiUrlSetting
-} from "./cloud-client.js";
+} from "./cloud-client.js?v=2";
 
 const STORAGE_KEY = "grid-atlas-workspace-v2";
 const THEME_KEY = "grid-atlas-theme";
