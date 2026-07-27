@@ -2889,9 +2889,17 @@ async function moveListToCloud(storageId) {
   }
 
   const photoCount = list.points.filter((point) => Boolean(point.photo)).length;
+  if (photoCount > 0) {
+    setCloudStatus(cloudText(
+      `写真${photoCount}件を含むためクラウドへ移動できません。写真を残したまま移動できる対応をお待ちください。`,
+      `This list contains ${photoCount} photo(s) and cannot be moved to cloud storage yet.`
+    ), { error: true });
+    renderStorageLists();
+    return;
+  }
   if (!window.confirm(cloudText(
-    `${list.name || "地点リスト"}の保存場所をクラウドへ変更しますか？\n地点数: ${list.points.length}\n完了後、端末側の保存データを削除します。${photoCount ? `\n写真${photoCount}件はクラウドへ移動しません。` : ""}`,
-    `Move ${list.name || "Point list"} to cloud storage?\nPoints: ${list.points.length}\nThe device copy will be removed after upload.${photoCount ? `\n${photoCount} photo(s) will not be moved.` : ""}`
+    `${list.name || "地点リスト"}の保存場所をクラウドへ変更しますか？\n地点数: ${list.points.length}\n完了後、端末側の保存データを削除します。`,
+    `Move ${list.name || "Point list"} to cloud storage?\nPoints: ${list.points.length}\nThe device copy will be removed after upload.`
   ))) {
     renderStorageLists();
     return;
