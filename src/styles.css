@@ -870,6 +870,83 @@ textarea {
   padding: 0 8px;
 }
 
+.storage-list-items {
+  display: grid;
+  gap: 8px;
+}
+
+.storage-list-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "marker name"
+    "storage storage"
+    "actions actions";
+  align-items: center;
+  gap: 8px 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field-bg);
+}
+
+.storage-list-row > input,
+.storage-cloud-marker {
+  grid-area: marker;
+}
+
+.storage-list-row > input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.storage-cloud-marker {
+  width: 18px;
+  color: var(--accent-strong);
+  text-align: center;
+  font-size: 16px;
+}
+
+.storage-list-row .point-list-name {
+  grid-area: name;
+}
+
+.storage-location-control {
+  grid-area: storage;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.storage-location-control > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.storage-location-control select {
+  width: 100%;
+  min-width: 0;
+}
+
+.storage-list-actions {
+  grid-area: actions;
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.storage-list-actions button {
+  min-height: 32px;
+  padding: 0 9px;
+}
+
 .cloud-data-group {
   padding-top: 10px;
   border-top: 1px solid var(--line);
