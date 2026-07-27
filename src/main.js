@@ -170,6 +170,7 @@ const state = {
     lists: [],
     pointLists: [],
     pointRows: [],
+    hiddenListIds: new Set(),
   },
   links: [],
   mode: "inspect",
@@ -398,6 +399,9 @@ const TRANSLATIONS = {
     "list.created": "新しいリストを作成し、登録先にしました",
     "list.active": "登録先",
     "list.copy": "コピー",
+    "list.rename": "リスト名変更",
+    "list.renamePrompt": "新しいリスト名",
+    "list.showOnGrid": "グリッドに表示",
     "maintenance.title": "バックアップ・初期化",
     "backup.title": "バックアップ",
     "backup.notice": "端末のリストを保存・復元できます。",
@@ -551,6 +555,9 @@ const TRANSLATIONS = {
     "list.created": "Created a new list and set it as the destination",
     "list.active": "Destination",
     "list.copy": "Copy",
+    "list.rename": "Rename list",
+    "list.renamePrompt": "New list name",
+    "list.showOnGrid": "Show on grid",
     "maintenance.title": "Backup & reset",
     "backup.title": "Backup",
     "backup.notice": "Save or restore lists stored on this device.",
@@ -792,6 +799,11 @@ function applyWorkspace(workspace) {
   const origin = validGeo(workspace.origin) ? workspace.origin : null;
   const existingPointIds = new Set();
   state.version = 3;
+  state.cloud.hiddenListIds = new Set(
+    Array.isArray(workspace.cloudHiddenListIds)
+      ? workspace.cloudHiddenListIds.filter((id) => typeof id === "string" && id)
+      : []
+  );
 
   if (Array.isArray(workspace.pointLists)) {
     state.pointLists = workspace.pointLists
@@ -921,6 +933,22 @@ function visiblePointIdSet() {
 
 function refreshVisiblePoints() {
   state.points = visiblePointLists().flatMap((list) => list.points);
+}
+
+function cloudListVisible(cloudId) {
+  return typeof cloudId === "string" && !state.cloud.hiddenListIds.has(cloudId);
+}
+
+function visibleCloudPointLists() {
+  return state.cloud.connected
+    ? state.cloud.pointLists.filter((list) => cloudListVisible(list.cloudId || list.id))
+    : [];
+}
+
+function visibleCloudPointRows() {
+  return visibleCloudPointLists().flatMap((list) => (
+    list.points.map((point) => ({ point, list, isCloud: true }))
+  ));
 }
 
 function localPointList() {
@@ -1107,6 +1135,11 @@ function syncProjectedCoordinates() {
   for (const point of allPointListPoints()) {
     syncProjectedPoint(point);
   }
+  for (const list of state.cloud.pointLists) {
+    for (const point of list.points) {
+      syncProjectedPoint(point);
+    }
+  }
 
   syncProjectedPoint(state.routeStartSnapshot);
   syncProjectedPoint(state.observationStart);
@@ -1153,7 +1186,8 @@ function workspaceSnapshot() {
     projection: { mode: "local", version: 1 },
     pointLists: state.pointLists,
     activePointListId: state.activePointListId,
-    links: state.links
+    links: state.links,
+    cloudHiddenListIds: [...state.cloud.hiddenListIds]
   };
 }
 
@@ -1627,6 +1661,21 @@ function drawPoints(options = {}) {
   }
 }
 
+function drawCloudPoints() {
+  const colors = canvasPalette();
+  for (const list of visibleCloudPointLists()) {
+    for (const point of list.points) {
+      const projected = syncProjectedPoint(point);
+      if (!projected) continue;
+      const screen = worldToScreen(projected);
+      context.beginPath();
+      context.arc(screen.x, screen.y, POINT_RADIUS, 0, Math.PI * 2);
+      context.fillStyle = colors.pointFill;
+      context.fill();
+    }
+  }
+}
+
 function drawRouteBadges() {
   const colors = canvasPalette();
   const ids = state.routeResult?.pointIds ?? [];
@@ -1661,6 +1710,7 @@ function draw() {
   drawRouteResult();
   drawObservationPath();
   drawTargetLine();
+  drawCloudPoints();
   drawPoints();
   drawCurrentLocation();
   drawPendingPoint();
@@ -2629,7 +2679,7 @@ function renderPointIndex() {
     list.points.map((point) => ({ point, list, isCloud: false }))
   ));
   if (state.cloud.connected) {
-    rows.push(...state.cloud.pointRows);
+    rows.push(...visibleCloudPointRows());
   }
   if (current) {
     rows.unshift({ point: current, list: null, isCloud: false });
@@ -2653,17 +2703,16 @@ function renderPointIndex() {
       row.setAttribute("aria-pressed", String(isPointSelected(point.id)));
     }
     row.classList.add("point-index-row");
-    row.classList.toggle("is-cloud", isCloud);
 
     const name = document.createElement("span");
     name.className = "point-index-name";
     const title = document.createElement("strong");
     title.textContent = isCloud
-      ? `☁ ${point.title || "Point"}`
+      ? point.title || "Point"
       : `${pointRoleMarker(point)}${point.title || "Point"}`;
     const meta = document.createElement("span");
     meta.textContent = isCloud
-      ? `${t("cloud.pointSource")} / ${list?.name || "地点リスト"}`
+      ? `☁ ${list?.name || "地点リスト"}`
       : list?.name || t("label.gps");
     name.append(title, meta);
 
@@ -2715,29 +2764,20 @@ function findStorageListEntry(storageId) {
   return storageListEntries().find((entry) => entry.storageId === storageId) ?? null;
 }
 
-function storageLocationValue(entry) {
-  if (entry.local && entry.cloud) return "both";
-  return entry.cloud ? "cloud" : "device";
-}
 
 function createStorageListRow(entry) {
   const row = document.createElement("div");
   row.className = "storage-list-row";
   row.classList.toggle("is-active-list", entry.local?.id === state.activePointListId);
 
-  let marker;
-  if (entry.local) {
-    marker = document.createElement("input");
-    marker.type = "checkbox";
-    marker.checked = entry.local.visible !== false;
-    marker.title = "グリッドに表示";
-    marker.addEventListener("change", () => setPointListVisible(entry.local.id, marker.checked));
-  } else {
-    marker = document.createElement("span");
-    marker.className = "storage-cloud-marker";
-    marker.textContent = "☁";
-    marker.setAttribute("aria-label", t("storage.cloud"));
-  }
+  const marker = document.createElement("input");
+  marker.type = "checkbox";
+  marker.checked = entry.local
+    ? entry.local.visible !== false
+    : cloudListVisible(entry.cloud?.id);
+  marker.title = t("list.showOnGrid");
+  marker.setAttribute("aria-label", t("list.showOnGrid"));
+  marker.addEventListener("change", () => setStorageListVisible(entry.storageId, marker.checked));
 
   const name = document.createElement("button");
   name.type = "button";
@@ -2747,13 +2787,22 @@ function createStorageListRow(entry) {
     name.addEventListener("click", () => setActivePointList(entry.local.id));
   }
   const title = document.createElement("strong");
-  title.textContent = entry.local?.name || entry.cloud?.name || "地点リスト";
+  title.textContent = `${entry.cloud ? "☁ " : ""}${entry.local?.name || entry.cloud?.name || "地点リスト"}`;
   const meta = document.createElement("span");
   const pointCount = entry.local?.points.length ?? entry.preview?.points.length ?? 0;
-  const metaParts = [`${pointCount}${t("label.points")}`, t(`storage.${storageLocationValue(entry)}`)];
+  const metaParts = [`${pointCount}${t("label.points")}`];
   if (entry.local?.id === state.activePointListId) metaParts.push(t("list.active"));
   meta.textContent = metaParts.join(" · ");
   name.append(title, meta);
+
+  const rename = document.createElement("button");
+  rename.type = "button";
+  rename.className = "storage-rename-button";
+  rename.textContent = "✎";
+  rename.title = t("list.rename");
+  rename.setAttribute("aria-label", t("list.rename"));
+  rename.disabled = state.cloud.busy;
+  rename.addEventListener("click", () => void renameStorageList(entry.storageId));
 
   const copy = document.createElement("button");
   copy.type = "button";
@@ -2778,7 +2827,7 @@ function createStorageListRow(entry) {
   remove.disabled = state.cloud.busy;
   remove.addEventListener("click", () => void deleteStoredList(entry.storageId));
 
-  row.append(marker, name, copy, move, remove);
+  row.append(marker, name, rename, copy, move, remove);
   return row;
 }
 
@@ -2858,7 +2907,7 @@ function syncCloudControls() {
   elements.cloudAccessToken.disabled = state.cloud.busy;
   elements.cloudConnectButton.disabled = state.cloud.busy;
   elements.cloudDisconnectButton.disabled = state.cloud.busy || (!state.cloud.connected && !elements.cloudAccessToken.value);
-  for (const button of document.querySelectorAll(".storage-copy-button, .storage-move-button, .storage-delete-button")) {
+  for (const button of document.querySelectorAll(".storage-rename-button, .storage-copy-button, .storage-move-button, .storage-delete-button")) {
     button.disabled = state.cloud.busy;
   }
 }
@@ -2877,8 +2926,7 @@ async function connectCloud() {
     state.cloud.pointLists = [];
     state.cloud.pointRows = [];
     setCloudStatus(cloudErrorMessage(error), { error: true });
-    renderStorageLists();
-    renderPointIndex();
+    render();
   }
 }
 function disconnectCloud() {
@@ -2891,10 +2939,9 @@ function disconnectCloud() {
   state.cloud.lists = [];
   state.cloud.pointLists = [];
   state.cloud.pointRows = [];
-  state.cloud.selectedIds.clear();
   setCloudStatus(cloudText("切断しました", "Disconnected"));
   renderStorageLists();
-  renderPointIndex();
+  render();
 }
 async function refreshCloudLists(options = {}) {
   setCloudBusy(true);
@@ -2915,6 +2962,7 @@ async function refreshCloudLists(options = {}) {
     state.cloud.pointRows = state.cloud.pointLists.flatMap((list) => (
       list.points.map((point) => ({ point, list, isCloud: true }))
     ));
+    syncProjectedCoordinates();
     state.cloud.connected = true;
     if (options.quiet !== true) {
       setCloudStatus(cloudText(
@@ -2930,7 +2978,58 @@ async function refreshCloudLists(options = {}) {
     setCloudStatus(cloudErrorMessage(error), { error: true });
   } finally {
     setCloudBusy(false);
-    renderPointIndex();
+    render();
+  }
+}
+
+async function renameStorageList(storageId) {
+  const entry = findStorageListEntry(storageId);
+  if (!entry) return;
+  const source = entry.local ?? entry.preview;
+  const currentName = source?.name || entry.cloud?.name || cloudText("地点リスト", "Point list");
+  const input = window.prompt(t("list.renamePrompt"), currentName);
+  if (input === null) return;
+  const nextName = input.trim();
+  if (!nextName || nextName === currentName) return;
+
+  if (!entry.cloud) {
+    if (!entry.local) return;
+    entry.local.name = nextName;
+    entry.local.updatedAt = new Date().toISOString();
+    persistWorkspace();
+    setCloudStatus(cloudText(`「${nextName}」に変更しました`, `Renamed to “${nextName}”`));
+    render();
+    return;
+  }
+  if (!state.cloud.connected || !source) {
+    setCloudStatus(t("storage.connectFirst"), { error: true });
+    return;
+  }
+
+  setCloudBusy(true);
+  let renamed = false;
+  try {
+    const payload = pointListToCloudPayload({
+      ...source,
+      cloudId: entry.cloud.id,
+      name: nextName
+    }, pointGeo);
+    await cloudClientFromInputs().updateList(entry.cloud.id, entry.cloud.revision, payload);
+    if (entry.local) {
+      entry.local.name = nextName;
+      entry.local.updatedAt = new Date().toISOString();
+      persistWorkspace();
+    }
+    renamed = true;
+  } catch (error) {
+    setCloudStatus(cloudErrorMessage(error), { error: true });
+  } finally {
+    setCloudBusy(false);
+  }
+
+  if (renamed) {
+    await refreshCloudLists({ quiet: true });
+    setCloudStatus(cloudText(`「${nextName}」に変更しました`, `Renamed to “${nextName}”`));
   }
 }
 
@@ -3023,10 +3122,13 @@ async function moveListToCloud(storageId) {
     if (needsFreshCloudId && entry.cloud && entry.cloud.id !== targetCloudId) {
       try {
         await client.deleteList(entry.cloud.id, entry.cloud.revision);
+        state.cloud.hiddenListIds.delete(entry.cloud.id);
       } catch {
         oldCloudDeleteFailed = true;
       }
     }
+    if (list.visible === false) state.cloud.hiddenListIds.add(targetCloudId);
+    else state.cloud.hiddenListIds.delete(targetCloudId);
     removeLocalListForStorageChange(list.id);
     moved = true;
   } catch (error) {
@@ -3078,7 +3180,9 @@ async function moveListToDevice(storageId) {
     const existingLocal = currentEntry?.local ?? null;
     const localId = existingLocal?.id || uniqueLocalListId(result.list.list.id);
     const imported = cloudPayloadToPointList(result.list, { localId, revision: result.revision, editable: true });
-    imported.visible = existingLocal?.visible !== false;
+    imported.visible = existingLocal
+      ? existingLocal.visible !== false
+      : cloudListVisible(entry.cloud.id);
 
     const before = workspaceSnapshot();
     const otherPointIds = new Set(state.pointLists
@@ -3104,6 +3208,8 @@ async function moveListToDevice(storageId) {
 
     try {
       await client.deleteList(entry.cloud.id, result.revision);
+      state.cloud.hiddenListIds.delete(entry.cloud.id);
+      persistWorkspace();
     } catch {
       cloudDeleteFailed = true;
     }
@@ -3137,8 +3243,12 @@ async function deleteStoredList(storageId) {
   setCloudBusy(true);
   let deleted = false;
   try {
-    if (entry.cloud) await cloudClientFromInputs().deleteList(entry.cloud.id, entry.cloud.revision);
+    if (entry.cloud) {
+      await cloudClientFromInputs().deleteList(entry.cloud.id, entry.cloud.revision);
+      state.cloud.hiddenListIds.delete(entry.cloud.id);
+    }
     if (entry.local) removeLocalListForStorageChange(entry.local.id);
+    else persistWorkspace();
     deleted = true;
   } catch (error) {
     setCloudStatus(cloudErrorMessage(error), { error: true });
@@ -3155,14 +3265,18 @@ function cloudErrorMessage(error) {
   if (error instanceof CloudApiError && error.message) return error.message;
   return cloudText("クラウド操作に失敗しました", "Cloud operation failed");
 }
-function setPointListVisible(listId, visible) {
-  const list = state.pointLists.find((item) => item.id === listId);
-  if (!list) {
-    return;
+function setStorageListVisible(storageId, visible) {
+  const entry = findStorageListEntry(storageId);
+  if (!entry) return;
+  const nextVisible = Boolean(visible);
+  if (entry.local) {
+    entry.local.visible = nextVisible;
+    entry.local.updatedAt = new Date().toISOString();
   }
-
-  list.visible = Boolean(visible);
-  list.updatedAt = new Date().toISOString();
+  if (entry.cloud) {
+    if (nextVisible) state.cloud.hiddenListIds.delete(entry.cloud.id);
+    else state.cloud.hiddenListIds.add(entry.cloud.id);
+  }
   refreshVisiblePoints();
   pruneHiddenPointReferences();
   persistWorkspace();
@@ -4423,7 +4537,11 @@ function fitTargetPoints() {
     return [...routeSelection, ...routeStartSnapshot, ...loadedPoints];
   }
 
-  const points = [...state.points, ...routeStartSnapshot, ...loadedPoints];
+  const cloudPoints = visibleCloudPointLists()
+    .flatMap((list) => list.points)
+    .map(syncProjectedPoint)
+    .filter(Boolean);
+  const points = [...state.points, ...cloudPoints, ...routeStartSnapshot, ...loadedPoints];
   if (state.followCurrentLocation || points.length === 0) {
     const current = currentLocationPoint();
     if (current) {
