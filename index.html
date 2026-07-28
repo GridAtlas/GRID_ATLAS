@@ -9,8 +9,8 @@
     <link rel="icon" href="assets/icon-grid.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=48">
-    <script src="src/main.js?v=120" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=50">
+    <script src="src/main.js?v=124" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -353,7 +353,7 @@
             </div>
             <div id="pointListItems" class="storage-list-items" data-storage-list-items></div>
             <output id="cloudStatus" class="form-status cloud-status" data-cloud-status aria-live="polite"></output>
-            <input id="pointImportFile" type="file" accept="application/json,.json" multiple hidden>
+            <input id="pointImportFile" type="file" accept=".gridatlas,application/vnd.gridatlas+zip,application/zip,application/json,.json" multiple hidden>
             <input id="observationImportFile" type="file" accept="application/json,.json" multiple hidden>
           </section>
           <nav class="mobile-grid-tabs mobile-sidebar-grid-tabs" aria-label="表示切替">
@@ -363,6 +363,13 @@
           </nav>
         </aside>
       </main>
+    </div>
+    <div id="gridAtlasDropOverlay" class="gridatlas-drop-overlay" aria-hidden="true">
+      <div class="gridatlas-drop-card" role="status" aria-live="polite">
+        <span class="gridatlas-drop-icon" aria-hidden="true">↓</span>
+        <strong data-i18n="import.drop.title">.gridatlasを読み込み</strong>
+        <span data-i18n="import.drop.description">この画面にドロップしてください</span>
+      </div>
     </div>
   </body>
 </html>

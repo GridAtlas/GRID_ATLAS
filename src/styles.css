@@ -915,7 +915,38 @@ textarea {
 
 .storage-list-items {
   display: grid;
+  gap: 14px;
+}
+
+.storage-list-section {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.storage-list-section-title {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.storage-list-section-items {
+  display: grid;
   gap: 5px;
+}
+
+.storage-list-empty {
+  min-height: 50px;
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .storage-list-row {
@@ -1153,6 +1184,54 @@ textarea {
 
 .cloud-status.is-error {
   color: var(--danger);
+}
+
+.gridatlas-drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 120ms ease, visibility 120ms ease;
+}
+
+.gridatlas-drop-overlay.is-active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.gridatlas-drop-card {
+  width: min(460px, 100%);
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  padding: 32px;
+  border: 2px dashed var(--accent);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow), var(--brand-glow);
+  color: var(--text);
+  text-align: center;
+}
+
+.gridatlas-drop-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--active-bg);
+  color: var(--accent-strong);
+  font-size: 36px;
+  font-weight: 900;
 }
 
 @media (max-width: 560px) {

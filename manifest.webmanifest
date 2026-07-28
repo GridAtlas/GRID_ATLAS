@@ -35,5 +35,15 @@
       "text": "share_text",
       "url": "share_url"
     }
-  }
+  },
+  "file_handlers": [
+    {
+      "action": "./",
+      "accept": {
+        "application/vnd.gridatlas+zip": [
+          ".gridatlas"
+        ]
+      }
+    }
+  ]
 }

@@ -4,6 +4,23 @@ import {
   createCloudClient,
   pointListToCloudPayload
 } from "./cloud-client.js?v=2";
+import {
+  GRIDATLAS_MIME_TYPE,
+  GRIDATLAS_URL_PARAMETER,
+  GridAtlasImportError,
+  buildGridAtlasArchive,
+  decodeGridAtlasUrlPayload,
+  gridAtlasDocumentDigest,
+  readGridAtlasFile
+} from "./gridatlas-import.js?v=2";
+import {
+  dataUrlToBlob,
+  getGridAtlasAsset,
+  gridAtlasAssetUrl,
+  hydrateGridAtlasAssets,
+  putGridAtlasAsset,
+  storeGridAtlasDataUrl
+} from "./gridatlas-assets.js?v=1";
 
 const STORAGE_KEY = "grid-atlas-workspace-v2";
 const THEME_KEY = "grid-atlas-theme";
@@ -102,6 +119,7 @@ const elements = {
   pointSubmitButton: document.querySelector("#pointSubmitButton"),
   readClipboardButton: document.querySelector("#readClipboardButton"),
   shareImportStatus: document.querySelector("#shareImportStatus"),
+  gridAtlasDropOverlay: document.querySelector("#gridAtlasDropOverlay"),
   useLocationButton: document.querySelector("#useLocationButton"),
   zoomInButton: document.querySelector("#zoomInButton"),
   zoomOutButton: document.querySelector("#zoomOutButton"),
@@ -177,6 +195,7 @@ const state = {
   },
   links: [],
   mode: "inspect",
+  mobilePage: "map",
   mobileGridPage: "grid",
   selection: [],
   selectedPointId: null,
@@ -322,6 +341,11 @@ const TRANSLATIONS = {
     "action.map": "地図",
     "button.clipboard": "クリップ読取",
     "button.currentLocation": "現在地",
+    "import.drop.title": ".gridatlasを読み込み",
+    "import.drop.description": "この画面にドロップしてください",
+    "import.gridatlas.success": "{count}件のスポットリストを読み込みました",
+    "import.gridatlas.urlSuccess": "リンクからスポットリストを読み込みました",
+    "import.gridatlas.error": "スポットリストを読み込めませんでした",
     "button.submitRegister": "登録",
     "button.update": "更新",
     "button.appleMaps": "Appleマップ",
@@ -416,6 +440,10 @@ const TRANSLATIONS = {
     "list.visible": "グリッドに表示中",
     "list.hidden": "グリッドで非表示",
     "list.noSelection": "操作するリストを選択してください",
+    "list.section.mine": "マイリスト",
+    "list.section.imported": "インポートリスト",
+    "list.section.cloud": "クラウドリスト",
+    "list.none": "リストなし",
     "maintenance.title": "バックアップ・初期化",
     "backup.title": "バックアップ",
     "backup.notice": "端末のリストを保存・復元できます。",
@@ -489,6 +517,11 @@ const TRANSLATIONS = {
     "action.map": "Map",
     "button.clipboard": "Read Clipboard",
     "button.currentLocation": "Current",
+    "import.drop.title": "Import .gridatlas",
+    "import.drop.description": "Drop it anywhere on this screen",
+    "import.gridatlas.success": "Imported {count} spot list(s)",
+    "import.gridatlas.urlSuccess": "Imported a spot list from the link",
+    "import.gridatlas.error": "Could not import the spot list",
     "button.submitRegister": "Add",
     "button.update": "Update",
     "button.appleMaps": "Apple Maps",
@@ -583,6 +616,10 @@ const TRANSLATIONS = {
     "list.visible": "Shown on grid",
     "list.hidden": "Hidden from grid",
     "list.noSelection": "Select a list first",
+    "list.section.mine": "My Lists",
+    "list.section.imported": "Imported Lists",
+    "list.section.cloud": "Cloud Lists",
+    "list.none": "No lists",
     "maintenance.title": "Backup & reset",
     "backup.title": "Backup",
     "backup.notice": "Save or restore lists stored on this device.",
@@ -890,8 +927,11 @@ function normalizePoint(point, origin) {
     note: typeof point.note === "string" ? point.note : "",
     photo: typeof point.photo === "string" ? point.photo : "",
     photoName: typeof point.photoName === "string" ? point.photoName : "",
+    photoAssetId: typeof point.photoAssetId === "string" ? point.photoAssetId : "",
+    gridAtlas: point.gridAtlas && typeof point.gridAtlas === "object" ? clonePlain(point.gridAtlas) : null,
     geo,
-    createdAt: point.createdAt || new Date().toISOString()
+    createdAt: point.createdAt || new Date().toISOString(),
+    updatedAt: point.updatedAt || point.createdAt || new Date().toISOString()
   };
 }
 
@@ -909,6 +949,7 @@ function createPointList(options = {}) {
     cloudId: typeof options.cloudId === "string" ? options.cloudId : "",
     cloudRevision: Number.isInteger(options.cloudRevision) ? options.cloudRevision : null,
     cloudUpdatedAt: typeof options.cloudUpdatedAt === "string" ? options.cloudUpdatedAt : "",
+    gridAtlas: options.gridAtlas && typeof options.gridAtlas === "object" ? clonePlain(options.gridAtlas) : null,
     importedAt: typeof options.importedAt === "string" ? options.importedAt : now,
     createdAt: typeof options.createdAt === "string" ? options.createdAt : now,
     updatedAt: typeof options.updatedAt === "string" ? options.updatedAt : now,
@@ -1124,6 +1165,7 @@ function normalizePointList(list, existingPointIds = new Set(), fallbackName = "
     cloudId: typeof list?.cloudId === "string" ? list.cloudId : "",
     cloudRevision: Number.isInteger(list?.cloudRevision) ? list.cloudRevision : null,
     cloudUpdatedAt: typeof list?.cloudUpdatedAt === "string" ? list.cloudUpdatedAt : "",
+    gridAtlas: list?.gridAtlas && typeof list.gridAtlas === "object" ? clonePlain(list.gridAtlas) : null,
     importedAt: typeof list?.importedAt === "string" ? list.importedAt : new Date().toISOString(),
     createdAt: typeof list?.createdAt === "string" ? list.createdAt : new Date().toISOString(),
     updatedAt: typeof list?.updatedAt === "string" ? list.updatedAt : new Date().toISOString(),
@@ -1237,10 +1279,17 @@ function pointGeoFromAny(point, origin) {
 
 function workspaceSnapshot() {
   ensurePointLists();
+  const pointLists = state.pointLists.map((list) => ({
+    ...list,
+    points: list.points.map((point) => ({
+      ...point,
+      photo: point.photoAssetId ? "" : point.photo
+    }))
+  }));
   return {
     version: 3,
     projection: { mode: "local", version: 1 },
-    pointLists: state.pointLists,
+    pointLists,
     activePointListId: state.activePointListId,
     links: state.links,
     cloudHiddenListIds: [...state.cloud.hiddenListIds]
@@ -1249,6 +1298,13 @@ function workspaceSnapshot() {
 
 function persistWorkspace() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(workspaceSnapshot()));
+}
+
+async function hydrateWorkspaceAssetPhotos() {
+  const changed = await hydrateGridAtlasAssets(state.pointLists);
+  if (changed) persistWorkspace();
+  refreshVisiblePoints();
+  render();
 }
 
 function syncCanvasSize() {
@@ -1807,6 +1863,7 @@ function validMobilePageName(value) {
 function setMobilePage(name) {
   const pageName = validMobilePageName(name) ? name : "map";
   const mapActive = pageName === "map";
+  state.mobilePage = pageName;
 
   for (const tab of elements.mobilePageTabs) {
     const active = tab.dataset.mobilePage === pageName;
@@ -1821,6 +1878,8 @@ function setMobilePage(name) {
     panel.classList.toggle("is-mobile-active", !mapActive && panel.dataset.mobilePanel === pageName);
   }
 
+  syncMobileGridTabSelection();
+
   if (mapActive) {
     scheduleCanvasResize();
   }
@@ -1831,16 +1890,24 @@ function validMobileGridPageName(value) {
   return MOBILE_GRID_PAGES.includes(value);
 }
 
-function setMobileGridPage(name) {
-  const pageName = validMobileGridPageName(name) ? name : "grid";
-  state.mobileGridPage = pageName;
-  document.documentElement.classList.toggle("is-mobile-list-page", pageName === "lists");
+function syncMobileGridTabSelection() {
+  const mapActive = state.mobilePage === "map";
+  document.documentElement.classList.toggle(
+    "is-mobile-list-page",
+    mapActive && state.mobileGridPage === "lists"
+  );
 
   for (const tab of elements.mobileGridTabs) {
-    const active = tab.dataset.mobileGridPage === pageName;
+    const active = mapActive && tab.dataset.mobileGridPage === state.mobileGridPage;
     tab.classList.toggle("is-active", active);
     tab.setAttribute("aria-pressed", String(active));
   }
+}
+
+function setMobileGridPage(name) {
+  const pageName = validMobileGridPageName(name) ? name : "grid";
+  state.mobileGridPage = pageName;
+  syncMobileGridTabSelection();
 
   for (const panel of elements.mobileGridPanels) {
     panel.classList.toggle("is-mobile-grid-active", panel.dataset.mobileGridPanel === pageName);
@@ -2937,16 +3004,54 @@ function createStorageListRow(entry) {
   return row;
 }
 
+function storageListSectionKey(entry) {
+  if (entry.cloud) return "cloud";
+  if (entry.local?.importedAt) return "imported";
+  return "mine";
+}
+
+function createStorageListSection(section, entries) {
+  const wrapper = document.createElement("section");
+  wrapper.className = "storage-list-section";
+  wrapper.dataset.storageListSection = section.key;
+
+  const heading = document.createElement("h3");
+  heading.className = "storage-list-section-title";
+  heading.textContent = t(section.label);
+
+  const items = document.createElement("div");
+  items.className = "storage-list-section-items";
+  if (entries.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "storage-list-empty";
+    empty.textContent = t("list.none");
+    items.append(empty);
+  } else {
+    for (const entry of entries) {
+      items.append(createStorageListRow(entry));
+    }
+  }
+
+  wrapper.append(heading, items);
+  return wrapper;
+}
+
 function renderStorageLists() {
   const entries = storageListEntries();
+  const sections = [
+    { key: "mine", label: "list.section.mine" },
+    { key: "imported", label: "list.section.imported" },
+    { key: "cloud", label: "list.section.cloud" }
+  ];
   const availableIds = new Set(entries.map((entry) => entry.storageId));
   for (const storageId of state.selectedStorageListIds) {
     if (!availableIds.has(storageId)) state.selectedStorageListIds.delete(storageId);
   }
   for (const container of elements.storageListContainers) {
     container.replaceChildren();
-    for (const entry of entries) {
-      container.append(createStorageListRow(entry));
+    for (const section of sections) {
+      const sectionEntries = entries.filter((entry) => storageListSectionKey(entry) === section.key);
+      container.append(createStorageListSection(section, sectionEntries));
     }
   }
 
@@ -4928,6 +5033,15 @@ async function submitPoint(event) {
   const projected = projectLatLng(geo.lat, geo.lng);
   const file = elements.pointPhoto.files[0] ?? null;
   const photo = file ? await readPhoto(file) : null;
+  let storedPhoto = null;
+  if (photo) {
+    try {
+      storedPhoto = await storeGridAtlasDataUrl(photo, { name: file?.name || "" });
+    } catch (error) {
+      console.warn("GRID ATLAS photo storage failed; keeping local fallback", error);
+    }
+  }
+  const photoDisplay = storedPhoto?.url || photo;
   const createdAt = new Date().toISOString();
   const fallbackTitle = `Point ${localPointList().points.length + 1}`;
 
@@ -4941,9 +5055,10 @@ async function submitPoint(event) {
     editedPoint.note = elements.pointNote.value.trim();
     editedPoint.geo = geo;
     editedPoint.updatedAt = createdAt;
-    if (photo) {
-      editedPoint.photo = photo;
+    if (photoDisplay) {
+      editedPoint.photo = photoDisplay;
       editedPoint.photoName = file?.name ?? "";
+      editedPoint.photoAssetId = storedPhoto?.id || "";
     }
 
     state.selection = [{ type: "point", id: editedPoint.id }];
@@ -4965,8 +5080,9 @@ async function submitPoint(event) {
     y: projected.y,
     title: elements.pointTitle.value.trim() || fallbackTitle,
     note: elements.pointNote.value.trim(),
-    photo,
+    photo: photoDisplay,
     photoName: file?.name ?? "",
+    photoAssetId: storedPhoto?.id || "",
     geo,
     createdAt
   };
@@ -5001,17 +5117,17 @@ function resizeImage(dataUrl) {
       const longestSide = Math.max(image.width, image.height);
       const scale = Math.min(1, 1400 / longestSide);
 
-      if (scale === 1) {
-        resolve(dataUrl);
-        return;
-      }
-
       const photoCanvas = document.createElement("canvas");
       photoCanvas.width = Math.round(image.width * scale);
       photoCanvas.height = Math.round(image.height * scale);
       const photoContext = photoCanvas.getContext("2d");
       photoContext.drawImage(image, 0, 0, photoCanvas.width, photoCanvas.height);
-      resolve(photoCanvas.toDataURL("image/jpeg", 0.82));
+      const outputType = dataUrl.startsWith("data:image/png")
+        ? "image/png"
+        : dataUrl.startsWith("data:image/webp")
+          ? "image/webp"
+          : "image/jpeg";
+      resolve(photoCanvas.toDataURL(outputType, 0.82));
     });
     image.addEventListener("error", () => resolve(dataUrl));
     image.src = dataUrl;
@@ -5895,16 +6011,19 @@ function dateTimeStamp() {
   return new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
 }
 
-function downloadJson(payload, filename) {
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {
-    type: "application/json"
-  });
+function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
   anchor.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function downloadJson(payload, filename) {
+  downloadBlob(new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json"
+  }), filename);
 }
 
 function selectedFiles(fileList) {
@@ -5926,34 +6045,439 @@ function readJsonFile(file) {
   });
 }
 
-function pointListSnapshot(listId = DEFAULT_POINT_LIST_ID) {
-  ensurePointLists();
-  const list = state.pointLists.find((item) => item.id === listId) ?? localPointList();
-  return {
-    type: "grid-atlas-point-list",
-    version: 2,
-    exportedAt: new Date().toISOString(),
-    list: {
-      name: list.name || "地点リスト",
-      description: list.description || "",
-      author: list.author || ""
-    },
-    points: list.points.map((point) => ({
-      id: point.id,
-      title: point.title,
-      note: point.note,
-      photo: point.photo,
-      photoName: point.photoName,
-      geo: pointGeo(point),
-      createdAt: point.createdAt,
-      updatedAt: point.updatedAt
-    }))
-  };
+function gridAtlasFileLikely(file) {
+  return Boolean(file) && (
+    String(file.name || "").toLowerCase().endsWith(".gridatlas")
+    || file.type === "application/vnd.gridatlas+zip"
+    || file.type === "application/zip"
+  );
 }
 
-function exportPointList(listId = DEFAULT_POINT_LIST_ID) {
+function readBlobAsDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result || "")));
+    reader.addEventListener("error", () => reject(reader.error ?? new Error("Image read failed")));
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function gridAtlasPackageToPointList(gridAtlasPackage, existingPointIds, existingListIds, options = {}) {
+  const { document, manifest, resources } = gridAtlasPackage;
+  const documentDigest = gridAtlasPackage.documentDigest || await gridAtlasDocumentDigest(document);
+  const resourceData = new Map();
+  for (const [resourceId, resource] of resources) {
+    const sourceBlob = new Blob([resource.bytes], { type: resource.metadata.mediaType });
+    const sourceDataUrl = await readBlobAsDataUrl(sourceBlob);
+    const sanitizedDataUrl = await resizeImage(sourceDataUrl);
+    const blob = await dataUrlToBlob(sanitizedDataUrl);
+    let storedAsset = null;
+    let displayUrl = "";
+    try {
+      storedAsset = await putGridAtlasAsset(blob, {
+        mediaType: blob.type || resource.metadata.mediaType,
+        name: resource.metadata.path?.split("/").pop() || ""
+      });
+      displayUrl = await gridAtlasAssetUrl(storedAsset.id);
+    } catch (error) {
+      console.warn("GRID ATLAS imported asset storage failed; keeping local fallback", error);
+      displayUrl = sanitizedDataUrl;
+    }
+    resourceData.set(resourceId, {
+      metadata: clonePlain(resource.metadata),
+      assetId: storedAsset?.id || "",
+      dataUrl: storedAsset ? "" : displayUrl,
+      displayUrl
+    });
+  }
+
+  let listId = document.id;
+  while (!listId || listId === DEFAULT_POINT_LIST_ID || existingListIds.has(listId)) {
+    listId = createId();
+  }
+  existingListIds.add(listId);
+
+  const points = document.places.map((place) => {
+    const media = Array.isArray(place.media) ? place.media : [];
+    const primaryMedia = media.find((item) => item.role === "photo") ?? media[0] ?? null;
+    const primaryResource = primaryMedia ? resourceData.get(primaryMedia.resourceId) : null;
+    const createdAt = place.createdAt || new Date().toISOString();
+    return {
+      id: place.id,
+      title: place.name,
+      note: typeof place.note === "string" ? place.note : "",
+      photo: primaryResource?.displayUrl || "",
+      photoName: primaryResource?.metadata?.path?.split("/").pop() || "",
+      photoAssetId: primaryResource?.assetId || "",
+      geo: {
+        lat: place.position.latitude,
+        lng: place.position.longitude
+      },
+      createdAt,
+      updatedAt: place.updatedAt || createdAt,
+      gridAtlas: {
+        placeId: place.id,
+        media: clonePlain(media),
+        extensions: clonePlain(place.extensions ?? {})
+      }
+    };
+  });
+
+  const displayName = options.conflict
+    ? `${document.name}${cloudText("（更新版）", " (updated)")}`
+    : document.name;
+  const createdAt = document.createdAt || new Date().toISOString();
+  return normalizePointList({
+    id: listId,
+    name: displayName,
+    description: document.description || "",
+    author: document.attribution?.name || "",
+    visible: true,
+    editable: true,
+    source: "import",
+    importedAt: new Date().toISOString(),
+    createdAt,
+    updatedAt: document.updatedAt || createdAt,
+    points,
+    gridAtlas: {
+      documentId: document.id,
+      documentDigest,
+      documentMedia: clonePlain(document.media ?? []),
+      documentExtensions: clonePlain(document.extensions ?? {}),
+      requiredExtensions: clonePlain(manifest?.requiredExtensions ?? []),
+      resources: Array.from(resourceData.values(), (resource) => ({
+        metadata: clonePlain(resource.metadata),
+        assetId: resource.assetId,
+        dataUrl: resource.dataUrl
+      }))
+    }
+  }, existingPointIds, displayName);
+}
+
+function applyImportedPointLists(importedLists, successMessage) {
+  const previousLists = state.pointLists;
+  const previousSelection = state.selection;
+  try {
+    state.pointLists = [...state.pointLists, ...importedLists];
+    refreshVisiblePoints();
+    state.selection = importedLists.flatMap((list) => list.points.map((point) => ({ type: "point", id: point.id })));
+    normalizeSelection();
+    persistWorkspace();
+  } catch (error) {
+    state.pointLists = previousLists;
+    state.selection = previousSelection;
+    refreshVisiblePoints();
+    throw error;
+  }
+
+  elements.shareImportStatus.value = successMessage;
+  if (mobilePageUiActive()) setMobilePage("map");
+  fitToPoints();
+}
+
+async function importGridAtlasPackages(packages, options = {}) {
+  if (!Array.isArray(packages) || packages.length === 0) return false;
+  try {
+    const existingPointIds = new Set(allPointListPoints().map((point) => point.id));
+    const existingListIds = new Set(state.pointLists.map((list) => list.id));
+    const importedLists = [];
+    const duplicates = [];
+    for (const gridAtlasPackage of packages) {
+      const documentDigest = gridAtlasPackage.documentDigest
+        || await gridAtlasDocumentDigest(gridAtlasPackage.document);
+      gridAtlasPackage.documentDigest = documentDigest;
+      const knownLists = [...state.pointLists, ...importedLists];
+      const duplicate = knownLists.find((list) => (
+        list.gridAtlas?.documentId === gridAtlasPackage.document.id
+        && list.gridAtlas?.documentDigest === documentDigest
+      ));
+      if (duplicate) {
+        duplicates.push(duplicate);
+        continue;
+      }
+      const conflict = knownLists.some((list) => list.gridAtlas?.documentId === gridAtlasPackage.document.id);
+      importedLists.push(await gridAtlasPackageToPointList(
+        gridAtlasPackage,
+        existingPointIds,
+        existingListIds,
+        { conflict }
+      ));
+    }
+
+    if (importedLists.length === 0 && duplicates.length > 0) {
+      const duplicate = duplicates[0];
+      state.selection = duplicate.points.map((point) => ({ type: "point", id: point.id }));
+      normalizeSelection();
+      elements.shareImportStatus.value = cloudText("このリストは読み込み済みです", "This list is already imported");
+      render();
+      fitToPoints();
+      return true;
+    }
+
+    const successMessage = options.source === "url" && importedLists.length === 1
+      ? t("import.gridatlas.urlSuccess")
+      : t("import.gridatlas.success").replace("{count}", String(importedLists.length));
+    applyImportedPointLists(importedLists, successMessage);
+    return true;
+  } catch (error) {
+    console.warn("GRID ATLAS import failed", error);
+    elements.shareImportStatus.value = error instanceof GridAtlasImportError
+      ? `${t("import.gridatlas.error")}: ${error.message}`
+      : t("import.gridatlas.error");
+    return false;
+  }
+}
+
+async function importGridAtlasFiles(files, options = {}) {
+  const fileItems = selectedFiles(files).filter(gridAtlasFileLikely);
+  if (fileItems.length === 0) {
+    elements.shareImportStatus.value = t("import.gridatlas.error");
+    return false;
+  }
+  try {
+    const packages = [];
+    for (const file of fileItems) packages.push(await readGridAtlasFile(file));
+    return importGridAtlasPackages(packages, options);
+  } catch (error) {
+    console.warn("GRID ATLAS file read failed", error);
+    elements.shareImportStatus.value = error instanceof GridAtlasImportError
+      ? `${t("import.gridatlas.error")}: ${error.message}`
+      : t("import.gridatlas.error");
+    return false;
+  }
+}
+
+function setGridAtlasDropVisible(visible) {
+  if (!elements.gridAtlasDropOverlay) return;
+  elements.gridAtlasDropOverlay.classList.toggle("is-active", visible);
+  elements.gridAtlasDropOverlay.setAttribute("aria-hidden", String(!visible));
+}
+
+function fileDragLikely(event) {
+  return Array.from(event.dataTransfer?.types ?? []).includes("Files");
+}
+
+function bindGridAtlasDropImport() {
+  let dragDepth = 0;
+  window.addEventListener("dragenter", (event) => {
+    if (!fileDragLikely(event)) return;
+    event.preventDefault();
+    dragDepth += 1;
+    setGridAtlasDropVisible(true);
+  });
+  window.addEventListener("dragover", (event) => {
+    if (!fileDragLikely(event)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+  });
+  window.addEventListener("dragleave", (event) => {
+    if (!fileDragLikely(event)) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) setGridAtlasDropVisible(false);
+  });
+  window.addEventListener("drop", (event) => {
+    if (!fileDragLikely(event)) return;
+    event.preventDefault();
+    dragDepth = 0;
+    setGridAtlasDropVisible(false);
+    void importGridAtlasFiles(event.dataTransfer?.files, { source: "drop" });
+  });
+}
+
+function incomingGridAtlasUrlValue() {
+  const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
+  const hashParams = new URLSearchParams(hash);
+  const hashValue = hashParams.get(GRIDATLAS_URL_PARAMETER);
+  if (hashValue) return hashValue;
+  return new URLSearchParams(window.location.search).get(GRIDATLAS_URL_PARAMETER) || "";
+}
+
+function clearIncomingGridAtlasUrlValue() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete(GRIDATLAS_URL_PARAMETER);
+  const hash = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
+  const hashParams = new URLSearchParams(hash);
+  hashParams.delete(GRIDATLAS_URL_PARAMETER);
+  const nextHash = hashParams.toString();
+  url.hash = nextHash ? `#${nextHash}` : "";
+  window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
+async function handleIncomingGridAtlasUrl() {
+  const value = incomingGridAtlasUrlValue();
+  if (!value) return false;
+  try {
+    const document = decodeGridAtlasUrlPayload(value);
+    return await importGridAtlasPackages([{
+      manifest: null,
+      document,
+      resources: new Map()
+    }], { source: "url" });
+  } catch (error) {
+    console.warn("GRID ATLAS URL import failed", error);
+    elements.shareImportStatus.value = error instanceof GridAtlasImportError
+      ? `${t("import.gridatlas.error")}: ${error.message}`
+      : t("import.gridatlas.error");
+    return false;
+  } finally {
+    clearIncomingGridAtlasUrlValue();
+  }
+}
+
+function registerGridAtlasFileLaunchHandler() {
+  if (!window.launchQueue?.setConsumer) return;
+  window.launchQueue.setConsumer(async (launchParams) => {
+    const handles = Array.from(launchParams.files ?? []);
+    const files = [];
+    for (const handle of handles) files.push(await handle.getFile());
+    await importGridAtlasFiles(files, { source: "file-handler" });
+  });
+}
+
+function imageExtension(mediaType) {
+  if (mediaType === "image/png") return "png";
+  if (mediaType === "image/webp") return "webp";
+  return "jpg";
+}
+
+async function ensureStoredPointPhoto(point) {
+  if (point.photoAssetId) {
+    const existing = await getGridAtlasAsset(point.photoAssetId);
+    if (existing) return existing;
+  }
+  if (!point.photo) return null;
+  const blob = point.photo.startsWith("data:")
+    ? await dataUrlToBlob(point.photo)
+    : await fetch(point.photo).then((response) => response.blob());
+  const stored = await putGridAtlasAsset(blob, { name: point.photoName, mediaType: blob.type });
+  point.photoAssetId = stored.id;
+  point.photo = await gridAtlasAssetUrl(stored.id);
+  return getGridAtlasAsset(stored.id);
+}
+
+async function pointListGridAtlasPackage(list) {
+  list.gridAtlas = list.gridAtlas && typeof list.gridAtlas === "object" ? list.gridAtlas : {};
+  list.gridAtlas.documentId = list.gridAtlas.documentId || createId();
+
+  const resourceRecords = new Map();
+  for (const resource of Array.isArray(list.gridAtlas.resources) ? list.gridAtlas.resources : []) {
+    const metadata = resource?.metadata;
+    if (!metadata?.id) continue;
+    let asset = resource.assetId ? await getGridAtlasAsset(resource.assetId) : null;
+    if (!asset && resource.dataUrl) {
+      const blob = await dataUrlToBlob(resource.dataUrl);
+      const stored = await putGridAtlasAsset(blob, {
+        name: metadata.path?.split("/").pop() || "",
+        mediaType: metadata.mediaType || blob.type
+      });
+      asset = await getGridAtlasAsset(stored.id);
+    }
+    if (!asset?.blob) continue;
+    resourceRecords.set(metadata.id, {
+      assetId: asset.id,
+      entry: {
+        id: metadata.id,
+        path: metadata.path || ("assets/" + asset.id + "." + imageExtension(asset.mediaType)),
+        mediaType: metadata.mediaType || asset.mediaType,
+        bytes: new Uint8Array(await asset.blob.arrayBuffer()),
+        image: metadata.image
+      }
+    });
+  }
+
+  const pointPhotoResources = new Map();
+  for (const point of list.points) {
+    const asset = await ensureStoredPointPhoto(point);
+    if (!asset?.blob) continue;
+    const existingPhotoMedia = Array.isArray(point.gridAtlas?.media)
+      ? point.gridAtlas.media.find((media) => media.role === "photo" && resourceRecords.has(media.resourceId))
+      : null;
+    const resourceId = existingPhotoMedia?.resourceId || asset.id;
+    if (!resourceRecords.has(resourceId)) {
+      resourceRecords.set(resourceId, {
+        assetId: asset.id,
+        entry: {
+          id: resourceId,
+          path: "assets/" + asset.id + "." + imageExtension(asset.mediaType),
+          mediaType: asset.mediaType,
+          bytes: new Uint8Array(await asset.blob.arrayBuffer())
+        }
+      });
+    }
+    pointPhotoResources.set(point.id, resourceId);
+  }
+
+  const places = list.points.map((point) => {
+    const geo = pointGeo(point);
+    const media = (Array.isArray(point.gridAtlas?.media) ? clonePlain(point.gridAtlas.media) : [])
+      .filter((item) => resourceRecords.has(item.resourceId));
+    const photoResourceId = pointPhotoResources.get(point.id);
+    if (photoResourceId && !media.some((item) => item.role === "photo" && item.resourceId === photoResourceId)) {
+      const withoutOldPhoto = media.filter((item) => item.role !== "photo");
+      media.splice(0, media.length, { resourceId: photoResourceId, role: "photo" }, ...withoutOldPhoto);
+    }
+    const place = {
+      id: point.gridAtlas?.placeId || point.id,
+      name: point.title || "Point",
+      position: { latitude: geo.lat, longitude: geo.lng }
+    };
+    if (point.note) place.note = point.note;
+    if (point.createdAt) place.createdAt = point.createdAt;
+    if (point.updatedAt) place.updatedAt = point.updatedAt;
+    if (media.length > 0) place.media = media;
+    if (point.gridAtlas?.extensions && Object.keys(point.gridAtlas.extensions).length > 0) {
+      place.extensions = clonePlain(point.gridAtlas.extensions);
+    }
+    return place;
+  });
+
+  const document = {
+    type: "place-list",
+    schemaVersion: 1,
+    id: list.gridAtlas.documentId,
+    name: list.name || "地点リスト",
+    places
+  };
+  if (list.description) document.description = list.description;
+  if (list.author) document.attribution = { name: list.author };
+  if (list.createdAt) document.createdAt = list.createdAt;
+  if (list.updatedAt) document.updatedAt = list.updatedAt;
+  const documentMedia = (Array.isArray(list.gridAtlas.documentMedia) ? clonePlain(list.gridAtlas.documentMedia) : [])
+    .filter((item) => resourceRecords.has(item.resourceId));
+  if (documentMedia.length > 0) document.media = documentMedia;
+  if (list.gridAtlas.documentExtensions && Object.keys(list.gridAtlas.documentExtensions).length > 0) {
+    document.extensions = clonePlain(list.gridAtlas.documentExtensions);
+  }
+
+  const result = await buildGridAtlasArchive(
+    document,
+    Array.from(resourceRecords.values(), (resource) => resource.entry),
+    { requiredExtensions: list.gridAtlas.requiredExtensions || [] }
+  );
+  list.gridAtlas.documentDigest = result.documentDigest;
+  list.gridAtlas.documentMedia = clonePlain(document.media || []);
+  list.gridAtlas.resources = result.manifest.resources.map((metadata) => ({
+    metadata: clonePlain(metadata),
+    assetId: resourceRecords.get(metadata.id)?.assetId || "",
+    dataUrl: ""
+  }));
+  persistWorkspace();
+  return result;
+}
+
+async function exportPointList(listId = DEFAULT_POINT_LIST_ID) {
   const list = state.pointLists.find((item) => item.id === listId) ?? localPointList();
-  downloadJson(pointListSnapshot(list.id), `grid-atlas-list-${safeFilenamePart(list.name)}-${dateStamp()}.json`);
+  try {
+    const result = await pointListGridAtlasPackage(list);
+    downloadBlob(
+      new Blob([result.bytes], { type: GRIDATLAS_MIME_TYPE }),
+      "grid-atlas-" + safeFilenamePart(list.name) + "-" + dateStamp() + ".gridatlas"
+    );
+    elements.shareImportStatus.value = cloudText(".gridatlasを保存しました", "Saved .gridatlas");
+  } catch (error) {
+    console.warn("GRID ATLAS export failed", error);
+    elements.shareImportStatus.value = cloudText("バックアップを保存できませんでした", "Could not save backup");
+  }
 }
 
 function pointListFromPayload(parsed, fileName, existingIds) {
@@ -6260,6 +6784,7 @@ function bindEvents() {
   window.addEventListener("resize", scheduleCanvasResize);
   window.visualViewport?.addEventListener("resize", scheduleCanvasResize);
   window.visualViewport?.addEventListener("scroll", scheduleCanvasResize);
+  bindGridAtlasDropImport();
 
   if ("ResizeObserver" in window) {
     canvasResizeObserver = new ResizeObserver(scheduleCanvasResize);
@@ -6345,16 +6870,17 @@ function bindEvents() {
     button.addEventListener("click", () => void runStorageListAction(button.dataset.storageListAction));
   }
   elements.backupExportButton.addEventListener("click", () => {
-    if (elements.backupListSelect.value) exportPointList(elements.backupListSelect.value);
+    if (elements.backupListSelect.value) void exportPointList(elements.backupListSelect.value);
   });
   elements.replacePointsButton.addEventListener("click", () => {
     elements.pointImportFile.click();
   });
-  elements.pointImportFile.addEventListener("change", () => {
+  elements.pointImportFile.addEventListener("change", async () => {
     const files = selectedFiles(elements.pointImportFile.files);
-    if (files.length > 0) {
-      void importPointListFiles(files);
-    }
+    const gridAtlasFiles = files.filter(gridAtlasFileLikely);
+    const jsonFiles = files.filter((file) => !gridAtlasFileLikely(file));
+    if (gridAtlasFiles.length > 0) await importGridAtlasFiles(gridAtlasFiles, { source: "picker" });
+    if (jsonFiles.length > 0) await importPointListFiles(jsonFiles);
     elements.pointImportFile.value = "";
   });
   elements.exportObservationButton.addEventListener("click", exportObservationRecord);
@@ -6466,9 +6992,13 @@ loadTheme();
 loadWorkspace();
 loadPreferences();
 loadCloudSettings();
+registerGridAtlasFileLaunchHandler();
 bindEvents();
 initMobilePages();
 resizeCanvas();
+void hydrateWorkspaceAssetPhotos()
+  .catch((error) => console.warn("GRID ATLAS asset hydration failed", error))
+  .finally(() => void handleIncomingGridAtlasUrl());
 handleIncomingShare();
 locateOnStartup();
 registerServiceWorker();

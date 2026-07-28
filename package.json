@@ -10,7 +10,7 @@
     "cloud:types": "wrangler types cloud/worker-configuration.d.ts",
     "cloud:dry-run": "wrangler deploy --dry-run --env=\"\" --outdir dist/cloud-worker",
     "test": "vitest run",
-    "check": "node --check src/main.js && node --check src/cloud-client.js && node --check service-worker.js && node --check scripts/dev-server.mjs && node --check cloud/worker.js && node --check cloud/auth.js && node --check vitest.config.mjs && vitest run"
+    "check": "node --check src/main.js && node --check src/cloud-client.js && node --check src/gridatlas-import.js && node --check src/gridatlas-assets.js && node --check service-worker.js && node --check scripts/dev-server.mjs && node scripts/check-gridatlas-spec.mjs && node --check cloud/worker.js && node --check cloud/auth.js && node --check vitest.config.mjs && vitest run"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.18.8",
@@ -18,5 +18,8 @@
     "@types/node": "^26.1.1",
     "vitest": "^4.1.10",
     "wrangler": "^4.114.0"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3"
   }
 }

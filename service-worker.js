@@ -1,10 +1,14 @@
-const CACHE_NAME = "grid-atlas-static-v126";
+const CACHE_NAME = "grid-atlas-static-v130";
 const STATIC_ASSETS = [
   "./",
   "./index.html",
-  "./src/styles.css?v=48",
-  "./src/main.js?v=120",
+  "./src/styles.css?v=50",
+  "./src/main.js?v=124",
   "./src/cloud-client.js?v=2",
+  "./src/gridatlas-import.js?v=2",
+  "./src/gridatlas-assets.js?v=1",
+  "./src/fflate.js",
+  "./src/fflate.LICENSE.txt",
   "./manifest.webmanifest",
   "./assets/icon-grid.svg",
   "./assets/icon-grid-192.png",

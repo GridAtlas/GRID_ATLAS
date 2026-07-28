@@ -1,0 +1,16 @@
+{
+  "type": "place-list",
+  "schemaVersion": 1,
+  "id": "list-example-minimal",
+  "name": "近所の気になる場所",
+  "places": [
+    {
+      "id": "place-example-1",
+      "name": "丘の上",
+      "position": {
+        "latitude": 35.681236,
+        "longitude": 139.767125
+      }
+    }
+  ]
+}

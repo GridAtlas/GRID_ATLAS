@@ -1,0 +1,49 @@
+{
+  "type": "place-list",
+  "schemaVersion": 1,
+  "id": "019bbb12-3456-7890-abcd-ef1234567890",
+  "name": "東京ラーメン30選",
+  "description": "再訪したい店",
+  "attribution": {
+    "name": "Kazki"
+  },
+  "createdAt": "2026-07-20T12:00:00.000Z",
+  "updatedAt": "2026-07-29T09:30:00.000Z",
+  "media": [
+    {
+      "resourceId": "cover-image",
+      "role": "cover",
+      "caption": "リストの表紙"
+    }
+  ],
+  "places": [
+    {
+      "id": "019ccc12-3456-7890-abcd-ef1234567890",
+      "name": "サンプル店",
+      "position": {
+        "latitude": 35.681236,
+        "longitude": 139.767125
+      },
+      "note": "夜がおすすめ",
+      "createdAt": "2026-07-20T12:30:00.000Z",
+      "updatedAt": "2026-07-28T18:00:00.000Z",
+      "media": [
+        {
+          "resourceId": "shop-photo",
+          "role": "photo",
+          "caption": "入口"
+        }
+      ],
+      "extensions": {
+        "com.example.rating": {
+          "score": 5
+        }
+      }
+    }
+  ],
+  "extensions": {
+    "com.example.collection": {
+      "category": "ramen"
+    }
+  }
+}
