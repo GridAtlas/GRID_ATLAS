@@ -217,8 +217,8 @@ let pendingObservationImportMode = "replace";
 
 const CANVAS_PALETTES = {
   pastel: {
-    gridMinor: "#eee5f0",
-    gridMajor: "#d9c9df",
+    gridMinor: "#f2dce6",
+    gridMajor: "#dda7bd",
     link: "#5e9f9a",
     linkSelected: "#6f9b78",
     route: "#8f7cbd",
@@ -231,7 +231,7 @@ const CANVAS_PALETTES = {
     currentFill: "#f5ce6a",
     pendingFill: "rgb(216 111 155 / 0.22)",
     pendingStroke: "rgb(216 111 155 / 0.62)",
-    pointFill: "#5e9f9a",
+    pointFill: "#d86f9b",
     pointBaseStroke: "#fffafd",
     routeStart: "#6d9bc3",
     routeSelected: "#9b8bc7",
