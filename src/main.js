@@ -4829,11 +4829,9 @@ function updatePinchGesture() {
   const [, first] = entries[0];
   const [, second] = entries[1];
   const distance = Math.max(1, pointerDistance(first, second));
-  const midpoint = pointerMidpoint(first, second);
   const movedDistance = Math.abs(distance - pinch.startDistance);
-  const movedCenter = pointerDistance(midpoint, pinch.startMidpoint);
 
-  if (movedDistance > POINTER_MOVE_THRESHOLD || movedCenter > POINTER_MOVE_THRESHOLD) {
+  if (movedDistance > POINTER_MOVE_THRESHOLD) {
     pinch.moved = true;
   }
 
@@ -4845,8 +4843,8 @@ function updatePinchGesture() {
   const nextScale = clampScale(pinch.startScale * (distance / pinch.startDistance));
   state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
   state.viewport.scale = nextScale;
-  state.viewport.x = pinch.startWorld.x - (midpoint.x - size.width / 2) / nextScale;
-  state.viewport.y = pinch.startWorld.y + (midpoint.y - size.height / 2) / nextScale;
+  state.viewport.x = pinch.startWorld.x - (pinch.startMidpoint.x - size.width / 2) / nextScale;
+  state.viewport.y = pinch.startWorld.y + (pinch.startMidpoint.y - size.height / 2) / nextScale;
 
   draw();
   renderStatus();
