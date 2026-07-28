@@ -79,6 +79,8 @@ const elements = {
   settingsRouteReturnToStart: document.querySelector("#settingsRouteReturnToStart"),
   settingsGpsEnabled: document.querySelector("#settingsGpsEnabled"),
   settingsMapProviderSelect: document.querySelector("#settingsMapProviderSelect"),
+  systemUpdateButton: document.querySelector("#systemUpdateButton"),
+  systemUpdateStatus: document.querySelector("#systemUpdateStatus"),
   statusLine: document.querySelector("#statusLine"),
   selectionInfoText: document.querySelector("#selectionInfoText"),
   mobileSelectedTitle: document.querySelector("#mobileSelectedTitle"),
@@ -288,6 +290,14 @@ const TRANSLATIONS = {
     "settings.languageEn": "English",
     "settings.unitsMetric": "km",
     "settings.unitsImperial": "mile",
+    "systemUpdate.action": "システム更新",
+    "systemUpdate.notice": "最新版を確認し、更新時は自動で再読み込みします。",
+    "systemUpdate.checking": "更新を確認しています…",
+    "systemUpdate.applying": "更新を適用しています…",
+    "systemUpdate.latest": "最新版です。",
+    "systemUpdate.reloading": "更新しました。再読み込みします…",
+    "systemUpdate.unsupported": "この環境ではシステム更新を利用できません。",
+    "systemUpdate.failed": "更新を確認できませんでした。通信状態を確認してください。",
     "edition.web": "WEB版",
     "page.analysis": "分析",
     "page.data": "データ",
@@ -447,6 +457,14 @@ const TRANSLATIONS = {
     "settings.languageEn": "English",
     "settings.unitsMetric": "km",
     "settings.unitsImperial": "mile",
+    "systemUpdate.action": "System Update",
+    "systemUpdate.notice": "Checks for the latest version and reloads automatically when updated.",
+    "systemUpdate.checking": "Checking for updates…",
+    "systemUpdate.applying": "Applying the update…",
+    "systemUpdate.latest": "You are up to date.",
+    "systemUpdate.reloading": "Updated. Reloading…",
+    "systemUpdate.unsupported": "System updates are unavailable in this environment.",
+    "systemUpdate.failed": "Could not check for updates. Check your connection.",
     "edition.web": "Web",
     "page.analysis": "Analysis",
     "page.data": "Data",
@@ -1720,7 +1738,7 @@ function drawRouteBadges() {
     }
 
     const screen = worldToScreen(point);
-    const label = String(index + 1);
+    const label = String(index);
     context.beginPath();
     context.arc(screen.x + 12, screen.y - 12, 9, 0, Math.PI * 2);
     context.fillStyle = index === 0 ? colors.badgeStartFill : colors.badgeFill;
@@ -2705,7 +2723,7 @@ function pointRoleMarker(point) {
 
 function pointRouteOrder(pointId) {
   const index = state.routeResult?.pointIds?.indexOf(pointId) ?? -1;
-  return index >= 0 ? index + 1 : null;
+  return index >= 0 ? index : null;
 }
 
 function renderPointIndex() {
@@ -3497,7 +3515,7 @@ function renderRouteResultDetails() {
     const item = document.createElement("li");
     const number = document.createElement("span");
     number.className = "route-step-number";
-    number.textContent = String(index + 1);
+    number.textContent = String(index);
 
     const text = document.createElement("div");
     const title = document.createElement("strong");
@@ -5751,6 +5769,94 @@ function activateWaitingServiceWorker(registration) {
   }
 }
 
+function setSystemUpdateStatus(key) {
+  if (elements.systemUpdateStatus) {
+    elements.systemUpdateStatus.textContent = t(key);
+  }
+}
+
+function waitForServiceWorkerActivation(worker) {
+  return new Promise((resolve, reject) => {
+    let timeoutId = window.setTimeout(() => {
+      finish(new Error("Service Worker update timed out"));
+    }, 20000);
+
+    function finish(error) {
+      worker.removeEventListener("statechange", handleStateChange);
+      window.clearTimeout(timeoutId);
+      timeoutId = null;
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    }
+
+    function handleStateChange() {
+      if (worker.state === "installed") {
+        worker.postMessage({ type: "SKIP_WAITING" });
+      }
+      if (worker.state === "activated") {
+        finish();
+      } else if (worker.state === "redundant") {
+        finish(new Error("Service Worker update became redundant"));
+      }
+    }
+
+    worker.addEventListener("statechange", handleStateChange);
+    handleStateChange();
+  });
+}
+
+async function requestSystemUpdate() {
+  if (!elements.systemUpdateButton || elements.systemUpdateButton.disabled) {
+    return;
+  }
+  if (!("serviceWorker" in navigator)) {
+    setSystemUpdateStatus("systemUpdate.unsupported");
+    return;
+  }
+
+  elements.systemUpdateButton.disabled = true;
+  setSystemUpdateStatus("systemUpdate.checking");
+  let reloadStarted = false;
+
+  try {
+    const registration = await navigator.serviceWorker.register("./service-worker.js", {
+      updateViaCache: "none"
+    });
+    let updateWorker = registration.waiting ?? registration.installing;
+    const handleUpdateFound = () => {
+      updateWorker = registration.installing ?? updateWorker;
+    };
+
+    registration.addEventListener("updatefound", handleUpdateFound);
+    try {
+      await registration.update();
+    } finally {
+      registration.removeEventListener("updatefound", handleUpdateFound);
+    }
+
+    updateWorker = registration.waiting ?? registration.installing ?? updateWorker;
+    if (!updateWorker) {
+      setSystemUpdateStatus("systemUpdate.latest");
+      return;
+    }
+
+    setSystemUpdateStatus("systemUpdate.applying");
+    await waitForServiceWorkerActivation(updateWorker);
+    reloadStarted = true;
+    setSystemUpdateStatus("systemUpdate.reloading");
+    window.location.reload();
+  } catch {
+    setSystemUpdateStatus("systemUpdate.failed");
+  } finally {
+    if (!reloadStarted) {
+      elements.systemUpdateButton.disabled = false;
+    }
+  }
+}
+
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) {
     return;
@@ -5767,7 +5873,7 @@ function registerServiceWorker() {
   });
 
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js").then((registration) => {
+    navigator.serviceWorker.register("./service-worker.js", { updateViaCache: "none" }).then((registration) => {
       activateWaitingServiceWorker(registration);
       registration.update().catch(() => {});
       registration.addEventListener("updatefound", () => {
@@ -6192,6 +6298,7 @@ function bindEvents() {
   elements.settingsGpsEnabled.addEventListener("change", () => {
     setGpsEnabled(elements.settingsGpsEnabled.checked);
   });
+  elements.systemUpdateButton.addEventListener("click", () => void requestSystemUpdate());
   elements.cloudConnectButton.addEventListener("click", () => void connectCloud());
   elements.cloudDisconnectButton.addEventListener("click", disconnectCloud);
   elements.cloudAccessToken.addEventListener("input", renderStorageLists);
