@@ -1537,3 +1537,134 @@ textarea {
     grid-template-rows: minmax(0, 1fr) auto;
   }
 }
+
+.share-link-dialog {
+  width: min(560px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow), var(--brand-glow);
+}
+
+.share-link-dialog::backdrop {
+  background: rgb(0 0 0 / 0.58);
+  backdrop-filter: blur(3px);
+}
+
+.share-link-dialog-form {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.share-link-dialog-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.share-link-dialog-heading h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.share-link-close {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 20px;
+}
+
+.share-link-summary {
+  font-size: 15px;
+}
+
+.share-link-privacy {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--active-bg);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.share-link-field {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.share-link-field textarea {
+  width: 100%;
+  min-height: 112px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.share-link-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.share-link-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.app-toast {
+  position: fixed;
+  z-index: 3000;
+  left: 50%;
+  bottom: max(22px, env(safe-area-inset-bottom));
+  width: max-content;
+  max-width: min(520px, calc(100vw - 24px));
+  transform: translateX(-50%);
+  padding: 11px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 9px;
+  background: var(--status-bg);
+  color: var(--accent-strong);
+  box-shadow: var(--shadow), var(--brand-glow);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.5;
+  text-align: center;
+  pointer-events: none;
+}
+
+.app-toast.is-error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.app-toast[hidden] {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .share-link-dialog-form {
+    padding: 15px;
+  }
+
+  .share-link-actions > button {
+    flex: 1 1 auto;
+  }
+
+  .app-toast {
+    bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+}

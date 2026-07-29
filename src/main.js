@@ -122,6 +122,13 @@ const elements = {
   readClipboardButton: document.querySelector("#readClipboardButton"),
   shareImportStatus: document.querySelector("#shareImportStatus"),
   gridAtlasDropOverlay: document.querySelector("#gridAtlasDropOverlay"),
+  shareLinkDialog: document.querySelector("#shareLinkDialog"),
+  shareLinkSummary: document.querySelector("#shareLinkSummary"),
+  shareLinkValue: document.querySelector("#shareLinkValue"),
+  shareLinkDialogStatus: document.querySelector("#shareLinkDialogStatus"),
+  shareLinkCopyButton: document.querySelector("#shareLinkCopyButton"),
+  shareLinkNativeButton: document.querySelector("#shareLinkNativeButton"),
+  appToast: document.querySelector("#appToast"),
   useLocationButton: document.querySelector("#useLocationButton"),
   zoomInButton: document.querySelector("#zoomInButton"),
   zoomOutButton: document.querySelector("#zoomOutButton"),
@@ -237,6 +244,8 @@ const state = {
 };
 
 let pendingObservationImportMode = "replace";
+let pendingShareLink = null;
+let appToastTimerId = 0;
 
 const CANVAS_PALETTES = {
   pastel: {
@@ -436,12 +445,20 @@ const TRANSLATIONS = {
     "list.active": "登録先",
     "list.copy": "コピー",
     "list.share": "共有リンク",
-    "list.shareConfirm": "「{name}」の{count}点を共有リンクにします。地点名・緯度経度・コメントを含み、画像は含みません。リンクをコピーしますか？",
+    "list.shareDialogTitle": "共有リンク",
+    "list.shareSummary": "「{name}」の{count}点",
+    "list.sharePrivacy": "地点名・緯度経度・コメントを含みます。画像は含みません。",
+    "list.shareValue": "共有リンク",
+    "list.shareCancel": "キャンセル",
+    "list.shareCopy": "リンクをコピー",
+    "list.shareNative": "共有する",
     "list.shareCopied": "共有リンクをコピーしました",
+    "list.shareCompleted": "共有しました",
     "list.shareTooLong": "このリストはリンク共有の推奨サイズを超えています。.gridatlasで共有してください",
     "list.shareUnavailable": "共有できるリストデータがありません",
-    "list.shareCopyFailed": "共有リンクをコピーできませんでした",
-    "list.shareManual": "この共有リンクをコピーしてください",
+    "list.shareCopyFailed": "共有リンクをコピーできませんでした。表示されたリンクを長押ししてコピーできます",
+    "list.shareGenerateFailed": "共有リンクを作れませんでした。リスト内容を確認してください",
+    "list.shareNativeFailed": "共有画面を開けませんでした",
     "list.rename": "リスト名変更",
     "list.renamePrompt": "新しいリスト名",
     "list.showOnGrid": "グリッドに表示",
@@ -619,12 +636,20 @@ const TRANSLATIONS = {
     "list.active": "Destination",
     "list.copy": "Copy",
     "list.share": "Share link",
-    "list.shareConfirm": "Create a share link for {count} point(s) in “{name}”. It includes names, coordinates, and notes, but no images. Copy the link?",
+    "list.shareDialogTitle": "Share link",
+    "list.shareSummary": "{count} point(s) in “{name}”",
+    "list.sharePrivacy": "Includes names, coordinates, and notes. Images are not included.",
+    "list.shareValue": "Share link",
+    "list.shareCancel": "Cancel",
+    "list.shareCopy": "Copy link",
+    "list.shareNative": "Share",
     "list.shareCopied": "Copied the share link",
+    "list.shareCompleted": "Shared",
     "list.shareTooLong": "This list exceeds the recommended link size. Share it as a .gridatlas file instead",
     "list.shareUnavailable": "No list data is available to share",
-    "list.shareCopyFailed": "Could not copy the share link",
-    "list.shareManual": "Copy this share link",
+    "list.shareCopyFailed": "Could not copy the link. You can press and hold the displayed link to copy it",
+    "list.shareGenerateFailed": "Could not create the share link. Check the list contents",
+    "list.shareNativeFailed": "Could not open the share sheet",
     "list.rename": "Rename list",
     "list.renamePrompt": "New list name",
     "list.showOnGrid": "Show on grid",
@@ -6536,6 +6561,27 @@ function gridAtlasShareUrl(document) {
   return url.href;
 }
 
+function showAppToast(message, options = {}) {
+  if (!elements.appToast || !message) return;
+  window.clearTimeout(appToastTimerId);
+  elements.appToast.value = message;
+  elements.appToast.hidden = false;
+  elements.appToast.classList.toggle("is-error", options.error === true);
+  appToastTimerId = window.setTimeout(() => {
+    elements.appToast.hidden = true;
+    elements.appToast.value = "";
+  }, options.duration ?? 4200);
+}
+
+function setShareFeedback(message, options = {}) {
+  setCloudStatus(message, { menu: false, error: options.error === true });
+  if (elements.shareLinkDialog?.open) {
+    elements.shareLinkDialogStatus.value = message;
+    elements.shareLinkDialogStatus.classList.toggle("is-error", options.error === true);
+  }
+  showAppToast(message, options);
+}
+
 async function copyShareLink(text) {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text);
@@ -6554,11 +6600,44 @@ async function copyShareLink(text) {
   if (!copied) throw new Error("Clipboard unavailable");
 }
 
+async function copyPendingShareLink() {
+  const share = pendingShareLink;
+  if (!share) return;
+  try {
+    await copyShareLink(share.url);
+    if (elements.shareLinkDialog?.open) elements.shareLinkDialog.close("copied");
+    setShareFeedback(t("list.shareCopied"));
+  } catch (error) {
+    console.warn("GRID ATLAS share link copy failed", error);
+    elements.shareLinkValue.focus();
+    elements.shareLinkValue.select();
+    setShareFeedback(t("list.shareCopyFailed"), { error: true });
+  }
+}
+
+async function sharePendingLinkNatively() {
+  const share = pendingShareLink;
+  if (!share || typeof navigator.share !== "function") return;
+  try {
+    await navigator.share({
+      title: `GRID ATLAS — ${share.title}`,
+      text: cloudText(`GRID ATLAS「${share.title}」`, `GRID ATLAS “${share.title}”`),
+      url: share.url
+    });
+    if (elements.shareLinkDialog?.open) elements.shareLinkDialog.close("shared");
+    setShareFeedback(t("list.shareCompleted"));
+  } catch (error) {
+    if (error?.name === "AbortError") return;
+    console.warn("GRID ATLAS native share failed", error);
+    setShareFeedback(t("list.shareNativeFailed"), { error: true });
+  }
+}
+
 async function shareStorageListLink(storageId) {
   const entry = findStorageListEntry(storageId);
   const list = entry?.local || entry?.preview;
   if (!list) {
-    setCloudStatus(t("list.shareUnavailable"), { menu: false, error: true });
+    setShareFeedback(t("list.shareUnavailable"), { error: true });
     return;
   }
 
@@ -6566,30 +6645,35 @@ async function shareStorageListLink(storageId) {
     const document = pointListGridAtlasUrlDocument(list);
     const url = gridAtlasShareUrl(document);
     if (new TextEncoder().encode(url).byteLength > GRIDATLAS_RECOMMENDED_SHARE_URL_BYTES) {
-      setCloudStatus(t("list.shareTooLong"), { menu: false, error: true });
+      setShareFeedback(t("list.shareTooLong"), { error: true, duration: 6500 });
       return;
     }
 
-    const confirmed = window.confirm(t("list.shareConfirm")
-      .replace("{name}", list.name || "地点リスト")
-      .replace("{count}", String(list.points.length)));
-    if (!confirmed) return;
-
-    try {
-      await copyShareLink(url);
-      setCloudStatus(t("list.shareCopied"), { menu: false });
-    } catch (error) {
-      console.warn("GRID ATLAS share link copy failed", error);
-      const manualCopy = window.prompt(t("list.shareManual"), url);
-      setCloudStatus(manualCopy === null ? t("list.shareCopyFailed") : t("list.shareCopied"), {
-        menu: false,
-        error: manualCopy === null
-      });
-    }
+    const title = list.name || "地点リスト";
+    const summary = t("list.shareSummary")
+      .replace("{name}", title)
+      .replace("{count}", String(list.points.length));
+    pendingShareLink = { url, title };
     persistWorkspace();
+
+    if (!elements.shareLinkDialog?.showModal) {
+      const confirmed = window.confirm(`${summary}\n${t("list.sharePrivacy")}\n\n${t("list.shareCopy")}?`);
+      if (!confirmed) return;
+      await copyPendingShareLink();
+      return;
+    }
+
+    elements.shareLinkSummary.textContent = summary;
+    elements.shareLinkValue.value = url;
+    elements.shareLinkDialogStatus.value = "";
+    elements.shareLinkDialogStatus.classList.remove("is-error");
+    elements.shareLinkNativeButton.hidden = typeof navigator.share !== "function";
+    if (elements.shareLinkDialog.open) elements.shareLinkDialog.close();
+    elements.shareLinkDialog.showModal();
   } catch (error) {
     console.warn("GRID ATLAS share link generation failed", error);
-    setCloudStatus(t("list.shareCopyFailed"), { menu: false, error: true });
+    pendingShareLink = null;
+    setShareFeedback(t("list.shareGenerateFailed"), { error: true });
   }
 }
 
@@ -6975,6 +7059,18 @@ function bindEvents() {
 
   elements.pointForm.addEventListener("submit", submitPoint);
   elements.readClipboardButton.addEventListener("click", readClipboardShare);
+  elements.shareLinkCopyButton.addEventListener("click", () => void copyPendingShareLink());
+  elements.shareLinkNativeButton.addEventListener("click", () => void sharePendingLinkNatively());
+  elements.shareLinkDialog.addEventListener("close", () => {
+    pendingShareLink = null;
+    elements.shareLinkSummary.textContent = "";
+    elements.shareLinkValue.value = "";
+    elements.shareLinkDialogStatus.value = "";
+    elements.shareLinkDialogStatus.classList.remove("is-error");
+  });
+  elements.shareLinkDialog.addEventListener("click", (event) => {
+    if (event.target === elements.shareLinkDialog) elements.shareLinkDialog.close("cancel");
+  });
   elements.useLocationButton.addEventListener("click", useCurrentLocation);
   elements.zoomInButton.addEventListener("click", () => zoomAt({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 1.25));
   elements.zoomOutButton.addEventListener("click", () => zoomAt({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 0.8));
