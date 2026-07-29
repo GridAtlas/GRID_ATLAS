@@ -108,6 +108,7 @@ describe("GRID ATLAS import format", () => {
     const encoded = encodeGridAtlasUrlPayload(document);
 
     expect(encoded.startsWith("v1.")).toBe(true);
+    expect(encoded).toMatch(/^v1\.[A-Za-z0-9_-]+$/);
     expect(decodeGridAtlasUrlPayload(encoded)).toEqual(document);
   });
 

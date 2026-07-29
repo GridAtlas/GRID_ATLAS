@@ -10,6 +10,7 @@ import {
   GridAtlasImportError,
   buildGridAtlasArchive,
   decodeGridAtlasUrlPayload,
+  encodeGridAtlasUrlPayload,
   gridAtlasDocumentDigest,
   readGridAtlasFile
 } from "./gridatlas-import.js?v=2";
@@ -30,6 +31,7 @@ const ROUTE_RETURN_KEY = "grid-atlas-route-return";
 const MAP_PROVIDER_KEY = "grid-atlas-map-provider";
 const MAP_PROVIDER_GOOGLE = "google";
 const MAP_PROVIDER_APPLE = "apple";
+const GRIDATLAS_RECOMMENDED_SHARE_URL_BYTES = 8192;
 const GPS_ENABLED_KEY = "grid-atlas-gps-enabled";
 
 
@@ -433,6 +435,13 @@ const TRANSLATIONS = {
     "list.created": "新しいリストを作成し、登録先にしました",
     "list.active": "登録先",
     "list.copy": "コピー",
+    "list.share": "共有リンク",
+    "list.shareConfirm": "「{name}」の{count}点を共有リンクにします。地点名・緯度経度・コメントを含み、画像は含みません。リンクをコピーしますか？",
+    "list.shareCopied": "共有リンクをコピーしました",
+    "list.shareTooLong": "このリストはリンク共有の推奨サイズを超えています。.gridatlasで共有してください",
+    "list.shareUnavailable": "共有できるリストデータがありません",
+    "list.shareCopyFailed": "共有リンクをコピーできませんでした",
+    "list.shareManual": "この共有リンクをコピーしてください",
     "list.rename": "リスト名変更",
     "list.renamePrompt": "新しいリスト名",
     "list.showOnGrid": "グリッドに表示",
@@ -609,6 +618,13 @@ const TRANSLATIONS = {
     "list.created": "Created a new list and set it as the destination",
     "list.active": "Destination",
     "list.copy": "Copy",
+    "list.share": "Share link",
+    "list.shareConfirm": "Create a share link for {count} point(s) in “{name}”. It includes names, coordinates, and notes, but no images. Copy the link?",
+    "list.shareCopied": "Copied the share link",
+    "list.shareTooLong": "This list exceeds the recommended link size. Share it as a .gridatlas file instead",
+    "list.shareUnavailable": "No list data is available to share",
+    "list.shareCopyFailed": "Could not copy the share link",
+    "list.shareManual": "Copy this share link",
     "list.rename": "Rename list",
     "list.renamePrompt": "New list name",
     "list.showOnGrid": "Show on grid",
@@ -2969,6 +2985,15 @@ function createStorageListRow(entry) {
   const rowActions = document.createElement("div");
   rowActions.className = "storage-list-row-actions";
 
+  const share = document.createElement("button");
+  share.type = "button";
+  share.className = "storage-share-button";
+  share.textContent = "🔗";
+  share.title = t("list.share");
+  share.setAttribute("aria-label", cloudText(`「${listName}」の共有リンクを作成`, `Create a share link for “${listName}”`));
+  share.disabled = state.cloud.busy || (!entry.local && !entry.preview);
+  share.addEventListener("click", () => void shareStorageListLink(entry.storageId));
+
   const rename = document.createElement("button");
   rename.type = "button";
   rename.className = "storage-rename-button";
@@ -2999,7 +3024,7 @@ function createStorageListRow(entry) {
     setCloudStatus(t(nextVisible ? "list.visible" : "list.hidden"), { menu: false });
   });
 
-  rowActions.append(rename, gridVisibility);
+  rowActions.append(share, rename, gridVisibility);
   row.append(marker, name, rowActions);
   return row;
 }
@@ -6463,6 +6488,109 @@ async function pointListGridAtlasPackage(list) {
   }));
   persistWorkspace();
   return result;
+}
+
+function pointListGridAtlasUrlDocument(list) {
+  list.gridAtlas = list.gridAtlas && typeof list.gridAtlas === "object" ? list.gridAtlas : {};
+  list.gridAtlas.documentId = list.gridAtlas.documentId || list.cloudId || list.id || createId();
+
+  const places = list.points.map((point) => {
+    const geo = pointGeo(point);
+    const place = {
+      id: point.gridAtlas?.placeId || point.id,
+      name: point.title || "Point",
+      position: { latitude: geo.lat, longitude: geo.lng }
+    };
+    if (point.note) place.note = point.note;
+    if (point.createdAt) place.createdAt = point.createdAt;
+    if (point.updatedAt) place.updatedAt = point.updatedAt;
+    if (point.gridAtlas?.extensions && Object.keys(point.gridAtlas.extensions).length > 0) {
+      place.extensions = clonePlain(point.gridAtlas.extensions);
+    }
+    return place;
+  });
+
+  const document = {
+    type: "place-list",
+    schemaVersion: 1,
+    id: list.gridAtlas.documentId,
+    name: list.name || "地点リスト",
+    places
+  };
+  if (list.description) document.description = list.description;
+  if (list.author) document.attribution = { name: list.author };
+  if (list.createdAt) document.createdAt = list.createdAt;
+  if (list.updatedAt) document.updatedAt = list.updatedAt;
+  if (list.gridAtlas.documentExtensions && Object.keys(list.gridAtlas.documentExtensions).length > 0) {
+    document.extensions = clonePlain(list.gridAtlas.documentExtensions);
+  }
+  return document;
+}
+
+function gridAtlasShareUrl(document) {
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = new URLSearchParams({
+    [GRIDATLAS_URL_PARAMETER]: encodeGridAtlasUrlPayload(document)
+  }).toString();
+  return url.href;
+}
+
+async function copyShareLink(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const input = document.createElement("textarea");
+  input.value = text;
+  input.setAttribute("readonly", "");
+  input.style.position = "fixed";
+  input.style.opacity = "0";
+  document.body.append(input);
+  input.select();
+  const copied = document.execCommand("copy");
+  input.remove();
+  if (!copied) throw new Error("Clipboard unavailable");
+}
+
+async function shareStorageListLink(storageId) {
+  const entry = findStorageListEntry(storageId);
+  const list = entry?.local || entry?.preview;
+  if (!list) {
+    setCloudStatus(t("list.shareUnavailable"), { menu: false, error: true });
+    return;
+  }
+
+  try {
+    const document = pointListGridAtlasUrlDocument(list);
+    const url = gridAtlasShareUrl(document);
+    if (new TextEncoder().encode(url).byteLength > GRIDATLAS_RECOMMENDED_SHARE_URL_BYTES) {
+      setCloudStatus(t("list.shareTooLong"), { menu: false, error: true });
+      return;
+    }
+
+    const confirmed = window.confirm(t("list.shareConfirm")
+      .replace("{name}", list.name || "地点リスト")
+      .replace("{count}", String(list.points.length)));
+    if (!confirmed) return;
+
+    try {
+      await copyShareLink(url);
+      setCloudStatus(t("list.shareCopied"), { menu: false });
+    } catch (error) {
+      console.warn("GRID ATLAS share link copy failed", error);
+      const manualCopy = window.prompt(t("list.shareManual"), url);
+      setCloudStatus(manualCopy === null ? t("list.shareCopyFailed") : t("list.shareCopied"), {
+        menu: false,
+        error: manualCopy === null
+      });
+    }
+    persistWorkspace();
+  } catch (error) {
+    console.warn("GRID ATLAS share link generation failed", error);
+    setCloudStatus(t("list.shareCopyFailed"), { menu: false, error: true });
+  }
 }
 
 async function exportPointList(listId = DEFAULT_POINT_LIST_ID) {
