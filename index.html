@@ -164,11 +164,12 @@
           </div>
 
           <nav class="actionbar" aria-label="地点操作">
-            <label class="action-destination" for="pointTransferDestinationSelect">
+            <label id="pointTransferDestinationControl" class="action-destination" for="pointTransferDestinationSelect" hidden>
               <span data-i18n="action.transferDestination">コピー／移動先</span>
               <select id="pointTransferDestinationSelect" aria-label="コピー／移動先">
                 <option value="" data-i18n="list.transferDestinationPlaceholder">リストを選択</option>
               </select>
+              <button id="cancelPointTransferButton" class="compact-button" type="button" data-i18n="action.cancel">キャンセル</button>
             </label>
             <button id="actionRegisterButton" class="action-button" type="button" title="この位置を登録" disabled>
               <span aria-hidden="true">＋</span>
