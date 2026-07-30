@@ -164,6 +164,12 @@
           </div>
 
           <nav class="actionbar" aria-label="地点操作">
+            <label class="action-destination" for="pointTransferDestinationSelect">
+              <span data-i18n="action.transferDestination">コピー／移動先</span>
+              <select id="pointTransferDestinationSelect" aria-label="コピー／移動先">
+                <option value="" data-i18n="list.transferDestinationPlaceholder">リストを選択</option>
+              </select>
+            </label>
             <button id="actionRegisterButton" class="action-button" type="button" title="この位置を登録" disabled>
               <span aria-hidden="true">＋</span>
               <span data-i18n="action.register">登録</span>
@@ -175,6 +181,18 @@
             <button id="actionCenterButton" class="action-button" type="button" title="選択点の中心に仮ポイントを作成" disabled>
               <span aria-hidden="true">◇</span>
               <span data-i18n="action.center">中心</span>
+            </button>
+            <button id="actionCopyToListButton" class="action-button" type="button" title="選択地点を登録先リストへコピー" disabled>
+              <span aria-hidden="true">⇢</span>
+              <span data-i18n="action.copyToList">コピー</span>
+            </button>
+            <button id="actionMoveToListButton" class="action-button" type="button" title="選択地点を登録先リストへ移動" disabled>
+              <span aria-hidden="true">⇥</span>
+              <span data-i18n="action.moveToList">移動</span>
+            </button>
+            <button id="actionShareSelectedButton" class="action-button" type="button" title="選択地点をURLで共有" disabled>
+              <span aria-hidden="true">🔗</span>
+              <span data-i18n="action.shareSelected">共有</span>
             </button>
             <button id="clearSelectionButton" class="action-button" type="button" title="選択を解除" disabled>
               <span aria-hidden="true">○</span>

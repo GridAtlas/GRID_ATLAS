@@ -80,6 +80,10 @@ const elements = {
   actionRegisterButton: document.querySelector("#actionRegisterButton"),
   actionRouteButton: document.querySelector("#actionRouteButton"),
   actionRouteLabel: document.querySelector("#actionRouteLabel"),
+  pointTransferDestinationSelect: document.querySelector("#pointTransferDestinationSelect"),
+  actionCopyToListButton: document.querySelector("#actionCopyToListButton"),
+  actionMoveToListButton: document.querySelector("#actionMoveToListButton"),
+  actionShareSelectedButton: document.querySelector("#actionShareSelectedButton"),
   clearSelectionButton: document.querySelector("#clearSelectionButton"),
   actionTargetButton: document.querySelector("#actionTargetButton"),
   actionRouteStartButton: document.querySelector("#actionRouteStartButton"),
@@ -193,6 +197,7 @@ const state = {
   pointLists: [],
   activePointListId: DEFAULT_POINT_LIST_ID,
   selectedStorageListIds: new Set(),
+  pointTransferDestinationListId: "",
   cloud: {
     connected: false,
     busy: false,
@@ -346,6 +351,10 @@ const TRANSLATIONS = {
     "action.target": "対象",
     "action.track": "追跡",
     "action.route": "巡回",
+    "action.transferDestination": "コピー／移動先",
+    "action.copyToList": "コピー",
+    "action.moveToList": "移動",
+    "action.shareSelected": "共有",
     "action.delete": "削除",
     "action.restore": "復旧",
     "action.edit": "編集",
@@ -447,6 +456,9 @@ const TRANSLATIONS = {
     "list.share": "共有リンク",
     "list.shareDialogTitle": "共有リンク",
     "list.shareSummary": "「{name}」の{count}点",
+    "list.shareSelectedNamePrompt": "共有するリスト名",
+    "list.shareSelectedDefaultName": "選択地点",
+    "list.shareSelectedUnavailable": "共有する地点を選択してください",
     "list.sharePrivacy": "地点名・緯度経度・コメントを含みます。画像は含みません。",
     "list.shareValue": "共有リンク",
     "list.shareCancel": "キャンセル",
@@ -466,6 +478,11 @@ const TRANSLATIONS = {
     "list.visible": "グリッドに表示中",
     "list.hidden": "グリッドで非表示",
     "list.noSelection": "操作するリストを選択してください",
+    "list.transferNoSelection": "別のリストへ移せる地点を選択してください",
+    "list.transferSelectDestination": "コピー／移動先を選択してください",
+    "list.transferDestinationPlaceholder": "リストを選択",
+    "list.copiedPoints": "「{name}」へ{count}地点をコピーしました",
+    "list.movedPoints": "「{name}」へ{count}地点を移動しました",
     "list.section.mine": "マイリスト",
     "list.section.imported": "インポートリスト",
     "list.section.cloud": "クラウドリスト",
@@ -491,7 +508,7 @@ const TRANSLATIONS = {
     "message.loadedObservation": "読み込み観察",
     "message.pointUnavailable": "地点を確認できません",
     "message.linkUnavailable": "線を確認できません",
-    "message.quickHint": "接続、巡回、削除、解除をクイックボタンで実行できます。",
+    "message.quickHint": "接続、リスト間コピー／移動、共有、巡回、削除、解除をクイックボタンで実行できます。",
     "message.currentLocation": "現在地"
   },
   en: {
@@ -537,6 +554,10 @@ const TRANSLATIONS = {
     "action.target": "Target",
     "action.track": "Track",
     "action.route": "Route",
+    "action.transferDestination": "Copy / move to",
+    "action.copyToList": "Copy",
+    "action.moveToList": "Move",
+    "action.shareSelected": "Share",
     "action.delete": "Delete",
     "action.restore": "Restore",
     "action.edit": "Edit",
@@ -638,6 +659,9 @@ const TRANSLATIONS = {
     "list.share": "Share link",
     "list.shareDialogTitle": "Share link",
     "list.shareSummary": "{count} point(s) in “{name}”",
+    "list.shareSelectedNamePrompt": "Name for the shared list",
+    "list.shareSelectedDefaultName": "Selected points",
+    "list.shareSelectedUnavailable": "Select points to share",
     "list.sharePrivacy": "Includes names, coordinates, and notes. Images are not included.",
     "list.shareValue": "Share link",
     "list.shareCancel": "Cancel",
@@ -657,6 +681,11 @@ const TRANSLATIONS = {
     "list.visible": "Shown on grid",
     "list.hidden": "Hidden from grid",
     "list.noSelection": "Select a list first",
+    "list.transferNoSelection": "Select points that can be transferred to another list",
+    "list.transferSelectDestination": "Select a destination list first",
+    "list.transferDestinationPlaceholder": "Select a list",
+    "list.copiedPoints": "Copied {count} point(s) to “{name}”",
+    "list.movedPoints": "Moved {count} point(s) to “{name}”",
     "list.section.mine": "My Lists",
     "list.section.imported": "Imported Lists",
     "list.section.cloud": "Cloud Lists",
@@ -682,7 +711,7 @@ const TRANSLATIONS = {
     "message.loadedObservation": "Loaded observation",
     "message.pointUnavailable": "Point unavailable",
     "message.linkUnavailable": "Line unavailable",
-    "message.quickHint": "Use quick buttons to link, route, delete, or clear.",
+    "message.quickHint": "Use quick buttons to link, copy or move between lists, share, route, delete, or clear.",
     "message.currentLocation": "Current location"
   }
 };
@@ -1168,6 +1197,71 @@ function copyStorageList(storageId) {
   refreshVisiblePoints();
   persistWorkspace();
   setCloudStatus(cloudText(`「${copy.name}」を作成し、登録先にしました`, `Created “${copy.name}” and set it as the destination`));
+  render();
+}
+
+function pointTransferDestinationList() {
+  ensurePointLists();
+  return state.pointLists.find((list) => (
+    list.id === state.pointTransferDestinationListId && list.editable
+  )) ?? null;
+}
+
+function transferableSelectedPoints(destinationList) {
+  if (!destinationList) return [];
+  normalizeSelection();
+  return selectedPointIds()
+    .filter((pointId) => pointId !== CURRENT_LOCATION_ID)
+    .map((pointId) => {
+      const point = findPointAny(pointId);
+      const sourceList = pointListForPoint(pointId);
+      return { point, sourceList };
+    })
+    .filter(({ point, sourceList }) => Boolean(point && sourceList?.editable && sourceList !== destinationList));
+}
+
+function transferSelectedPointsToActiveList(mode) {
+  const destinationList = pointTransferDestinationList();
+  if (!destinationList) {
+    showAppToast(t("list.transferSelectDestination"), { error: true });
+    return;
+  }
+  const candidates = transferableSelectedPoints(destinationList);
+  if (candidates.length === 0) {
+    showAppToast(t("list.transferNoSelection"), { error: true });
+    return;
+  }
+
+  const now = new Date().toISOString();
+  let transferredIds;
+  if (mode === "copy") {
+    const copies = candidates.map(({ point }) => ({
+      ...clonePlain(point),
+      id: createId(),
+      updatedAt: now
+    }));
+    destinationList.points.push(...copies);
+    transferredIds = copies.map((point) => point.id);
+  } else {
+    const sourceLists = new Set(candidates.map(({ sourceList }) => sourceList));
+    for (const sourceList of sourceLists) {
+      sourceList.points = sourceList.points.filter((point) => (
+        !candidates.some((candidate) => candidate.sourceList === sourceList && candidate.point.id === point.id)
+      ));
+      sourceList.updatedAt = now;
+    }
+    destinationList.points.push(...candidates.map(({ point }) => point));
+    transferredIds = candidates.map(({ point }) => point.id);
+  }
+
+  destinationList.updatedAt = now;
+  refreshVisiblePoints();
+  state.selection = transferredIds.map((id) => ({ type: "point", id }));
+  normalizeSelection();
+  persistWorkspace();
+  showAppToast(t(mode === "copy" ? "list.copiedPoints" : "list.movedPoints")
+    .replace("{name}", destinationList.name)
+    .replace("{count}", String(transferredIds.length)));
   render();
 }
 
@@ -2127,6 +2221,8 @@ function renderActionButtons() {
   const deletablePointCount = pointIds.filter((id) => id !== CURRENT_LOCATION_ID && pointEditable(id)).length;
   const observationSelected = isLoadedObservationSelected();
   const canDelete = deletablePointCount + linkIds.length > 0 || observationSelected;
+  const destinationList = pointTransferDestinationList();
+  const transferablePointCount = transferableSelectedPoints(destinationList).length;
 
   const canOpenRegisterPage = !hasPendingPoint && state.selection.length === 0 && mobilePageUiActive();
   elements.actionRegisterButton.disabled = !hasPendingPoint && !canOpenRegisterPage;
@@ -2137,6 +2233,13 @@ function renderActionButtons() {
   elements.actionTargetButton.disabled = !targetCandidate;
   elements.actionRouteStartButton.disabled = !routeStartCandidate;
   elements.actionCenterButton.disabled = centerCandidateCount < 2;
+  const shareableSelectedPointCount = selectedPointIds()
+    .map(findPoint)
+    .filter((point) => point && point.id !== CURRENT_LOCATION_ID)
+    .length;
+  elements.actionCopyToListButton.disabled = transferablePointCount === 0;
+  elements.actionMoveToListButton.disabled = transferablePointCount === 0;
+  elements.actionShareSelectedButton.disabled = shareableSelectedPointCount === 0;
   elements.actionRestoreButton.disabled = restoreCandidateCount === 0;
   elements.actionEditButton.disabled = !editCandidate;
   elements.actionMapButton.disabled = !mapCandidate;
@@ -2154,6 +2257,17 @@ function renderActionButtons() {
   elements.actionTargetButton.classList.toggle("is-active", Boolean(targetCandidate && targetCandidate.id === state.targetPointId));
   elements.actionRouteStartButton.classList.toggle("is-active", Boolean(routeStartCandidate && routeStartCandidate.id === state.routeStartPointId));
   elements.actionCenterButton.classList.toggle("is-active", false);
+  elements.actionCopyToListButton.classList.toggle("is-active", false);
+  elements.actionMoveToListButton.classList.toggle("is-active", false);
+  elements.actionCopyToListButton.title = transferablePointCount > 0
+    ? cloudText(`選択した${transferablePointCount}地点を「${destinationList.name}」へコピー`, `Copy ${transferablePointCount} selected point(s) to “${destinationList.name}”`)
+    : t(destinationList ? "list.transferNoSelection" : "list.transferSelectDestination");
+  elements.actionMoveToListButton.title = transferablePointCount > 0
+    ? cloudText(`選択した${transferablePointCount}地点を「${destinationList.name}」へ移動`, `Move ${transferablePointCount} selected point(s) to “${destinationList.name}”`)
+    : t(destinationList ? "list.transferNoSelection" : "list.transferSelectDestination");
+  elements.actionShareSelectedButton.title = shareableSelectedPointCount > 0
+    ? cloudText(`選択した${shareableSelectedPointCount}地点をURLで共有`, `Share ${shareableSelectedPointCount} selected point(s) by URL`)
+    : t("list.shareSelectedUnavailable");
   elements.actionRestoreButton.classList.toggle("is-active", false);
   elements.actionEditButton.classList.toggle("is-active", Boolean(state.editingPointId));
   elements.actionMapButton.classList.toggle("is-active", false);
@@ -3104,6 +3218,25 @@ function renderStorageLists() {
       container.append(createStorageListSection(section, sectionEntries));
     }
   }
+
+  const previousDestinationListId = state.pointTransferDestinationListId;
+  const editableLists = state.pointLists.filter((list) => list.editable);
+  elements.pointTransferDestinationSelect.replaceChildren();
+  const destinationPlaceholder = document.createElement("option");
+  destinationPlaceholder.value = "";
+  destinationPlaceholder.textContent = t("list.transferDestinationPlaceholder");
+  elements.pointTransferDestinationSelect.append(destinationPlaceholder);
+  for (const list of editableLists) {
+    const option = document.createElement("option");
+    option.value = list.id;
+    option.textContent = `${list.name} (${list.points.length}${t("label.points")})`;
+    elements.pointTransferDestinationSelect.append(option);
+  }
+  state.pointTransferDestinationListId = editableLists.some((list) => list.id === previousDestinationListId)
+    ? previousDestinationListId
+    : "";
+  elements.pointTransferDestinationSelect.value = state.pointTransferDestinationListId;
+  elements.pointTransferDestinationSelect.disabled = editableLists.length === 0;
 
   const previousBackupListId = elements.backupListSelect.value;
   const localEntries = entries.filter((entry) => entry.local);
@@ -6633,9 +6766,7 @@ async function sharePendingLinkNatively() {
   }
 }
 
-async function shareStorageListLink(storageId) {
-  const entry = findStorageListEntry(storageId);
-  const list = entry?.local || entry?.preview;
+async function sharePointListLink(list, options = {}) {
   if (!list) {
     setShareFeedback(t("list.shareUnavailable"), { error: true });
     return;
@@ -6654,7 +6785,7 @@ async function shareStorageListLink(storageId) {
       .replace("{name}", title)
       .replace("{count}", String(list.points.length));
     pendingShareLink = { url, title };
-    persistWorkspace();
+    if (options.persist === true) persistWorkspace();
 
     if (!elements.shareLinkDialog?.showModal) {
       const confirmed = window.confirm(`${summary}\n${t("list.sharePrivacy")}\n\n${t("list.shareCopy")}?`);
@@ -6677,6 +6808,39 @@ async function shareStorageListLink(storageId) {
   }
 }
 
+async function shareStorageListLink(storageId) {
+  const entry = findStorageListEntry(storageId);
+  await sharePointListLink(entry?.local || entry?.preview, { persist: true });
+}
+
+async function shareSelectedPointsLink() {
+  normalizeSelection();
+  const points = selectedPointIds()
+    .filter((pointId) => pointId !== CURRENT_LOCATION_ID)
+    .map(findPoint)
+    .filter(Boolean);
+  if (points.length === 0) {
+    setShareFeedback(t("list.shareSelectedUnavailable"), { error: true });
+    return;
+  }
+
+  const defaultName = t("list.shareSelectedDefaultName");
+  const input = window.prompt(t("list.shareSelectedNamePrompt"), defaultName);
+  if (input === null) return;
+  const name = input.trim() || defaultName;
+  const now = new Date().toISOString();
+  const list = {
+    id: createId(),
+    name,
+    description: "",
+    author: "",
+    createdAt: now,
+    updatedAt: now,
+    gridAtlas: { documentId: createId() },
+    points: points.map(clonePlain)
+  };
+  await sharePointListLink(list);
+}
 async function exportPointList(listId = DEFAULT_POINT_LIST_ID) {
   const list = state.pointLists.find((item) => item.id === listId) ?? localPointList();
   try {
@@ -7032,6 +7196,10 @@ function bindEvents() {
     setMapProvider(elements.settingsMapProviderSelect.value);
     render();
   });
+  elements.pointTransferDestinationSelect.addEventListener("change", () => {
+    state.pointTransferDestinationListId = elements.pointTransferDestinationSelect.value;
+    renderActionButtons();
+  });
   elements.settingsGpsEnabled.addEventListener("change", () => {
     setGpsEnabled(elements.settingsGpsEnabled.checked);
   });
@@ -7053,6 +7221,9 @@ function bindEvents() {
   elements.actionRouteStartButton.addEventListener("click", setRouteStartFromSelection);
   elements.actionFollowButton.addEventListener("click", () => toggleLocationFollow({ fillForm: false }));
   elements.actionCenterButton.addEventListener("click", createCenterPendingPoint);
+  elements.actionCopyToListButton.addEventListener("click", () => transferSelectedPointsToActiveList("copy"));
+  elements.actionMoveToListButton.addEventListener("click", () => transferSelectedPointsToActiveList("move"));
+  elements.actionShareSelectedButton.addEventListener("click", () => void shareSelectedPointsLink());
   elements.actionRestoreButton.addEventListener("click", restoreLastDeleted);
   elements.actionEditButton.addEventListener("click", startEditingSelectedPoint);
   elements.actionMapButton.addEventListener("click", openSelectedPointInPreferredMap);
