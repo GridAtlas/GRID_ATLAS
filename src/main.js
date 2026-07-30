@@ -1225,9 +1225,7 @@ function transferableSelectedPoints(destinationList = null) {
 }
 
 function beginPointTransfer(mode) {
-  const candidates = transferableSelectedPoints().filter(({ sourceList }) => (
-    state.pointLists.some((list) => list.editable && list !== sourceList)
-  ));
+  const candidates = transferableSelectedPoints();
   if (candidates.length === 0) {
     showAppToast(t("list.transferNoSelection"), { error: true });
     render();
@@ -2256,9 +2254,7 @@ function renderActionButtons() {
   const deletablePointCount = pointIds.filter((id) => id !== CURRENT_LOCATION_ID && pointEditable(id)).length;
   const observationSelected = isLoadedObservationSelected();
   const canDelete = deletablePointCount + linkIds.length > 0 || observationSelected;
-  const transferablePointCount = transferableSelectedPoints()
-    .filter(({ sourceList }) => state.pointLists.some((list) => list.editable && list !== sourceList))
-    .length;
+  const transferablePointCount = transferableSelectedPoints().length;
 
   const canOpenRegisterPage = !hasPendingPoint && state.selection.length === 0 && mobilePageUiActive();
   elements.actionRegisterButton.disabled = !hasPendingPoint && !canOpenRegisterPage;
