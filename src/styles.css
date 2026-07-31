@@ -55,6 +55,34 @@
   --on-route: #021006;
 }
 
+:root[data-theme="atlas-paper"] {
+  color-scheme: light;
+  --bg: #f5efe3;
+  --surface: #fffaf0;
+  --surface-strong: #ebe3d2;
+  --line: #cbbfaa;
+  --line-strong: #6f8795;
+  --text: #24313a;
+  --muted: #65727b;
+  --accent: #2563eb;
+  --accent-strong: #173d8a;
+  --teal: #0f8b8d;
+  --green: #3f7d46;
+  --danger: #b64141;
+  --shadow: 0 10px 24px rgb(36 49 58 / 0.12);
+  --field-bg: #fffdf6;
+  --canvas-bg: #f8f3e8;
+  --status-bg: rgb(255 250 240 / 0.92);
+  --active-bg: rgb(37 99 235 / 0.12);
+  --focus-ring: rgb(37 99 235 / 0.28);
+  --brand-glow: 0 0 0 5px rgb(37 99 235 / 0.12);
+  --route: #7c5eb6;
+  --route-soft: rgb(124 94 182 / 0.1);
+  --route-text: #4f3b80;
+  --on-accent: #ffffff;
+  --on-route: #ffffff;
+}
+
 * {
   box-sizing: border-box;
 }

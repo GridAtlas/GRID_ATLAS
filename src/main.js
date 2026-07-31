@@ -39,6 +39,7 @@ const CLOUD_ACCESS_TOKEN_KEY = "grid-atlas-cloud-access-token";
 const CLOUD_PRODUCTION_API_URL = "https://grid-atlas-cloud-staging.kazki1981.workers.dev";
 const PASTEL_THEME = "pastel";
 const RETRO_THEME = "retro";
+const ATLAS_PAPER_THEME = "atlas-paper";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
 const METRIC_UNIT = "metric";
@@ -307,6 +308,32 @@ const CANVAS_PALETTES = {
     badgeText: "#d6ffe0",
     badgeStartFill: "#2cff64",
     badgeStartText: "#020806"
+  },
+  "atlas-paper": {
+    gridMinor: "#d9d2c2",
+    gridMajor: "#9eb3bd",
+    link: "#0f8b8d",
+    linkSelected: "#2563eb",
+    route: "#7c5eb6",
+    target: "#dc2626",
+    targetSoft: "rgb(220 38 38 / 0.16)",
+    targetGuide: "rgb(36 49 58 / 0.58)",
+    targetFill: "#dc2626",
+    observationBaseline: "rgb(135 104 94 / 0.32)",
+    observationTrail: "#b45309",
+    currentFill: "#f59e0b",
+    pendingFill: "rgb(37 99 235 / 0.16)",
+    pendingStroke: "rgb(37 99 235 / 0.58)",
+    pointFill: "#2563eb",
+    pointBaseStroke: "#fffaf0",
+    routeStart: "#0f766e",
+    routeSelected: "#7c3aed",
+    pendingPointStroke: "#0f8b8d",
+    selected: "#111827",
+    badgeFill: "#fffaf0",
+    badgeText: "#24313a",
+    badgeStartFill: "#2563eb",
+    badgeStartText: "#ffffff"
   }
 };
 
@@ -324,16 +351,17 @@ const TRANSLATIONS = {
     "settings.mapApple": "Appleマップ",
     "settings.themeRetro": "レトロ",
     "settings.themePastel": "パステル",
+    "settings.themeAtlasPaper": "アトラスペーパー",
     "settings.languageJa": "日本語",
     "settings.languageEn": "English",
     "settings.unitsMetric": "km",
     "settings.unitsImperial": "mile",
     "systemUpdate.action": "システム更新",
-    "systemUpdate.notice": "最新版を確認し、更新時は自動で再読み込みします。",
+    "systemUpdate.notice": "最新版を確認し、アプリを再読み込みします。",
     "systemUpdate.checking": "更新を確認しています…",
     "systemUpdate.applying": "更新を適用しています…",
     "systemUpdate.latest": "最新版です。",
-    "systemUpdate.reloading": "更新しました。再読み込みします…",
+    "systemUpdate.reloading": "確認しました。再読み込みします…",
     "systemUpdate.unsupported": "この環境ではシステム更新を利用できません。",
     "systemUpdate.failed": "更新を確認できませんでした。通信状態を確認してください。",
     "edition.web": "WEB版",
@@ -528,16 +556,17 @@ const TRANSLATIONS = {
     "settings.mapApple": "Apple Maps",
     "settings.themeRetro": "Retro",
     "settings.themePastel": "Pastel",
+    "settings.themeAtlasPaper": "Atlas Paper",
     "settings.languageJa": "Japanese",
     "settings.languageEn": "English",
     "settings.unitsMetric": "km",
     "settings.unitsImperial": "mile",
     "systemUpdate.action": "System Update",
-    "systemUpdate.notice": "Checks for the latest version and reloads automatically when updated.",
+    "systemUpdate.notice": "Checks for the latest version and reloads the app.",
     "systemUpdate.checking": "Checking for updates…",
     "systemUpdate.applying": "Applying the update…",
     "systemUpdate.latest": "You are up to date.",
-    "systemUpdate.reloading": "Updated. Reloading…",
+    "systemUpdate.reloading": "Checked. Reloading…",
     "systemUpdate.unsupported": "System updates are unavailable in this environment.",
     "systemUpdate.failed": "Could not check for updates. Check your connection.",
     "edition.web": "Web",
@@ -872,7 +901,8 @@ function toggleSettingsMenu() {
   setSettingsMenuOpen(elements.settingsPanel.hidden);
 }
 function currentTheme() {
-  return document.documentElement.dataset.theme === RETRO_THEME ? RETRO_THEME : PASTEL_THEME;
+  const theme = document.documentElement.dataset.theme;
+  return theme === RETRO_THEME || theme === ATLAS_PAPER_THEME ? theme : PASTEL_THEME;
 }
 
 function canvasPalette() {
@@ -885,14 +915,14 @@ function loadTheme() {
     saved = localStorage.getItem(THEME_KEY);
   } catch {}
 
-  setTheme(saved === PASTEL_THEME || saved === "light" ? PASTEL_THEME : RETRO_THEME, { persist: false });
+  setTheme(saved === ATLAS_PAPER_THEME || saved === "paper" ? ATLAS_PAPER_THEME : saved === PASTEL_THEME || saved === "light" ? PASTEL_THEME : RETRO_THEME, { persist: false });
 }
 
 function setTheme(theme, options = {}) {
-  const normalized = theme === RETRO_THEME ? RETRO_THEME : PASTEL_THEME;
-  const isRetro = normalized === RETRO_THEME;
+  const normalized = theme === ATLAS_PAPER_THEME || theme === "paper" ? ATLAS_PAPER_THEME : theme === RETRO_THEME ? RETRO_THEME : PASTEL_THEME;
   document.documentElement.dataset.theme = normalized;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", isRetro ? "#020806" : "#d86f9b");
+  const themeColor = normalized === RETRO_THEME ? "#020806" : normalized === ATLAS_PAPER_THEME ? "#f5efe3" : "#d86f9b";
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColor);
 
   if (options.persist !== false) {
     localStorage.setItem(THEME_KEY, normalized);
@@ -6109,6 +6139,22 @@ function setSystemUpdateStatus(key) {
   }
 }
 
+async function clearGridAtlasStaticCaches() {
+  if (!("caches" in window)) {
+    return;
+  }
+
+  const cacheKeys = await caches.keys();
+  await Promise.all(cacheKeys
+    .filter((key) => key.startsWith("grid-atlas-static-"))
+    .map((key) => caches.delete(key)));
+}
+
+function reloadAfterSystemUpdateCheck() {
+  setSystemUpdateStatus("systemUpdate.reloading");
+  window.location.reload();
+}
+
 function waitForServiceWorkerActivation(worker) {
   return new Promise((resolve, reject) => {
     let timeoutId = window.setTimeout(() => {
@@ -6172,16 +6218,15 @@ async function requestSystemUpdate() {
     }
 
     updateWorker = registration.waiting ?? registration.installing ?? updateWorker;
-    if (!updateWorker) {
-      setSystemUpdateStatus("systemUpdate.latest");
-      return;
+    if (updateWorker) {
+      setSystemUpdateStatus("systemUpdate.applying");
+      await waitForServiceWorkerActivation(updateWorker);
+    } else {
+      await clearGridAtlasStaticCaches();
     }
 
-    setSystemUpdateStatus("systemUpdate.applying");
-    await waitForServiceWorkerActivation(updateWorker);
     reloadStarted = true;
-    setSystemUpdateStatus("systemUpdate.reloading");
-    window.location.reload();
+    reloadAfterSystemUpdateCheck();
   } catch {
     setSystemUpdateStatus("systemUpdate.failed");
   } finally {
@@ -6198,12 +6243,23 @@ function registerServiceWorker() {
 
   const reloadOnControllerChange = Boolean(navigator.serviceWorker.controller);
   let reloadingForServiceWorker = false;
-  navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (!reloadOnControllerChange || reloadingForServiceWorker) {
+  const reloadForServiceWorker = () => {
+    if (reloadingForServiceWorker) {
       return;
     }
     reloadingForServiceWorker = true;
     window.location.reload();
+  };
+
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (reloadOnControllerChange) {
+      reloadForServiceWorker();
+    }
+  });
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    if (event.data?.type === "GRID_ATLAS_UPDATE_ACTIVATED") {
+      reloadForServiceWorker();
+    }
   });
 
   window.addEventListener("load", () => {
