@@ -3715,6 +3715,24 @@ function removeLocalListForStorageChange(listId) {
   render();
 }
 
+function restoreLocalPointMedia(targetList, localList) {
+  if (!targetList || !localList) return targetList;
+  const localPointsById = new Map(localList.points.map((point) => [point.id, point]));
+  return {
+    ...targetList,
+    points: targetList.points.map((point) => {
+      const localPoint = localPointsById.get(point.id);
+      if (!localPoint) return point;
+      return {
+        ...point,
+        photo: localPoint.photo || "",
+        photoName: localPoint.photoName || "",
+        photoAssetId: localPoint.photoAssetId || ""
+      };
+    })
+  };
+}
+
 async function moveListToCloud(storageId, options = {}) {
   const entry = findStorageListEntry(storageId);
   if (!entry?.local) {
@@ -3743,18 +3761,16 @@ async function moveListToCloud(storageId, options = {}) {
     return;
   }
 
-  const photoCount = list.points.filter((point) => Boolean(point.photo)).length;
-  if (photoCount > 0) {
-    setCloudStatus(cloudText(
-      `写真${photoCount}件を含むためクラウドへ移動できません。写真を残したまま移動できる対応をお待ちください。`,
-      `This list contains ${photoCount} photo(s) and cannot be moved to cloud storage yet.`
-    ), { error: true });
-    renderStorageLists();
-    return;
-  }
+  const photoCount = list.points.filter((point) => Boolean(point.photo || point.photoAssetId)).length;
   if (options.confirm !== false && !window.confirm(cloudText(
-    `${list.name || "地点リスト"}の保存場所をクラウドへ変更しますか？\n地点数: ${list.points.length}\n完了後、端末側の保存データを削除します。`,
-    `Move ${list.name || "Point list"} to cloud storage?\nPoints: ${list.points.length}\nThe device copy will be removed after upload.`
+    `${list.name || "地点リスト"}の保存場所をクラウドへ変更しますか？\n地点数: ${list.points.length}`
+      + (photoCount > 0
+        ? `\n写真${photoCount}件は端末側にも残し、クラウドには地点情報とコメントを保存します。`
+        : "\n完了後、端末側の保存データを削除します。"),
+    `Move ${list.name || "Point list"} to cloud storage?\nPoints: ${list.points.length}`
+      + (photoCount > 0
+        ? `\nThe ${photoCount} photo(s) will remain on this device; cloud storage will contain points and comments.`
+        : "\nThe device copy will be removed after upload.")
   ))) {
     renderStorageLists();
     return;
@@ -3779,7 +3795,14 @@ async function moveListToCloud(storageId, options = {}) {
     }
     if (list.visible === false) state.cloud.hiddenListIds.add(targetCloudId);
     else state.cloud.hiddenListIds.delete(targetCloudId);
-    removeLocalListForStorageChange(list.id);
+    if (photoCount > 0) {
+      list.cloudId = targetCloudId;
+      list.cloudRevision = null;
+      list.cloudUpdatedAt = payload.list.updatedAt;
+      persistWorkspace();
+    } else {
+      removeLocalListForStorageChange(list.id);
+    }
     moved = true;
   } catch (error) {
     setCloudStatus(cloudErrorMessage(error), { error: true });
@@ -3791,7 +3814,9 @@ async function moveListToCloud(storageId, options = {}) {
     await refreshCloudLists({ quiet: true });
     setCloudStatus(oldCloudDeleteFailed
       ? cloudText("クラウドへ移動しました。以前のクラウドコピーは削除できませんでした。", "Moved to cloud. An older cloud copy could not be removed.")
-      : cloudText("保存場所をクラウドへ変更しました", "Moved list storage to cloud"),
+      : photoCount > 0
+        ? cloudText("クラウドへ保存しました。写真を保持するため端末側のコピーも残しています。", "Saved to cloud. The device copy remains to preserve its photos.")
+        : cloudText("保存場所をクラウドへ変更しました", "Moved list storage to cloud"),
     { error: oldCloudDeleteFailed });
   }
 }
@@ -3830,7 +3855,8 @@ async function moveListToDevice(storageId, options = {}) {
     const existingLocal = currentEntry?.local ?? null;
     const localId = existingLocal?.id || uniqueLocalListId(result.list.list.id);
     const imported = cloudPayloadToPointList(result.list, { localId, revision: result.revision, editable: true });
-    imported.visible = existingLocal
+    const restored = restoreLocalPointMedia(imported, existingLocal);
+    restored.visible = existingLocal
       ? existingLocal.visible !== false
       : cloudListVisible(entry.cloud.id);
 
@@ -3838,7 +3864,7 @@ async function moveListToDevice(storageId, options = {}) {
     const otherPointIds = new Set(state.pointLists
       .filter((list) => list.id !== existingLocal?.id)
       .flatMap((list) => list.points.map((point) => point.id)));
-    const normalized = normalizePointList(imported, otherPointIds, imported.name);
+    const normalized = normalizePointList(restored, otherPointIds, restored.name);
     if (existingLocal) {
       const index = state.pointLists.findIndex((list) => list.id === existingLocal.id);
       state.pointLists[index] = normalized;
