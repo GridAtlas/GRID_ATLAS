@@ -700,6 +700,12 @@ textarea:focus-visible {
 .point-form {
   gap: 12px;
 }
+.point-source-heading {
+  margin-bottom: -4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
 
 label span,
 dt,

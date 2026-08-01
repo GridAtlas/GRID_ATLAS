@@ -414,7 +414,8 @@ const TRANSLATIONS = {
     "action.restore": "復旧",
     "action.edit": "編集",
     "action.map": "地図",
-    "button.clipboard": "クリップ読取",
+    "section.pointSource": "地点取得",
+    "button.clipboard": "クリップボード",
     "button.currentLocation": "現在地",
     "import.drop.title": ".gridatlasを読み込み",
     "import.drop.description": "この画面にドロップしてください",
@@ -629,7 +630,8 @@ const TRANSLATIONS = {
     "action.restore": "Restore",
     "action.edit": "Edit",
     "action.map": "Map",
-    "button.clipboard": "Read Clipboard",
+    "section.pointSource": "Get location",
+    "button.clipboard": "Clipboard",
     "button.currentLocation": "Current",
     "import.drop.title": "Import .gridatlas",
     "import.drop.description": "Drop it anywhere on this screen",
@@ -5442,6 +5444,18 @@ function removePointer(event, options = {}) {
   }
 }
 
+function resetPointFormAfterSubmit() {
+  elements.pointForm.reset();
+  elements.shareImportStatus.value = "";
+  elements.shareImportStatus.textContent = "";
+  state.pendingGeo = null;
+  state.editingPointId = null;
+  state.pendingLinkPointId = null;
+  state.mode = "inspect";
+  if (mobilePageUiActive()) {
+    setMobilePage("map");
+  }
+}
 async function submitPoint(event) {
   event.preventDefault();
 
@@ -5491,11 +5505,7 @@ async function submitPoint(event) {
 
     state.selection = [{ type: "point", id: editedPoint.id }];
     normalizeSelection();
-    state.pendingGeo = null;
-    state.editingPointId = null;
-    state.mode = "inspect";
-    elements.pointForm.reset();
-    elements.shareImportStatus.value = "更新しました";
+    resetPointFormAfterSubmit();
     persistWorkspace();
     syncCanvasSize();
     render();
@@ -5521,9 +5531,7 @@ async function submitPoint(event) {
   refreshVisiblePoints();
   state.selection = [{ type: "point", id: point.id }];
   normalizeSelection();
-  state.pendingGeo = null;
-  state.mode = "inspect";
-  elements.pointForm.reset();
+  resetPointFormAfterSubmit();
   persistWorkspace();
   syncCanvasSize();
   render();
@@ -6076,7 +6084,7 @@ function applySharedTextToForm(text, successMessage, failureMessage) {
     return false;
   }
 
-  applySharedLocationToForm(result, successMessage);
+  applySharedLocationToForm(result, successMessage, { includeNote: false });
   return true;
 }
 
@@ -6108,7 +6116,7 @@ function handleIncomingShare() {
   applySharedLocationToForm(result, "共有地点を読み取りました");
 }
 
-function applySharedLocationToForm(result, message) {
+function applySharedLocationToForm(result, message, options = {}) {
   pauseLocationFollowForManualView();
   const geo = normalizeGeo({ lat: result.lat, lng: result.lng });
   const projected = projectLatLng(geo.lat, geo.lng);
@@ -6124,7 +6132,7 @@ function applySharedLocationToForm(result, message) {
     elements.pointTitle.value = result.title.slice(0, 80);
   }
 
-  if (result.note && !elements.pointNote.value.trim()) {
+  if (options.includeNote !== false && result.note && !elements.pointNote.value.trim()) {
     elements.pointNote.value = result.note;
   }
 
