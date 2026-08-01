@@ -3329,7 +3329,7 @@ function createStorageListRow(entry) {
   gridVisibility.type = "button";
   gridVisibility.className = "storage-grid-button";
   gridVisibility.classList.toggle("is-active", visible);
-  gridVisibility.append(createIcon("grid"));
+  gridVisibility.append(createIcon(visible ? "grid-filled" : "grid"));
   gridVisibility.title = t(visible ? "list.visible" : "list.hidden");
   gridVisibility.setAttribute("aria-pressed", String(visible));
   gridVisibility.setAttribute("aria-label", cloudText(
@@ -3385,8 +3385,8 @@ function createStorageListRow(entry) {
   const destinationButton = document.createElement("button");
   destinationButton.type = "button";
   destinationButton.className = "storage-destination-button";
-  destinationButton.append(createIcon("home"));
   const isDestination = entry.local?.id === state.activePointListId;
+  destinationButton.append(createIcon(isDestination ? "home-filled" : "home"));
   destinationButton.classList.toggle("is-active", isDestination);
   destinationButton.title = cloudText(
     isDestination ? "登録先を解除" : "登録先に指定",

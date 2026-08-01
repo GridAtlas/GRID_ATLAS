@@ -1153,6 +1153,27 @@ textarea {
   color: var(--accent-strong);
 }
 
+.storage-grid-button,
+.storage-list-row-actions button {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.storage-grid-button:hover:not(:disabled),
+.storage-list-row-actions button:hover:not(:disabled) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent-strong);
+}
+
+.storage-grid-button.is-active,
+.storage-destination-button.is-active {
+  border: 0;
+  background: transparent;
+  color: var(--accent-strong);
+}
 .list-management-heading {
   align-items: flex-start;
   flex-wrap: wrap;
