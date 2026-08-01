@@ -46,8 +46,6 @@ const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
 const POINTER_MOVE_THRESHOLD = 3;
-const STORAGE_LIST_LONG_PRESS_MS = 560;
-const STORAGE_LIST_LONG_PRESS_MOVE_THRESHOLD = 8;
 const CURRENT_LOCATION_ID = "__current_location__";
 const LOADED_OBSERVATION_PREFIX = "__loaded_observation__";
 const DEFAULT_POINT_LIST_ID = "local";
@@ -506,7 +504,6 @@ const TRANSLATIONS = {
     "list.newPrompt": "新しいリストの名前",
     "list.created": "新しいリストを作成し、登録先にしました",
     "list.active": "登録先",
-    "list.longPressDestination": "長押しで登録先に指定",
     "list.copy": "コピー",
     "list.share": "共有リンク",
     "list.shareDialogTitle": "共有リンク",
@@ -722,7 +719,6 @@ const TRANSLATIONS = {
     "list.newPrompt": "Name the new list",
     "list.created": "Created a new list and set it as the destination",
     "list.active": "Destination",
-    "list.longPressDestination": "Long-press to set as destination",
     "list.copy": "Copy",
     "list.share": "Share link",
     "list.shareDialogTitle": "Share link",
@@ -1027,10 +1023,12 @@ function applyWorkspace(workspace) {
     list.editable = true;
   }
   ensurePointLists();
-  state.activePointListId = typeof workspace.activePointListId === "string"
-    && state.pointLists.some((list) => list.id === workspace.activePointListId && list.editable)
-    ? workspace.activePointListId
-    : DEFAULT_POINT_LIST_ID;
+  state.activePointListId = workspace.activePointListId === null
+    ? null
+    : typeof workspace.activePointListId === "string"
+      && state.pointLists.some((list) => list.id === workspace.activePointListId && list.editable)
+      ? workspace.activePointListId
+      : DEFAULT_POINT_LIST_ID;
   refreshVisiblePoints();
   state.links = Array.isArray(workspace.links)
     ? workspace.links.filter((link) => validStoredLinkEndpointId(link.a) && validStoredLinkEndpointId(link.b))
@@ -1205,6 +1203,14 @@ function setActivePointList(listId) {
   const list = state.pointLists.find((item) => item.id === listId && item.editable);
   if (!list || state.activePointListId === list.id) return;
   state.activePointListId = list.id;
+  persistWorkspace();
+  render();
+}
+
+function toggleActivePointList(listId) {
+  const list = state.pointLists.find((item) => item.id === listId && item.editable);
+  if (!list) return;
+  state.activePointListId = state.activePointListId === list.id ? null : list.id;
   persistWorkspace();
   render();
 }
@@ -3276,46 +3282,12 @@ function clearStorageListSelection() {
   renderStorageLists();
 }
 
-function setupStorageListRowInteractions(row, entry) {
-  let longPressTimer = 0;
-  let pointerStart = null;
-  let longPressTriggered = false;
-
+function setupStorageListRowSelection(row, entry) {
   const isRowControl = (target) => target instanceof Element
     && Boolean(target.closest("button, input, select, textarea, a"));
-  const clearLongPress = () => {
-    if (longPressTimer) window.clearTimeout(longPressTimer);
-    longPressTimer = 0;
-    pointerStart = null;
-  };
 
-  row.addEventListener("pointerdown", (event) => {
-    if (isRowControl(event.target) || (typeof event.button === "number" && event.button !== 0)) return;
-    pointerStart = { x: event.clientX, y: event.clientY };
-    longPressTriggered = false;
-    longPressTimer = window.setTimeout(() => {
-      longPressTimer = 0;
-      pointerStart = null;
-      if (!entry.local?.editable) return;
-      longPressTriggered = true;
-      setActivePointList(entry.local.id);
-    }, STORAGE_LIST_LONG_PRESS_MS);
-  });
-  row.addEventListener("pointermove", (event) => {
-    if (!pointerStart) return;
-    if (Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y)
-      > STORAGE_LIST_LONG_PRESS_MOVE_THRESHOLD) {
-      clearLongPress();
-    }
-  });
-  row.addEventListener("pointerup", clearLongPress);
-  row.addEventListener("pointercancel", clearLongPress);
   row.addEventListener("click", (event) => {
     if (isRowControl(event.target)) return;
-    if (longPressTriggered) {
-      longPressTriggered = false;
-      return;
-    }
     setStorageListSelected(entry.storageId, !state.selectedStorageListIds.has(entry.storageId));
   });
   row.addEventListener("keydown", (event) => {
@@ -3323,11 +3295,7 @@ function setupStorageListRowInteractions(row, entry) {
     event.preventDefault();
     setStorageListSelected(entry.storageId, !state.selectedStorageListIds.has(entry.storageId));
   });
-  row.addEventListener("contextmenu", (event) => {
-    if (!isRowControl(event.target)) event.preventDefault();
-  });
 }
-
 function createStorageListRow(entry) {
   const row = document.createElement("div");
   row.className = "storage-list-row";
@@ -3361,12 +3329,6 @@ function createStorageListRow(entry) {
     setCloudStatus(t(nextVisible ? "list.visible" : "list.hidden"), { menu: false });
   });
 
-  const destination = document.createElement("span");
-  destination.className = "storage-list-destination";
-  destination.hidden = entry.local?.id !== state.activePointListId;
-  destination.title = t("list.active");
-  destination.setAttribute("role", "img");
-  destination.setAttribute("aria-label", t("list.active"));
 
   const name = document.createElement("div");
   name.className = "point-list-name point-list-select";
@@ -3400,10 +3362,30 @@ function createStorageListRow(entry) {
   rename.disabled = state.cloud.busy;
   rename.addEventListener("click", () => void renameStorageList(entry.storageId));
 
-  rowActions.append(share, rename);
-  row.append(gridVisibility, destination, name, rowActions);
-  row.title = entry.local?.editable ? t("list.longPressDestination") : listName;
-  setupStorageListRowInteractions(row, entry);
+  const destinationButton = document.createElement("button");
+  destinationButton.type = "button";
+  destinationButton.className = "storage-destination-button";
+  const isDestination = entry.local?.id === state.activePointListId;
+  destinationButton.classList.toggle("is-active", isDestination);
+  destinationButton.title = cloudText(
+    isDestination ? "登録先を解除" : "登録先に指定",
+    isDestination ? "Unset as destination" : "Set as destination"
+  );
+  destinationButton.setAttribute("aria-pressed", String(isDestination));
+  destinationButton.setAttribute("aria-label", cloudText(
+    isDestination
+      ? "「" + listName + "」を登録先から解除"
+      : "「" + listName + "」を登録先に指定",
+    isDestination
+      ? "Unset “" + listName + "” as the destination"
+      : "Set “" + listName + "” as the destination"
+  ));
+  destinationButton.disabled = !entry.local?.editable || state.cloud.busy;
+  destinationButton.addEventListener("click", () => toggleActivePointList(entry.local.id));
+
+  rowActions.append(share, rename, destinationButton);
+  row.append(gridVisibility, name, rowActions);
+  setupStorageListRowSelection(row, entry);
   return row;
 }
 
