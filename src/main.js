@@ -201,6 +201,18 @@ const elements = {
   clearButton: document.querySelector("#clearButton")
 };
 
+const ICON_NAMESPACE = "http://www.w3.org/2000/svg";
+function createIcon(name) {
+  const icon = document.createElementNS(ICON_NAMESPACE, "svg");
+  icon.classList.add("ui-icon");
+  icon.setAttribute("aria-hidden", "true");
+  const use = document.createElementNS(ICON_NAMESPACE, "use");
+  const href = "#icon-" + name;
+  use.setAttribute("href", href);
+  use.setAttributeNS("http://www.w3.org/1999/xlink", "href", href);
+  icon.append(use);
+  return icon;
+}
 const state = {
   version: 3,
   language: JA_LANGUAGE,
@@ -500,7 +512,7 @@ const TRANSLATIONS = {
     "storage.move": "移動",
     "storage.moveDevice": "端末に移動",
     "storage.connectFirst": "先にクラウドへ接続してください",
-    "list.new": "＋ 新規作成",
+    "list.new": "新規作成",
     "list.newPrompt": "新しいリストの名前",
     "list.created": "新しいリストを作成し、登録先にしました",
     "list.active": "登録先",
@@ -715,7 +727,7 @@ const TRANSLATIONS = {
     "storage.move": "Move",
     "storage.moveDevice": "Move to device",
     "storage.connectFirst": "Connect to the cloud first",
-    "list.new": "+ New",
+    "list.new": "New list",
     "list.newPrompt": "Name the new list",
     "list.created": "Created a new list and set it as the destination",
     "list.active": "Destination",
@@ -3108,7 +3120,7 @@ function renderAnalysis() {
     remove.type = "button";
     remove.className = "danger-button";
     remove.title = "削除";
-    remove.textContent = "×";
+    remove.append(createIcon("trash"));
     remove.addEventListener("click", () => {
       state.links = state.links.filter((link) => link.id !== item.link.id);
       removeSelectionEntry("link", item.link.id);
@@ -3122,20 +3134,19 @@ function renderAnalysis() {
 }
 
 
-function pointRoleMarker(point) {
-  const markers = [];
+function pointRoleIcons(point) {
+  const icons = [];
   if (point.id === CURRENT_LOCATION_ID) {
-    markers.push("🟡");
+    icons.push("current");
   }
   if (point.id === state.routeStartPointId) {
-    markers.push("🔵");
+    icons.push("start");
   }
   if (point.id === state.targetPointId) {
-    markers.push("🟠");
+    icons.push("target");
   }
-  return markers.length > 0 ? `${markers.join("")} ` : "";
+  return icons;
 }
-
 function pointRouteOrder(pointId) {
   const index = state.routeResult?.pointIds?.indexOf(pointId) ?? -1;
   return index >= 0 ? index : null;
@@ -3188,11 +3199,17 @@ function renderPointIndex() {
     const name = document.createElement("span");
     name.className = "point-index-name";
     const title = document.createElement("strong");
-    title.textContent = `${pointRoleMarker(point)}${point.title || "Point"}`;
+    for (const iconName of pointRoleIcons(point)) {
+      title.append(createIcon(iconName));
+    }
+    title.append(document.createTextNode(point.title || "Point"));
     const meta = document.createElement("span");
-    meta.textContent = isCloud
-      ? `☁ ${list?.name || "地点リスト"}`
-      : list?.name || t("label.gps");
+    if (isCloud) {
+      meta.append(createIcon("cloud"));
+      meta.append(document.createTextNode(list?.name || "地点リスト"));
+    } else {
+      meta.textContent = list?.name || t("label.gps");
+    }
     name.append(title, meta);
 
     const distance = document.createElement("span");
@@ -3312,7 +3329,7 @@ function createStorageListRow(entry) {
   gridVisibility.type = "button";
   gridVisibility.className = "storage-grid-button";
   gridVisibility.classList.toggle("is-active", visible);
-  gridVisibility.textContent = "▦";
+  gridVisibility.append(createIcon("grid"));
   gridVisibility.title = t(visible ? "list.visible" : "list.hidden");
   gridVisibility.setAttribute("aria-pressed", String(visible));
   gridVisibility.setAttribute("aria-label", cloudText(
@@ -3334,7 +3351,10 @@ function createStorageListRow(entry) {
   name.className = "point-list-name point-list-select";
   name.title = listName;
   const title = document.createElement("strong");
-  title.textContent = `${entry.cloud ? "☁ " : ""}${listName}`;
+  if (entry.cloud) {
+    title.append(createIcon("cloud"));
+  }
+  title.append(document.createTextNode(listName));
   const meta = document.createElement("span");
   const pointCount = entry.local?.points.length ?? entry.preview?.points.length ?? 0;
   const metaParts = [`${pointCount}${t("label.points")}`];
@@ -3347,7 +3367,7 @@ function createStorageListRow(entry) {
   const share = document.createElement("button");
   share.type = "button";
   share.className = "storage-share-button";
-  share.textContent = "🔗";
+  share.append(createIcon("share"));
   share.title = t("list.share");
   share.setAttribute("aria-label", cloudText(`「${listName}」の共有リンクを作成`, `Create a share link for “${listName}”`));
   share.disabled = state.cloud.busy || (!entry.local && !entry.preview);
@@ -3356,7 +3376,7 @@ function createStorageListRow(entry) {
   const rename = document.createElement("button");
   rename.type = "button";
   rename.className = "storage-rename-button";
-  rename.textContent = "✎";
+  rename.append(createIcon("edit"));
   rename.title = t("list.rename");
   rename.setAttribute("aria-label", cloudText(`「${listName}」の名前を変更`, `Rename “${listName}”`));
   rename.disabled = state.cloud.busy;
@@ -3365,6 +3385,7 @@ function createStorageListRow(entry) {
   const destinationButton = document.createElement("button");
   destinationButton.type = "button";
   destinationButton.className = "storage-destination-button";
+  destinationButton.append(createIcon("home"));
   const isDestination = entry.local?.id === state.activePointListId;
   destinationButton.classList.toggle("is-active", isDestination);
   destinationButton.title = cloudText(

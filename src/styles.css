@@ -126,6 +126,25 @@ button {
   }
 }
 
+.icon-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.ui-icon {
+  width: 1.1em;
+  height: 1.1em;
+  display: block;
+  flex: 0 0 auto;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
@@ -173,6 +192,11 @@ textarea:focus-visible {
   font-size: 20px;
   line-height: 1;
   font-weight: 800;
+}
+
+.settings-menu-button .ui-icon {
+  width: 19px;
+  height: 19px;
 }
 
 .settings-menu-button[aria-expanded="true"] {
@@ -495,11 +519,17 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
-.action-button span:first-child {
-  font-size: 18px;
-  line-height: 1;
+.action-button .ui-icon {
+  width: 17px;
+  height: 17px;
 }
 
+
+.compact-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 
 .action-button:disabled {
   cursor: default;
@@ -568,6 +598,11 @@ textarea:focus-visible {
   padding: 0;
   font-size: 18px;
   box-shadow: var(--shadow);
+}
+
+.icon-button .ui-icon {
+  width: 20px;
+  height: 20px;
 }
 
 .icon-button.is-active,
@@ -948,6 +983,17 @@ textarea {
   white-space: nowrap;
 }
 
+.point-list-name strong {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.point-list-name strong .ui-icon {
+  width: 13px;
+  height: 13px;
+}
+
 .point-list-name span {
   color: var(--muted);
   font-size: 12px;
@@ -1027,14 +1073,8 @@ textarea {
   color: var(--muted);
 }
 
-.storage-destination-button::before {
-  content: "";
-  width: 17px;
-  height: 17px;
-  display: block;
-  background: currentColor;
-  clip-path: polygon(50% 0, 100% 42%, 86% 42%, 86% 100%, 14% 100%, 14% 42%, 0 42%);
-}
+
+
 
 .storage-destination-button.is-active {
   border-color: var(--accent);
@@ -1096,6 +1136,11 @@ textarea {
   width: 32px;
   padding: 0;
   font-size: 17px;
+}
+
+.storage-list-row-actions .ui-icon {
+  width: 17px;
+  height: 17px;
 }
 
 .storage-grid-button {
@@ -1303,6 +1348,11 @@ textarea {
   font-weight: 900;
 }
 
+.gridatlas-drop-icon .ui-icon {
+  width: 32px;
+  height: 32px;
+}
+
 @media (max-width: 560px) {
   .cloud-config-grid {
     grid-template-columns: 1fr;
@@ -1388,6 +1438,28 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.point-index-name strong {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.point-index-name strong .ui-icon {
+  width: 13px;
+  height: 13px;
+}
+
+.point-index-name span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.point-index-name span .ui-icon {
+  width: 12px;
+  height: 12px;
 }
 
 .point-index-name span,
@@ -1652,6 +1724,13 @@ textarea {
   height: 36px;
   padding: 0;
   font-size: 20px;
+  display: grid;
+  place-items: center;
+}
+
+.share-link-close .ui-icon {
+  width: 18px;
+  height: 18px;
 }
 
 .share-link-summary {
