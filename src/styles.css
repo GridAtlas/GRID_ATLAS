@@ -55,7 +55,7 @@
   --on-route: #021006;
 }
 
-:root[data-theme="atlas-paper"] {
+:root[data-theme="basic"] {
   color-scheme: light;
   --bg: #f5efe3;
   --surface: #fffaf0;
@@ -554,8 +554,8 @@ textarea:focus-visible {
 
 .canvas-tools {
   position: absolute;
-  top: 14px;
-  left: 14px;
+  right: 14px;
+  bottom: 14px;
   display: grid;
   grid-template-columns: repeat(4, 42px);
   gap: 8px;
@@ -999,24 +999,34 @@ textarea {
   min-width: 0;
   min-height: 48px;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
   padding: 5px 7px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--field-bg);
+  cursor: pointer;
+  touch-action: pan-y;
 }
 
 .storage-list-row.is-selected {
+  border-color: var(--accent);
   background: var(--active-bg);
 }
 
-.storage-list-row > input {
+.storage-list-row:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+.storage-list-destination {
   width: 18px;
-  height: 18px;
-  margin: 0;
-  accent-color: var(--accent);
+  height: 17px;
+  display: block;
+  flex: none;
+  clip-path: polygon(0 0, 100% 0, 100% 67%, 50% 100%, 0 67%);
+  background: var(--accent-strong);
 }
 
 .point-list-select {

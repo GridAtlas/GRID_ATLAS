@@ -39,13 +39,15 @@ const CLOUD_ACCESS_TOKEN_KEY = "grid-atlas-cloud-access-token";
 const CLOUD_PRODUCTION_API_URL = "https://grid-atlas-cloud-staging.kazki1981.workers.dev";
 const PASTEL_THEME = "pastel";
 const RETRO_THEME = "retro";
-const ATLAS_PAPER_THEME = "atlas-paper";
+const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
 const POINTER_MOVE_THRESHOLD = 3;
+const STORAGE_LIST_LONG_PRESS_MS = 560;
+const STORAGE_LIST_LONG_PRESS_MOVE_THRESHOLD = 8;
 const CURRENT_LOCATION_ID = "__current_location__";
 const LOADED_OBSERVATION_PREFIX = "__loaded_observation__";
 const DEFAULT_POINT_LIST_ID = "local";
@@ -319,7 +321,7 @@ const CANVAS_PALETTES = {
     badgeStartFill: "#2cff64",
     badgeStartText: "#020806"
   },
-  "atlas-paper": {
+  basic: {
     gridMinor: "#d9d2c2",
     gridMajor: "#9eb3bd",
     link: "#0f8b8d",
@@ -359,9 +361,9 @@ const TRANSLATIONS = {
     "settings.mapProvider": "地図サービス",
     "settings.mapGoogle": "Googleマップ",
     "settings.mapApple": "Appleマップ",
-    "settings.themeRetro": "レトロ",
+    "settings.themeBasic": "ベーシック",
     "settings.themePastel": "パステル",
-    "settings.themeAtlasPaper": "アトラスペーパー",
+    "settings.themeRetro": "レトロ",
     "settings.languageJa": "日本語",
     "settings.languageEn": "English",
     "settings.unitsMetric": "km",
@@ -504,6 +506,7 @@ const TRANSLATIONS = {
     "list.newPrompt": "新しいリストの名前",
     "list.created": "新しいリストを作成し、登録先にしました",
     "list.active": "登録先",
+    "list.longPressDestination": "長押しで登録先に指定",
     "list.copy": "コピー",
     "list.share": "共有リンク",
     "list.shareDialogTitle": "共有リンク",
@@ -574,9 +577,9 @@ const TRANSLATIONS = {
     "settings.mapProvider": "Map service",
     "settings.mapGoogle": "Google Maps",
     "settings.mapApple": "Apple Maps",
-    "settings.themeRetro": "Retro",
+    "settings.themeBasic": "Basic",
     "settings.themePastel": "Pastel",
-    "settings.themeAtlasPaper": "Atlas Paper",
+    "settings.themeRetro": "Retro",
     "settings.languageJa": "Japanese",
     "settings.languageEn": "English",
     "settings.unitsMetric": "km",
@@ -719,6 +722,7 @@ const TRANSLATIONS = {
     "list.newPrompt": "Name the new list",
     "list.created": "Created a new list and set it as the destination",
     "list.active": "Destination",
+    "list.longPressDestination": "Long-press to set as destination",
     "list.copy": "Copy",
     "list.share": "Share link",
     "list.shareDialogTitle": "Share link",
@@ -932,7 +936,7 @@ function toggleSettingsMenu() {
 }
 function currentTheme() {
   const theme = document.documentElement.dataset.theme;
-  return theme === RETRO_THEME || theme === ATLAS_PAPER_THEME ? theme : PASTEL_THEME;
+  return theme === RETRO_THEME || theme === BASIC_THEME ? theme : PASTEL_THEME;
 }
 
 function canvasPalette() {
@@ -945,13 +949,13 @@ function loadTheme() {
     saved = localStorage.getItem(THEME_KEY);
   } catch {}
 
-  setTheme(saved === ATLAS_PAPER_THEME || saved === "paper" ? ATLAS_PAPER_THEME : saved === PASTEL_THEME || saved === "light" ? PASTEL_THEME : RETRO_THEME, { persist: false });
+  setTheme(saved === BASIC_THEME || saved === "atlas-paper" || saved === "paper" ? BASIC_THEME : saved === PASTEL_THEME || saved === "light" ? PASTEL_THEME : RETRO_THEME, { persist: false });
 }
 
 function setTheme(theme, options = {}) {
-  const normalized = theme === ATLAS_PAPER_THEME || theme === "paper" ? ATLAS_PAPER_THEME : theme === RETRO_THEME ? RETRO_THEME : PASTEL_THEME;
+  const normalized = theme === BASIC_THEME || theme === "atlas-paper" || theme === "paper" ? BASIC_THEME : theme === RETRO_THEME ? RETRO_THEME : PASTEL_THEME;
   document.documentElement.dataset.theme = normalized;
-  const themeColor = normalized === RETRO_THEME ? "#020806" : normalized === ATLAS_PAPER_THEME ? "#f5efe3" : "#d86f9b";
+  const themeColor = normalized === RETRO_THEME ? "#020806" : normalized === BASIC_THEME ? "#f5efe3" : "#d86f9b";
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColor);
 
   if (options.persist !== false) {
@@ -3259,10 +3263,10 @@ function syncStorageListActionButtons(entries = storageListEntries()) {
 function setStorageListSelected(storageId, selected) {
   if (selected) state.selectedStorageListIds.add(storageId);
   else state.selectedStorageListIds.delete(storageId);
-  for (const marker of document.querySelectorAll("[data-storage-list-select]")) {
-    if (marker.dataset.storageListSelect !== storageId) continue;
-    marker.checked = Boolean(selected);
-    marker.closest(".storage-list-row")?.classList.toggle("is-selected", Boolean(selected));
+  for (const row of document.querySelectorAll("[data-storage-list-row]")) {
+    if (row.dataset.storageListRow !== storageId) continue;
+    row.classList.toggle("is-selected", Boolean(selected));
+    row.setAttribute("aria-pressed", String(Boolean(selected)));
   }
   syncStorageListActionButtons();
 }
@@ -3272,35 +3276,106 @@ function clearStorageListSelection() {
   renderStorageLists();
 }
 
+function setupStorageListRowInteractions(row, entry) {
+  let longPressTimer = 0;
+  let pointerStart = null;
+  let longPressTriggered = false;
+
+  const isRowControl = (target) => target instanceof Element
+    && Boolean(target.closest("button, input, select, textarea, a"));
+  const clearLongPress = () => {
+    if (longPressTimer) window.clearTimeout(longPressTimer);
+    longPressTimer = 0;
+    pointerStart = null;
+  };
+
+  row.addEventListener("pointerdown", (event) => {
+    if (isRowControl(event.target) || (typeof event.button === "number" && event.button !== 0)) return;
+    pointerStart = { x: event.clientX, y: event.clientY };
+    longPressTriggered = false;
+    longPressTimer = window.setTimeout(() => {
+      longPressTimer = 0;
+      pointerStart = null;
+      if (!entry.local?.editable) return;
+      longPressTriggered = true;
+      setActivePointList(entry.local.id);
+    }, STORAGE_LIST_LONG_PRESS_MS);
+  });
+  row.addEventListener("pointermove", (event) => {
+    if (!pointerStart) return;
+    if (Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y)
+      > STORAGE_LIST_LONG_PRESS_MOVE_THRESHOLD) {
+      clearLongPress();
+    }
+  });
+  row.addEventListener("pointerup", clearLongPress);
+  row.addEventListener("pointercancel", clearLongPress);
+  row.addEventListener("click", (event) => {
+    if (isRowControl(event.target)) return;
+    if (longPressTriggered) {
+      longPressTriggered = false;
+      return;
+    }
+    setStorageListSelected(entry.storageId, !state.selectedStorageListIds.has(entry.storageId));
+  });
+  row.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    setStorageListSelected(entry.storageId, !state.selectedStorageListIds.has(entry.storageId));
+  });
+  row.addEventListener("contextmenu", (event) => {
+    if (!isRowControl(event.target)) event.preventDefault();
+  });
+}
+
 function createStorageListRow(entry) {
   const row = document.createElement("div");
   row.className = "storage-list-row";
-  row.classList.toggle("is-selected", state.selectedStorageListIds.has(entry.storageId));
+  const selected = state.selectedStorageListIds.has(entry.storageId);
+  row.classList.toggle("is-selected", selected);
+  row.dataset.storageListRow = entry.storageId;
+  row.tabIndex = 0;
+  row.setAttribute("role", "button");
+  row.setAttribute("aria-pressed", String(selected));
   const listName = entry.local?.name || entry.cloud?.name || "地点リスト";
   const visible = storageListIsVisible(entry);
 
-  const marker = document.createElement("input");
-  marker.type = "checkbox";
-  marker.checked = state.selectedStorageListIds.has(entry.storageId);
-  marker.dataset.storageListSelect = entry.storageId;
-  marker.title = t("list.selectForAction");
-  marker.setAttribute("aria-label", cloudText(`「${listName}」を選択`, `Select “${listName}”`));
-  marker.addEventListener("change", () => setStorageListSelected(entry.storageId, marker.checked));
+  const gridVisibility = document.createElement("button");
+  gridVisibility.type = "button";
+  gridVisibility.className = "storage-grid-button";
+  gridVisibility.classList.toggle("is-active", visible);
+  gridVisibility.textContent = "▦";
+  gridVisibility.title = t(visible ? "list.visible" : "list.hidden");
+  gridVisibility.setAttribute("aria-pressed", String(visible));
+  gridVisibility.setAttribute("aria-label", cloudText(
+    visible
+      ? `「${listName}」をグリッドから非表示にする`
+      : `「${listName}」をグリッドに表示する`,
+    visible
+      ? `Hide “${listName}” from the grid`
+      : `Show “${listName}” on the grid`
+  ));
+  gridVisibility.addEventListener("click", () => {
+    const nextVisible = !visible;
+    setStorageListVisible(entry.storageId, nextVisible);
+    setCloudStatus(t(nextVisible ? "list.visible" : "list.hidden"), { menu: false });
+  });
 
-  const name = document.createElement("button");
-  name.type = "button";
+  const destination = document.createElement("span");
+  destination.className = "storage-list-destination";
+  destination.hidden = entry.local?.id !== state.activePointListId;
+  destination.title = t("list.active");
+  destination.setAttribute("role", "img");
+  destination.setAttribute("aria-label", t("list.active"));
+
+  const name = document.createElement("div");
   name.className = "point-list-name point-list-select";
-  name.disabled = !entry.local?.editable;
   name.title = listName;
-  if (entry.local?.editable) {
-    name.addEventListener("click", () => setActivePointList(entry.local.id));
-  }
   const title = document.createElement("strong");
   title.textContent = `${entry.cloud ? "☁ " : ""}${listName}`;
   const meta = document.createElement("span");
   const pointCount = entry.local?.points.length ?? entry.preview?.points.length ?? 0;
   const metaParts = [`${pointCount}${t("label.points")}`];
-  if (entry.local?.id === state.activePointListId) metaParts.push(t("list.active"));
   meta.textContent = metaParts.join(" · ");
   name.append(title, meta);
 
@@ -3325,29 +3400,10 @@ function createStorageListRow(entry) {
   rename.disabled = state.cloud.busy;
   rename.addEventListener("click", () => void renameStorageList(entry.storageId));
 
-  const gridVisibility = document.createElement("button");
-  gridVisibility.type = "button";
-  gridVisibility.className = "storage-grid-button";
-  gridVisibility.classList.toggle("is-active", visible);
-  gridVisibility.textContent = "▦";
-  gridVisibility.title = t(visible ? "list.visible" : "list.hidden");
-  gridVisibility.setAttribute("aria-pressed", String(visible));
-  gridVisibility.setAttribute("aria-label", cloudText(
-    visible
-      ? `「${listName}」をグリッドから非表示にする`
-      : `「${listName}」をグリッドに表示する`,
-    visible
-      ? `Hide “${listName}” from the grid`
-      : `Show “${listName}” on the grid`
-  ));
-  gridVisibility.addEventListener("click", () => {
-    const nextVisible = !visible;
-    setStorageListVisible(entry.storageId, nextVisible);
-    setCloudStatus(t(nextVisible ? "list.visible" : "list.hidden"), { menu: false });
-  });
-
-  rowActions.append(share, rename, gridVisibility);
-  row.append(marker, name, rowActions);
+  rowActions.append(share, rename);
+  row.append(gridVisibility, destination, name, rowActions);
+  row.title = entry.local?.editable ? t("list.longPressDestination") : listName;
+  setupStorageListRowInteractions(row, entry);
   return row;
 }
 
