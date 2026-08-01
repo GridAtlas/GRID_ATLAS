@@ -7480,6 +7480,12 @@ function bindEvents() {
   elements.cloudDisconnectButton.addEventListener("click", disconnectCloud);
   elements.cloudAccessToken.addEventListener("input", renderStorageLists);
   document.addEventListener("click", () => setSettingsMenuOpen(false));
+  document.addEventListener("dblclick", (event) => {
+    if (event.target instanceof Element && event.target.closest("input, textarea, [contenteditable=\"true\"]")) {
+      return;
+    }
+    event.preventDefault();
+  }, true);
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       setSettingsMenuOpen(false);

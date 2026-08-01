@@ -90,6 +90,14 @@
 html,
 body {
   height: 100%;
+  touch-action: manipulation;
+}
+
+body,
+body * {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 body {
@@ -98,6 +106,15 @@ body {
   color: var(--text);
   font-family: "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
   letter-spacing: 0;
+}
+
+input,
+textarea,
+[contenteditable="true"],
+[contenteditable="true"] * {
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-touch-callout: default;
 }
 
 button,
