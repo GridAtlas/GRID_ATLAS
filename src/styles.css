@@ -1584,7 +1584,8 @@ textarea {
   }
 }
 
-.share-link-dialog {
+.share-link-dialog,
+.point-info-dialog {
   width: min(560px, calc(100vw - 24px));
   max-height: calc(100dvh - 24px);
   padding: 0;
@@ -1595,25 +1596,29 @@ textarea {
   box-shadow: var(--shadow), var(--brand-glow);
 }
 
-.share-link-dialog::backdrop {
+.share-link-dialog::backdrop,
+.point-info-dialog::backdrop {
   background: rgb(0 0 0 / 0.58);
   backdrop-filter: blur(3px);
 }
 
-.share-link-dialog-form {
+.share-link-dialog-form,
+.point-info-dialog-form {
   display: grid;
   gap: 14px;
   padding: 18px;
 }
 
-.share-link-dialog-heading {
+.share-link-dialog-heading,
+.point-info-dialog-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.share-link-dialog-heading h2 {
+.share-link-dialog-heading h2,
+.point-info-dialog-heading h2 {
   margin: 0;
   font-size: 18px;
 }
@@ -1671,6 +1676,71 @@ textarea {
   color: var(--on-accent);
 }
 
+.point-info-photo {
+  width: 100%;
+  max-height: min(340px, 42dvh);
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+}
+
+.point-info-section {
+  display: grid;
+  gap: 8px;
+}
+
+.point-info-section h3 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.point-info-name {
+  font-size: 18px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.point-info-comment {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.point-info-comment.is-muted {
+  color: var(--muted);
+}
+
+.point-info-fields {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.point-info-fields > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+}
+
+.point-info-fields dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
 .app-toast {
   position: fixed;
   z-index: 3000;
@@ -1702,8 +1772,13 @@ textarea {
 }
 
 @media (max-width: 760px) {
-  .share-link-dialog-form {
+  .share-link-dialog-form,
+  .point-info-dialog-form {
     padding: 15px;
+  }
+
+  .point-info-fields {
+    grid-template-columns: 1fr;
   }
 
   .share-link-actions > button {

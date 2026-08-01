@@ -9,8 +9,8 @@
     <link rel="icon" href="assets/icon-grid.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="atlas-paper"||theme==="paper"?"atlas-paper":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=52">
-    <script src="src/main.js?v=129" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=53">
+    <script src="src/main.js?v=130" type="module" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -225,6 +225,10 @@
               <span aria-hidden="true">🔗</span>
               <span data-i18n="action.shareSelected">共有</span>
             </button>
+            <button id="actionInfoButton" class="action-button" type="button" title="選択地点の情報を表示" disabled>
+              <span aria-hidden="true">i</span>
+              <span data-i18n="action.info">情報</span>
+            </button>
             <label id="pointTransferDestinationControl" class="action-destination" for="pointTransferDestinationSelect" hidden>
               <span data-i18n="action.transferDestination">コピー／移動先</span>
               <select id="pointTransferDestinationSelect" aria-label="コピー／移動先">
@@ -402,6 +406,45 @@
           <button id="shareLinkCopyButton" type="button" data-i18n="list.shareCopy">リンクをコピー</button>
           <button id="shareLinkNativeButton" class="share-link-primary" type="button" data-i18n="list.shareNative" hidden>共有する</button>
         </div>
+      </form>
+    </dialog>
+    <dialog id="pointInfoDialog" class="point-info-dialog" aria-labelledby="pointInfoDialogTitle">
+      <form class="point-info-dialog-form" method="dialog">
+        <div class="point-info-dialog-heading">
+          <h2 id="pointInfoDialogTitle" data-i18n="info.dialogTitle">地点情報</h2>
+          <button class="share-link-close" type="submit" value="cancel" aria-label="閉じる">×</button>
+        </div>
+        <img id="pointInfoPhoto" class="point-info-photo" alt="" hidden>
+        <section class="point-info-section" aria-labelledby="pointInfoSummaryTitle">
+          <h3 id="pointInfoSummaryTitle" data-i18n="info.summary">選択地点</h3>
+          <strong id="pointInfoName" class="point-info-name"></strong>
+          <p id="pointInfoComment" class="point-info-comment"></p>
+        </section>
+        <section class="point-info-section" aria-labelledby="pointInfoOtherTitle">
+          <h3 id="pointInfoOtherTitle" data-i18n="info.other">その他情報</h3>
+          <dl class="point-info-fields">
+            <div>
+              <dt data-i18n="field.coords">緯度経度</dt>
+              <dd id="pointInfoCoords"></dd>
+            </div>
+            <div>
+              <dt data-i18n="info.list">リスト</dt>
+              <dd id="pointInfoList"></dd>
+            </div>
+            <div>
+              <dt data-i18n="field.created">登録</dt>
+              <dd id="pointInfoCreated"></dd>
+            </div>
+            <div>
+              <dt data-i18n="info.updated">更新</dt>
+              <dd id="pointInfoUpdated"></dd>
+            </div>
+            <div>
+              <dt data-i18n="info.distanceFromCurrent">現在地から</dt>
+              <dd id="pointInfoDistance"></dd>
+            </div>
+          </dl>
+        </section>
       </form>
     </dialog>
     <output id="appToast" class="app-toast" role="status" aria-live="polite" hidden></output>

@@ -87,6 +87,7 @@ const elements = {
   actionCopyToListButton: document.querySelector("#actionCopyToListButton"),
   actionMoveToListButton: document.querySelector("#actionMoveToListButton"),
   actionShareSelectedButton: document.querySelector("#actionShareSelectedButton"),
+  actionInfoButton: document.querySelector("#actionInfoButton"),
   clearSelectionButton: document.querySelector("#clearSelectionButton"),
   actionTargetButton: document.querySelector("#actionTargetButton"),
   actionRouteStartButton: document.querySelector("#actionRouteStartButton"),
@@ -135,6 +136,15 @@ const elements = {
   shareLinkDialogStatus: document.querySelector("#shareLinkDialogStatus"),
   shareLinkCopyButton: document.querySelector("#shareLinkCopyButton"),
   shareLinkNativeButton: document.querySelector("#shareLinkNativeButton"),
+  pointInfoDialog: document.querySelector("#pointInfoDialog"),
+  pointInfoPhoto: document.querySelector("#pointInfoPhoto"),
+  pointInfoName: document.querySelector("#pointInfoName"),
+  pointInfoComment: document.querySelector("#pointInfoComment"),
+  pointInfoCoords: document.querySelector("#pointInfoCoords"),
+  pointInfoList: document.querySelector("#pointInfoList"),
+  pointInfoCreated: document.querySelector("#pointInfoCreated"),
+  pointInfoUpdated: document.querySelector("#pointInfoUpdated"),
+  pointInfoDistance: document.querySelector("#pointInfoDistance"),
   appToast: document.querySelector("#appToast"),
   useLocationButton: document.querySelector("#useLocationButton"),
   zoomInButton: document.querySelector("#zoomInButton"),
@@ -387,6 +397,7 @@ const TRANSLATIONS = {
     "action.copyToList": "コピー",
     "action.moveToList": "移動",
     "action.shareSelected": "共有",
+    "action.info": "情報",
     "action.delete": "削除",
     "action.restore": "復旧",
     "action.edit": "編集",
@@ -438,6 +449,15 @@ const TRANSLATIONS = {
     "field.line": "線",
     "field.distance": "距離",
     "field.endpoints": "端点",
+    "info.dialogTitle": "地点情報",
+    "info.summary": "選択地点",
+    "info.other": "その他情報",
+    "info.list": "リスト",
+    "info.updated": "更新",
+    "info.distanceFromCurrent": "現在地から",
+    "info.noPhoto": "写真なし",
+    "info.noComment": "コメントなし",
+    "info.unavailable": "選択地点の情報を表示できません",
     "metric.points": "地点",
     "metric.links": "線",
     "metric.total": "合計",
@@ -592,6 +612,7 @@ const TRANSLATIONS = {
     "action.copyToList": "Copy",
     "action.moveToList": "Move",
     "action.shareSelected": "Share",
+    "action.info": "Info",
     "action.delete": "Delete",
     "action.restore": "Restore",
     "action.edit": "Edit",
@@ -643,6 +664,15 @@ const TRANSLATIONS = {
     "field.line": "Line",
     "field.distance": "Distance",
     "field.endpoints": "Endpoints",
+    "info.dialogTitle": "Point Info",
+    "info.summary": "Selected Point",
+    "info.other": "Other Info",
+    "info.list": "List",
+    "info.updated": "Updated",
+    "info.distanceFromCurrent": "From current",
+    "info.noPhoto": "No photo",
+    "info.noComment": "No comment",
+    "info.unavailable": "Selected point info is unavailable",
     "metric.points": "Points",
     "metric.links": "Lines",
     "metric.total": "Total",
@@ -2042,6 +2072,7 @@ function render() {
   renderSelectionInfo();
   renderStatus();
   renderActionButtons();
+  renderPointInfoDialog();
   syncSettingsControls();
   syncLocationGlowAnimation();
 }
@@ -2281,6 +2312,7 @@ function renderActionButtons() {
   const restoreCandidateCount = deletedSnapshotItemCount();
   const editCandidate = editableSelectedPoint();
   const mapCandidate = mapPointForSelection();
+  const infoCandidate = singleSelectedPoint();
   const deletablePointCount = pointIds.filter((id) => id !== CURRENT_LOCATION_ID && pointEditable(id)).length;
   const observationSelected = isLoadedObservationSelected();
   const canDelete = deletablePointCount + linkIds.length > 0 || observationSelected;
@@ -2305,6 +2337,7 @@ function renderActionButtons() {
   elements.actionRestoreButton.disabled = restoreCandidateCount === 0;
   elements.actionEditButton.disabled = !editCandidate;
   elements.actionMapButton.disabled = !mapCandidate;
+  elements.actionInfoButton.disabled = !infoCandidate;
 
   elements.actionRegisterButton.classList.remove("is-active");
   elements.actionRegisterButton.title = hasPendingPoint ? "仮ポイントを登録" : canOpenRegisterPage ? "地点登録画面を開く" : "仮ポイントを作成すると登録できます";
@@ -2333,10 +2366,98 @@ function renderActionButtons() {
   elements.actionRestoreButton.classList.toggle("is-active", false);
   elements.actionEditButton.classList.toggle("is-active", Boolean(state.editingPointId));
   elements.actionMapButton.classList.toggle("is-active", false);
+  elements.actionInfoButton.classList.toggle("is-active", Boolean(elements.pointInfoDialog?.open && infoCandidate));
+  elements.actionInfoButton.title = infoCandidate ? "選択地点の情報を表示" : "1地点を選択すると情報を表示できます";
   elements.actionRestoreButton.title = restoreCandidateCount > 0 ? `直前の削除を復旧 (${restoreCandidateCount}件)` : "直前の削除を復旧";
   elements.pointSubmitButton.textContent = state.editingPointId ? t("button.update") : t("button.submitRegister");
   elements.actionRouteLabel.textContent = t("action.route");
   renderLocationFollowButton();
+}
+
+function renderPointInfoDialog() {
+  if (!elements.pointInfoDialog?.open) {
+    return;
+  }
+
+  const point = singleSelectedPoint();
+  if (!point) {
+    elements.pointInfoDialog.close("selection-changed");
+    return;
+  }
+
+  const geo = pointGeo(point);
+  const accuracy = Number.isFinite(geo.accuracy) ? ` / +/-${formatDistance(geo.accuracy)}` : "";
+  const current = currentLocationPoint();
+  const distance = current && point.id !== CURRENT_LOCATION_ID
+    ? formatDistance(distanceBetween(current, point))
+    : t("label.none");
+
+  elements.pointInfoName.textContent = point.title;
+  elements.pointInfoComment.textContent = point.note || t("info.noComment");
+  elements.pointInfoComment.classList.toggle("is-muted", !point.note);
+  elements.pointInfoCoords.textContent = `${formatCoordinate(geo.lat)}, ${formatCoordinate(geo.lng)}${accuracy}`;
+  elements.pointInfoList.textContent = pointListNameForPoint(point) || t("label.none");
+  elements.pointInfoCreated.textContent = point.isVirtual ? t("message.currentLocation") : formatOptionalDate(point.createdAt);
+  elements.pointInfoUpdated.textContent = formatOptionalDate(point.updatedAt);
+  elements.pointInfoDistance.textContent = distance;
+
+  if (point.photo) {
+    elements.pointInfoPhoto.hidden = false;
+    elements.pointInfoPhoto.src = point.photo;
+    elements.pointInfoPhoto.alt = point.photoName || point.title;
+  } else {
+    elements.pointInfoPhoto.hidden = true;
+    elements.pointInfoPhoto.removeAttribute("src");
+    elements.pointInfoPhoto.alt = t("info.noPhoto");
+  }
+}
+
+function formatOptionalDate(value) {
+  if (!value) {
+    return t("label.none");
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? t("label.none") : formatDate(value);
+}
+
+function pointListNameForPoint(point) {
+  if (!point || point.id === CURRENT_LOCATION_ID) {
+    return "";
+  }
+
+  const localList = state.pointLists.find((list) => findPointIn(point.id, list.points));
+  if (localList) {
+    return localList.name;
+  }
+
+  const cloudList = state.cloud.pointLists.find((list) => findPointIn(point.id, list.points));
+  return cloudList?.name || "";
+}
+
+function showSelectedPointInfoDialog() {
+  const point = singleSelectedPoint();
+  if (!point) {
+    showAppToast(t("info.unavailable"), { error: true });
+    return;
+  }
+
+  if (!elements.pointInfoDialog?.showModal) {
+    const geo = pointGeo(point);
+    window.alert([
+      point.title,
+      point.note || t("info.noComment"),
+      `${t("field.coords")}: ${formatCoordinate(geo.lat)}, ${formatCoordinate(geo.lng)}`,
+      `${t("info.list")}: ${pointListNameForPoint(point) || t("label.none")}`
+    ].join("\n"));
+    return;
+  }
+
+  if (elements.pointInfoDialog.open) {
+    elements.pointInfoDialog.close("refresh");
+  }
+  elements.pointInfoDialog.showModal();
+  renderPointInfoDialog();
+  renderActionButtons();
 }
 
 function renderDetails() {
@@ -7316,6 +7437,7 @@ function bindEvents() {
   elements.actionCopyToListButton.addEventListener("click", () => beginPointTransfer("copy"));
   elements.actionMoveToListButton.addEventListener("click", () => beginPointTransfer("move"));
   elements.actionShareSelectedButton.addEventListener("click", () => void shareSelectedPointsLink());
+  elements.actionInfoButton.addEventListener("click", showSelectedPointInfoDialog);
   elements.actionRestoreButton.addEventListener("click", restoreLastDeleted);
   elements.actionEditButton.addEventListener("click", startEditingSelectedPoint);
   elements.actionMapButton.addEventListener("click", openSelectedPointInPreferredMap);
@@ -7333,6 +7455,10 @@ function bindEvents() {
   });
   elements.shareLinkDialog.addEventListener("click", (event) => {
     if (event.target === elements.shareLinkDialog) elements.shareLinkDialog.close("cancel");
+  });
+  elements.pointInfoDialog.addEventListener("close", renderActionButtons);
+  elements.pointInfoDialog.addEventListener("click", (event) => {
+    if (event.target === elements.pointInfoDialog) elements.pointInfoDialog.close("cancel");
   });
   elements.useLocationButton.addEventListener("click", useCurrentLocation);
   elements.zoomInButton.addEventListener("click", () => zoomAt({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 1.25));
