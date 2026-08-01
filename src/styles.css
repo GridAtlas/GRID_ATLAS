@@ -188,10 +188,22 @@ textarea:focus-visible {
 .settings-menu-button {
   width: 40px;
   min-height: 34px;
+  display: grid;
+  place-items: center;
   padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   font-size: 20px;
   line-height: 1;
   font-weight: 800;
+}
+
+.settings-menu-button:hover:not(:disabled) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent-strong);
 }
 
 .settings-menu-button .ui-icon {
@@ -200,8 +212,8 @@ textarea:focus-visible {
 }
 
 .settings-menu-button[aria-expanded="true"] {
-  border-color: var(--accent);
-  background: var(--active-bg);
+  border: 0;
+  background: transparent;
   color: var(--accent-strong);
 }
 
