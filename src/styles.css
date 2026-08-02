@@ -1736,7 +1736,8 @@ textarea {
 }
 
 .share-link-dialog,
-.point-info-dialog {
+.point-info-dialog,
+.point-transfer-dialog {
   width: min(560px, calc(100vw - 24px));
   max-height: calc(100dvh - 24px);
   padding: 0;
@@ -1748,20 +1749,23 @@ textarea {
 }
 
 .share-link-dialog::backdrop,
-.point-info-dialog::backdrop {
+.point-info-dialog::backdrop,
+.point-transfer-dialog::backdrop {
   background: rgb(0 0 0 / 0.58);
   backdrop-filter: blur(3px);
 }
 
 .share-link-dialog-form,
-.point-info-dialog-form {
+.point-info-dialog-form,
+.point-transfer-dialog-form {
   display: grid;
   gap: 14px;
   padding: 18px;
 }
 
 .share-link-dialog-heading,
-.point-info-dialog-heading {
+.point-info-dialog-heading,
+.point-transfer-dialog-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1769,7 +1773,8 @@ textarea {
 }
 
 .share-link-dialog-heading h2,
-.point-info-dialog-heading h2 {
+.point-info-dialog-heading h2,
+.point-transfer-dialog-heading h2 {
   margin: 0;
   font-size: 18px;
 }
@@ -1789,6 +1794,98 @@ textarea {
   height: 18px;
 }
 
+.point-transfer-dialog {
+  width: min(480px, calc(100vw - 24px));
+}
+
+.point-transfer-dialog-heading {
+  align-items: flex-start;
+}
+
+.point-transfer-dialog-heading > div {
+  min-width: 0;
+}
+
+.point-transfer-dialog-hint {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.point-transfer-destination-list {
+  display: grid;
+  gap: 8px;
+  max-height: min(48dvh, 360px);
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.point-transfer-destination-button {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--field-bg);
+  color: var(--text);
+  text-align: left;
+}
+
+.point-transfer-destination-button:hover,
+.point-transfer-destination-button:focus-visible {
+  border-color: var(--accent);
+  background: var(--active-bg);
+}
+
+.point-transfer-destination-name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.point-transfer-destination-count {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.point-transfer-dialog-empty {
+  padding: 18px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.point-transfer-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.point-transfer-new-button {
+  margin-right: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.point-transfer-new-button .ui-icon {
+  width: 16px;
+  height: 16px;
+}
 .share-link-summary {
   font-size: 15px;
 }
@@ -1931,7 +2028,8 @@ textarea {
 
 @media (max-width: 760px) {
   .share-link-dialog-form,
-  .point-info-dialog-form {
+  .point-info-dialog-form,
+  .point-transfer-dialog-form {
     padding: 15px;
   }
 

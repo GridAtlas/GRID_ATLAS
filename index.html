@@ -260,13 +260,7 @@
               <svg class="ui-icon" aria-hidden="true"><use href="#icon-info"></use></svg>
               <span data-i18n="action.info">情報</span>
             </button>
-            <label id="pointTransferDestinationControl" class="action-destination" for="pointTransferDestinationSelect" hidden>
-              <span data-i18n="action.transferDestination">コピー／移動先</span>
-              <select id="pointTransferDestinationSelect" aria-label="コピー／移動先">
-                <option value="" data-i18n="list.transferDestinationPlaceholder">リストを選択</option>
-              </select>
-              <button id="cancelPointTransferButton" class="compact-button" type="button" data-i18n="action.cancel">キャンセル</button>
-            </label>
+
           </nav>
           <nav class="mobile-grid-tabs" aria-label="表示切替">
             <button class="mobile-grid-tab is-active" type="button" data-mobile-grid-page="grid" aria-pressed="true" data-i18n="page.grid">グリッド</button>
@@ -478,6 +472,27 @@
             </div>
           </dl>
         </section>
+      </form>
+    </dialog>
+    <dialog id="pointTransferDialog" class="point-transfer-dialog" aria-labelledby="pointTransferDialogTitle">
+      <form class="point-transfer-dialog-form" method="dialog">
+        <div class="point-transfer-dialog-heading">
+          <div>
+            <h2 id="pointTransferDialogTitle"></h2>
+            <p id="pointTransferDialogHint" class="point-transfer-dialog-hint"></p>
+          </div>
+          <button id="cancelPointTransferButton" class="share-link-close" type="button" aria-label="閉じる">
+            <svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+          </button>
+        </div>
+        <div id="pointTransferDestinationList" class="point-transfer-destination-list"></div>
+        <div class="point-transfer-dialog-actions">
+          <button id="createPointTransferListButton" class="point-transfer-new-button" type="button">
+            <svg class="ui-icon" aria-hidden="true"><use href="#icon-plus"></use></svg>
+            <span data-i18n="list.transferDialogNew">新しいリストを作成</span>
+          </button>
+          <button class="compact-button" type="submit" value="cancel" data-i18n="action.cancel">キャンセル</button>
+        </div>
       </form>
     </dialog>
     <output id="appToast" class="app-toast" role="status" aria-live="polite" hidden></output>

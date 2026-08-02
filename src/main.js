@@ -81,8 +81,11 @@ const elements = {
   actionRegisterButton: document.querySelector("#actionRegisterButton"),
   actionRouteButton: document.querySelector("#actionRouteButton"),
   actionRouteLabel: document.querySelector("#actionRouteLabel"),
-  pointTransferDestinationControl: document.querySelector("#pointTransferDestinationControl"),
-  pointTransferDestinationSelect: document.querySelector("#pointTransferDestinationSelect"),
+  pointTransferDialog: document.querySelector("#pointTransferDialog"),
+  pointTransferDialogTitle: document.querySelector("#pointTransferDialogTitle"),
+  pointTransferDialogHint: document.querySelector("#pointTransferDialogHint"),
+  pointTransferDestinationList: document.querySelector("#pointTransferDestinationList"),
+  createPointTransferListButton: document.querySelector("#createPointTransferListButton"),
   cancelPointTransferButton: document.querySelector("#cancelPointTransferButton"),
   actionCopyToListButton: document.querySelector("#actionCopyToListButton"),
   actionMoveToListButton: document.querySelector("#actionMoveToListButton"),
@@ -405,7 +408,7 @@ const TRANSLATIONS = {
     "action.target": "対象",
     "action.track": "追跡",
     "action.route": "巡回",
-    "action.transferDestination": "コピー／移動先",
+
     "action.cancel": "キャンセル",
     "action.copyToList": "コピー",
     "action.moveToList": "移動",
@@ -550,7 +553,12 @@ const TRANSLATIONS = {
     "list.noSelection": "操作するリストを選択してください",
     "list.transferNoSelection": "別のリストへ移せる地点を選択してください",
     "list.transferSelectDestination": "コピー／移動先を選択してください",
-    "list.transferDestinationPlaceholder": "リストを選択",
+
+    "list.transferDialogCopyTitle": "コピー先を選択",
+    "list.transferDialogMoveTitle": "移動先を選択",
+    "list.transferDialogHint": "登録済みリストから選択するか、新しいリストを作成できます。",
+    "list.transferDialogNew": "新しいリストを作成",
+    "list.transferDialogEmpty": "選択できるリストがありません",
     "list.copiedPoints": "「{name}」へ{count}地点をコピーしました",
     "list.movedPoints": "「{name}」へ{count}地点を移動しました",
     "list.section.mine": "マイリスト",
@@ -625,7 +633,7 @@ const TRANSLATIONS = {
     "action.target": "Target",
     "action.track": "Track",
     "action.route": "Route",
-    "action.transferDestination": "Copy / move to",
+
     "action.cancel": "Cancel",
     "action.copyToList": "Copy",
     "action.moveToList": "Move",
@@ -770,7 +778,12 @@ const TRANSLATIONS = {
     "list.noSelection": "Select a list first",
     "list.transferNoSelection": "Select points that can be transferred to another list",
     "list.transferSelectDestination": "Select a destination list first",
-    "list.transferDestinationPlaceholder": "Select a list",
+
+    "list.transferDialogCopyTitle": "Choose a copy destination",
+    "list.transferDialogMoveTitle": "Choose a move destination",
+    "list.transferDialogHint": "Choose an existing list or create a new one.",
+    "list.transferDialogNew": "Create a new list",
+    "list.transferDialogEmpty": "No lists available",
     "list.copiedPoints": "Copied {count} point(s) to “{name}”",
     "list.movedPoints": "Moved {count} point(s) to “{name}”",
     "list.section.mine": "My Lists",
@@ -1365,20 +1378,84 @@ function beginPointTransfer(mode) {
   state.pendingPointTransferMode = mode;
   state.pointTransferDestinationListId = "";
   render();
-  requestAnimationFrame(() => elements.pointTransferDestinationSelect.focus());
+  requestAnimationFrame(() => {
+    if (!elements.pointTransferDialog.open) elements.pointTransferDialog.showModal();
+    const firstDestination = elements.pointTransferDestinationList.querySelector("button");
+    firstDestination?.focus();
+  });
 }
 
 function cancelPointTransfer() {
   state.pendingPointTransferMode = null;
   state.pointTransferDestinationListId = "";
+  if (elements.pointTransferDialog.open) elements.pointTransferDialog.close("cancel");
   render();
+}
+
+function createPointTransferDestinationList() {
+  if (!state.pendingPointTransferMode) return;
+  const suggestedName = cloudText("新しいリスト", "New list");
+  const input = window.prompt(t("list.newPrompt"), suggestedName);
+  if (input === null) return;
+  const name = input.trim() || suggestedName;
+  const list = createPointList({
+    name,
+    visible: true,
+    editable: true,
+    source: "local",
+    importedAt: "",
+    points: []
+  });
+  state.pointLists.push(list);
+  state.pointTransferDestinationListId = list.id;
+  persistWorkspace();
+  choosePointTransferDestination();
 }
 
 function choosePointTransferDestination() {
   const mode = state.pendingPointTransferMode;
   if (!mode || !pointTransferDestinationList()) return;
   state.pendingPointTransferMode = null;
+  if (elements.pointTransferDialog.open) elements.pointTransferDialog.close("selected");
   transferSelectedPointsToActiveList(mode);
+}
+
+function renderPointTransferDialog() {
+  const mode = state.pendingPointTransferMode;
+  const editableLists = state.pointLists.filter((list) => list.editable);
+  elements.pointTransferDialogTitle.textContent = mode === "move"
+    ? t("list.transferDialogMoveTitle")
+    : mode === "copy"
+      ? t("list.transferDialogCopyTitle")
+      : "";
+  elements.pointTransferDialogHint.textContent = mode ? t("list.transferDialogHint") : "";
+  elements.pointTransferDestinationList.replaceChildren();
+  if (editableLists.length === 0 && mode) {
+    const empty = document.createElement("div");
+    empty.className = "point-transfer-dialog-empty";
+    empty.textContent = t("list.transferDialogEmpty");
+    elements.pointTransferDestinationList.append(empty);
+  }
+  for (const list of editableLists) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "point-transfer-destination-button";
+    button.dataset.destinationListId = list.id;
+    const name = document.createElement("span");
+    name.className = "point-transfer-destination-name";
+    name.textContent = list.name;
+    const count = document.createElement("span");
+    count.className = "point-transfer-destination-count";
+    count.textContent = `${list.points.length}${t("label.points")}`;
+    button.append(name, count);
+    button.addEventListener("click", () => {
+      state.pointTransferDestinationListId = list.id;
+      choosePointTransferDestination();
+    });
+    button.disabled = !mode;
+    elements.pointTransferDestinationList.append(button);
+  }
+  elements.createPointTransferListButton.disabled = !mode;
 }
 
 function transferSelectedPointsToActiveList(mode) {
@@ -3693,27 +3770,7 @@ function renderStorageLists() {
     }
   }
 
-  const previousDestinationListId = state.pointTransferDestinationListId;
-  const editableLists = state.pointLists.filter((list) => list.editable);
-  elements.pointTransferDestinationSelect.replaceChildren();
-  const destinationPlaceholder = document.createElement("option");
-  destinationPlaceholder.value = "";
-  destinationPlaceholder.textContent = t("list.transferDestinationPlaceholder");
-  elements.pointTransferDestinationSelect.append(destinationPlaceholder);
-  for (const list of editableLists) {
-    const option = document.createElement("option");
-    option.value = list.id;
-    option.textContent = `${list.name} (${list.points.length}${t("label.points")})`;
-    elements.pointTransferDestinationSelect.append(option);
-  }
-  state.pointTransferDestinationListId = editableLists.some((list) => list.id === previousDestinationListId)
-    ? previousDestinationListId
-    : "";
-  elements.pointTransferDestinationSelect.value = state.pointTransferDestinationListId;
-  elements.pointTransferDestinationSelect.disabled = editableLists.length === 0 || !state.pendingPointTransferMode;
-  elements.pointTransferDestinationSelect.setAttribute("aria-label", t("action.transferDestination"));
-  elements.pointTransferDestinationControl.hidden = !state.pendingPointTransferMode;
-  elements.cancelPointTransferButton.textContent = t("action.cancel");
+  renderPointTransferDialog();
 
   const previousBackupListId = elements.backupListSelect.value;
   const localEntries = entries.filter((entry) => entry.local);
@@ -7809,11 +7866,17 @@ function bindEvents() {
     setMapProvider(elements.settingsMapProviderSelect.value);
     render();
   });
-  elements.pointTransferDestinationSelect.addEventListener("change", () => {
-    state.pointTransferDestinationListId = elements.pointTransferDestinationSelect.value;
-    choosePointTransferDestination();
-  });
+  elements.createPointTransferListButton.addEventListener("click", createPointTransferDestinationList);
   elements.cancelPointTransferButton.addEventListener("click", cancelPointTransfer);
+  elements.pointTransferDialog.addEventListener("close", () => {
+    if (!state.pendingPointTransferMode) return;
+    state.pendingPointTransferMode = null;
+    state.pointTransferDestinationListId = "";
+    render();
+  });
+  elements.pointTransferDialog.addEventListener("click", (event) => {
+    if (event.target === elements.pointTransferDialog) cancelPointTransfer();
+  });
   elements.settingsGpsEnabled.addEventListener("change", () => {
     setGpsEnabled(elements.settingsGpsEnabled.checked);
   });
