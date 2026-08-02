@@ -1191,6 +1191,43 @@ function findVisibleCloudPoint(pointId) {
   return findCloudPointInLists(pointId, visibleCloudPointLists());
 }
 
+function cloudPointListForPoint(pointId) {
+  return state.cloud.pointLists.find((list) => findPointIn(pointId, list.points)) ?? null;
+}
+
+async function updateCloudPointList(list, nextList, options = {}) {
+  const cloudId = list?.cloudId || list?.id;
+  const meta = state.cloud.lists.find((item) => item.id === cloudId);
+  if (!state.cloud.connected || !cloudId || !meta) {
+    setCloudStatus(t("storage.connectFirst"), { error: true });
+    return false;
+  }
+
+  let payload;
+  try {
+    payload = pointListToCloudPayload({ ...nextList, cloudId }, pointGeo);
+  } catch (error) {
+    setCloudStatus(cloudErrorMessage(error), { error: true });
+    return false;
+  }
+
+  setCloudBusy(true);
+  let updated = false;
+  try {
+    await cloudClientFromInputs().updateList(cloudId, meta.revision, payload);
+    updated = true;
+  } catch (error) {
+    setCloudStatus(cloudErrorMessage(error), { error: true });
+  } finally {
+    setCloudBusy(false);
+  }
+
+  if (updated) {
+    await refreshCloudLists({ quiet: true });
+    setCloudStatus(options.message || cloudText("クラウドリストを更新しました", "Cloud list updated"));
+  }
+  return updated;
+}
 function findCloudPointAny(pointId) {
   return findCloudPointInLists(pointId, state.cloud.pointLists);
 }
@@ -4436,8 +4473,17 @@ function selectedCounts() {
 }
 
 function editableSelectedPoint() {
-  const pointIds = selectedPointIds().filter((id) => id !== CURRENT_LOCATION_ID && pointEditable(id));
-  return pointIds.length === 1 && selectedCounts().total === 1 && pointEditable(pointIds[0]) ? findPointIn(pointIds[0], state.points) : null;
+  const pointIds = selectedPointIds().filter((id) => id !== CURRENT_LOCATION_ID);
+  if (pointIds.length !== 1 || selectedCounts().total !== 1) return null;
+
+  const pointId = pointIds[0];
+  if (pointEditable(pointId)) {
+    return findPointIn(pointId, state.points);
+  }
+  if (state.cloud.connected && cloudPointListForPoint(pointId)) {
+    return findCloudPointAny(pointId);
+  }
+  return null;
 }
 
 function mapPointForSelection() {
@@ -4922,7 +4968,9 @@ function startEditingSelectedPoint() {
   elements.pointNote.value = point.note || "";
   elements.pointPhoto.value = "";
   fillFormFromGeo(geo);
-  elements.shareImportStatus.value = "編集: 内容を更新できます";
+  elements.shareImportStatus.value = cloudPointListForPoint(point.id)
+    ? cloudText("クラウドリストを直接編集中。保存するとクラウドを更新します", "Editing the cloud list directly. Saving will update the cloud.")
+    : "編集: 内容を更新できます";
   if (mobilePageUiActive()) {
     setMobilePage("register");
   }
@@ -5692,6 +5740,41 @@ async function submitPoint(event) {
     accuracy: isSameGeo(state.pendingGeo, { lat, lng }) ? state.pendingGeo.accuracy : undefined
   });
   const projected = projectLatLng(geo.lat, geo.lng);
+  const editedCloudList = state.editingPointId
+    ? cloudPointListForPoint(state.editingPointId)
+    : null;
+  const editedCloudPoint = editedCloudList
+    ? findPointIn(state.editingPointId, editedCloudList.points)
+    : null;
+  if (editedCloudList && editedCloudPoint) {
+    const updatedAt = new Date().toISOString();
+    const nextList = {
+      ...editedCloudList,
+      points: editedCloudList.points.map((point) => point.id === editedCloudPoint.id
+        ? {
+          ...point,
+          x: projected.x,
+          y: projected.y,
+          title: elements.pointTitle.value.trim() || point.title || "Point",
+          note: elements.pointNote.value.trim(),
+          geo,
+          updatedAt
+        }
+        : point)
+    };
+    const updated = await updateCloudPointList(editedCloudList, nextList);
+    if (!updated) {
+      render();
+      return;
+    }
+    state.selection = [{ type: "point", id: editedCloudPoint.id }];
+    normalizeSelection();
+    resetPointFormAfterSubmit();
+    syncCanvasSize();
+    render();
+    return;
+  }
+
   const file = elements.pointPhoto.files[0] ?? null;
   const photo = file ? await readPhoto(file) : null;
   let storedPhoto = null;
@@ -7579,44 +7662,76 @@ function clearWorkspace() {
   render();
 }
 
-function deleteSelectedPoint() {
+async function deleteSelectedPoint() {
   normalizeSelection();
-  const pointIds = selectedPointIds().filter((id) => id !== CURRENT_LOCATION_ID && pointEditable(id));
+  const selectedIds = selectedPointIds().filter((id) => id !== CURRENT_LOCATION_ID);
+  const pointIds = selectedIds.filter((id) => pointEditable(id));
+  const cloudPointIds = selectedIds.filter((id) => (
+    !pointIds.includes(id) && state.cloud.connected && cloudPointListForPoint(id)
+  ));
   const explicitLinkIds = selectedLinkIds();
   const selectedObservations = selectedLoadedObservations();
   const selectedObservationIdSet = new Set(selectedObservations.map((observation) => observation.id));
   const pointIdSet = new Set(pointIds);
+  const cloudPointIdSet = new Set(cloudPointIds);
+  const deletionPointIdSet = new Set([...pointIdSet, ...cloudPointIdSet]);
   const linkIdSet = new Set(explicitLinkIds);
 
   for (const link of state.links) {
-    if (pointIdSet.has(link.a) || pointIdSet.has(link.b)) {
+    if (deletionPointIdSet.has(link.a) || deletionPointIdSet.has(link.b)) {
       linkIdSet.add(link.id);
     }
   }
 
-  if (pointIdSet.size + linkIdSet.size + selectedObservationIdSet.size === 0) {
+  if (deletionPointIdSet.size + linkIdSet.size + selectedObservationIdSet.size === 0) {
     return;
   }
 
   const parts = [];
   if (pointIdSet.size > 0) {
-    parts.push(`${pointIdSet.size}点`);
+    parts.push(String(pointIdSet.size) + "点");
+  }
+  if (cloudPointIdSet.size > 0) {
+    parts.push(String(cloudPointIdSet.size) + "クラウド地点");
   }
   if (linkIdSet.size > 0) {
-    parts.push(`${linkIdSet.size}線`);
+    parts.push(String(linkIdSet.size) + "線");
   }
   if (selectedObservationIdSet.size > 0) {
-    parts.push(`${selectedObservationIdSet.size}観察（保存ファイルには影響しません）`);
+    parts.push(String(selectedObservationIdSet.size) + "観察（保存ファイルには影響しません）");
   }
 
-  const confirmed = window.confirm(`選択中の${parts.join(" / ")}を削除しますか。`);
+  const confirmed = window.confirm("選択中の" + parts.join(" / ") + "を削除しますか。");
   if (!confirmed) {
     return;
   }
 
+  if (cloudPointIdSet.size > 0) {
+    const cloudLists = state.cloud.pointLists.filter((list) => (
+      list.points.some((point) => cloudPointIdSet.has(point.id))
+    ));
+    for (const list of cloudLists) {
+      const nextList = {
+        ...list,
+        points: list.points.filter((point) => !cloudPointIdSet.has(point.id))
+      };
+      const updated = await updateCloudPointList(list, nextList, {
+        message: cloudText("クラウド地点を削除しました", "Cloud point(s) deleted")
+      });
+      if (!updated) {
+        render();
+        return;
+      }
+    }
+  }
+
   state.lastDeleted = {
     points: state.points.filter((item) => pointIdSet.has(item.id)).map(clonePlain),
-    links: state.links.filter((item) => linkIdSet.has(item.id)).map(clonePlain),
+    links: state.links.filter((item) => (
+      linkIdSet.has(item.id)
+      && !cloudPointIdSet.has(item.a)
+      && !cloudPointIdSet.has(item.b)
+    )).map(clonePlain),
     observations: selectedObservations.map(clonePlain)
   };
   if (selectedObservationIdSet.size > 0) {
@@ -7633,18 +7748,18 @@ function deleteSelectedPoint() {
   state.selectedPointId = null;
   state.selectedLinkId = null;
   state.pendingLinkPointId = null;
-  if (pointIdSet.has(state.editingPointId)) {
+  if (deletionPointIdSet.has(state.editingPointId)) {
     state.editingPointId = null;
   }
-  state.routeSelectionIds = state.routeSelectionIds.filter((id) => !pointIdSet.has(id));
-  if (pointIdSet.has(state.routeStartPointId)) {
+  state.routeSelectionIds = state.routeSelectionIds.filter((id) => !deletionPointIdSet.has(id));
+  if (deletionPointIdSet.has(state.routeStartPointId)) {
     clearRouteStartState();
   }
-  if (state.routeResult?.pointIds?.some((id) => pointIdSet.has(id))) {
+  if (state.routeResult?.pointIds?.some((id) => deletionPointIdSet.has(id))) {
     state.routeResult = null;
   }
 
-  if (pointIdSet.has(state.targetPointId)) {
+  if (deletionPointIdSet.has(state.targetPointId)) {
     clearTarget({ render: false });
   }
 
