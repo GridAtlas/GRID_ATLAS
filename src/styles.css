@@ -1080,7 +1080,7 @@ textarea {
   min-width: 0;
   min-height: 48px;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
   padding: 5px 7px;
@@ -1946,4 +1946,70 @@ textarea {
   .app-toast {
     bottom: calc(76px + env(safe-area-inset-bottom));
   }
+}
+
+
+
+.storage-list-drag-hint {
+  flex: 0 0 100%;
+  margin: -3px 0 2px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.storage-list-drag-handle {
+  display: grid;
+  width: 16px;
+  min-height: 32px;
+  place-items: center;
+  color: var(--muted);
+  cursor: grab;
+  font-size: 17px;
+  line-height: 1;
+  touch-action: none;
+}
+
+.storage-list-row.is-dragging {
+  opacity: 0.48;
+  border-color: var(--accent-strong);
+}
+
+.storage-list-row.is-drop-before {
+  border-top: 3px solid var(--accent-strong);
+}
+
+.storage-list-row.is-drop-after {
+  border-bottom: 3px solid var(--accent-strong);
+}
+
+.storage-list-section.is-drop-target .storage-list-section-items {
+  padding: 5px;
+  border: 2px dashed var(--accent-strong);
+  border-radius: 8px;
+  background: var(--active-bg);
+}
+
+.storage-list-drag-ghost {
+  position: fixed;
+  z-index: 1000;
+  max-width: min(260px, 70vw);
+  padding: 8px 12px;
+  border: 1px solid var(--accent-strong);
+  border-radius: 8px;
+  background: var(--field-bg);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 900;
+  pointer-events: none;
+}
+
+body.is-storage-list-dragging,
+body.is-storage-list-dragging .storage-list-row {
+  cursor: grabbing;
+}
+
+body.is-storage-list-dragging .storage-list-row {
+  touch-action: none;
 }

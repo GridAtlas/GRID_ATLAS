@@ -277,6 +277,7 @@ const state = {
 let pendingObservationImportMode = "replace";
 let pendingShareLink = null;
 let appToastTimerId = 0;
+let activeStorageListDrag = null;
 
 const CANVAS_PALETTES = {
   pastel: {
@@ -513,6 +514,10 @@ const TRANSLATIONS = {
     "storage.move": "移動",
     "storage.moveDevice": "端末に移動",
     "storage.connectFirst": "先にクラウドへ接続してください",
+    "storage.dragHint": "リストを長押ししてドラッグすると、順番や保存場所を変更できます。",
+    "storage.dragReordered": "リストの順番を変更しました",
+    "storage.dragMoveCloud": "クラウドへ移動",
+    "storage.dragMoveDevice": "端末へ移動",
     "list.new": "新規作成",
     "list.newPrompt": "新しいリストの名前",
     "list.created": "新しいリストを作成し、登録先にしました",
@@ -729,6 +734,10 @@ const TRANSLATIONS = {
     "storage.move": "Move",
     "storage.moveDevice": "Move to device",
     "storage.connectFirst": "Connect to the cloud first",
+    "storage.dragHint": "Press and hold a list, then drag to reorder it or change its storage.",
+    "storage.dragReordered": "List order updated",
+    "storage.dragMoveCloud": "Move to cloud",
+    "storage.dragMoveDevice": "Move to device",
     "list.new": "New list",
     "list.newPrompt": "Name the new list",
     "list.created": "Created a new list and set it as the destination",
@@ -3306,6 +3315,10 @@ function setupStorageListRowSelection(row, entry) {
     && Boolean(target.closest("button, input, select, textarea, a"));
 
   row.addEventListener("click", (event) => {
+    if (row.dataset.storageDragSuppressClick === "true") {
+      delete row.dataset.storageDragSuppressClick;
+      return;
+    }
     if (isRowControl(event.target)) return;
     setStorageListSelected(entry.storageId, !state.selectedStorageListIds.has(entry.storageId));
   });
@@ -3313,6 +3326,178 @@ function setupStorageListRowSelection(row, entry) {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     setStorageListSelected(entry.storageId, !state.selectedStorageListIds.has(entry.storageId));
+  });
+}
+function reorderLocalPointLists(sourceId, targetId, before) {
+  const sourceIndex = state.pointLists.findIndex((list) => list.id === sourceId);
+  const targetIndex = state.pointLists.findIndex((list) => list.id === targetId);
+  if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return false;
+
+  const [source] = state.pointLists.splice(sourceIndex, 1);
+  let insertIndex = state.pointLists.findIndex((list) => list.id === targetId);
+  if (!before) insertIndex += 1;
+  state.pointLists.splice(insertIndex, 0, source);
+  persistWorkspace();
+  setCloudStatus(t("storage.dragReordered"), { menu: false });
+  render();
+  return true;
+}
+
+function clearStorageListDragHover() {
+  for (const element of document.querySelectorAll(".storage-list-row.is-drop-before, .storage-list-row.is-drop-after, .storage-list-section.is-drop-target")) {
+    element.classList.remove("is-drop-before", "is-drop-after", "is-drop-target");
+  }
+}
+
+function updateStorageListDragHover(dragState, clientX, clientY) {
+  clearStorageListDragHover();
+  dragState.drop = null;
+  if (!dragState.dragging) return;
+
+  const element = document.elementFromPoint(clientX, clientY);
+  const targetRow = element instanceof Element ? element.closest("[data-storage-list-row]") : null;
+  const targetSection = element instanceof Element ? element.closest("[data-storage-list-section]") : null;
+  const sourceEntry = findStorageListEntry(dragState.storageId);
+  if (!sourceEntry) return;
+
+  if (targetRow && targetRow !== dragState.row) {
+    const targetEntry = findStorageListEntry(targetRow.dataset.storageListRow);
+    const sameSection = targetEntry
+      && sourceEntry.local
+      && targetEntry.local
+      && storageListSectionKey(sourceEntry) === storageListSectionKey(targetEntry);
+    if (sameSection) {
+      const rect = targetRow.getBoundingClientRect();
+      const before = clientY < rect.top + rect.height / 2;
+      dragState.drop = {
+        type: "reorder",
+        targetId: targetEntry.local.id,
+        before
+      };
+      targetRow.classList.add(before ? "is-drop-before" : "is-drop-after");
+      return;
+    }
+  }
+
+  if (!targetSection) return;
+  const sectionKey = targetSection.dataset.storageListSection;
+  if (sectionKey === "cloud" && sourceEntry.local && !sourceEntry.cloud) {
+    dragState.drop = { type: "move-cloud" };
+    targetSection.classList.add("is-drop-target");
+  } else if (sectionKey !== "cloud" && sourceEntry.cloud && !sourceEntry.local) {
+    dragState.drop = { type: "move-device" };
+    targetSection.classList.add("is-drop-target");
+  }
+}
+
+function updateStorageListDragGhost(dragState, clientX, clientY) {
+  if (!dragState.ghost) return;
+  dragState.ghost.style.transform = "translate3d(" + (clientX + 14) + "px, " + (clientY + 14) + "px, 0)";
+}
+
+function beginStorageListDrag(dragState) {
+  if (activeStorageListDrag !== dragState || dragState.dragging) return;
+  dragState.dragging = true;
+  dragState.row.classList.add("is-dragging");
+  dragState.row.setAttribute("aria-grabbed", "true");
+  document.body.classList.add("is-storage-list-dragging");
+
+  const ghost = document.createElement("div");
+  ghost.className = "storage-list-drag-ghost";
+  ghost.textContent = dragState.row.querySelector(".point-list-name strong")?.textContent || t("panel.lists");
+  document.body.append(ghost);
+  dragState.ghost = ghost;
+  try {
+    dragState.row.setPointerCapture(dragState.pointerId);
+  } catch {}
+  updateStorageListDragGhost(dragState, dragState.lastX, dragState.lastY);
+}
+
+function finishStorageListDrag(dragState) {
+  clearStorageListDragHover();
+  dragState.row.classList.remove("is-dragging");
+  dragState.row.removeAttribute("aria-grabbed");
+  if (dragState.ghost) dragState.ghost.remove();
+  document.body.classList.remove("is-storage-list-dragging");
+  if (activeStorageListDrag === dragState) activeStorageListDrag = null;
+}
+
+function applyStorageListDrop(dragState) {
+  const drop = dragState.drop;
+  const entry = findStorageListEntry(dragState.storageId);
+  if (!drop || !entry) return;
+
+  if (drop.type === "reorder") {
+    reorderLocalPointLists(entry.local.id, drop.targetId, drop.before);
+  } else if (drop.type === "move-cloud") {
+    void moveListToCloud(entry.storageId);
+  } else if (drop.type === "move-device") {
+    void moveListToDevice(entry.storageId);
+  }
+}
+
+function setupStorageListDrag(row, entry) {
+  const isRowControl = (target) => target instanceof Element
+    && Boolean(target.closest("button, input, select, textarea, a"));
+
+  row.addEventListener("pointerdown", (event) => {
+    if ((event.pointerType === "mouse" && event.button !== 0) || state.cloud.busy || isRowControl(event.target)) return;
+    if (activeStorageListDrag) finishStorageListDrag(activeStorageListDrag);
+
+    const dragState = {
+      row,
+      storageId: entry.storageId,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
+      dragging: false,
+      drop: null,
+      ghost: null,
+      timerId: 0
+    };
+    activeStorageListDrag = dragState;
+
+    const cleanup = () => {
+      window.clearTimeout(dragState.timerId);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      if (activeStorageListDrag === dragState && !dragState.dragging) activeStorageListDrag = null;
+    };
+    const onMove = (moveEvent) => {
+      if (moveEvent.pointerId !== dragState.pointerId || activeStorageListDrag !== dragState) return;
+      dragState.lastX = moveEvent.clientX;
+      dragState.lastY = moveEvent.clientY;
+      if (!dragState.dragging) {
+        const distance = Math.hypot(moveEvent.clientX - dragState.startX, moveEvent.clientY - dragState.startY);
+        if (distance > 10) cleanup();
+        return;
+      }
+      moveEvent.preventDefault();
+      updateStorageListDragGhost(dragState, moveEvent.clientX, moveEvent.clientY);
+      updateStorageListDragHover(dragState, moveEvent.clientX, moveEvent.clientY);
+    };
+    const onUp = (upEvent) => {
+      if (upEvent.pointerId !== dragState.pointerId || activeStorageListDrag !== dragState) return;
+      cleanup();
+      if (!dragState.dragging) return;
+      upEvent.preventDefault();
+      row.dataset.storageDragSuppressClick = "true";
+      applyStorageListDrop(dragState);
+      finishStorageListDrag(dragState);
+    };
+    const onCancel = (cancelEvent) => {
+      if (cancelEvent.pointerId !== dragState.pointerId || activeStorageListDrag !== dragState) return;
+      cleanup();
+      finishStorageListDrag(dragState);
+    };
+
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    dragState.timerId = window.setTimeout(() => beginStorageListDrag(dragState), 360);
   });
 }
 function createStorageListRow(entry) {
@@ -3326,6 +3511,12 @@ function createStorageListRow(entry) {
   row.setAttribute("aria-pressed", String(selected));
   const listName = entry.local?.name || entry.cloud?.name || "地点リスト";
   const visible = storageListIsVisible(entry);
+
+  const dragHandle = document.createElement("span");
+  dragHandle.className = "storage-list-drag-handle";
+  dragHandle.textContent = "⠿";
+  dragHandle.title = t("storage.dragHint");
+  dragHandle.setAttribute("aria-hidden", "true");
 
   const gridVisibility = document.createElement("button");
   gridVisibility.type = "button";
@@ -3407,8 +3598,9 @@ function createStorageListRow(entry) {
   destinationButton.addEventListener("click", () => toggleActivePointList(entry.local.id));
 
   rowActions.append(share, rename, destinationButton);
-  row.append(gridVisibility, name, rowActions);
+  row.append(dragHandle, gridVisibility, name, rowActions);
   setupStorageListRowSelection(row, entry);
+  setupStorageListDrag(row, entry);
   return row;
 }
 
@@ -3422,6 +3614,7 @@ function createStorageListSection(section, entries) {
   const wrapper = document.createElement("section");
   wrapper.className = "storage-list-section";
   wrapper.dataset.storageListSection = section.key;
+  wrapper.setAttribute("aria-label", t(section.label));
 
   const heading = document.createElement("h3");
   heading.className = "storage-list-section-title";
