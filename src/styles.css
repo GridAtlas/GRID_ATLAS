@@ -1204,6 +1204,7 @@ textarea {
 }
 
 .storage-grid-button.is-active,
+.storage-sync-button.is-active,
 .storage-destination-button.is-active {
   border: 0;
   background: transparent;
@@ -1717,7 +1718,6 @@ textarea {
     grid-template-columns: repeat(2, 42px);
   }
 
-  .coordinate-fields,
   .metric-grid {
     grid-template-columns: 1fr;
   }
