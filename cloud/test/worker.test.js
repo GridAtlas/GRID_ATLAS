@@ -121,6 +121,7 @@ describe("GRID ATLAS Cloud API", () => {
     expect(created.status).toBe(201);
     const createdBody = await created.json();
     expect(createdBody.revision).toBe(1);
+    expect(createdBody.list.list.scope).toBe("mine");
     expect(createdBody.list.list.createdAt).toBe("2026-07-23T15:00:00.000Z");
     expect(createdBody.list).not.toHaveProperty("currentLocation");
     expect(createdBody.list.points[0]).not.toHaveProperty("selected");
@@ -139,6 +140,7 @@ describe("GRID ATLAS Cloud API", () => {
     const collectionBody = await collection.json();
     expect(collectionBody.lists).toHaveLength(1);
     expect(collectionBody.lists[0]).toMatchObject({
+      scope: "mine",
       id: "list-1",
       revision: 1,
       createdAt: "2026-07-23T15:00:00.000Z"

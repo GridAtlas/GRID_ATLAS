@@ -3845,9 +3845,13 @@ function setupStorageListDrag(row, entry) {
     };
     const onUp = (upEvent) => {
       if (upEvent.pointerId !== dragState.pointerId || activeStorageListDrag !== dragState) return;
-      cleanup();
-      if (!dragState.dragging) return;
+      if (!dragState.dragging) {
+        cleanup();
+        return;
+      }
       upEvent.preventDefault();
+      updateStorageListDragHover(dragState, upEvent.clientX, upEvent.clientY);
+      cleanup();
       row.dataset.storageDragSuppressClick = "true";
       applyStorageListDrop(dragState);
       finishStorageListDrag(dragState);
@@ -4297,6 +4301,10 @@ async function moveListToCloud(storageId, options = {}) {
   const source = entry.local;
   const targetCloudId = `cloud:${createId()}`;
   const payload = pointListToCloudPayload({ ...source, id: targetCloudId, cloudId: targetCloudId, cloudScope: "mine" }, pointGeo);
+  if (payload.list.scope !== "mine") {
+    setCloudStatus(cloudText("マイリスト（クラウド）として保存できません。", "Could not create a private cloud list."), { error: true });
+    return false;
+  }
   setCloudBusy(true);
   let completed = false;
   try {

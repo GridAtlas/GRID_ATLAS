@@ -486,14 +486,11 @@
             <h2 id="storageTransferDialogTitle">リストの登録方法</h2>
             <p id="storageTransferDialogHint" class="point-transfer-dialog-hint">このリストを移動またはコピーします。</p>
           </div>
-          <button id="storageTransferCancelButton" class="share-link-close" type="button" aria-label="閉じる">
-            <svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg>
-          </button>
         </div>
         <div class="point-transfer-dialog-actions">
           <button id="storageTransferMoveButton" class="primary-button" type="button">移動</button>
           <button id="storageTransferCopyButton" type="button">コピー</button>
-          <button class="compact-button" type="submit" value="cancel">キャンセル</button>
+          <button id="storageTransferCancelButton" class="compact-button" type="submit" value="cancel">キャンセル</button>
         </div>
       </form>
     </dialog>
@@ -504,9 +501,6 @@
             <h2 id="pointTransferDialogTitle"></h2>
             <p id="pointTransferDialogHint" class="point-transfer-dialog-hint"></p>
           </div>
-          <button id="cancelPointTransferButton" class="share-link-close" type="button" aria-label="閉じる">
-            <svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg>
-          </button>
         </div>
         <div id="pointTransferDestinationList" class="point-transfer-destination-list"></div>
         <div class="point-transfer-dialog-actions">
@@ -514,7 +508,7 @@
             <svg class="ui-icon" aria-hidden="true"><use href="#icon-plus"></use></svg>
             <span data-i18n="list.transferDialogNew">新しいリストを作成</span>
           </button>
-          <button class="compact-button" type="submit" value="cancel" data-i18n="action.cancel">キャンセル</button>
+          <button id="cancelPointTransferButton" class="compact-button" type="submit" value="cancel" data-i18n="action.cancel">キャンセル</button>
         </div>
       </form>
     </dialog>
