@@ -531,6 +531,16 @@ const TRANSLATIONS = {
     "storage.dragReordered": "リストの順番を変更しました",
     "storage.dragMoveCloud": "クラウド保管へ移動",
     "storage.dragMoveDevice": "端末へ移動",
+    "storage.transferTitle": "リストの移動／コピー",
+    "storage.transferHint": "「{name}」を{target}へ移動またはコピーします。",
+    "storage.transferMove": "移動",
+    "storage.transferCopy": "コピー",
+    "storage.targetMineDevice": "マイリスト（端末内）",
+    "storage.targetMineCloud": "マイリスト（クラウド）",
+    "storage.targetPublic": "公開リスト",
+    "storage.dragPublicFromMine": "公開リストへ登録できるのはマイリストからだけです。",
+    "storage.dragPublicToMine": "公開リストからはマイリストへのコピーだけできます。",
+    "storage.dragPublicCopyOnly": "このリストは編集不可のため、移動元にはできません。",
     "list.new": "新規作成",
     "list.newPrompt": "新しいリストの名前",
     "list.created": "新しいリストを作成し、登録先にしました",
@@ -762,9 +772,12 @@ const TRANSLATIONS = {
     "storage.dragMoveCloud": "Move to cloud storage",
     "storage.dragMoveDevice": "Move to device",
     "storage.transferTitle": "List transfer",
-    "storage.transferHint": "Move or copy “{name}”.",
+    "storage.transferHint": "Move or copy “{name}” to {target}.",
     "storage.transferMove": "Move",
     "storage.transferCopy": "Copy",
+    "storage.targetMineDevice": "My Lists (Device)",
+    "storage.targetMineCloud": "My Lists (Cloud)",
+    "storage.targetPublic": "Public Lists",
     "storage.dragPublicFromMine": "Only My Lists can be registered as Public Lists.",
     "storage.dragPublicToMine": "Public Lists can only be copied to My Lists.",
     "storage.dragPublicCopyOnly": "This list is read-only and cannot be moved from.",
@@ -3578,10 +3591,27 @@ function storageListTransferReason(sourceEntry, targetSection) {
 }
 
 function openStorageTransferDialog(storageId, targetSection) {
-  state.pendingStorageTransfer = { storageId, targetSection };
+  const targetKeys = {
+    mineDevice: "storage.targetMineDevice",
+    mineCloud: "storage.targetMineCloud",
+    public: "storage.targetPublic"
+  };
+  if (!Object.hasOwn(targetKeys, targetSection)) {
+    showAppToast(cloudText("移動先を確認できません。", "The transfer destination is unavailable."), { error: true });
+    return;
+  }
   const entry = findStorageListEntry(storageId);
+  if (!entry) {
+    showAppToast(cloudText("移動元のリストを確認できません。", "The source list is unavailable."), { error: true });
+    return;
+  }
+  state.pendingStorageTransfer = { storageId, targetSection };
+  const targetLabel = t(targetKeys[targetSection]);
+  const name = entry.local?.name || entry.cloud?.name || "地点リスト";
   elements.storageTransferDialogTitle.textContent = t("storage.transferTitle");
-  elements.storageTransferDialogHint.textContent = t("storage.transferHint").replace("{name}", entry?.local?.name || entry?.cloud?.name || "地点リスト");
+  elements.storageTransferDialogHint.textContent = t("storage.transferHint")
+    .replace("{name}", name)
+    .replace("{target}", targetLabel);
   elements.storageTransferMoveButton.textContent = t("storage.transferMove");
   elements.storageTransferCopyButton.textContent = t("storage.transferCopy");
   elements.storageTransferCancelButton.textContent = t("action.cancel");
@@ -3639,26 +3669,55 @@ async function executeStorageListTransfer(mode) {
   const entry = findStorageListEntry(pending.storageId);
   if (!entry) return;
   const sourceSection = storageListSectionKey(entry);
-  if (pending.targetSection === "mineCloud" && entry.local) {
-    await moveListToCloud(pending.storageId, { copy: mode === "copy" });
-  } else if (pending.targetSection === "mineDevice" && entry.cloud) {
-    await moveListToDevice(pending.storageId, { copy: mode === "copy" });
-  } else if (pending.targetSection === "mineDevice" && entry.local && sourceSection === "imported") {
-    if (mode === "copy") {
-      copyStorageList(pending.storageId);
-    } else {
-      entry.local.source = "local";
-      entry.local.editable = true;
-      entry.local.importedAt = "";
-      entry.local.updatedAt = new Date().toISOString();
-      persistWorkspace();
-      render();
+  const targetSection = pending.targetSection;
+
+  if (targetSection === "mineCloud") {
+    if ((sourceSection !== "mineDevice" && sourceSection !== "imported") || !entry.local) {
+      showAppToast(t("storage.dragPublicToMine"), { error: true });
+      return;
     }
-  } else if (pending.targetSection === "public") {
-    await publishStorageList(pending.storageId, { move: mode === "move" });
-  } else if (pending.targetSection === "mineDevice" && entry.cloud) {
-    await moveListToDevice(pending.storageId, { copy: mode === "copy" });
+    await moveListToCloud(pending.storageId, { copy: mode === "copy" });
+    return;
   }
+
+  if (targetSection === "mineDevice") {
+    if (sourceSection === "public") {
+      if (mode !== "copy") {
+        showAppToast(t("storage.dragPublicCopyOnly"), { error: true });
+        return;
+      }
+      await moveListToDevice(pending.storageId, { copy: true });
+      return;
+    }
+    if (sourceSection === "mineCloud" && entry.cloud) {
+      await moveListToDevice(pending.storageId, { copy: mode === "copy" });
+      return;
+    }
+    if (sourceSection === "imported" && entry.local) {
+      if (mode === "copy") {
+        copyStorageList(pending.storageId);
+      } else {
+        entry.local.source = "local";
+        entry.local.editable = true;
+        entry.local.importedAt = "";
+        entry.local.updatedAt = new Date().toISOString();
+        persistWorkspace();
+        render();
+      }
+      return;
+    }
+  }
+
+  if (targetSection === "public") {
+    if (sourceSection !== "mineDevice" && sourceSection !== "mineCloud") {
+      showAppToast(t("storage.dragPublicFromMine"), { error: true });
+      return;
+    }
+    await publishStorageList(pending.storageId, { move: mode === "move" });
+    return;
+  }
+
+  showAppToast(cloudText("この移動またはコピーは実行できません。", "This transfer is not available."), { error: true });
 }
 function clearStorageListDragHover() {
   for (const element of document.querySelectorAll(".storage-list-row.is-drop-before, .storage-list-row.is-drop-after, .storage-list-section.is-drop-target")) {
@@ -3910,16 +3969,20 @@ function createStorageListRow(entry) {
 }
 
 function storageEntryCloudScope(entry) {
-  return entry.local?.cloudScope || entry.preview?.cloudScope || entry.cloud?.scope || "public";
+  return entry?.cloud?.scope === "mine" || entry?.preview?.cloudScope === "mine"
+    ? "mine"
+    : entry?.cloud?.scope === "public" || entry?.preview?.cloudScope === "public"
+      ? "public"
+      : "public";
 }
 
 function isMyCloudStorageEntry(entry) {
-  return Boolean(entry.cloud && storageEntryCloudScope(entry) === "mine");
+  return Boolean(entry?.cloud && storageEntryCloudScope(entry) === "mine");
 }
 
 function storageListSectionKey(entry) {
-  if (entry.local?.importedAt) return "imported";
-  if (entry.local) return "mineDevice";
+  if (entry?.local?.importedAt) return "imported";
+  if (entry?.local) return "mineDevice";
   if (isMyCloudStorageEntry(entry)) return "mineCloud";
   return "public";
 }

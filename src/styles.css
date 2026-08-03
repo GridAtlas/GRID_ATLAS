@@ -1798,6 +1798,20 @@ textarea {
   width: min(480px, calc(100vw - 24px));
 }
 
+.storage-transfer-dialog {
+  width: min(520px, calc(100vw - 24px));
+}
+
+.storage-transfer-dialog .point-transfer-dialog-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.storage-transfer-dialog .point-transfer-dialog-actions > button {
+  min-width: 0;
+}
+
 .point-transfer-dialog-heading {
   align-items: flex-start;
 }
@@ -2027,6 +2041,9 @@ textarea {
 }
 
 @media (max-width: 760px) {
+  .storage-transfer-dialog .point-transfer-dialog-actions {
+    grid-template-columns: 1fr;
+  }
   .share-link-dialog-form,
   .point-info-dialog-form,
   .point-transfer-dialog-form {
