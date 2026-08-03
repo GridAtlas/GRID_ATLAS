@@ -502,22 +502,22 @@ const TRANSLATIONS = {
     "route.fromPrevious": "前地点から",
     "route.toStart": "スタートへ",
     "data.pointLists": "地点リスト",
-    "data.cloud": "公開リスト",
+    "data.cloud": "マイリスト（クラウド）",
     "data.observations": "観察記録",
     "data.grid": "グリッド",
     "cloud.menuTitle": "クラウド機能",
-    "cloud.dataNotice": "接続中の公開リストです。",
-    "cloud.pointSource": "公開リスト",
+    "cloud.dataNotice": "接続中のマイリスト（クラウド）です。",
+    "cloud.pointSource": "マイリスト（クラウド）",
     "cloud.apiUrl": "Cloud API URL",
     "cloud.accessToken": "アクセスコード",
     "cloud.connect": "接続",
     "cloud.disconnect": "切断",
     "cloud.advanced": "接続設定",
-    "cloud.localList": "公開する端末内リスト",
-    "cloud.save": "公開リストとして保存",
-    "cloud.delete": "公開リストから削除",
-    "cloud.empty": "公開リストなし",
-    "storage.notice": "各リストは端末内またはクラウドへ個別に移動できます。公開リストへの登録はコピーのみです。",
+    "cloud.localList": "クラウドへ移動する端末内リスト",
+    "cloud.save": "マイリスト（クラウド）として保存",
+    "cloud.delete": "マイリスト（クラウド）から削除",
+    "cloud.empty": "マイリスト（クラウド）なし",
+    "storage.notice": "各リストは端末内またはクラウドへ個別に移動できます。インポートリストはマイリストへ移動またはコピーできます。",
     "storage.location": "保存場所",
     "storage.device": "端末",
     "storage.cloud": "クラウド",
@@ -526,7 +526,7 @@ const TRANSLATIONS = {
     "storage.move": "移動",
     "storage.moveDevice": "端末に移動",
     "storage.connectFirst": "先にクラウドへ接続してください",
-    "storage.publicCopyOnly": "公開リストへの登録はコピーのみ対応です。",
+    "storage.importMoveOnly": "インポートリストは、個別の転送操作でマイリストへ移動またはコピーできます。",
     "storage.dragHint": "リストを長押ししてドラッグすると、順番や保存場所を変更できます。",
     "storage.dragReordered": "リストの順番を変更しました",
     "storage.dragMoveCloud": "クラウド保管へ移動",
@@ -535,12 +535,9 @@ const TRANSLATIONS = {
     "storage.transferHint": "「{name}」を{target}へ移動またはコピーします。",
     "storage.transferMove": "移動",
     "storage.transferCopy": "コピー",
+    "storage.dragImportedDestination": "インポートリストはコピー先・移動先にできません。",
     "storage.targetMineDevice": "マイリスト（端末内）",
     "storage.targetMineCloud": "マイリスト（クラウド）",
-    "storage.targetPublic": "公開リスト",
-    "storage.dragPublicFromMine": "公開リストへ登録できるのはマイリストからだけです。",
-    "storage.dragPublicToMine": "公開リストからはマイリストへのコピーだけできます。",
-    "storage.dragPublicCopyOnly": "このリストは編集不可のため、移動元にはできません。",
     "list.new": "新規作成",
     "list.newPrompt": "新しいリストの名前",
     "list.created": "新しいリストを作成し、登録先にしました",
@@ -586,7 +583,7 @@ const TRANSLATIONS = {
     "list.section.mineDevice": "マイリスト（端末内）",
     "list.section.mineCloud": "マイリスト（クラウド）",
     "list.section.imported": "インポートリスト",
-    "list.section.public": "公開リスト",
+
     "list.none": "リストなし",
     "maintenance.title": "バックアップ・初期化",
     "backup.title": "バックアップ",
@@ -742,22 +739,22 @@ const TRANSLATIONS = {
     "route.fromPrevious": "From previous",
     "route.toStart": "To start",
     "data.pointLists": "Point Lists",
-    "data.cloud": "Public Lists",
+    "data.cloud": "My Lists (Cloud)",
     "data.observations": "Observation Records",
     "data.grid": "Grid",
     "cloud.menuTitle": "Cloud features",
-    "cloud.dataNotice": "Public lists in the connected cloud.",
-    "cloud.pointSource": "Public list",
+    "cloud.dataNotice": "My Lists stored in the connected cloud.",
+    "cloud.pointSource": "My List (Cloud)",
     "cloud.apiUrl": "Cloud API URL",
     "cloud.accessToken": "Access code",
     "cloud.connect": "Connect",
     "cloud.disconnect": "Disconnect",
     "cloud.advanced": "Connection settings",
-    "cloud.localList": "Device list to publish",
-    "cloud.save": "Save as a public list",
-    "cloud.delete": "Delete public list",
-    "cloud.empty": "No public lists",
-    "storage.notice": "Move each list independently between device and cloud storage. Public lists can only be copied.",
+    "cloud.localList": "Device list to move to cloud",
+    "cloud.save": "Save as My List (Cloud)",
+    "cloud.delete": "Delete from My Lists (Cloud)",
+    "cloud.empty": "No My Lists (Cloud)",
+    "storage.notice": "Move each list independently between device and cloud storage. Imported lists can be moved or copied to My Lists.",
     "storage.location": "Storage",
     "storage.device": "Device",
     "storage.cloud": "Cloud",
@@ -766,7 +763,7 @@ const TRANSLATIONS = {
     "storage.move": "Move",
     "storage.moveDevice": "Move to device",
     "storage.connectFirst": "Connect to the cloud first",
-    "storage.publicCopyOnly": "Public lists can only be copied to register.",
+    "storage.importMoveOnly": "Move or copy imported lists to My Lists from the individual transfer dialog.",
     "storage.dragHint": "Press and hold a list, then drag to reorder it or change its storage.",
     "storage.dragReordered": "List order updated",
     "storage.dragMoveCloud": "Move to cloud storage",
@@ -775,12 +772,9 @@ const TRANSLATIONS = {
     "storage.transferHint": "Move or copy “{name}” to {target}.",
     "storage.transferMove": "Move",
     "storage.transferCopy": "Copy",
+    "storage.dragImportedDestination": "Imported Lists cannot be a copy or move destination.",
     "storage.targetMineDevice": "My Lists (Device)",
     "storage.targetMineCloud": "My Lists (Cloud)",
-    "storage.targetPublic": "Public Lists",
-    "storage.dragPublicFromMine": "Only My Lists can be registered as Public Lists.",
-    "storage.dragPublicToMine": "Public Lists can only be copied to My Lists.",
-    "storage.dragPublicCopyOnly": "This list is read-only and cannot be moved from.",
     "list.new": "New list",
     "list.newPrompt": "Name the new list",
     "list.created": "Created a new list and set it as the destination",
@@ -791,7 +785,7 @@ const TRANSLATIONS = {
     "list.share": "Share link",
     "list.shareDialogTitle": "Share link",
     "list.shareSummary": "{count} point(s) in “{name}”",
-    "list.shareSelectedNamePrompt": "Name for the public list",
+    "list.shareSelectedNamePrompt": "Name for the shared list",
     "list.shareSelectedDefaultName": "Selected points",
     "list.shareSelectedUnavailable": "Select points to share",
     "list.sharePrivacy": "Includes names, coordinates, and notes. Images are not included.",
@@ -826,7 +820,7 @@ const TRANSLATIONS = {
     "list.section.mineDevice": "My Lists (Device)",
     "list.section.mineCloud": "My Lists (Cloud)",
     "list.section.imported": "Imported Lists",
-    "list.section.public": "Public Lists",
+
     "list.none": "No lists",
     "maintenance.title": "Backup & reset",
     "backup.title": "Backup",
@@ -1172,7 +1166,7 @@ function createPointList(options = {}) {
     source: typeof options.source === "string" ? options.source : "import",
     storagePlaceholder: options.storagePlaceholder === true,
     cloudId: typeof options.cloudId === "string" ? options.cloudId : "",
-    cloudScope: options.cloudScope === "mine" ? "mine" : options.cloudScope === "public" ? "public" : "",
+    cloudScope: options.cloudScope === "mine" ? "mine" : "",
     cloudRevision: Number.isInteger(options.cloudRevision) ? options.cloudRevision : null,
     cloudUpdatedAt: typeof options.cloudUpdatedAt === "string" ? options.cloudUpdatedAt : "",
     gridAtlas: options.gridAtlas && typeof options.gridAtlas === "object" ? clonePlain(options.gridAtlas) : null,
@@ -1263,10 +1257,6 @@ function cloudPointListForPoint(pointId) {
 
 async function updateCloudPointList(list, nextList, options = {}) {
   const cloudId = list?.cloudId || list?.id;
-  if (list?.source === "cloud" && list.cloudScope !== "mine") {
-    setCloudStatus(cloudText("公開リストは直接編集できません", "Public lists are read-only"), { error: true });
-    return false;
-  }
   const meta = state.cloud.lists.find((item) => item.id === cloudId);
   if (!state.cloud.connected || !cloudId || !meta) {
     setCloudStatus(t("storage.connectFirst"), { error: true });
@@ -1294,7 +1284,7 @@ async function updateCloudPointList(list, nextList, options = {}) {
 
   if (updated) {
     await refreshCloudLists({ quiet: true });
-    setCloudStatus(options.message || cloudText("公開リストを更新しました", "Public list updated"));
+    setCloudStatus(options.message || cloudText("マイリスト（クラウド）を更新しました", "My List (Cloud) updated"));
   }
   return updated;
 }
@@ -1596,7 +1586,7 @@ function findPointAny(pointId) {
 }
 function pointEditable(pointId) {
   const list = pointListForPoint(pointId);
-  return Boolean(list?.editable && (list.source !== "cloud" || list.cloudScope === "mine"));
+  return Boolean(list?.editable);
 }
 
 function normalizePointList(list, existingPointIds = new Set(), fallbackName = "地点リスト") {
@@ -1619,7 +1609,7 @@ function normalizePointList(list, existingPointIds = new Set(), fallbackName = "
     source: typeof list?.source === "string" ? list.source : "import",
     storagePlaceholder: list?.storagePlaceholder === true,
     cloudId: typeof list?.cloudId === "string" ? list.cloudId : "",
-    cloudScope: list?.cloudScope === "mine" ? "mine" : list?.cloudScope === "public" ? "public" : "",
+    cloudScope: list?.cloudScope === "mine" ? "mine" : "",
     cloudRevision: Number.isInteger(list?.cloudRevision) ? list.cloudRevision : null,
     cloudUpdatedAt: typeof list?.cloudUpdatedAt === "string" ? list.cloudUpdatedAt : "",
     gridAtlas: list?.gridAtlas && typeof list.gridAtlas === "object" ? clonePlain(list.gridAtlas) : null,
@@ -3543,8 +3533,8 @@ function storageListSectionEntryList(sectionKey) {
   if (sectionKey === "mineDevice" || sectionKey === "imported") {
     return state.pointLists.filter((list) => storageListSectionKey({ local: list }) === sectionKey);
   }
-  if (sectionKey === "mineCloud" || sectionKey === "public") {
-    return state.cloud.pointLists.filter((list) => storageListSectionKey({ preview: list, cloud: { id: list.cloudId || list.id, scope: list.cloudScope } }) === sectionKey);
+  if (sectionKey === "mineCloud") {
+    return state.cloud.pointLists;
   }
   return [];
 }
@@ -3553,23 +3543,21 @@ function reorderStorageLists(sourceEntry, targetEntry, before) {
   const sectionKey = storageListSectionKey(sourceEntry);
   if (sectionKey !== storageListSectionKey(targetEntry)) return false;
   const lists = storageListSectionEntryList(sectionKey);
-  const sourceKey = sourceEntry.local?.id || sourceEntry.cloud?.id;
-  const targetKey = targetEntry.local?.id || targetEntry.cloud?.id;
-  const sourceIndex = lists.findIndex((list) => (list.id || list.cloudId) === sourceKey);
-  const targetIndex = lists.findIndex((list) => (list.id || list.cloudId) === targetKey);
+  const listKey = (list) => list.cloudId || list.id;
+  const sourceKey = sourceEntry.cloud?.id || sourceEntry.local?.id;
+  const targetKey = targetEntry.cloud?.id || targetEntry.local?.id;
+  const sourceIndex = lists.findIndex((list) => listKey(list) === sourceKey);
+  const targetIndex = lists.findIndex((list) => listKey(list) === targetKey);
   if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return false;
   const [source] = lists.splice(sourceIndex, 1);
-  let insertIndex = lists.findIndex((list) => (list.id || list.cloudId) === targetKey);
+  let insertIndex = lists.findIndex((list) => listKey(list) === targetKey);
   if (!before) insertIndex += 1;
   lists.splice(insertIndex, 0, source);
   if (sectionKey === "mineDevice" || sectionKey === "imported") {
     const other = state.pointLists.filter((list) => storageListSectionKey({ local: list }) !== sectionKey);
-    state.pointLists = [];
-    for (const list of other) state.pointLists.push(list);
-    state.pointLists.push(...lists);
-  } else {
-    const other = state.cloud.pointLists.filter((list) => storageListSectionKey({ preview: list, cloud: { id: list.cloudId || list.id, scope: list.cloudScope } }) !== sectionKey);
-    state.cloud.pointLists = [...other, ...lists];
+    state.pointLists = [...other, ...lists];
+  } else if (sectionKey === "mineCloud") {
+    state.cloud.pointLists = lists;
   }
   persistWorkspace();
   setCloudStatus(t("storage.dragReordered"), { menu: false });
@@ -3580,21 +3568,17 @@ function reorderStorageLists(sourceEntry, targetEntry, before) {
 function storageListTransferReason(sourceEntry, targetSection) {
   const sourceSection = storageListSectionKey(sourceEntry);
   if (sourceSection === targetSection) return "";
-  if (targetSection === "public") {
-    if (sourceSection !== "mineDevice" && sourceSection !== "mineCloud") return t("storage.dragPublicFromMine");
-    return "";
+  if (targetSection === "imported") return t("storage.dragImportedDestination");
+  if (targetSection !== "mineDevice" && targetSection !== "mineCloud") {
+    return cloudText("移動先を確認できません。", "The transfer destination is unavailable.");
   }
-  if (targetSection === "mineCloud" && sourceSection === "public") return t("storage.dragPublicToMine");
-  if (targetSection === "mineDevice" && sourceSection === "public") return "";
-  if (sourceSection === "public" && targetSection !== "mineDevice") return t("storage.dragPublicCopyOnly");
   return "";
 }
 
 function openStorageTransferDialog(storageId, targetSection) {
   const targetKeys = {
     mineDevice: "storage.targetMineDevice",
-    mineCloud: "storage.targetMineCloud",
-    public: "storage.targetPublic"
+    mineCloud: "storage.targetMineCloud"
   };
   if (!Object.hasOwn(targetKeys, targetSection)) {
     showAppToast(cloudText("移動先を確認できません。", "The transfer destination is unavailable."), { error: true });
@@ -3615,7 +3599,6 @@ function openStorageTransferDialog(storageId, targetSection) {
   elements.storageTransferMoveButton.textContent = t("storage.transferMove");
   elements.storageTransferCopyButton.textContent = t("storage.transferCopy");
   elements.storageTransferCancelButton.textContent = t("action.cancel");
-  elements.storageTransferMoveButton.disabled = storageListSectionKey(entry) === "public";
   if (!elements.storageTransferDialog.open) elements.storageTransferDialog.showModal();
 }
 
@@ -3624,44 +3607,6 @@ function closeStorageTransferDialog() {
   if (elements.storageTransferDialog.open) elements.storageTransferDialog.close("cancel");
 }
 
-async function publishStorageList(storageId, options = {}) {
-  const entry = findStorageListEntry(storageId);
-  const sourceSection = storageListSectionKey(entry);
-  const source = entry?.local ?? entry?.preview;
-  if (!entry || !source || (sourceSection !== "mineDevice" && sourceSection !== "mineCloud")) {
-    setCloudStatus(t("storage.dragPublicFromMine"), { error: true });
-    renderStorageLists();
-    return false;
-  }
-  if (!state.cloud.connected) {
-    setCloudStatus(t("storage.connectFirst"), { error: true });
-    return false;
-  }
-  const publicId = `public:${createId()}`;
-  const payload = pointListToCloudPayload({ ...source, id: publicId, cloudId: publicId, cloudScope: "public" }, pointGeo);
-  setCloudBusy(true);
-  let completed = false;
-  try {
-    const client = cloudClientFromInputs();
-    await client.createList(payload);
-    if (options.move === true) {
-      if (entry.local) removeLocalListForStorageChange(entry.local.id);
-      else if (entry.cloud) await client.deleteList(entry.cloud.id, entry.cloud.revision);
-    }
-    completed = true;
-  } catch (error) {
-    setCloudStatus(cloudErrorMessage(error), { error: true });
-  } finally {
-    setCloudBusy(false);
-  }
-  if (completed) {
-    await refreshCloudLists({ quiet: true });
-    setCloudStatus(options.move === true
-      ? cloudText("公開リストへ移動しました", "Moved to Public Lists")
-      : cloudText("公開リストへコピーしました", "Copied to Public Lists"));
-  }
-  return completed;
-}
 async function executeStorageListTransfer(mode) {
   const pending = state.pendingStorageTransfer;
   closeStorageTransferDialog();
@@ -3673,7 +3618,7 @@ async function executeStorageListTransfer(mode) {
 
   if (targetSection === "mineCloud") {
     if ((sourceSection !== "mineDevice" && sourceSection !== "imported") || !entry.local) {
-      showAppToast(t("storage.dragPublicToMine"), { error: true });
+      showAppToast(cloudText("このリストはクラウドへ移動またはコピーできません。", "This list cannot be moved or copied to cloud storage."), { error: true });
       return;
     }
     await moveListToCloud(pending.storageId, { copy: mode === "copy" });
@@ -3681,14 +3626,6 @@ async function executeStorageListTransfer(mode) {
   }
 
   if (targetSection === "mineDevice") {
-    if (sourceSection === "public") {
-      if (mode !== "copy") {
-        showAppToast(t("storage.dragPublicCopyOnly"), { error: true });
-        return;
-      }
-      await moveListToDevice(pending.storageId, { copy: true });
-      return;
-    }
     if (sourceSection === "mineCloud" && entry.cloud) {
       await moveListToDevice(pending.storageId, { copy: mode === "copy" });
       return;
@@ -3706,15 +3643,6 @@ async function executeStorageListTransfer(mode) {
       }
       return;
     }
-  }
-
-  if (targetSection === "public") {
-    if (sourceSection !== "mineDevice" && sourceSection !== "mineCloud") {
-      showAppToast(t("storage.dragPublicFromMine"), { error: true });
-      return;
-    }
-    await publishStorageList(pending.storageId, { move: mode === "move" });
-    return;
   }
 
   showAppToast(cloudText("この移動またはコピーは実行できません。", "This transfer is not available."), { error: true });
@@ -3972,24 +3900,17 @@ function createStorageListRow(entry) {
   return row;
 }
 
-function storageEntryCloudScope(entry) {
-  return entry?.cloud?.scope === "mine" || entry?.preview?.cloudScope === "mine"
-    ? "mine"
-    : entry?.cloud?.scope === "public" || entry?.preview?.cloudScope === "public"
-      ? "public"
-      : "public";
-}
-
 function isMyCloudStorageEntry(entry) {
-  return Boolean(entry?.cloud && storageEntryCloudScope(entry) === "mine");
+  return Boolean(entry?.cloud);
 }
 
 function storageListSectionKey(entry) {
   if (entry?.local?.importedAt) return "imported";
   if (entry?.local) return "mineDevice";
   if (isMyCloudStorageEntry(entry)) return "mineCloud";
-  return "public";
+  return "";
 }
+
 function createStorageListSection(section, entries) {
   const wrapper = document.createElement("section");
   wrapper.className = "storage-list-section";
@@ -4034,13 +3955,13 @@ function renderPointDestinationSelect() {
   }
   select.value = activeList ? pointListStorageKey(activeList) : "";
   select.disabled = state.editingPointId !== null || lists.length === 0;
-}function renderStorageLists() {
+}
+function renderStorageLists() {
   const entries = storageListEntries();
   const sections = [
     { key: "mineDevice", label: "list.section.mineDevice" },
     { key: "mineCloud", label: "list.section.mineCloud" },
-    { key: "imported", label: "list.section.imported" },
-    { key: "public", label: "list.section.public" }
+    { key: "imported", label: "list.section.imported" }
   ];
   const availableIds = new Set(entries.map((entry) => entry.storageId));
   for (const storageId of state.selectedStorageListIds) {
@@ -4169,7 +4090,7 @@ async function refreshCloudLists(options = {}) {
   try {
     const client = cloudClientFromInputs();
     const response = await client.listLists();
-    if (!Array.isArray(response?.lists)) throw new CloudApiError(cloudText("公開リスト一覧の形式が不正です", "Invalid public list response"));
+    if (!Array.isArray(response?.lists)) throw new CloudApiError(cloudText("クラウドリスト一覧の形式が不正です", "Invalid cloud list response"));
     state.cloud.lists = response.lists.filter((list) => (
       list && typeof list.id === "string" && Number.isInteger(list.revision)
     ));
@@ -4178,7 +4099,7 @@ async function refreshCloudLists(options = {}) {
     state.cloud.pointLists = details.map((result) => cloudPayloadToPointList(result.list, {
       localId: `cloud-preview:${result.list.list.id}`,
       revision: result.revision,
-      editable: result.list.list.scope === "mine"
+      editable: true
     }));
     state.cloud.pointRows = state.cloud.pointLists.flatMap((list) => (
       list.points.map((point) => ({ point, list, isCloud: true }))
@@ -4187,8 +4108,8 @@ async function refreshCloudLists(options = {}) {
     state.cloud.connected = true;
     if (options.quiet !== true) {
       setCloudStatus(cloudText(
-        `${state.cloud.lists.length}件の公開リストを読み込みました`,
-        `Loaded ${state.cloud.lists.length} public list(s)`
+        `${state.cloud.lists.length}件のマイリスト（クラウド）を読み込みました`,
+        `Loaded ${state.cloud.lists.length} My List(s) (Cloud)`
       ));
     }
   } catch (error) {
@@ -4453,8 +4374,8 @@ async function runStorageListAction(action) {
   }
 
   if (action === "move") {
-    if (entries.some((entry) => (entry.cloud && !isMyCloudStorageEntry(entry)) || entry.local?.importedAt)) {
-      setCloudStatus(t("storage.publicCopyOnly"), { error: true });
+    if (entries.some((entry) => entry.local?.importedAt)) {
+      setCloudStatus(t("storage.importMoveOnly"), { error: true });
       return;
     }
     if (entries.some((entry) => entry.local) && !state.cloud.connected) {
@@ -4462,8 +4383,8 @@ async function runStorageListAction(action) {
       return;
     }
     const confirmed = window.confirm(cloudText(
-      `選択した${entries.length}件の保存場所を移動しますか？\n端末のリストはクラウド保管へ、マイリスト（クラウド）は端末へ移動します。公開リストはコピーのみです。`,
-      `Move ${entries.length} selected list(s)?\nDevice lists move to cloud storage; My Lists (Cloud) move to this device. Public lists can only be copied.`
+      `選択した${entries.length}件の保存場所を移動しますか？\n端末のリストはクラウド保管へ、マイリスト（クラウド）は端末へ移動します。`,
+      `Move ${entries.length} selected list(s)?\nDevice lists move to cloud storage; My Lists (Cloud) move to this device.`
     ));
     if (!confirmed) return;
     for (const storageId of storageIds) {
@@ -5217,9 +5138,7 @@ function startEditingSelectedPoint() {
   const editingList = pointListForPoint(point.id);
   elements.shareImportStatus.value = editingList?.cloudId
     ? cloudText("クラウド保管中のマイリストを編集中。保存するとクラウドへ反映します", "Editing a cloud-stored my list. Saving will update cloud storage.")
-    : cloudPointListForPoint(point.id)
-      ? cloudText("公開リストを直接編集中。保存すると公開リストを更新します", "Editing the public list directly. Saving will update the public list.")
-      : "編集: 内容を更新できます";
+    : "編集: 内容を更新できます";
   if (mobilePageUiActive()) {
     setMobilePage("register");
   }

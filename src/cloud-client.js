@@ -140,7 +140,7 @@ export function pointListToCloudPayload(list, getCoordinates) {
     list: {
       id: listId,
       name: String(list.name || "地点リスト"),
-      scope: list.cloudScope === "mine" ? "mine" : "public",
+      scope: "mine",
       ...(typeof list.description === "string" && list.description ? { description: list.description } : {}),
       createdAt: validTimestamp(list.createdAt) || now,
       updatedAt: now
@@ -155,7 +155,7 @@ export function cloudPayloadToPointList(payload, options = {}) {
   return {
     id: options.localId || payload.list.id,
     cloudId: payload.list.id,
-    cloudScope: payload.list.scope === "mine" ? "mine" : "public",
+    cloudScope: "mine",
     cloudRevision: Number.isInteger(options.revision) ? options.revision : null,
     cloudUpdatedAt: payload.list.updatedAt || now,
     name: payload.list.name,
@@ -190,7 +190,7 @@ export function assertCloudPointListPayload(payload) {
     !payload.list ||
     typeof payload.list.id !== "string" ||
     typeof payload.list.name !== "string" ||
-    (payload.list.scope !== undefined && !["mine", "public"].includes(payload.list.scope)) ||
+    (payload.list.scope !== undefined && typeof payload.list.scope !== "string") ||
     !Array.isArray(payload.points)
   ) {
     throw new CloudApiError("クラウドの地点リスト形式を確認できません");

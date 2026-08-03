@@ -186,21 +186,28 @@ describe("GRID ATLAS Cloud API", () => {
     expect(missing.status).toBe(404);
   });
 
-  it("rejects direct updates to public lists while allowing deletion", async () => {
-    const token = await issueToken("owner-public");
-    const publicPayload = samplePayload({ name: "公開リスト" });
-    publicPayload.list.scope = "public";
-    expect((await api("/v1/me/lists", { method: "POST", token, body: publicPayload })).status).toBe(201);
+  it("normalizes legacy cloud scope and allows update and deletion", async () => {
+    const token = await issueToken("owner-legacy-scope");
+    const legacyPayload = samplePayload({ name: "クラウドリスト" });
+    legacyPayload.list.scope = "public";
+    const created = await api("/v1/me/lists", { method: "POST", token, body: legacyPayload });
+    expect(created.status).toBe(201);
+    const createdBody = await created.json();
+    expect(createdBody.list.list.scope).toBe("mine");
+
     const update = await api("/v1/me/lists/list-1", {
       method: "PUT",
       token,
-      body: { expectedRevision: 1, payload: samplePayload({ name: "更新不可" }) }
+      body: { expectedRevision: 1, payload: samplePayload({ name: "更新後" }) }
     });
-    expect(update.status).toBe(403);
+    expect(update.status).toBe(200);
+    const updateBody = await update.json();
+    expect(updateBody.list.list.scope).toBe("mine");
+
     const deleted = await api("/v1/me/lists/list-1", {
       method: "DELETE",
       token,
-      body: { expectedRevision: 1 }
+      body: { expectedRevision: 2 }
     });
     expect(deleted.status).toBe(204);
   });

@@ -118,15 +118,11 @@ async function handleListItem(request, env, cors, ownerId, listId) {
     if (!existing) return jsonResponse({ error: "リストが見つかりません" }, 404, cors);
 
     const existingPayload = parseStoredPayload(existing.payload_json);
-    if (existingPayload?.list?.scope !== "mine") {
-      throw new HttpError("公開リストは直接編集できません", 403);
-    }
     const now = new Date().toISOString();
     const normalized = normalizePayload(body.payload, now, {
       createdAt: existingPayload?.list?.createdAt || existing.created_at
     });
     if (normalized.list.id !== listId) throw new HttpError("リストIDが一致しません", 400);
-    if (normalized.list.scope !== "mine") throw new HttpError("マイリスト（クラウド）だけ更新できます", 403);
 
     const result = await env.DB.prepare(
       `UPDATE cloud_lists
@@ -291,7 +287,7 @@ function normalizePayload(payload, now, options = {}) {
     list: {
       id: payload.list.id,
       name: payload.list.name,
-      scope: payload.list.scope === "mine" ? "mine" : "public",
+      scope: "mine",
       ...(payload.list.description === undefined ? {} : { description: payload.list.description }),
       createdAt: validateTimestamp(options.createdAt || payload.list.createdAt || now, "作成日時"),
       updatedAt: now
@@ -351,24 +347,16 @@ function daysInMonth(year, month) {
 }
 
 function toListMeta(row) {
-  let scope = "public";
-  try {
-    const payload = row.payload_json ? parseStoredPayload(row.payload_json) : null;
-    scope = payload?.list?.scope === "mine" ? "mine" : "public";
-  } catch {
-    scope = "public";
-  }
   return {
     id: row.id,
     name: row.name,
     description: row.description,
-    scope,
+    scope: "mine",
     revision: row.revision,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
 }
-
 function parseStoredPayload(value) {
   const parsed = JSON.parse(value);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
