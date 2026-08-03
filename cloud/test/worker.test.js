@@ -184,6 +184,24 @@ describe("GRID ATLAS Cloud API", () => {
     expect(missing.status).toBe(404);
   });
 
+  it("rejects direct updates to public lists while allowing deletion", async () => {
+    const token = await issueToken("owner-public");
+    const publicPayload = samplePayload({ name: "公開リスト" });
+    publicPayload.list.scope = "public";
+    expect((await api("/v1/me/lists", { method: "POST", token, body: publicPayload })).status).toBe(201);
+    const update = await api("/v1/me/lists/list-1", {
+      method: "PUT",
+      token,
+      body: { expectedRevision: 1, payload: samplePayload({ name: "更新不可" }) }
+    });
+    expect(update.status).toBe(403);
+    const deleted = await api("/v1/me/lists/list-1", {
+      method: "DELETE",
+      token,
+      body: { expectedRevision: 1 }
+    });
+    expect(deleted.status).toBe(204);
+  });
   it("rejects malformed tokens, payloads, oversized bodies, and unsupported methods", async () => {
     const expiredToken = await issueToken("owner-a", { expiresIn: -1 });
     expect((await api("/v1/me/lists", { token: expiredToken })).status).toBe(401);
@@ -300,6 +318,7 @@ function samplePayload({ name = "テスト地点リスト" } = {}) {
     list: {
       id: "list-1",
       name,
+      scope: "mine",
       description: "API統合テスト",
       createdAt: "2026-07-24T00:00:00+09:00"
     },

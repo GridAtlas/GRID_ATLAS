@@ -479,7 +479,24 @@
         </section>
       </form>
     </dialog>
-    <dialog id="pointTransferDialog" class="point-transfer-dialog" aria-labelledby="pointTransferDialogTitle">
+    <dialog id="storageTransferDialog" class="point-transfer-dialog" aria-labelledby="storageTransferDialogTitle">
+      <form class="point-transfer-dialog-form" method="dialog">
+        <div class="point-transfer-dialog-heading">
+          <div>
+            <h2 id="storageTransferDialogTitle">リストの登録方法</h2>
+            <p id="storageTransferDialogHint" class="point-transfer-dialog-hint">このリストを移動またはコピーします。</p>
+          </div>
+          <button id="storageTransferCancelButton" class="share-link-close" type="button" aria-label="閉じる">
+            <svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+          </button>
+        </div>
+        <div class="point-transfer-dialog-actions">
+          <button id="storageTransferMoveButton" class="primary-button" type="button">移動</button>
+          <button id="storageTransferCopyButton" type="button">コピー</button>
+          <button class="compact-button" type="submit" value="cancel">キャンセル</button>
+        </div>
+      </form>
+    </dialog>    <dialog id="pointTransferDialog" class="point-transfer-dialog" aria-labelledby="pointTransferDialogTitle">
       <form class="point-transfer-dialog-form" method="dialog">
         <div class="point-transfer-dialog-heading">
           <div>

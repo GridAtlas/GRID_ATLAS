@@ -118,11 +118,15 @@ async function handleListItem(request, env, cors, ownerId, listId) {
     if (!existing) return jsonResponse({ error: "リストが見つかりません" }, 404, cors);
 
     const existingPayload = parseStoredPayload(existing.payload_json);
+    if (existingPayload?.list?.scope !== "mine") {
+      throw new HttpError("公開リストは直接編集できません", 403);
+    }
     const now = new Date().toISOString();
     const normalized = normalizePayload(body.payload, now, {
       createdAt: existingPayload?.list?.createdAt || existing.created_at
     });
     if (normalized.list.id !== listId) throw new HttpError("リストIDが一致しません", 400);
+    if (normalized.list.scope !== "mine") throw new HttpError("マイリスト（クラウド）だけ更新できます", 403);
 
     const result = await env.DB.prepare(
       `UPDATE cloud_lists

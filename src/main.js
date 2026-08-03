@@ -82,6 +82,12 @@ const elements = {
   actionRouteButton: document.querySelector("#actionRouteButton"),
   actionRouteLabel: document.querySelector("#actionRouteLabel"),
   pointTransferDialog: document.querySelector("#pointTransferDialog"),
+  storageTransferDialog: document.querySelector("#storageTransferDialog"),
+  storageTransferDialogTitle: document.querySelector("#storageTransferDialogTitle"),
+  storageTransferDialogHint: document.querySelector("#storageTransferDialogHint"),
+  storageTransferMoveButton: document.querySelector("#storageTransferMoveButton"),
+  storageTransferCopyButton: document.querySelector("#storageTransferCopyButton"),
+  storageTransferCancelButton: document.querySelector("#storageTransferCancelButton"),
   pointTransferDialogTitle: document.querySelector("#pointTransferDialogTitle"),
   pointTransferDialogHint: document.querySelector("#pointTransferDialogHint"),
   pointTransferDestinationList: document.querySelector("#pointTransferDestinationList"),
@@ -228,6 +234,7 @@ const state = {
   selectedStorageListIds: new Set(),
   pointTransferDestinationListId: "",
   pendingPointTransferMode: null,
+  pendingStorageTransfer: null,
   cloud: {
     connected: false,
     busy: false,
@@ -527,7 +534,7 @@ const TRANSLATIONS = {
     "list.new": "新規作成",
     "list.newPrompt": "新しいリストの名前",
     "list.created": "新しいリストを作成し、登録先にしました",
-    "list.active": "登録先",
+    "list.active": "地点登録先",
     "list.syncEnable": "クラウドへ移動",
     "list.syncDisable": "端末へ移動",
     "list.copy": "コピー",
@@ -754,6 +761,13 @@ const TRANSLATIONS = {
     "storage.dragReordered": "List order updated",
     "storage.dragMoveCloud": "Move to cloud storage",
     "storage.dragMoveDevice": "Move to device",
+    "storage.transferTitle": "List transfer",
+    "storage.transferHint": "Move or copy “{name}”.",
+    "storage.transferMove": "Move",
+    "storage.transferCopy": "Copy",
+    "storage.dragPublicFromMine": "Only My Lists can be registered as Public Lists.",
+    "storage.dragPublicToMine": "Public Lists can only be copied to My Lists.",
+    "storage.dragPublicCopyOnly": "This list is read-only and cannot be moved from.",
     "list.new": "New list",
     "list.newPrompt": "Name the new list",
     "list.created": "Created a new list and set it as the destination",
@@ -1067,7 +1081,21 @@ function applyWorkspace(workspace) {
   }
 
   for (const list of state.pointLists) {
-    list.editable = true;
+    if (list.id === DEFAULT_POINT_LIST_ID) {
+      list.editable = true;
+      list.source = "local";
+      list.importedAt = "";
+      continue;
+    }
+    // Detach legacy cloud links so device and cloud lists are independent.
+    list.cloudId = "";
+    list.cloudScope = "";
+    list.cloudRevision = null;
+    list.cloudUpdatedAt = "";
+    const imported = list.source === "import" || Boolean(list.importedAt);
+    list.editable = !imported;
+    list.source = imported ? "import" : "local";
+    if (!imported) list.importedAt = "";
   }
   ensurePointLists();
   state.activePointListId = workspace.activePointListId === null
@@ -1222,6 +1250,10 @@ function cloudPointListForPoint(pointId) {
 
 async function updateCloudPointList(list, nextList, options = {}) {
   const cloudId = list?.cloudId || list?.id;
+  if (list?.source === "cloud" && list.cloudScope !== "mine") {
+    setCloudStatus(cloudText("公開リストは直接編集できません", "Public lists are read-only"), { error: true });
+    return false;
+  }
   const meta = state.cloud.lists.find((item) => item.id === cloudId);
   if (!state.cloud.connected || !cloudId || !meta) {
     setCloudStatus(t("storage.connectFirst"), { error: true });
@@ -1253,65 +1285,6 @@ async function updateCloudPointList(list, nextList, options = {}) {
   }
   return updated;
 }
-function localListHasCloudSync(list) {
-  return Boolean(list?.cloudId);
-}
-
-async function syncLocalPointListToCloud(list, options = {}) {
-  if (!localListHasCloudSync(list) || !state.cloud.connected) return false;
-  return updateCloudPointList(list, list, {
-    message: options.message || cloudText("公開リストを更新しました", "Public list updated")
-  });
-}
-
-async function toggleLocalListCloudSync(listId) {
-  const list = state.pointLists.find((item) => item.id === listId && item.editable);
-  if (!list) return;
-
-  if (list.cloudId) {
-    const confirmed = window.confirm(cloudText(
-      `「${list.name}」の同期を解除しますか？\n公開リストは削除せず残します。`,
-      `Disconnect sync for “${list.name}”?\nThe public list will remain available.`
-    ));
-    if (!confirmed) return;
-    list.cloudId = "";
-    list.cloudRevision = null;
-    list.cloudUpdatedAt = "";
-    persistWorkspace();
-    setCloudStatus(cloudText("マイリストの連携を解除しました。公開リストは残っています。", "Cloud link disconnected. The public list remains available."));
-    render();
-    return;
-  }
-
-  if (!state.cloud.connected) {
-    setCloudStatus(t("storage.connectFirst"), { error: true });
-    render();
-    return;
-  }
-
-  const cloudId = `cloud:${createId()}`;
-  const nextList = { ...list, cloudId, updatedAt: new Date().toISOString() };
-  let enabled = false;
-  try {
-    const payload = pointListToCloudPayload(nextList, pointGeo);
-    setCloudBusy(true);
-    await cloudClientFromInputs().createList(payload);
-    list.cloudId = cloudId;
-    list.cloudRevision = null;
-    list.cloudUpdatedAt = payload.list.updatedAt;
-    persistWorkspace();
-    enabled = true;
-  } catch (error) {
-    setCloudStatus(cloudErrorMessage(error), { error: true });
-  } finally {
-    setCloudBusy(false);
-  }
-
-  if (enabled) {
-    await refreshCloudLists({ quiet: true });
-    setCloudStatus(cloudText("公開リストとして保存しました", "Saved as a public list"));
-  }
-}
 function findCloudPointAny(pointId) {
   return findCloudPointInLists(pointId, state.cloud.pointLists);
 }
@@ -1329,36 +1302,54 @@ function visibleSelectablePoints() {
   return [...state.points, ...visibleCloudPoints()];
 }
 
+function pointListStorageKey(list) {
+  return list?.source === "cloud" ? `cloud:${list.cloudId || list.id}` : list?.id || "";
+}
+
+function editablePointLists() {
+  ensurePointLists();
+  return [
+    ...state.pointLists.filter((list) => list.editable),
+    ...state.cloud.pointLists.filter((list) => list.editable)
+  ];
+}
+
+function pointListByStorageKey(storageKey) {
+  return editablePointLists().find((list) => pointListStorageKey(list) === storageKey) ?? null;
+}
+
 function localPointList() {
   ensurePointLists();
-  let list = state.pointLists.find((item) => item.id === state.activePointListId && item.editable);
+  let list = pointListByStorageKey(state.activePointListId);
   if (!list) {
-    list = state.pointLists.find((item) => item.id === DEFAULT_POINT_LIST_ID) ?? state.pointLists.find((item) => item.editable);
+    list = state.pointLists.find((item) => item.id === DEFAULT_POINT_LIST_ID && item.editable)
+      ?? state.pointLists.find((item) => item.editable)
+      ?? state.cloud.pointLists.find((item) => item.editable);
   }
   if (!list) {
     list = createLocalPointList();
     state.pointLists.unshift(list);
   }
-  state.activePointListId = list.id;
+  state.activePointListId = pointListStorageKey(list);
   return list;
 }
 
 function setActivePointList(listId) {
-  const list = state.pointLists.find((item) => item.id === listId && item.editable);
-  if (!list || state.activePointListId === list.id) return;
-  state.activePointListId = list.id;
-  persistWorkspace();
+  const list = pointListByStorageKey(listId);
+  if (!list || state.activePointListId === pointListStorageKey(list)) return;
+  state.activePointListId = pointListStorageKey(list);
+  if (list.source !== "cloud") persistWorkspace();
   render();
 }
 
 function toggleActivePointList(listId) {
-  const list = state.pointLists.find((item) => item.id === listId && item.editable);
+  const list = pointListByStorageKey(listId);
   if (!list) return;
-  state.activePointListId = state.activePointListId === list.id ? null : list.id;
-  persistWorkspace();
+  const key = pointListStorageKey(list);
+  state.activePointListId = state.activePointListId === key ? null : key;
+  if (list.source !== "cloud") persistWorkspace();
   render();
 }
-
 function createNewPointList() {
   const suggestedName = cloudText("新しいリスト", "New list");
   const input = window.prompt(t("list.newPrompt"), suggestedName);
@@ -1420,13 +1411,10 @@ function copyStorageList(storageId) {
 }
 
 function pointTransferDestinationList() {
-  ensurePointLists();
-  return state.pointLists.find((list) => (
-    list.id === state.pointTransferDestinationListId && list.editable
-  )) ?? null;
+  return pointListByStorageKey(state.pointTransferDestinationListId);
 }
 
-function transferableSelectedPoints(destinationList = null) {
+function transferableSelectedPoints(destinationList = null, mode = "copy") {
   normalizeSelection();
   return selectedPointIds()
     .filter((pointId) => pointId !== CURRENT_LOCATION_ID)
@@ -1435,11 +1423,11 @@ function transferableSelectedPoints(destinationList = null) {
       const sourceList = pointListForPoint(pointId);
       return { point, sourceList };
     })
-    .filter(({ point, sourceList }) => Boolean(point && sourceList?.editable && (!destinationList || sourceList !== destinationList)));
+    .filter(({ point, sourceList }) => Boolean(point && sourceList && (mode !== "move" || sourceList.editable) && (!destinationList || sourceList !== destinationList)));
 }
 
 function beginPointTransfer(mode) {
-  const candidates = transferableSelectedPoints();
+  const candidates = transferableSelectedPoints(null, mode);
   if (candidates.length === 0) {
     showAppToast(t("list.transferNoSelection"), { error: true });
     render();
@@ -1493,7 +1481,7 @@ function choosePointTransferDestination() {
 
 function renderPointTransferDialog() {
   const mode = state.pendingPointTransferMode;
-  const editableLists = state.pointLists.filter((list) => list.editable);
+  const editableLists = editablePointLists();
   elements.pointTransferDialogTitle.textContent = mode === "move"
     ? t("list.transferDialogMoveTitle")
     : mode === "copy"
@@ -1511,7 +1499,7 @@ function renderPointTransferDialog() {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "point-transfer-destination-button";
-    button.dataset.destinationListId = list.id;
+    button.dataset.destinationListId = pointListStorageKey(list);
     const name = document.createElement("span");
     name.className = "point-transfer-destination-name";
     name.textContent = list.name;
@@ -1520,7 +1508,7 @@ function renderPointTransferDialog() {
     count.textContent = `${list.points.length}${t("label.points")}`;
     button.append(name, count);
     button.addEventListener("click", () => {
-      state.pointTransferDestinationListId = list.id;
+      state.pointTransferDestinationListId = pointListStorageKey(list);
       choosePointTransferDestination();
     });
     button.disabled = !mode;
@@ -1536,7 +1524,7 @@ async function transferSelectedPointsToActiveList(mode) {
     render();
     return;
   }
-  const candidates = transferableSelectedPoints(destinationList);
+  const candidates = transferableSelectedPoints(destinationList, mode);
   if (candidates.length === 0) {
     showAppToast(t("list.transferNoSelection"), { error: true });
     render();
@@ -1544,7 +1532,7 @@ async function transferSelectedPointsToActiveList(mode) {
   }
 
   const syncLists = new Set([destinationList, ...candidates.map(({ sourceList }) => sourceList)]
-    .filter((list) => localListHasCloudSync(list)));
+    .filter((list) => list?.source === "cloud"));
   const now = new Date().toISOString();
   let transferredIds;
   if (mode === "copy") {
@@ -1572,7 +1560,10 @@ async function transferSelectedPointsToActiveList(mode) {
   state.selection = transferredIds.map((id) => ({ type: "point", id }));
   normalizeSelection();
   persistWorkspace();
-  await Promise.all([...syncLists].map((list) => syncLocalPointListToCloud(list)));
+  for (const list of syncLists) {
+    const current = state.cloud.pointLists.find((item) => (item.cloudId || item.id) === (list.cloudId || list.id)) || list;
+    if (!(await updateCloudPointList(current, current))) { render(); return; }
+  }
   showAppToast(t(mode === "copy" ? "list.copiedPoints" : "list.movedPoints")
     .replace("{name}", destinationList.name)
     .replace("{count}", String(transferredIds.length)));
@@ -1581,15 +1572,18 @@ async function transferSelectedPointsToActiveList(mode) {
 
 function pointListForPoint(pointId) {
   ensurePointLists();
-  return state.pointLists.find((list) => list.points.some((point) => point.id === pointId)) ?? null;
+  return state.pointLists.find((list) => list.points.some((point) => point.id === pointId))
+    ?? state.cloud.pointLists.find((list) => list.points.some((point) => point.id === pointId))
+    ?? null;
 }
 
 function findPointAny(pointId) {
-  return allPointListPoints().find((point) => point.id === pointId) ?? null;
+  return [...allPointListPoints(), ...state.cloud.pointLists.flatMap((list) => list.points)]
+    .find((point) => point.id === pointId) ?? null;
 }
-
 function pointEditable(pointId) {
-  return Boolean(pointListForPoint(pointId)?.editable);
+  const list = pointListForPoint(pointId);
+  return Boolean(list?.editable && (list.source !== "cloud" || list.cloudScope === "mine"));
 }
 
 function normalizePointList(list, existingPointIds = new Set(), fallbackName = "地点リスト") {
@@ -3406,8 +3400,7 @@ function renderPointIndex() {
     title.append(document.createTextNode(point.title || "Point"));
     const meta = document.createElement("span");
     if (isCloud) {
-      meta.append(createIcon("cloud"));
-      meta.append(document.createTextNode(list?.name || "地点リスト"));
+      meta.textContent = list?.name || "地点リスト";
     } else {
       meta.textContent = list?.name || t("label.gps");
     }
@@ -3533,6 +3526,140 @@ function reorderLocalPointLists(sourceId, targetId, before) {
   return true;
 }
 
+function storageListSectionEntryList(sectionKey) {
+  if (sectionKey === "mineDevice" || sectionKey === "imported") {
+    return state.pointLists.filter((list) => storageListSectionKey({ local: list }) === sectionKey);
+  }
+  if (sectionKey === "mineCloud" || sectionKey === "public") {
+    return state.cloud.pointLists.filter((list) => storageListSectionKey({ preview: list, cloud: { id: list.cloudId || list.id, scope: list.cloudScope } }) === sectionKey);
+  }
+  return [];
+}
+
+function reorderStorageLists(sourceEntry, targetEntry, before) {
+  const sectionKey = storageListSectionKey(sourceEntry);
+  if (sectionKey !== storageListSectionKey(targetEntry)) return false;
+  const lists = storageListSectionEntryList(sectionKey);
+  const sourceKey = sourceEntry.local?.id || sourceEntry.cloud?.id;
+  const targetKey = targetEntry.local?.id || targetEntry.cloud?.id;
+  const sourceIndex = lists.findIndex((list) => (list.id || list.cloudId) === sourceKey);
+  const targetIndex = lists.findIndex((list) => (list.id || list.cloudId) === targetKey);
+  if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return false;
+  const [source] = lists.splice(sourceIndex, 1);
+  let insertIndex = lists.findIndex((list) => (list.id || list.cloudId) === targetKey);
+  if (!before) insertIndex += 1;
+  lists.splice(insertIndex, 0, source);
+  if (sectionKey === "mineDevice" || sectionKey === "imported") {
+    const other = state.pointLists.filter((list) => storageListSectionKey({ local: list }) !== sectionKey);
+    state.pointLists = [];
+    for (const list of other) state.pointLists.push(list);
+    state.pointLists.push(...lists);
+  } else {
+    const other = state.cloud.pointLists.filter((list) => storageListSectionKey({ preview: list, cloud: { id: list.cloudId || list.id, scope: list.cloudScope } }) !== sectionKey);
+    state.cloud.pointLists = [...other, ...lists];
+  }
+  persistWorkspace();
+  setCloudStatus(t("storage.dragReordered"), { menu: false });
+  render();
+  return true;
+}
+
+function storageListTransferReason(sourceEntry, targetSection) {
+  const sourceSection = storageListSectionKey(sourceEntry);
+  if (sourceSection === targetSection) return "";
+  if (targetSection === "public") {
+    if (sourceSection !== "mineDevice" && sourceSection !== "mineCloud") return t("storage.dragPublicFromMine");
+    return "";
+  }
+  if (targetSection === "mineCloud" && sourceSection === "public") return t("storage.dragPublicToMine");
+  if (targetSection === "mineDevice" && sourceSection === "public") return "";
+  if (sourceSection === "public" && targetSection !== "mineDevice") return t("storage.dragPublicCopyOnly");
+  return "";
+}
+
+function openStorageTransferDialog(storageId, targetSection) {
+  state.pendingStorageTransfer = { storageId, targetSection };
+  const entry = findStorageListEntry(storageId);
+  elements.storageTransferDialogTitle.textContent = t("storage.transferTitle");
+  elements.storageTransferDialogHint.textContent = t("storage.transferHint").replace("{name}", entry?.local?.name || entry?.cloud?.name || "地点リスト");
+  elements.storageTransferMoveButton.textContent = t("storage.transferMove");
+  elements.storageTransferCopyButton.textContent = t("storage.transferCopy");
+  elements.storageTransferCancelButton.textContent = t("action.cancel");
+  elements.storageTransferMoveButton.disabled = storageListSectionKey(entry) === "public";
+  if (!elements.storageTransferDialog.open) elements.storageTransferDialog.showModal();
+}
+
+function closeStorageTransferDialog() {
+  state.pendingStorageTransfer = null;
+  if (elements.storageTransferDialog.open) elements.storageTransferDialog.close("cancel");
+}
+
+async function publishStorageList(storageId, options = {}) {
+  const entry = findStorageListEntry(storageId);
+  const sourceSection = storageListSectionKey(entry);
+  const source = entry?.local ?? entry?.preview;
+  if (!entry || !source || (sourceSection !== "mineDevice" && sourceSection !== "mineCloud")) {
+    setCloudStatus(t("storage.dragPublicFromMine"), { error: true });
+    renderStorageLists();
+    return false;
+  }
+  if (!state.cloud.connected) {
+    setCloudStatus(t("storage.connectFirst"), { error: true });
+    return false;
+  }
+  const publicId = `public:${createId()}`;
+  const payload = pointListToCloudPayload({ ...source, id: publicId, cloudId: publicId, cloudScope: "public" }, pointGeo);
+  setCloudBusy(true);
+  let completed = false;
+  try {
+    const client = cloudClientFromInputs();
+    await client.createList(payload);
+    if (options.move === true) {
+      if (entry.local) removeLocalListForStorageChange(entry.local.id);
+      else if (entry.cloud) await client.deleteList(entry.cloud.id, entry.cloud.revision);
+    }
+    completed = true;
+  } catch (error) {
+    setCloudStatus(cloudErrorMessage(error), { error: true });
+  } finally {
+    setCloudBusy(false);
+  }
+  if (completed) {
+    await refreshCloudLists({ quiet: true });
+    setCloudStatus(options.move === true
+      ? cloudText("公開リストへ移動しました", "Moved to Public Lists")
+      : cloudText("公開リストへコピーしました", "Copied to Public Lists"));
+  }
+  return completed;
+}
+async function executeStorageListTransfer(mode) {
+  const pending = state.pendingStorageTransfer;
+  closeStorageTransferDialog();
+  if (!pending) return;
+  const entry = findStorageListEntry(pending.storageId);
+  if (!entry) return;
+  const sourceSection = storageListSectionKey(entry);
+  if (pending.targetSection === "mineCloud" && entry.local) {
+    await moveListToCloud(pending.storageId, { copy: mode === "copy" });
+  } else if (pending.targetSection === "mineDevice" && entry.cloud) {
+    await moveListToDevice(pending.storageId, { copy: mode === "copy" });
+  } else if (pending.targetSection === "mineDevice" && entry.local && sourceSection === "imported") {
+    if (mode === "copy") {
+      copyStorageList(pending.storageId);
+    } else {
+      entry.local.source = "local";
+      entry.local.editable = true;
+      entry.local.importedAt = "";
+      entry.local.updatedAt = new Date().toISOString();
+      persistWorkspace();
+      render();
+    }
+  } else if (pending.targetSection === "public") {
+    await publishStorageList(pending.storageId, { move: mode === "move" });
+  } else if (pending.targetSection === "mineDevice" && entry.cloud) {
+    await moveListToDevice(pending.storageId, { copy: mode === "copy" });
+  }
+}
 function clearStorageListDragHover() {
   for (const element of document.querySelectorAll(".storage-list-row.is-drop-before, .storage-list-row.is-drop-after, .storage-list-section.is-drop-target")) {
     element.classList.remove("is-drop-before", "is-drop-after", "is-drop-target");
@@ -3543,43 +3670,33 @@ function updateStorageListDragHover(dragState, clientX, clientY) {
   clearStorageListDragHover();
   dragState.drop = null;
   if (!dragState.dragging) return;
-
   const element = document.elementFromPoint(clientX, clientY);
   const targetRow = element instanceof Element ? element.closest("[data-storage-list-row]") : null;
   const targetSection = element instanceof Element ? element.closest("[data-storage-list-section]") : null;
   const sourceEntry = findStorageListEntry(dragState.storageId);
   if (!sourceEntry) return;
-
   if (targetRow && targetRow !== dragState.row) {
     const targetEntry = findStorageListEntry(targetRow.dataset.storageListRow);
-    const sameSection = targetEntry
-      && sourceEntry.local
-      && targetEntry.local
-      && storageListSectionKey(sourceEntry) === storageListSectionKey(targetEntry);
-    if (sameSection) {
+    if (targetEntry && storageListSectionKey(sourceEntry) === storageListSectionKey(targetEntry)) {
       const rect = targetRow.getBoundingClientRect();
       const before = clientY < rect.top + rect.height / 2;
-      dragState.drop = {
-        type: "reorder",
-        targetId: targetEntry.local.id,
-        before
-      };
+      dragState.drop = { type: "reorder", targetEntry, before };
       targetRow.classList.add(before ? "is-drop-before" : "is-drop-after");
       return;
     }
   }
-
   if (!targetSection) return;
   const sectionKey = targetSection.dataset.storageListSection;
-  if (sectionKey === "mineCloud" && sourceEntry.local && !sourceEntry.cloud) {
-    dragState.drop = { type: "move-cloud" };
+  if (storageListSectionKey(sourceEntry) === sectionKey) return;
+  const reason = storageListTransferReason(sourceEntry, sectionKey);
+  if (reason) {
+    dragState.drop = { type: "invalid", reason };
     targetSection.classList.add("is-drop-target");
-  } else if (sectionKey === "mineDevice" && sourceEntry.cloud && !sourceEntry.local && isMyCloudStorageEntry(sourceEntry)) {
-    dragState.drop = { type: "move-device" };
-    targetSection.classList.add("is-drop-target");
+    return;
   }
+  dragState.drop = { type: "transfer", targetSection: sectionKey };
+  targetSection.classList.add("is-drop-target");
 }
-
 function updateStorageListDragGhost(dragState, clientX, clientY) {
   if (!dragState.ghost) return;
   dragState.ghost.style.transform = "translate3d(" + (clientX + 14) + "px, " + (clientY + 14) + "px, 0)";
@@ -3616,16 +3733,14 @@ function applyStorageListDrop(dragState) {
   const drop = dragState.drop;
   const entry = findStorageListEntry(dragState.storageId);
   if (!drop || !entry) return;
-
   if (drop.type === "reorder") {
-    reorderLocalPointLists(entry.local.id, drop.targetId, drop.before);
-  } else if (drop.type === "move-cloud") {
-    void moveListToCloud(entry.storageId);
-  } else if (drop.type === "move-device") {
-    void moveListToDevice(entry.storageId);
+    reorderStorageLists(entry, drop.targetEntry, drop.before);
+  } else if (drop.type === "transfer") {
+    openStorageTransferDialog(entry.storageId, drop.targetSection);
+  } else if (drop.type === "invalid") {
+    showAppToast(drop.reason, { error: true });
   }
 }
-
 function setupStorageListDrag(row, entry) {
   const isRowControl = (target) => target instanceof Element
     && Boolean(target.closest("button, input, select, textarea, a"));
@@ -3734,9 +3849,6 @@ function createStorageListRow(entry) {
   name.className = "point-list-name point-list-select";
   name.title = listName;
   const title = document.createElement("strong");
-  if (entry.cloud) {
-    title.append(createIcon("cloud"));
-  }
   title.append(document.createTextNode(listName));
   const meta = document.createElement("span");
   const pointCount = entry.local?.points.length ?? entry.preview?.points.length ?? 0;
@@ -3747,33 +3859,6 @@ function createStorageListRow(entry) {
   const rowActions = document.createElement("div");
   rowActions.className = "storage-list-row-actions";
 
-  if (entry.local && !entry.local.importedAt) {
-    const moveButton = document.createElement("button");
-    moveButton.type = "button";
-    moveButton.className = "storage-location-button";
-    moveButton.append(createIcon("cloud"));
-    moveButton.title = t("storage.moveCloud");
-    moveButton.setAttribute("aria-label", cloudText(
-      `「${listName}」をマイリスト（クラウド）へ移動`,
-      `Move “${listName}” to My Lists (Cloud)`
-    ));
-    moveButton.disabled = state.cloud.busy || !entry.local.editable;
-    moveButton.addEventListener("click", () => void moveListToCloud(entry.storageId));
-    rowActions.append(moveButton);
-  } else if (entry.cloud && !entry.local && isMyCloudStorageEntry(entry)) {
-    const moveButton = document.createElement("button");
-    moveButton.type = "button";
-    moveButton.className = "storage-location-button is-active";
-    moveButton.append(createIcon("cloud"));
-    moveButton.title = t("storage.moveDevice");
-    moveButton.setAttribute("aria-label", cloudText(
-      `「${listName}」をマイリスト（端末内）へ移動`,
-      `Move “${listName}” to My Lists (Device)`
-    ));
-    moveButton.disabled = state.cloud.busy;
-    moveButton.addEventListener("click", () => void moveListToDevice(entry.storageId));
-    rowActions.append(moveButton);
-  }
   const share = document.createElement("button");
   share.type = "button";
   share.className = "storage-share-button";
@@ -3789,13 +3874,16 @@ function createStorageListRow(entry) {
   rename.append(createIcon("edit"));
   rename.title = t("list.rename");
   rename.setAttribute("aria-label", cloudText(`「${listName}」の名前を変更`, `Rename “${listName}”`));
-  rename.disabled = state.cloud.busy;
+  rename.disabled = state.cloud.busy || !(entry.local?.editable || entry.preview?.editable);
   rename.addEventListener("click", () => void renameStorageList(entry.storageId));
 
   const destinationButton = document.createElement("button");
   destinationButton.type = "button";
   destinationButton.className = "storage-destination-button";
-  const isDestination = entry.local?.id === state.activePointListId;
+  const destinationList = entry.local ?? (isMyCloudStorageEntry(entry) ? entry.preview : null);
+  const isDestination = destinationList && pointListStorageKey(destinationList) === state.activePointListId;
+  if (isDestination) metaParts.push(t("list.active"));
+  meta.textContent = metaParts.join(" · ");
   destinationButton.append(createIcon(isDestination ? "home-filled" : "home"));
   destinationButton.classList.toggle("is-active", isDestination);
   destinationButton.title = cloudText(
@@ -3811,8 +3899,8 @@ function createStorageListRow(entry) {
       ? "Unset “" + listName + "” as the destination"
       : "Set “" + listName + "” as the destination"
   ));
-  destinationButton.disabled = !entry.local?.editable || state.cloud.busy;
-  destinationButton.addEventListener("click", () => toggleActivePointList(entry.local.id));
+  destinationButton.disabled = !destinationList?.editable || state.cloud.busy;
+  destinationButton.addEventListener("click", () => toggleActivePointList(pointListStorageKey(destinationList)));
 
   rowActions.append(share, rename, destinationButton);
   row.append(dragHandle, gridVisibility, name, rowActions);
@@ -3865,25 +3953,21 @@ function createStorageListSection(section, entries) {
 function renderPointDestinationSelect() {
   const select = elements.pointDestinationListSelect;
   if (!select) return;
-
-  ensurePointLists();
-  const lists = state.pointLists.filter((list) => list.editable);
-  const activeList = lists.find((list) => list.id === state.activePointListId) ?? lists[0] ?? null;
-  if (activeList && state.activePointListId !== activeList.id) {
-    state.activePointListId = activeList.id;
+  const lists = editablePointLists();
+  const activeList = pointListByStorageKey(state.activePointListId) ?? lists[0] ?? null;
+  if (activeList && state.activePointListId !== pointListStorageKey(activeList)) {
+    state.activePointListId = pointListStorageKey(activeList);
   }
-
   select.replaceChildren();
   for (const list of lists) {
     const option = document.createElement("option");
-    option.value = list.id;
+    option.value = pointListStorageKey(list);
     option.textContent = list.name || "地点リスト";
     select.append(option);
   }
-  select.value = activeList?.id ?? "";
+  select.value = activeList ? pointListStorageKey(activeList) : "";
   select.disabled = state.editingPointId !== null || lists.length === 0;
-}
-function renderStorageLists() {
+}function renderStorageLists() {
   const entries = storageListEntries();
   const sections = [
     { key: "mineDevice", label: "list.section.mineDevice" },
@@ -4027,12 +4111,11 @@ async function refreshCloudLists(options = {}) {
     state.cloud.pointLists = details.map((result) => cloudPayloadToPointList(result.list, {
       localId: `cloud-preview:${result.list.list.id}`,
       revision: result.revision,
-      editable: false
+      editable: result.list.list.scope === "mine"
     }));
     state.cloud.pointRows = state.cloud.pointLists.flatMap((list) => (
       list.points.map((point) => ({ point, list, isCloud: true }))
     ));
-    syncLinkedLocalListsFromCloud();
     syncProjectedCoordinates();
     state.cloud.connected = true;
     if (options.quiet !== true) {
@@ -4057,6 +4140,10 @@ async function renameStorageList(storageId) {
   const entry = findStorageListEntry(storageId);
   if (!entry) return;
   const source = entry.local ?? entry.preview;
+  if (!source?.editable) {
+    setCloudStatus(cloudText("このリストは編集できません", "This list is read-only"), { error: true });
+    return;
+  }
   const currentName = source?.name || entry.cloud?.name || cloudText("地点リスト", "Point list");
   const input = window.prompt(t("list.renamePrompt"), currentName);
   if (input === null) return;
@@ -4136,144 +4223,36 @@ function removeLocalListForStorageChange(listId) {
   render();
 }
 
-function syncLinkedLocalListsFromCloud() {
-  let changed = false;
-  for (const local of state.pointLists) {
-    if (!localListHasCloudSync(local)) continue;
-    const remote = state.cloud.pointLists.find((list) => (list.cloudId || list.id) === local.cloudId);
-    if (!remote) continue;
-    const otherPointIds = new Set(state.pointLists
-      .filter((list) => list.id !== local.id)
-      .flatMap((list) => list.points.map((point) => point.id)));
-    const restored = restoreLocalPointMedia({
-      ...remote,
-      id: local.id,
-      cloudId: local.cloudId,
-      editable: true,
-      visible: local.visible,
-      source: local.source,
-      importedAt: local.importedAt,
-      createdAt: local.createdAt
-    }, local);
-    const normalized = normalizePointList(restored, otherPointIds, local.name);
-    const index = state.pointLists.findIndex((list) => list.id === local.id);
-    if (index >= 0) {
-      state.pointLists[index] = normalized;
-      changed = true;
-    }
-  }
-  if (changed) {
-    refreshVisiblePoints();
-    persistWorkspace();
-  }
-}
-function restoreLocalPointMedia(targetList, localList) {
-  if (!targetList || !localList) return targetList;
-  const localPointsById = new Map(localList.points.map((point) => [point.id, point]));
-  return {
-    ...targetList,
-    points: targetList.points.map((point) => {
-      const localPoint = localPointsById.get(point.id);
-      if (!localPoint) return point;
-      return {
-        ...point,
-        photo: localPoint.photo || "",
-        photoName: localPoint.photoName || "",
-        photoAssetId: localPoint.photoAssetId || ""
-      };
-    })
-  };
-}
-
 async function moveListToCloud(storageId, options = {}) {
   const entry = findStorageListEntry(storageId);
-  if (!entry?.local) {
-    renderStorageLists();
-    return;
-  }
+  if (!entry?.local) return false;
   if (!state.cloud.connected) {
     setCloudStatus(t("storage.connectFirst"), { error: true });
     renderStorageLists();
-    return;
+    return false;
   }
-
-  const list = entry.local;
-  const preferredCloudId = list.cloudId || list.id;
-  const remoteIdIsActive = state.cloud.lists.some((item) => item.id === preferredCloudId);
-  const needsFreshCloudId = preferredCloudId === DEFAULT_POINT_LIST_ID
-    || (Boolean(list.cloudId) && !remoteIdIsActive);
-  const targetCloudId = needsFreshCloudId ? `cloud:${createId()}` : preferredCloudId;
-  const transferList = { ...list, cloudId: targetCloudId, cloudScope: "mine" };
-  let payload;
-  try {
-    payload = pointListToCloudPayload(transferList, pointGeo);
-  } catch (error) {
-    setCloudStatus(cloudErrorMessage(error), { error: true });
-    renderStorageLists();
-    return;
-  }
-
-  const photoCount = list.points.filter((point) => Boolean(point.photo || point.photoAssetId)).length;
-  if (options.confirm !== false && !window.confirm(cloudText(
-    `${list.name || "地点リスト"}の保存場所をクラウド保管へ変更しますか？\n地点数: ${list.points.length}`
-      + (photoCount > 0
-        ? `\n写真${photoCount}件は端末側にも残し、クラウド保管には地点情報とコメントを保存します。`
-        : "\n完了後、端末側の保存データを削除します。"),
-    `Move ${list.name || "Point list"} to cloud storage?\nPoints: ${list.points.length}`
-      + (photoCount > 0
-        ? `\nThe ${photoCount} photo(s) will remain on this device; cloud storage will contain points and comments.`
-        : "\nThe device copy will be removed after upload.")
-  ))) {
-    renderStorageLists();
-    return;
-  }
-
+  const source = entry.local;
+  const targetCloudId = `cloud:${createId()}`;
+  const payload = pointListToCloudPayload({ ...source, id: targetCloudId, cloudId: targetCloudId, cloudScope: "mine" }, pointGeo);
   setCloudBusy(true);
-  let moved = false;
-  let oldCloudDeleteFailed = false;
+  let completed = false;
   try {
-    const client = cloudClientFromInputs();
-    const remoteMeta = state.cloud.lists.find((item) => item.id === targetCloudId) ?? null;
-    if (remoteMeta) await client.updateList(targetCloudId, remoteMeta.revision, payload);
-    else await client.createList(payload);
-
-    if (needsFreshCloudId && entry.cloud && entry.cloud.id !== targetCloudId) {
-      try {
-        await client.deleteList(entry.cloud.id, entry.cloud.revision);
-        state.cloud.hiddenListIds.delete(entry.cloud.id);
-      } catch {
-        oldCloudDeleteFailed = true;
-      }
-    }
-    if (list.visible === false) state.cloud.hiddenListIds.add(targetCloudId);
-    else state.cloud.hiddenListIds.delete(targetCloudId);
-    if (photoCount > 0) {
-      list.cloudId = targetCloudId;
-      list.cloudScope = "mine";
-      list.cloudRevision = null;
-      list.cloudUpdatedAt = payload.list.updatedAt;
-      persistWorkspace();
-    } else {
-      removeLocalListForStorageChange(list.id);
-    }
-    moved = true;
+    await cloudClientFromInputs().createList(payload);
+    if (options.copy !== true) removeLocalListForStorageChange(source.id);
+    completed = true;
   } catch (error) {
     setCloudStatus(cloudErrorMessage(error), { error: true });
   } finally {
     setCloudBusy(false);
   }
-
-  if (moved) {
+  if (completed) {
     await refreshCloudLists({ quiet: true });
-    setCloudStatus(oldCloudDeleteFailed
-      ? cloudText("クラウド保管へ移動しました。以前のクラウド保管コピーは削除できませんでした。", "Moved to cloud storage. An older cloud storage copy could not be removed.")
-      : photoCount > 0
-        ? cloudText("クラウド保管へ保存しました。写真を保持するため端末側のコピーも残しています。", "Saved to cloud storage. The device copy remains to preserve its photos.")
-        : cloudText("保存場所をクラウド保管へ変更しました", "Moved list storage to cloud storage"),
-    { error: oldCloudDeleteFailed });
+    setCloudStatus(options.copy === true
+      ? cloudText("マイリスト（クラウド）へコピーしました", "Copied to My Lists (Cloud)")
+      : cloudText("マイリスト（クラウド）へ移動しました", "Moved to My Lists (Cloud)"));
   }
+  return completed;
 }
-
 function uniqueLocalListId(preferredId) {
   const existingIds = new Set(state.pointLists.map((list) => list.id));
   if (preferredId !== DEFAULT_POINT_LIST_ID && !existingIds.has(preferredId)) return preferredId;
@@ -4284,84 +4263,55 @@ function uniqueLocalListId(preferredId) {
 
 async function moveListToDevice(storageId, options = {}) {
   const entry = findStorageListEntry(storageId);
-  if (entry?.cloud && !isMyCloudStorageEntry(entry)) {
-    setCloudStatus(t("storage.publicCopyOnly"), { error: true });
-    renderStorageLists();
-    return;
-  }
   if (!entry?.cloud || !state.cloud.connected) {
     setCloudStatus(t("storage.connectFirst"), { error: true });
     renderStorageLists();
-    return;
+    return false;
   }
-  const name = entry.local?.name || entry.cloud.name || "地点リスト";
-  if (options.confirm !== false && !window.confirm(cloudText(
-    `${name}の保存場所を端末へ変更しますか？\n端末への保存完了後、クラウド側を削除します。`,
-    `Move ${name} to device storage?\nThe cloud copy will be removed after the device save completes.`
-  ))) {
-    renderStorageLists();
-    return;
-  }
-
+  const name = entry.cloud.name || "地点リスト";
   setCloudBusy(true);
   let installed = false;
   let cloudDeleteFailed = false;
   try {
     const client = cloudClientFromInputs();
     const result = await client.getList(entry.cloud.id);
-    const currentEntry = findStorageListEntry(storageId);
-    const existingLocal = currentEntry?.local ?? null;
-    const localId = existingLocal?.id || uniqueLocalListId(result.list.list.id);
-    const imported = cloudPayloadToPointList(result.list, { localId, revision: result.revision, editable: true });
-    const restored = restoreLocalPointMedia(imported, existingLocal);
-    restored.visible = existingLocal
-      ? existingLocal.visible !== false
-      : cloudListVisible(entry.cloud.id);
-
-    const before = workspaceSnapshot();
-    const otherPointIds = new Set(state.pointLists
-      .filter((list) => list.id !== existingLocal?.id)
-      .flatMap((list) => list.points.map((point) => point.id)));
-    const normalized = normalizePointList(restored, otherPointIds, restored.name);
-    if (existingLocal) {
-      const index = state.pointLists.findIndex((list) => list.id === existingLocal.id);
-      state.pointLists[index] = normalized;
-    } else {
-      state.pointLists.push(normalized);
-    }
+    const imported = cloudPayloadToPointList(result.list, { localId: uniqueLocalListId(result.list.list.id), revision: result.revision, editable: true });
+    const normalized = normalizePointList({
+      ...imported,
+      id: uniqueLocalListId(imported.id),
+      cloudId: "",
+      cloudScope: "",
+      cloudRevision: null,
+      cloudUpdatedAt: "",
+      source: "local",
+      importedAt: "",
+      editable: true
+    }, new Set(allPointListPoints().map((point) => point.id)), imported.name);
+    state.pointLists.push(normalized);
     state.activePointListId = normalized.id;
     refreshVisiblePoints();
-    try {
-      persistWorkspace();
-    } catch (error) {
-      applyWorkspace(before);
-      throw new CloudApiError(cloudText("端末へ保存できません", "Could not save to the device"), { cause: error });
-    }
-    render();
+    persistWorkspace();
     installed = true;
-
-    try {
-      await client.deleteList(entry.cloud.id, result.revision);
-      state.cloud.hiddenListIds.delete(entry.cloud.id);
-      persistWorkspace();
-    } catch {
-      cloudDeleteFailed = true;
+    if (options.copy !== true) {
+      try { await client.deleteList(entry.cloud.id, result.revision); }
+      catch { cloudDeleteFailed = true; }
     }
   } catch (error) {
     setCloudStatus(cloudErrorMessage(error), { error: true });
   } finally {
     setCloudBusy(false);
   }
-
   if (installed) {
     await refreshCloudLists({ quiet: true });
     setCloudStatus(cloudDeleteFailed
-      ? cloudText("端末へ保存しましたが、クラウド側を削除できませんでした。", "Saved to device, but the cloud copy could not be removed.")
-      : cloudText("保存場所を端末へ変更しました", "Moved list storage to device"),
-    { error: cloudDeleteFailed });
+      ? cloudText("端末へコピーしましたが、クラウド側を削除できませんでした。", "Copied to device, but the cloud list could not be deleted.")
+      : options.copy === true
+        ? cloudText("マイリスト（端末内）へコピーしました", "Copied to My Lists (Device)")
+        : cloudText("マイリスト（端末内）へ移動しました", "Moved to My Lists (Device)"),
+      { error: cloudDeleteFailed });
   }
+  return installed;
 }
-
 async function deleteStoredList(storageId, options = {}) {
   const entry = findStorageListEntry(storageId);
   if (!entry) {
@@ -4707,15 +4657,8 @@ function selectedCounts() {
 function editableSelectedPoint() {
   const pointIds = selectedPointIds().filter((id) => id !== CURRENT_LOCATION_ID);
   if (pointIds.length !== 1 || selectedCounts().total !== 1) return null;
-
   const pointId = pointIds[0];
-  if (pointEditable(pointId)) {
-    return findPointIn(pointId, state.points);
-  }
-  if (state.cloud.connected && cloudPointListForPoint(pointId)) {
-    return findCloudPointAny(pointId);
-  }
-  return null;
+  return pointEditable(pointId) ? findPointAny(pointId) : null;
 }
 
 function mapPointForSelection() {
@@ -5960,10 +5903,8 @@ function resetPointFormAfterSubmit() {
 }
 async function submitPoint(event) {
   event.preventDefault();
-
   const lat = Number.parseFloat(elements.pointLat.value);
   const lng = Number.parseFloat(elements.pointLng.value);
-
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     elements.shareImportStatus.value = "緯度経度を入力してください";
     return;
@@ -5975,25 +5916,20 @@ async function submitPoint(event) {
     accuracy: isSameGeo(state.pendingGeo, { lat, lng }) ? state.pendingGeo.accuracy : undefined
   });
   const projected = projectLatLng(geo.lat, geo.lng);
-  const editedLocalList = state.editingPointId
-    ? pointListForPoint(state.editingPointId)
-    : null;
-  const editedLocalPoint = state.editingPointId
-    ? findPointIn(state.editingPointId, state.points)
-    : null;
-  const editedCloudList = editedLocalPoint
-    ? null
-    : state.editingPointId
-      ? cloudPointListForPoint(state.editingPointId)
-      : null;
-  const editedCloudPoint = editedCloudList
-    ? findPointIn(state.editingPointId, editedCloudList.points)
-    : null;
-  if (editedCloudList && editedCloudPoint) {
+  const editingList = state.editingPointId ? pointListForPoint(state.editingPointId) : null;
+  const editingPoint = state.editingPointId ? findPointAny(state.editingPointId) : null;
+  if (state.editingPointId && (!editingList || !editingPoint || !pointEditable(state.editingPointId))) {
+    showAppToast(cloudText("このリストは編集できません", "This list is read-only"), { error: true });
+    resetPointFormAfterSubmit();
+    render();
+    return;
+  }
+
+  if (editingPoint && editingList) {
     const updatedAt = new Date().toISOString();
     const nextList = {
-      ...editedCloudList,
-      points: editedCloudList.points.map((point) => point.id === editedCloudPoint.id
+      ...editingList,
+      points: editingList.points.map((point) => point.id === editingPoint.id
         ? {
           ...point,
           x: projected.x,
@@ -6003,14 +5939,17 @@ async function submitPoint(event) {
           geo,
           updatedAt
         }
-        : point)
+        : point),
+      updatedAt
     };
-    const updated = await updateCloudPointList(editedCloudList, nextList);
-    if (!updated) {
-      render();
-      return;
+    if (editingList.source === "cloud") {
+      const updated = await updateCloudPointList(editingList, nextList);
+      if (!updated) { render(); return; }
+    } else {
+      Object.assign(editingList, nextList);
+      persistWorkspace();
     }
-    state.selection = [{ type: "point", id: editedCloudPoint.id }];
+    state.selection = [{ type: "point", id: editingPoint.id }];
     normalizeSelection();
     resetPointFormAfterSubmit();
     syncCanvasSize();
@@ -6022,69 +5961,40 @@ async function submitPoint(event) {
   const photo = file ? await readPhoto(file) : null;
   let storedPhoto = null;
   if (photo) {
-    try {
-      storedPhoto = await storeGridAtlasDataUrl(photo, { name: file?.name || "" });
-    } catch (error) {
-      console.warn("GRID ATLAS photo storage failed; keeping local fallback", error);
-    }
+    try { storedPhoto = await storeGridAtlasDataUrl(photo, { name: file?.name || "" }); }
+    catch (error) { console.warn("GRID ATLAS photo storage failed; keeping local fallback", error); }
   }
   const photoDisplay = storedPhoto?.url || photo;
   const createdAt = new Date().toISOString();
-  const fallbackTitle = `Point ${localPointList().points.length + 1}`;
-
-  pauseLocationFollowForManualView();
-
-  const editedPoint = state.editingPointId ? findPointIn(state.editingPointId, state.points) : null;
-  if (editedPoint) {
-    editedPoint.x = projected.x;
-    editedPoint.y = projected.y;
-    editedPoint.title = elements.pointTitle.value.trim() || editedPoint.title || fallbackTitle;
-    editedPoint.note = elements.pointNote.value.trim();
-    editedPoint.geo = geo;
-    editedPoint.updatedAt = createdAt;
-    if (photoDisplay) {
-      editedPoint.photo = photoDisplay;
-      editedPoint.photoName = file?.name ?? "";
-      editedPoint.photoAssetId = storedPhoto?.id || "";
-    }
-
-    state.selection = [{ type: "point", id: editedPoint.id }];
-    normalizeSelection();
-    persistWorkspace();
-    await syncLocalPointListToCloud(editedLocalList);
-    resetPointFormAfterSubmit();
-    syncCanvasSize();
-    render();
-    return;
-  }
-
+  const list = localPointList();
   const point = {
     id: createId(),
     x: projected.x,
     y: projected.y,
-    title: elements.pointTitle.value.trim() || fallbackTitle,
+    title: elements.pointTitle.value.trim() || `Point ${list.points.length + 1}`,
     note: elements.pointNote.value.trim(),
-    photo: photoDisplay,
-    photoName: file?.name ?? "",
-    photoAssetId: storedPhoto?.id || "",
+    photo: list.source === "cloud" ? "" : photoDisplay,
+    photoName: list.source === "cloud" ? "" : file?.name ?? "",
+    photoAssetId: list.source === "cloud" ? "" : storedPhoto?.id || "",
     geo,
     createdAt
   };
-
-  const list = localPointList();
   list.visible = true;
   list.updatedAt = createdAt;
   list.points.push(point);
-  refreshVisiblePoints();
+  if (list.source === "cloud") {
+    const updated = await updateCloudPointList(list, list);
+    if (!updated) { list.points.pop(); render(); return; }
+  } else {
+    refreshVisiblePoints();
+    persistWorkspace();
+  }
   state.selection = [{ type: "point", id: point.id }];
   normalizeSelection();
-  persistWorkspace();
-  await syncLocalPointListToCloud(list);
   resetPointFormAfterSubmit();
   syncCanvasSize();
   render();
 }
-
 function readPhoto(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -7144,7 +7054,7 @@ async function gridAtlasPackageToPointList(gridAtlasPackage, existingPointIds, e
     description: document.description || "",
     author: document.attribution?.name || "",
     visible: true,
-    editable: true,
+    editable: false,
     source: "import",
     importedAt: new Date().toISOString(),
     createdAt,
@@ -7696,8 +7606,8 @@ function pointListFromPayload(parsed, fileName, existingIds) {
     description: typeof listMeta.description === "string" ? listMeta.description : "",
     author: typeof listMeta.author === "string" ? listMeta.author : "",
     visible: true,
-    editable: true,
-    source: "local",
+    editable: false,
+    source: "import",
     importedAt: new Date().toISOString(),
     points: parsed.points
   }, existingIds, fallbackName);
@@ -7914,7 +7824,7 @@ async function deleteSelectedPoint() {
   const selectedIds = selectedPointIds().filter((id) => id !== CURRENT_LOCATION_ID);
   const pointIds = selectedIds.filter((id) => pointEditable(id));
   const cloudPointIds = selectedIds.filter((id) => (
-    !pointIds.includes(id) && state.cloud.connected && cloudPointListForPoint(id)
+    !pointIds.includes(id) && state.cloud.connected && cloudPointListForPoint(id)?.editable
   ));
   const explicitLinkIds = selectedLinkIds();
   const selectedObservations = selectedLoadedObservations();
@@ -7938,11 +7848,7 @@ async function deleteSelectedPoint() {
   if (pointIdSet.size > 0) {
     parts.push(String(pointIdSet.size) + "点");
   }
-  const syncLists = state.pointLists.filter((list) => (
-    localListHasCloudSync(list)
-      && list.points.some((point) => pointIdSet.has(point.id))
-  ));
-  if (cloudPointIdSet.size > 0) {
+if (cloudPointIdSet.size > 0) {
     parts.push(String(cloudPointIdSet.size) + "クラウド地点");
   }
   if (linkIdSet.size > 0) {
@@ -8017,7 +7923,6 @@ async function deleteSelectedPoint() {
   if (pointIdSet.size + linkIdSet.size > 0) {
     persistWorkspace();
   }
-  await Promise.all(syncLists.map((list) => syncLocalPointListToCloud(list)));
   render();
 }
 
@@ -8072,7 +7977,15 @@ function bindEvents() {
   elements.pointTransferDialog.addEventListener("click", (event) => {
     if (event.target === elements.pointTransferDialog) cancelPointTransfer();
   });
-  elements.settingsGpsEnabled.addEventListener("change", () => {
+  elements.storageTransferMoveButton.addEventListener("click", () => void executeStorageListTransfer("move"));
+  elements.storageTransferCopyButton.addEventListener("click", () => void executeStorageListTransfer("copy"));
+  elements.storageTransferCancelButton.addEventListener("click", closeStorageTransferDialog);
+  elements.storageTransferDialog.addEventListener("click", (event) => {
+    if (event.target === elements.storageTransferDialog) closeStorageTransferDialog();
+  });
+  elements.storageTransferDialog.addEventListener("close", () => {
+    state.pendingStorageTransfer = null;
+  });  elements.settingsGpsEnabled.addEventListener("change", () => {
     setGpsEnabled(elements.settingsGpsEnabled.checked);
   });
   elements.systemUpdateButton.addEventListener("click", () => void requestSystemUpdate());
