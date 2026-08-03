@@ -1204,7 +1204,7 @@ textarea {
 }
 
 .storage-grid-button.is-active,
-.storage-sync-button.is-active,
+.storage-location-button.is-active,
 .storage-destination-button.is-active {
   border: 0;
   background: transparent;

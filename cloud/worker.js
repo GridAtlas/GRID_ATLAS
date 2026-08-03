@@ -63,7 +63,7 @@ function parseRoute(pathname) {
 async function handleListCollection(request, env, cors, ownerId) {
   if (request.method === "GET") {
     const result = await env.DB.prepare(
-      `SELECT id, name, description, revision, created_at, updated_at
+      `SELECT id, name, description, payload_json, revision, created_at, updated_at
        FROM cloud_lists
        WHERE owner_id = ?1 AND deleted_at IS NULL
        ORDER BY updated_at DESC`
@@ -287,6 +287,7 @@ function normalizePayload(payload, now, options = {}) {
     list: {
       id: payload.list.id,
       name: payload.list.name,
+      scope: payload.list.scope === "mine" ? "mine" : "public",
       ...(payload.list.description === undefined ? {} : { description: payload.list.description }),
       createdAt: validateTimestamp(options.createdAt || payload.list.createdAt || now, "作成日時"),
       updatedAt: now
@@ -346,10 +347,18 @@ function daysInMonth(year, month) {
 }
 
 function toListMeta(row) {
+  let scope = "public";
+  try {
+    const payload = row.payload_json ? parseStoredPayload(row.payload_json) : null;
+    scope = payload?.list?.scope === "mine" ? "mine" : "public";
+  } catch {
+    scope = "public";
+  }
   return {
     id: row.id,
     name: row.name,
     description: row.description,
+    scope,
     revision: row.revision,
     createdAt: row.created_at,
     updatedAt: row.updated_at
