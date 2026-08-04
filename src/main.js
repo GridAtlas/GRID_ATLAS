@@ -243,6 +243,7 @@ const state = {
     pointLists: [],
     pointRows: [],
     hiddenListIds: new Set(),
+    listOrder: [],
   },
   links: [],
   mode: "inspect",
@@ -567,7 +568,7 @@ const TRANSLATIONS = {
     "list.renamePrompt": "新しいリスト名",
     "list.showOnGrid": "グリッドに表示",
     "list.selectForAction": "操作対象に選択",
-    "list.visible": "グリッドに表示中",
+    "list.visible": "グリッド表示中",
     "list.hidden": "グリッドで非表示",
     "list.noSelection": "操作するリストを選択してください",
     "list.transferNoSelection": "別のリストへ移せる地点を選択してください",
@@ -1069,6 +1070,9 @@ function applyWorkspace(workspace) {
       ? workspace.cloudHiddenListIds.filter((id) => typeof id === "string" && id)
       : []
   );
+  state.cloud.listOrder = Array.isArray(workspace.cloudListOrder)
+    ? workspace.cloudListOrder.filter((id) => typeof id === "string" && id)
+    : [];
 
   if (Array.isArray(workspace.pointLists)) {
     state.pointLists = workspace.pointLists
@@ -1739,7 +1743,8 @@ function workspaceSnapshot() {
     pointLists,
     activePointListId: state.activePointListId,
     links: state.links,
-    cloudHiddenListIds: [...state.cloud.hiddenListIds]
+    cloudHiddenListIds: [...state.cloud.hiddenListIds],
+    cloudListOrder: [...state.cloud.listOrder]
   };
 }
 
@@ -3422,6 +3427,27 @@ function renderPointIndex() {
     elements.mobilePointItems.append(row);
   }
 }
+function applyCloudListOrder() {
+  const metadata = Array.isArray(state.cloud.lists) ? state.cloud.lists : [];
+  const available = new Set(metadata.map((list) => list.id).filter(Boolean));
+  const orderedIds = [];
+  for (const id of state.cloud.listOrder) {
+    if (available.has(id) && !orderedIds.includes(id)) orderedIds.push(id);
+  }
+  for (const list of metadata) {
+    if (!orderedIds.includes(list.id)) orderedIds.push(list.id);
+  }
+  state.cloud.listOrder = orderedIds;
+  const orderIndex = new Map(orderedIds.map((id, index) => [id, index]));
+  const byOrder = (a, b) => (orderIndex.get(a.id) ?? Number.MAX_SAFE_INTEGER)
+    - (orderIndex.get(b.id) ?? Number.MAX_SAFE_INTEGER);
+  state.cloud.lists.sort(byOrder);
+  state.cloud.pointLists.sort((a, b) => byOrder(
+    { id: a.cloudId || a.id },
+    { id: b.cloudId || b.id }
+  ));
+}
+
 function storageListEntries() {
   ensurePointLists();
   const cloudMetaById = new Map(state.cloud.lists.map((list) => [list.id, list]));
@@ -3558,6 +3584,8 @@ function reorderStorageLists(sourceEntry, targetEntry, before) {
     state.pointLists = [...other, ...lists];
   } else if (sectionKey === "mineCloud") {
     state.cloud.pointLists = lists;
+    state.cloud.listOrder = lists.map((list) => list.cloudId || list.id).filter(Boolean);
+    applyCloudListOrder();
   }
   persistWorkspace();
   setCloudStatus(t("storage.dragReordered"), { menu: false });
@@ -3844,6 +3872,7 @@ function createStorageListRow(entry) {
   const meta = document.createElement("span");
   const pointCount = entry.local?.points.length ?? entry.preview?.points.length ?? 0;
   const metaParts = [`${pointCount}${t("label.points")}`];
+  if (visible) metaParts.push(t("list.visible"));
   meta.textContent = metaParts.join(" · ");
   name.append(title, meta);
 
@@ -4101,6 +4130,8 @@ async function refreshCloudLists(options = {}) {
       revision: result.revision,
       editable: true
     }));
+    applyCloudListOrder();
+    persistWorkspace();
     state.cloud.pointRows = state.cloud.pointLists.flatMap((list) => (
       list.points.map((point) => ({ point, list, isCloud: true }))
     ));
