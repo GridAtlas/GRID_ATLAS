@@ -308,9 +308,7 @@ const CANVAS_PALETTES = {
     targetFill: "#e8907e",
     observationBaseline: "rgb(197 111 133 / 0.34)",
     observationTrail: "#c56f85",
-    observationGapFill: "rgb(197 111 133 / 0.12)",
-    observationGapHatch: "rgb(197 111 133 / 0.48)",
-    observationGapStroke: "rgb(197 111 133 / 0.7)",
+    observationGapLine: "rgb(128 128 128 / 0.72)",
     currentFill: "#f5ce6a",
     currentStale: "#a68f85",
     pendingFill: "rgb(216 111 155 / 0.22)",
@@ -338,9 +336,7 @@ const CANVAS_PALETTES = {
     targetFill: "#ff8a1c",
     observationBaseline: "rgb(214 255 224 / 0.28)",
     observationTrail: "#fff35a",
-    observationGapFill: "rgb(214 255 224 / 0.1)",
-    observationGapHatch: "rgb(214 255 224 / 0.52)",
-    observationGapStroke: "rgb(214 255 224 / 0.72)",
+    observationGapLine: "rgb(128 128 128 / 0.72)",
     currentFill: "#fff35a",
     currentStale: "#9db4a3",
     pendingFill: "rgb(44 255 100 / 0.18)",
@@ -368,9 +364,7 @@ const CANVAS_PALETTES = {
     targetFill: "#dc2626",
     observationBaseline: "rgb(135 104 94 / 0.32)",
     observationTrail: "#b45309",
-    observationGapFill: "rgb(180 83 9 / 0.1)",
-    observationGapHatch: "rgb(180 83 9 / 0.46)",
-    observationGapStroke: "rgb(180 83 9 / 0.68)",
+    observationGapLine: "rgb(128 128 128 / 0.72)",
     currentFill: "#f59e0b",
     currentStale: "#8b8176",
     pendingFill: "rgb(37 99 235 / 0.16)",
@@ -2038,76 +2032,51 @@ function observationPointTimestamp(point) {
   return Number.isFinite(timestamp) ? timestamp : null;
 }
 
-function drawObservationGapBand(from, to, gapMs) {
-  const start = worldToScreen(from);
-  const end = worldToScreen(to);
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const length = Math.hypot(dx, dy);
-  if (length < 2) {
+function drawObservationSegment(points, strokeStyle, lineWidth, lineDash) {
+  if (points.length < 2) {
     return;
   }
 
-  const halfWidth = Math.min(30, Math.max(9, 8 + Math.log2(Math.max(1, gapMs / OBSERVATION_GAP_THRESHOLD_MS)) * 4));
-  const nx = -dy / length * halfWidth;
-  const ny = dx / length * halfWidth;
-  const polygon = [
-    { x: start.x + nx, y: start.y + ny },
-    { x: end.x + nx, y: end.y + ny },
-    { x: end.x - nx, y: end.y - ny },
-    { x: start.x - nx, y: start.y - ny }
-  ];
-  const bounds = polygon.reduce((result, point) => ({
-    minX: Math.min(result.minX, point.x),
-    minY: Math.min(result.minY, point.y),
-    maxX: Math.max(result.maxX, point.x),
-    maxY: Math.max(result.maxY, point.y)
-  }), { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
-  const colors = canvasPalette();
-
-  context.save();
   context.beginPath();
-  context.moveTo(polygon[0].x, polygon[0].y);
-  polygon.slice(1).forEach((point) => context.lineTo(point.x, point.y));
-  context.closePath();
-  context.fillStyle = colors.observationGapFill;
-  context.fill();
-  context.clip();
-  context.strokeStyle = colors.observationGapHatch;
-  context.lineWidth = 1;
-  context.setLineDash([]);
-  for (let x = bounds.minX - bounds.maxY; x < bounds.maxX + bounds.maxY; x += 9) {
-    context.beginPath();
-    context.moveTo(x, bounds.maxY + 12);
-    context.lineTo(x + bounds.maxY - bounds.minY + 12, bounds.minY - 12);
-    context.stroke();
-  }
-  context.restore();
-
-  context.save();
-  context.strokeStyle = colors.observationGapStroke;
-  context.lineWidth = 1.5;
-  context.setLineDash([2, 3]);
-  for (const point of [start, end]) {
-    context.beginPath();
-    context.arc(point.x, point.y, POINT_RADIUS + 3, 0, Math.PI * 2);
-    context.stroke();
-  }
-  context.restore();
+  points.forEach((point, index) => {
+    const screen = worldToScreen(point);
+    if (index === 0) {
+      context.moveTo(screen.x, screen.y);
+    } else {
+      context.lineTo(screen.x, screen.y);
+    }
+  });
+  context.strokeStyle = strokeStyle;
+  context.lineWidth = lineWidth;
+  context.setLineDash(lineDash);
+  context.stroke();
 }
 
-function drawObservationGapBands(layer) {
+function drawObservationTrail(layer, isSelected, colors) {
+  const observedStroke = isSelected ? colors.selected : colors.observationTrail;
+  const observedWidth = layer.loaded ? (isSelected ? 4.2 : 2.8) : 3.4;
+  let observedSegment = [layer.points[0]];
+
   for (let index = 1; index < layer.points.length; index += 1) {
     const from = layer.points[index - 1];
     const to = layer.points[index];
     const fromAt = observationPointTimestamp(from);
     const toAt = observationPointTimestamp(to);
-    if (fromAt === null || toAt === null || toAt - fromAt < OBSERVATION_GAP_THRESHOLD_MS) {
+    const isGap = fromAt !== null && toAt !== null && toAt - fromAt >= OBSERVATION_GAP_THRESHOLD_MS;
+
+    if (!isGap) {
+      observedSegment.push(to);
       continue;
     }
-    drawObservationGapBand(from, to, toAt - fromAt);
+
+    drawObservationSegment(observedSegment, observedStroke, observedWidth, [4, 4]);
+    drawObservationSegment([from, to], colors.observationGapLine, 1.6, [2, 5]);
+    observedSegment = [to];
   }
+
+  drawObservationSegment(observedSegment, observedStroke, observedWidth, [4, 4]);
 }
+
 function drawObservationLayer(layer) {
   const colors = canvasPalette();
   const isSelected = layer.loaded && isLoadedObservationSelected(layer.id);
@@ -2115,7 +2084,6 @@ function drawObservationLayer(layer) {
   const targetScreen = layer.target ? worldToScreen(layer.target) : null;
 
   context.save();
-  drawObservationGapBands(layer);
   if (targetScreen) {
     context.beginPath();
     context.moveTo(startScreen.x, startScreen.y);
@@ -2126,19 +2094,7 @@ function drawObservationLayer(layer) {
     context.stroke();
   }
 
-  context.beginPath();
-  layer.points.forEach((point, index) => {
-    const screen = worldToScreen(point);
-    if (index === 0) {
-      context.moveTo(screen.x, screen.y);
-    } else {
-      context.lineTo(screen.x, screen.y);
-    }
-  });
-  context.strokeStyle = isSelected ? colors.selected : colors.observationTrail;
-  context.lineWidth = layer.loaded ? (isSelected ? 4.2 : 2.8) : 3.4;
-  context.setLineDash([4, 4]);
-  context.stroke();
+  drawObservationTrail(layer, isSelected, colors);
   context.restore();
 }
 
