@@ -276,6 +276,23 @@ textarea:focus-visible {
   padding: 0 10px;
 }
 
+.system-update-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.system-update-row .settings-nav-button {
+  flex: 1;
+}
+
+.system-update-version {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .settings-nav-button.is-active {
   border-color: var(--accent);
   background: var(--active-bg);

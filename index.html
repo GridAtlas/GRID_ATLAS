@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=60">
-    <script src="src/main.js?v=137" type="module" defer></script>
+    <script src="src/main.js?v=138" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -68,7 +68,10 @@
                 <output id="cloudMenuStatus" class="form-status cloud-status" data-cloud-status aria-live="polite"></output>
               </section>
               <section class="settings-nav">
-                <button id="systemUpdateButton" class="settings-nav-button" type="button" data-i18n="systemUpdate.action">システム更新</button>
+                <div class="system-update-row">
+                  <button id="systemUpdateButton" class="settings-nav-button" type="button" data-i18n="systemUpdate.action">システム更新</button>
+                  <output id="systemUpdateVersion" class="system-update-version" aria-live="polite"></output>
+                </div>
                 <p class="cloud-note" data-i18n="systemUpdate.notice">最新版を確認し、更新時は自動で再読み込みします。</p>
                 <output id="systemUpdateStatus" class="form-status" aria-live="polite"></output>
               </section>

@@ -42,6 +42,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
+const WEB_VERSION = "0.600";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -119,6 +120,7 @@ const elements = {
   settingsMapProviderSelect: document.querySelector("#settingsMapProviderSelect"),
   systemUpdateButton: document.querySelector("#systemUpdateButton"),
   systemUpdateStatus: document.querySelector("#systemUpdateStatus"),
+  systemUpdateVersion: document.querySelector("#systemUpdateVersion"),
   statusLine: document.querySelector("#statusLine"),
   selectionInfoText: document.querySelector("#selectionInfoText"),
   mobileSelectedTitle: document.querySelector("#mobileSelectedTitle"),
@@ -403,6 +405,7 @@ const TRANSLATIONS = {
     "settings.unitsImperial": "mile",
     "systemUpdate.action": "システム更新",
     "systemUpdate.notice": "最新版を確認し、アプリを再読み込みします。",
+    "systemUpdate.version": "WEB版",
     "systemUpdate.checking": "更新を確認しています…",
     "systemUpdate.applying": "更新を適用しています…",
     "systemUpdate.latest": "最新版です。",
@@ -641,6 +644,7 @@ const TRANSLATIONS = {
     "settings.unitsImperial": "mile",
     "systemUpdate.action": "System Update",
     "systemUpdate.notice": "Checks for the latest version and reloads the app.",
+    "systemUpdate.version": "Web version",
     "systemUpdate.checking": "Checking for updates…",
     "systemUpdate.applying": "Applying the update…",
     "systemUpdate.latest": "You are up to date.",
@@ -2394,6 +2398,7 @@ function render() {
   renderSelectedSummary();
   renderSelectionInfo();
   renderStatus();
+  renderWebVersion();
   renderActionButtons();
   renderPointInfoDialog();
   syncSettingsControls();
@@ -6905,6 +6910,12 @@ function shortMapUrlLikely(value) {
 function activateWaitingServiceWorker(registration) {
   if (registration.waiting && navigator.serviceWorker.controller) {
     registration.waiting.postMessage({ type: "SKIP_WAITING" });
+  }
+}
+
+function renderWebVersion() {
+  if (elements.systemUpdateVersion) {
+    elements.systemUpdateVersion.textContent = `${t("systemUpdate.version")} ${WEB_VERSION}`;
   }
 }
 
