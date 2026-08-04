@@ -1,6 +1,8 @@
 import { AuthError, authenticateRequest } from "./auth.js";
 
 const MAX_BODY_BYTES = 256 * 1024;
+const MAX_ASSET_BYTES = 10 * 1024 * 1024;
+const ALLOWED_ASSET_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const MAX_POINTS = 5000;
 const ID_PATTERN = /^[A-Za-z0-9._:-]+$/;
 
@@ -25,6 +27,9 @@ export default {
       const user = await authenticateRequest(request, env);
       if (!env.DB) return jsonResponse({ error: "データベースが未設定です" }, 503, cors);
 
+      if (route.assetId) {
+        return await handleAsset(request, env, cors, user.id, route.listId, route.assetId);
+      }
       return route.listId
         ? await handleListItem(request, env, cors, user.id, route.listId)
         : await handleListCollection(request, env, cors, user.id);
@@ -44,6 +49,19 @@ export default {
 
 function parseRoute(pathname) {
   const parts = pathname.replace(/^\/+|\/+$/g, "").split("/");
+  if (parts.length === 6 && parts[0] === "v1" && parts[1] === "me" && parts[2] === "lists" && parts[3] && parts[4] === "assets" && parts[5]) {
+    let listId;
+    let assetId;
+    try {
+      listId = decodeURIComponent(parts[3]);
+      assetId = decodeURIComponent(parts[5]);
+    } catch {
+      throw new HttpError("画像IDが不正です", 400);
+    }
+    validateId(listId, "リストID");
+    validateId(assetId, "画像ID");
+    return { listId, assetId };
+  }
   if (parts.length === 3 && parts[0] === "v1" && parts[1] === "me" && parts[2] === "lists") {
     return { listId: null };
   }
@@ -75,6 +93,7 @@ async function handleListCollection(request, env, cors, ownerId) {
     const payload = await readPayload(request);
     const now = new Date().toISOString();
     const normalized = normalizePayload(payload, now);
+    await ensurePayloadAssets(env, ownerId, normalized);
     try {
       await env.DB.prepare(
         `INSERT INTO cloud_lists
@@ -122,6 +141,7 @@ async function handleListItem(request, env, cors, ownerId, listId) {
     const normalized = normalizePayload(body.payload, now, {
       createdAt: existingPayload?.list?.createdAt || existing.created_at
     });
+    await ensurePayloadAssets(env, ownerId, normalized);
     if (normalized.list.id !== listId) throw new HttpError("リストIDが一致しません", 400);
 
     const result = await env.DB.prepare(
@@ -166,6 +186,84 @@ async function handleListItem(request, env, cors, ownerId, listId) {
         ? jsonResponse({ error: "クラウド側が更新されています", revision: current.revision }, 409, cors)
         : jsonResponse({ error: "リストが見つかりません" }, 404, cors);
     }
+    await deleteListAssets(env, ownerId, listId);
+    return new Response(null, { status: 204, headers: responseHeaders(cors) });
+  }
+
+  return methodNotAllowed(["GET", "PUT", "DELETE"], cors);
+}
+
+async function handleAsset(request, env, cors, ownerId, listId, assetId) {
+  if (!env.ASSETS) {
+    return jsonResponse({ error: "画像ストレージが未設定です" }, 503, cors);
+  }
+
+  const list = await findList(env.DB, ownerId, listId);
+  if (!list) return jsonResponse({ error: "リストが見つかりません" }, 404, cors);
+  const key = assetKey(ownerId, listId, assetId);
+
+  if (request.method === "PUT") {
+    const mediaType = (request.headers.get("Content-Type") || "").split(";", 1)[0].trim().toLowerCase();
+    if (!ALLOWED_ASSET_TYPES.has(mediaType)) {
+      throw new HttpError("対応していない画像形式です", 415);
+    }
+    const contentLength = Number(request.headers.get("Content-Length"));
+    if (Number.isFinite(contentLength) && contentLength > MAX_ASSET_BYTES) {
+      throw new HttpError("画像が大きすぎます", 413);
+    }
+    const bytes = new Uint8Array(await request.arrayBuffer());
+    if (bytes.byteLength === 0 || bytes.byteLength > MAX_ASSET_BYTES) {
+      throw new HttpError("画像サイズが不正です", 413);
+    }
+    const digest = await sha256Hex(bytes);
+    if (digest !== assetId) {
+      throw new HttpError("画像IDと内容が一致しません", 400);
+    }
+
+    let name = "";
+    const encodedName = request.headers.get("X-Asset-Name");
+    if (encodedName) {
+      try { name = decodeURIComponent(encodedName).slice(0, 200); } catch {}
+    }
+    const now = new Date().toISOString();
+    await env.ASSETS.put(key, bytes, {
+      httpMetadata: { contentType: mediaType }
+    });
+    await env.DB.prepare(
+      "INSERT INTO cloud_assets " +
+        "(owner_id, list_id, asset_id, media_type, name, byte_length, created_at, updated_at) " +
+        "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7) " +
+        "ON CONFLICT(owner_id, list_id, asset_id) DO UPDATE SET " +
+        "media_type = excluded.media_type, name = excluded.name, " +
+        "byte_length = excluded.byte_length, updated_at = excluded.updated_at"
+    ).bind(ownerId, listId, assetId, mediaType, name, bytes.byteLength, now).run();
+    return jsonResponse({
+      asset: { id: assetId, mediaType, name, byteLength: bytes.byteLength }
+    }, 201, cors);
+  }
+
+  const metadata = await findAsset(env.DB, ownerId, listId, assetId);
+  if (!metadata) return jsonResponse({ error: "画像が見つかりません" }, 404, cors);
+
+  if (request.method === "GET") {
+    const object = await env.ASSETS.get(key);
+    if (!object) return jsonResponse({ error: "画像が見つかりません" }, 404, cors);
+    const headers = new Headers();
+    object.writeHttpMetadata(headers);
+    headers.set("Cache-Control", "private, max-age=300");
+    headers.set("ETag", object.httpEtag);
+    for (const [name, value] of Object.entries(cors || {})) {
+      headers.set(name, value);
+    }
+    headers.set("X-Content-Type-Options", "nosniff");
+    return new Response(object.body, { status: 200, headers });
+  }
+
+  if (request.method === "DELETE") {
+    await env.ASSETS.delete(key);
+    await env.DB.prepare(
+      "DELETE FROM cloud_assets WHERE owner_id = ?1 AND list_id = ?2 AND asset_id = ?3"
+    ).bind(ownerId, listId, assetId).run();
     return new Response(null, { status: 204, headers: responseHeaders(cors) });
   }
 
@@ -271,12 +369,14 @@ function normalizePayload(payload, now, options = {}) {
       throw new HttpError("経度が不正です", 400);
     }
     if (point.comment !== undefined) validateText(point.comment, "コメント", 4000, true);
+    const photo = normalizePhotoDescriptor(point.photo);
     return {
       id: point.id,
       name: point.name,
       latitude: point.latitude,
       longitude: point.longitude,
-      ...(point.comment === undefined ? {} : { comment: point.comment })
+      ...(point.comment === undefined ? {} : { comment: point.comment }),
+      ...(photo ? { photo } : {})
     };
   });
 
@@ -294,6 +394,59 @@ function normalizePayload(payload, now, options = {}) {
     },
     points
   };
+}
+
+function normalizePhotoDescriptor(value) {
+  if (!value || typeof value !== "object") return null;
+  validateId(value.assetId, "画像ID");
+  const mediaType = String(value.mediaType || "").toLowerCase();
+  if (!ALLOWED_ASSET_TYPES.has(mediaType)) throw new HttpError("画像形式が不正です", 400);
+  const byteLength = Number(value.byteLength);
+  if (!Number.isInteger(byteLength) || byteLength < 1 || byteLength > MAX_ASSET_BYTES) {
+    throw new HttpError("画像サイズが不正です", 400);
+  }
+  const name = typeof value.name === "string" ? value.name.slice(0, 200) : "";
+  return { assetId: value.assetId, mediaType, byteLength, ...(name ? { name } : {}) };
+}
+
+async function ensurePayloadAssets(env, ownerId, payload) {
+  const photos = payload.points.map((point) => point.photo).filter(Boolean);
+  if (photos.length === 0) return;
+  if (!env.ASSETS) throw new HttpError("画像ストレージが未設定です", 503);
+  for (const photo of photos) {
+    const metadata = await findAsset(env.DB, ownerId, payload.list.id, photo.assetId);
+    if (!metadata || metadata.media_type !== photo.mediaType || metadata.byte_length !== photo.byteLength) {
+      throw new HttpError("画像がアップロードされていません", 400);
+    }
+  }
+}
+
+async function findAsset(db, ownerId, listId, assetId) {
+  return db.prepare(
+    "SELECT owner_id, list_id, asset_id, media_type, name, byte_length " +
+      "FROM cloud_assets WHERE owner_id = ?1 AND list_id = ?2 AND asset_id = ?3"
+  ).bind(ownerId, listId, assetId).first();
+}
+
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest("SHA-256", value);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function assetKey(ownerId, listId, assetId) {
+  return "assets/" + encodeURIComponent(ownerId) + "/" + listId + "/" + assetId;
+}
+
+async function deleteListAssets(env, ownerId, listId) {
+  const assets = await env.DB.prepare(
+    "SELECT asset_id FROM cloud_assets WHERE owner_id = ?1 AND list_id = ?2"
+  ).bind(ownerId, listId).all();
+  if (env.ASSETS && assets.results.length > 0) {
+    await env.ASSETS.delete(assets.results.map((asset) => assetKey(ownerId, listId, asset.asset_id)));
+  }
+  await env.DB.prepare(
+    "DELETE FROM cloud_assets WHERE owner_id = ?1 AND list_id = ?2"
+  ).bind(ownerId, listId).run();
 }
 
 function validateId(value, label) {
@@ -370,13 +523,13 @@ function corsHeaders(origin, env) {
   if (!origin || !allowed.has(origin)) {
     return origin ? null : {
       "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-      "Access-Control-Allow-Headers": "Authorization, Content-Type"
+      "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Asset-Name"
     };
   }
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Asset-Name",
     "Access-Control-Max-Age": "600",
     Vary: "Origin"
   };

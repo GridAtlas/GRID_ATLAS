@@ -32,6 +32,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await env.DB.prepare("DELETE FROM cloud_lists").run();
+  await env.DB.prepare("DELETE FROM cloud_assets").run();
 });
 
 afterAll(() => {
@@ -211,6 +212,73 @@ describe("GRID ATLAS Cloud API", () => {
     });
     expect(deleted.status).toBe(204);
   });
+  it("stores private image assets in R2 and removes them with the list", async () => {
+    const token = await issueToken("owner-assets");
+    const accessEnv = {
+      DB: env.DB,
+      ASSETS: env.ASSETS,
+      AUTH_JWKS_URL: JWKS_URL,
+      AUTH_ISSUER: ISSUER,
+      AUTH_AUDIENCE: AUDIENCE,
+      WEB_ORIGINS: "https://gridatlas.github.io",
+    };
+    const created = await api("/v1/me/lists", {
+      method: "POST",
+      token,
+      body: samplePayload(),
+      environment: accessEnv
+    });
+    expect(created.status).toBe(201);
+
+    const bytes = new TextEncoder().encode("test image");
+    const assetId = await sha256Hex(bytes);
+    const assetPath = "/v1/me/lists/list-1/assets/" + assetId;
+    const uploaded = await worker.fetch(new Request("https://api.test" + assetPath, {
+      method: "PUT",
+      headers: {
+        Authorization: "Bearer " + token,
+        "Content-Type": "image/png",
+        "X-Asset-Name": "pin.png"
+      },
+      body: bytes
+    }), accessEnv);
+    expect(uploaded.status).toBe(201);
+
+    const payload = samplePayload();
+    payload.points[0].photo = {
+      assetId,
+      mediaType: "image/png",
+      name: "pin.png",
+      byteLength: bytes.byteLength
+    };
+    const updated = await api("/v1/me/lists/list-1", {
+      method: "PUT",
+      token,
+      body: { expectedRevision: 1, payload },
+      environment: accessEnv
+    });
+    expect(updated.status).toBe(200);
+
+    const downloaded = await worker.fetch(new Request("https://api.test" + assetPath, {
+      headers: { Authorization: "Bearer " + token }
+    }), accessEnv);
+    expect(downloaded.status).toBe(200);
+    expect(new TextDecoder().decode(await downloaded.arrayBuffer())).toBe("test image");
+
+    const otherOwner = await worker.fetch(new Request("https://api.test" + assetPath, {
+      headers: { Authorization: "Bearer " + await issueToken("owner-other") }
+    }), accessEnv);
+    expect(otherOwner.status).toBe(404);
+
+    const deleted = await api("/v1/me/lists/list-1", {
+      method: "DELETE",
+      token,
+      body: { expectedRevision: 2 },
+      environment: accessEnv
+    });
+    expect(deleted.status).toBe(204);
+    expect(await env.ASSETS.get("assets/owner-assets/list-1/" + assetId)).toBeNull();
+  });
   it("rejects malformed tokens, payloads, oversized bodies, and unsupported methods", async () => {
     const expiredToken = await issueToken("owner-a", { expiresIn: -1 });
     expect((await api("/v1/me/lists", { token: expiredToken })).status).toBe(401);
@@ -280,7 +348,7 @@ describe("GRID ATLAS Cloud API", () => {
   });
 });
 
-async function api(path, { method = "GET", token, body, origin, contentType = "application/json" } = {}) {
+async function api(path, { method = "GET", token, body, origin, contentType = "application/json", environment = env } = {}) {
   const headers = new Headers();
   const bearer = token === undefined ? await issueToken("owner-a") : token;
   if (bearer) headers.set("Authorization", `Bearer ${bearer}`);
@@ -290,7 +358,7 @@ async function api(path, { method = "GET", token, body, origin, contentType = "a
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body)
-  }), env);
+  }), environment);
 }
 
 async function issueToken(subject, { expiresIn = 3600, audience = AUDIENCE } = {}) {
@@ -312,6 +380,10 @@ async function issueToken(subject, { expiresIn = 3600, audience = AUDIENCE } = {
   return `${signingInput}.${base64UrlEncode(signature)}`;
 }
 
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest("SHA-256", value);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 function base64UrlEncode(value) {
   const bytes = typeof value === "string" ? new TextEncoder().encode(value) : new Uint8Array(value);
   let binary = "";

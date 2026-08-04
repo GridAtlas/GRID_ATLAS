@@ -20,16 +20,22 @@ export function createCloudClient({ baseUrl, getAccessToken, fetchImpl = globalT
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const rawBody = options.body instanceof Blob
+      || options.body instanceof ArrayBuffer
+      || ArrayBuffer.isView(options.body);
     let response;
     try {
       response = await fetchImpl(new URL(path, endpoint), {
         method: options.method || "GET",
         headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${token}`,
-          ...(options.body === undefined ? {} : { "Content-Type": "application/json" })
+          Accept: options.accept || "application/json",
+          Authorization: "Bearer " + token,
+          ...(options.body === undefined ? {} : {
+            "Content-Type": options.contentType || (rawBody ? "application/octet-stream" : "application/json")
+          }),
+          ...(options.headers || {})
         },
-        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        body: options.body === undefined ? undefined : rawBody ? options.body : JSON.stringify(options.body),
         cache: "no-store",
         signal: controller.signal
       });
@@ -43,28 +49,45 @@ export function createCloudClient({ baseUrl, getAccessToken, fetchImpl = globalT
     }
 
     if (response.status === 204) return null;
+    if (response.ok && options.responseType === "blob") return response.blob();
     const payload = await readJsonResponse(response);
     if (!response.ok) {
       throw new CloudApiError(
-        typeof payload?.error === "string" ? payload.error : `クラウド操作に失敗しました (${response.status})`,
+        typeof payload?.error === "string" ? payload.error : "クラウド操作に失敗しました (" + response.status + ")",
         { status: response.status, payload }
       );
     }
     return payload;
   }
-
   return {
     listLists: () => request("v1/me/lists"),
-    getList: (listId) => request(`v1/me/lists/${encodeURIComponent(listId)}`),
+    getList: (listId) => request("v1/me/lists/" + encodeURIComponent(listId)),
     createList: (payload) => request("v1/me/lists", { method: "POST", body: { payload } }),
-    updateList: (listId, expectedRevision, payload) => request(`v1/me/lists/${encodeURIComponent(listId)}`, {
+    updateList: (listId, expectedRevision, payload) => request("v1/me/lists/" + encodeURIComponent(listId), {
       method: "PUT",
       body: { expectedRevision, payload }
     }),
-    deleteList: (listId, expectedRevision) => request(`v1/me/lists/${encodeURIComponent(listId)}`, {
+    deleteList: (listId, expectedRevision) => request("v1/me/lists/" + encodeURIComponent(listId), {
       method: "DELETE",
       body: { expectedRevision }
-    })
+    }),
+    uploadAsset: (listId, assetId, blob, options = {}) => request(
+      "v1/me/lists/" + encodeURIComponent(listId) + "/assets/" + encodeURIComponent(assetId),
+      {
+        method: "PUT",
+        body: blob,
+        contentType: blob.type || options.mediaType || "application/octet-stream",
+        headers: options.name ? { "X-Asset-Name": encodeURIComponent(options.name) } : {}
+      }
+    ).then((response) => response?.asset || null),
+    getAsset: (listId, assetId) => request(
+      "v1/me/lists/" + encodeURIComponent(listId) + "/assets/" + encodeURIComponent(assetId),
+      { responseType: "blob", accept: "*/*" }
+    ),
+    deleteAsset: (listId, assetId) => request(
+      "v1/me/lists/" + encodeURIComponent(listId) + "/assets/" + encodeURIComponent(assetId),
+      { method: "DELETE" }
+    )
   };
 }
 
@@ -113,7 +136,7 @@ export function resolveCloudApiUrlSetting(storedValue, { defaultUrl, pageUrl } =
   return { url: stored, replaced: false };
 }
 
-export function pointListToCloudPayload(list, getCoordinates) {
+export function pointListToCloudPayload(list, getCoordinates, options = {}) {
   if (!list || typeof list !== "object") throw new CloudApiError("保存する地点リストがありません");
   const now = new Date().toISOString();
   const listId = typeof list.cloudId === "string" && list.cloudId ? list.cloudId : list.id;
@@ -124,12 +147,14 @@ export function pointListToCloudPayload(list, getCoordinates) {
     if (!geo || !Number.isFinite(geo.lat) || !Number.isFinite(geo.lng)) {
       throw new CloudApiError(`地点「${point?.title || "名称なし"}」の緯度経度を確認できません`);
     }
+    const photo = options.photoAssets?.get(point.id) || point.cloudPhoto || null;
     return {
       id: String(point.id || ""),
       name: String(point.title || "Point"),
       latitude: geo.lat,
       longitude: geo.lng,
-      ...(typeof point.note === "string" && point.note ? { comment: point.note } : {})
+      ...(typeof point.note === "string" && point.note ? { comment: point.note } : {}),
+      ...(photo ? { photo } : {})
     };
   }) : [];
 
@@ -172,7 +197,9 @@ export function cloudPayloadToPointList(payload, options = {}) {
       title: point.name,
       note: point.comment || "",
       photo: "",
-      photoName: "",
+      photoName: point.photo?.name || "",
+      photoAssetId: point.photo?.assetId || "",
+      cloudPhoto: point.photo || null,
       geo: { lat: point.latitude, lng: point.longitude },
       createdAt: payload.list.createdAt || now,
       updatedAt: payload.list.updatedAt || now

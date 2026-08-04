@@ -3,7 +3,7 @@ import {
   cloudPayloadToPointList,
   createCloudClient,
   pointListToCloudPayload
-} from "./cloud-client.js?v=2";
+} from "./cloud-client.js?v=3";
 import {
   GRIDATLAS_MIME_TYPE,
   GRIDATLAS_URL_PARAMETER,
@@ -272,6 +272,10 @@ const state = {
   lastDeleted: null,
   pendingGeo: null,
   gpsEnabled: false,
+  deviceHeading: null,
+  movementHeading: null,
+  deviceHeadingListening: false,
+  deviceHeadingPermissionRequested: false,
   lastLocationUpdateAt: null,
   lastLocationError: null,
   followCurrentLocation: false,
@@ -952,6 +956,7 @@ function setGpsEnabled(value, options = {}) {
     }
     state.locationWatchId = null;
     state.currentGeo = null;
+    stopDeviceHeading();
     state.selection = state.selection.filter((entry) => entry.id !== CURRENT_LOCATION_ID);
     normalizeSelection();
   } else {
@@ -1275,6 +1280,61 @@ function cloudPointListForPoint(pointId) {
   return state.cloud.pointLists.find((list) => findPointIn(pointId, list.points)) ?? null;
 }
 
+async function cloudPhotoAssetsForList(list, cloudId, client) {
+  const photoAssets = new Map();
+  for (const point of Array.isArray(list?.points) ? list.points : []) {
+    if (point.cloudPhoto) {
+      photoAssets.set(point.id, point.cloudPhoto);
+    }
+    if (!point.photoAssetId && point.photo) {
+      await ensureStoredPointPhoto(point);
+    }
+    if (!point.photoAssetId) {
+      continue;
+    }
+    const localAsset = await getGridAtlasAsset(point.photoAssetId);
+    if (!localAsset?.blob) {
+      continue;
+    }
+    const uploaded = await client.uploadAsset(cloudId, localAsset.id, localAsset.blob, {
+      name: localAsset.name,
+      mediaType: localAsset.mediaType
+    });
+    if (uploaded?.id) {
+      photoAssets.set(point.id, {
+        assetId: uploaded.id,
+        mediaType: uploaded.mediaType || localAsset.mediaType,
+        name: uploaded.name || localAsset.name || "",
+        byteLength: uploaded.byteLength || localAsset.byteLength
+      });
+    }
+  }
+  return photoAssets;
+}
+
+async function cloudPayloadWithPhotos(list, cloudId, client) {
+  const photoAssets = await cloudPhotoAssetsForList(list, cloudId, client);
+  return pointListToCloudPayload({ ...list, cloudId }, pointGeo, { photoAssets });
+}
+
+async function hydrateCloudPointListAssets(list, client) {
+  const photoPoints = (list?.points || []).filter((point) => point.photoAssetId);
+  await Promise.all(photoPoints.map(async (point) => {
+    try {
+      const blob = await client.getAsset(list.cloudId, point.photoAssetId);
+      const local = await putGridAtlasAsset(blob, {
+        name: point.photoName,
+        mediaType: blob.type
+      });
+      point.photoAssetId = local.id;
+      point.photo = await gridAtlasAssetUrl(local.id);
+    } catch (error) {
+      console.warn("GRID ATLAS cloud photo hydration failed", error);
+    }
+  }));
+  return list;
+}
+
 async function updateCloudPointList(list, nextList, options = {}) {
   const cloudId = list?.cloudId || list?.id;
   const meta = state.cloud.lists.find((item) => item.id === cloudId);
@@ -1284,8 +1344,10 @@ async function updateCloudPointList(list, nextList, options = {}) {
   }
 
   let payload;
+  let client;
   try {
-    payload = pointListToCloudPayload({ ...nextList, cloudId }, pointGeo);
+    client = cloudClientFromInputs();
+    payload = await cloudPayloadWithPhotos(nextList, cloudId, client);
   } catch (error) {
     setCloudStatus(cloudErrorMessage(error), { error: true });
     return false;
@@ -1294,7 +1356,7 @@ async function updateCloudPointList(list, nextList, options = {}) {
   setCloudBusy(true);
   let updated = false;
   try {
-    await cloudClientFromInputs().updateList(cloudId, meta.revision, payload);
+    await client.updateList(cloudId, meta.revision, payload);
     updated = true;
   } catch (error) {
     setCloudStatus(cloudErrorMessage(error), { error: true });
@@ -2213,6 +2275,135 @@ function syncLocationGlowAnimation() {
   locationGlowFrame = requestAnimationFrame(animate);
 }
 
+function normalizeHeading(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+  return (numeric % 360 + 360) % 360;
+}
+
+function deviceOrientationHeading(event) {
+  const compassHeading = normalizeHeading(event.webkitCompassHeading);
+  if (compassHeading !== null) {
+    return compassHeading;
+  }
+
+  if (event.alpha === null || event.alpha === undefined) {
+    return null;
+  }
+
+  if (event.absolute === false) {
+    return null;
+  }
+
+  const alpha = Number(event.alpha);
+  if (!Number.isFinite(alpha)) {
+    return null;
+  }
+
+  const orientation = Number(window.screen?.orientation?.angle ?? window.orientation ?? 0);
+  return normalizeHeading(360 - alpha + orientation);
+}
+
+function handleDeviceOrientation(event) {
+  if (!state.gpsEnabled) {
+    return;
+  }
+
+  const heading = deviceOrientationHeading(event);
+  if (heading === null) {
+    return;
+  }
+
+  state.deviceHeading = heading;
+  if (currentLocationPoint()) {
+    draw();
+  }
+}
+
+function startDeviceHeading() {
+  if (state.deviceHeadingListening) {
+    return;
+  }
+
+  const attach = () => {
+    if (state.deviceHeadingListening) {
+      return;
+    }
+    window.addEventListener("deviceorientationabsolute", handleDeviceOrientation, true);
+    window.addEventListener("deviceorientation", handleDeviceOrientation, true);
+    state.deviceHeadingListening = true;
+  };
+
+  const orientationEvent = window.DeviceOrientationEvent;
+  if (typeof orientationEvent?.requestPermission === "function") {
+    if (state.deviceHeadingPermissionRequested) {
+      return;
+    }
+    state.deviceHeadingPermissionRequested = true;
+    orientationEvent.requestPermission().then((permission) => {
+      if (permission === "granted") {
+        attach();
+      }
+    }).catch(() => {});
+    return;
+  }
+
+  attach();
+}
+
+function stopDeviceHeading() {
+  if (state.deviceHeadingListening) {
+    window.removeEventListener("deviceorientationabsolute", handleDeviceOrientation, true);
+    window.removeEventListener("deviceorientation", handleDeviceOrientation, true);
+  }
+  state.deviceHeadingListening = false;
+  state.deviceHeading = null;
+  state.movementHeading = null;
+}
+
+function currentLocationHeading() {
+  return state.deviceHeading ?? state.movementHeading;
+}
+
+function drawCurrentLocationHeading(screen, colors, isStale) {
+  const heading = currentLocationHeading();
+  if (heading === null) {
+    return;
+  }
+
+  const angle = heading * Math.PI / 180;
+  const direction = { x: Math.sin(angle), y: -Math.cos(angle) };
+  const perpendicular = { x: Math.cos(angle), y: Math.sin(angle) };
+  const baseDistance = POINT_RADIUS - 1;
+  const tipDistance = POINT_RADIUS + 14;
+  const halfWidth = 5;
+
+  context.save();
+  context.beginPath();
+  context.moveTo(screen.x + direction.x * tipDistance, screen.y + direction.y * tipDistance);
+  context.lineTo(
+    screen.x + direction.x * baseDistance + perpendicular.x * halfWidth,
+    screen.y + direction.y * baseDistance + perpendicular.y * halfWidth
+  );
+  context.lineTo(
+    screen.x + direction.x * baseDistance - perpendicular.x * halfWidth,
+    screen.y + direction.y * baseDistance - perpendicular.y * halfWidth
+  );
+  context.closePath();
+  context.fillStyle = isStale ? colors.currentStale : colors.currentFill;
+  context.globalAlpha = isStale ? 0.5 : 0.95;
+  context.fill();
+  context.globalAlpha = 1;
+  context.lineWidth = 1.5;
+  context.strokeStyle = colors.pointBaseStroke;
+  context.stroke();
+  context.restore();
+}
 function drawCurrentLocation() {
   const location = currentLocationPoint();
   if (!location) {
@@ -2225,6 +2416,7 @@ function drawCurrentLocation() {
   const isStale = currentLocationStatus() === "stale";
 
   drawCurrentLocationGlow(screen, colors);
+  drawCurrentLocationHeading(screen, colors, isStale);
 
   context.save();
   context.beginPath();
@@ -4228,10 +4420,13 @@ async function refreshCloudLists(options = {}) {
     ));
 
     const details = await Promise.all(state.cloud.lists.map((list) => client.getList(list.id)));
-    state.cloud.pointLists = details.map((result) => cloudPayloadToPointList(result.list, {
-      localId: `cloud-preview:${result.list.list.id}`,
-      revision: result.revision,
-      editable: true
+    state.cloud.pointLists = await Promise.all(details.map(async (result) => {
+      const list = cloudPayloadToPointList(result.list, {
+        localId: "cloud-preview:" + result.list.list.id,
+        revision: result.revision,
+        editable: true
+      });
+      return hydrateCloudPointListAssets(list, client);
     }));
     applyCloudListOrder();
     persistWorkspace();
@@ -4354,8 +4549,9 @@ async function moveListToCloud(storageId, options = {}) {
     return false;
   }
   const source = entry.local;
-  const targetCloudId = `cloud:${createId()}`;
-  const payload = pointListToCloudPayload({ ...source, id: targetCloudId, cloudId: targetCloudId, cloudScope: "mine" }, pointGeo);
+  const targetCloudId = "cloud:" + createId();
+  const cloudList = { ...source, id: targetCloudId, cloudId: targetCloudId, cloudScope: "mine" };
+  const payload = pointListToCloudPayload(cloudList, pointGeo);
   if (payload.list.scope !== "mine") {
     setCloudStatus(cloudText("マイリスト（クラウド）として保存できません。", "Could not create a private cloud list."), { error: true });
     return false;
@@ -4363,7 +4559,12 @@ async function moveListToCloud(storageId, options = {}) {
   setCloudBusy(true);
   let completed = false;
   try {
-    await cloudClientFromInputs().createList(payload);
+    const client = cloudClientFromInputs();
+    const created = await client.createList(payload);
+    if (cloudList.points.some((point) => point.photoAssetId || point.photo || point.cloudPhoto)) {
+      const photoPayload = await cloudPayloadWithPhotos(cloudList, targetCloudId, client);
+      await client.updateList(targetCloudId, created?.revision || 1, photoPayload);
+    }
     if (options.copy !== true) removeLocalListForStorageChange(source.id);
     completed = true;
   } catch (error) {
@@ -4378,8 +4579,7 @@ async function moveListToCloud(storageId, options = {}) {
       : cloudText("マイリスト（クラウド）へ移動しました", "Moved to My Lists (Cloud)"));
   }
   return completed;
-}
-function uniqueLocalListId(preferredId) {
+}function uniqueLocalListId(preferredId) {
   const existingIds = new Set(state.pointLists.map((list) => list.id));
   if (preferredId !== DEFAULT_POINT_LIST_ID && !existingIds.has(preferredId)) return preferredId;
   let nextId = createId();
@@ -4401,7 +4601,7 @@ async function moveListToDevice(storageId, options = {}) {
   try {
     const client = cloudClientFromInputs();
     const result = await client.getList(entry.cloud.id);
-    const imported = cloudPayloadToPointList(result.list, { localId: uniqueLocalListId(result.list.list.id), revision: result.revision, editable: true });
+    const imported = await hydrateCloudPointListAssets(cloudPayloadToPointList(result.list, { localId: uniqueLocalListId(result.list.list.id), revision: result.revision, editable: true }), client);
     const normalized = normalizePointList({
       ...imported,
       id: uniqueLocalListId(imported.id),
@@ -5835,6 +6035,7 @@ function centerAndFollowCurrentLocation() {
     return;
   }
 
+  startDeviceHeading();
   syncCanvasSize();
   state.screenFollowCurrentLocation = true;
   state.locationFollowScaleMode = FOLLOW_SCALE_CENTER;
@@ -6154,6 +6355,7 @@ function resizeImage(dataUrl) {
 }
 
 function useCurrentLocation() {
+  startDeviceHeading();
   requestCurrentLocation({ fillForm: true, center: false, showButtonState: true });
 }
 
@@ -6183,6 +6385,8 @@ function updateCurrentLocationFromPosition(position, options = {}) {
     lng: position.coords.longitude,
     accuracy: position.coords.accuracy
   });
+
+  state.movementHeading = normalizeHeading(position.coords.heading);
 
   state.currentGeo = geo;
   state.lastLocationUpdateAt = Date.now();
@@ -6334,6 +6538,7 @@ function startLocationFollow(options = {}) {
     return;
   }
 
+  startDeviceHeading();
   const autoRouteStart = !state.routeStartPointId;
   state.followCurrentLocation = true;
   state.locationFollowFillForm = Boolean(options.fillForm);

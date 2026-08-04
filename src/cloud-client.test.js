@@ -63,6 +63,57 @@ describe("Cloud client", () => {
     expect(JSON.parse(init.body).payload.type).toBe("grid-atlas-share");
   });
 
+  it("uploads and downloads authenticated binary assets", async () => {
+    const fetchImpl = vi.fn(async (url, init) => {
+      if (init.method === "PUT") {
+        return new Response(JSON.stringify({
+          asset: { id: "asset-1", mediaType: "image/png", name: "pin.png", byteLength: 4 }
+        }), { status: 201, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response(new Blob(["test"], { type: "image/png" }), {
+        status: 200,
+        headers: { "Content-Type": "image/png" }
+      });
+    });
+    const client = createCloudClient({
+      baseUrl: "https://api.example.com",
+      getAccessToken: () => "test-token",
+      fetchImpl
+    });
+
+    const uploaded = await client.uploadAsset("list-1", "asset-1", new Blob(["test"], { type: "image/png" }), { name: "pin.png" });
+    expect(uploaded).toMatchObject({ id: "asset-1", mediaType: "image/png" });
+    const downloaded = await client.getAsset("list-1", "asset-1");
+    expect(await downloaded.text()).toBe("test");
+
+    const [uploadUrl, uploadInit] = fetchImpl.mock.calls[0];
+    expect(uploadUrl.pathname).toBe("/v1/me/lists/list-1/assets/asset-1");
+    expect(uploadInit.headers.Authorization).toBe("Bearer test-token");
+    expect(uploadInit.headers["Content-Type"]).toBe("image/png");
+    expect(uploadInit.headers["X-Asset-Name"]).toBe("pin.png");
+  });
+
+  it("includes only uploaded photo descriptors in cloud payloads", () => {
+    const list = {
+      id: "local",
+      cloudId: "list-1",
+      name: "写真付き",
+      points: [{
+        id: "point-1",
+        title: "地点",
+        geo: { lat: 35, lng: 139 },
+        photoAssetId: "asset-1"
+      }]
+    };
+    const photoAssets = new Map([["point-1", {
+      assetId: "asset-1",
+      mediaType: "image/png",
+      name: "pin.png",
+      byteLength: 4
+    }]]);
+    const payload = pointListToCloudPayload(list, (point) => point.geo, { photoAssets });
+    expect(payload.points[0].photo).toEqual(photoAssets.get("point-1"));
+  });
   it("keeps conflict details for the UI", async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
       error: "クラウド側が更新されています",

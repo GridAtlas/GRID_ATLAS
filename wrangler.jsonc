@@ -10,6 +10,12 @@
     "AUTH_ISSUER": "",
     "AUTH_AUDIENCE": ""
   },
+  "r2_buckets": [
+    {
+      "binding": "ASSETS",
+      "bucket_name": "grid-atlas-cloud-local-assets"
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
@@ -36,6 +42,12 @@
         "PERSONAL_OWNER_ID": "personal-beta",
         "FRIEND_OWNER_ID": "friend-beta"
       },
+      "r2_buckets": [
+        {
+          "binding": "ASSETS",
+          "bucket_name": "grid-atlas-cloud-staging-assets"
+        }
+      ],
       "d1_databases": [
         {
           "binding": "DB",
