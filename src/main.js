@@ -61,6 +61,8 @@ const OBSERVATION_MIN_STEP_METERS = 15;
 const OBSERVATION_ACCURACY_FACTOR = 1.5;
 const OBSERVATION_MAX_ACCURACY_METERS = 50;
 const OBSERVATION_MAX_POINTS = 2000;
+const OBSERVATION_GAP_THRESHOLD_MS = 30 * 1000;
+const LOCATION_STALE_AFTER_MS = 30 * 1000;
 const DEFAULT_GEO = { lat: 35.681236, lng: 139.767125 };
 const DEFAULT_CENTER = { x: 0, y: 0 };
 const MOBILE_GRID_PAGES = ["grid", "points", "lists"];
@@ -268,6 +270,8 @@ const state = {
   lastDeleted: null,
   pendingGeo: null,
   gpsEnabled: false,
+  lastLocationUpdateAt: null,
+  lastLocationError: null,
   followCurrentLocation: false,
   screenFollowCurrentLocation: false,
   locationWatchId: null,
@@ -304,7 +308,11 @@ const CANVAS_PALETTES = {
     targetFill: "#e8907e",
     observationBaseline: "rgb(197 111 133 / 0.34)",
     observationTrail: "#c56f85",
+    observationGapFill: "rgb(197 111 133 / 0.12)",
+    observationGapHatch: "rgb(197 111 133 / 0.48)",
+    observationGapStroke: "rgb(197 111 133 / 0.7)",
     currentFill: "#f5ce6a",
+    currentStale: "#a68f85",
     pendingFill: "rgb(216 111 155 / 0.22)",
     pendingStroke: "rgb(216 111 155 / 0.62)",
     pointFill: "#d86f9b",
@@ -330,7 +338,11 @@ const CANVAS_PALETTES = {
     targetFill: "#ff8a1c",
     observationBaseline: "rgb(214 255 224 / 0.28)",
     observationTrail: "#fff35a",
+    observationGapFill: "rgb(214 255 224 / 0.1)",
+    observationGapHatch: "rgb(214 255 224 / 0.52)",
+    observationGapStroke: "rgb(214 255 224 / 0.72)",
     currentFill: "#fff35a",
+    currentStale: "#9db4a3",
     pendingFill: "rgb(44 255 100 / 0.18)",
     pendingStroke: "rgb(119 255 153 / 0.72)",
     pointFill: "#23ff5e",
@@ -356,7 +368,11 @@ const CANVAS_PALETTES = {
     targetFill: "#dc2626",
     observationBaseline: "rgb(135 104 94 / 0.32)",
     observationTrail: "#b45309",
+    observationGapFill: "rgb(180 83 9 / 0.1)",
+    observationGapHatch: "rgb(180 83 9 / 0.46)",
+    observationGapStroke: "rgb(180 83 9 / 0.68)",
     currentFill: "#f59e0b",
+    currentStale: "#8b8176",
     pendingFill: "rgb(37 99 235 / 0.16)",
     pendingStroke: "rgb(37 99 235 / 0.58)",
     pointFill: "#2563eb",
@@ -593,6 +609,9 @@ const TRANSLATIONS = {
     "backup.export": "バックアップ保存",
     "backup.restore": "バックアップから復元",
     "status.grid": "格子",
+    "status.locationFresh": "位置更新あり",
+    "status.locationStale": "最終観測位置（更新なし）",
+    "status.locationWaiting": "位置情報を待機中",
     "label.points": "点",
     "label.links": "線",
     "label.observations": "観察",
@@ -608,7 +627,8 @@ const TRANSLATIONS = {
     "message.pointUnavailable": "地点を確認できません",
     "message.linkUnavailable": "線を確認できません",
     "message.quickHint": "接続、リスト間コピー／移動、共有、巡回、削除、解除をクイックボタンで実行できます。",
-    "message.currentLocation": "現在地"
+    "message.currentLocation": "現在地",
+    "message.lastObservedLocation": "最終観測位置"
   },
   en: {
     "settings.title": "Settings",
@@ -830,6 +850,9 @@ const TRANSLATIONS = {
     "backup.export": "Save backup",
     "backup.restore": "Restore backup",
     "status.grid": "Grid",
+    "status.locationFresh": "Location updating",
+    "status.locationStale": "Last observed position (not updating)",
+    "status.locationWaiting": "Waiting for location",
     "label.points": "pts",
     "label.links": "lines",
     "label.observations": "observations",
@@ -845,7 +868,8 @@ const TRANSLATIONS = {
     "message.pointUnavailable": "Point unavailable",
     "message.linkUnavailable": "Line unavailable",
     "message.quickHint": "Use quick buttons to link, copy or move between lists, share, route, delete, or clear.",
-    "message.currentLocation": "Current location"
+    "message.currentLocation": "Current location",
+    "message.lastObservedLocation": "Last observed position"
   }
 };
 
@@ -2015,6 +2039,81 @@ function visibleObservationLayers() {
   return layers;
 }
 
+function observationPointTimestamp(point) {
+  const timestamp = Date.parse(point?.recordedAt ?? "");
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function drawObservationGapBand(from, to, gapMs) {
+  const start = worldToScreen(from);
+  const end = worldToScreen(to);
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const length = Math.hypot(dx, dy);
+  if (length < 2) {
+    return;
+  }
+
+  const halfWidth = Math.min(30, Math.max(9, 8 + Math.log2(Math.max(1, gapMs / OBSERVATION_GAP_THRESHOLD_MS)) * 4));
+  const nx = -dy / length * halfWidth;
+  const ny = dx / length * halfWidth;
+  const polygon = [
+    { x: start.x + nx, y: start.y + ny },
+    { x: end.x + nx, y: end.y + ny },
+    { x: end.x - nx, y: end.y - ny },
+    { x: start.x - nx, y: start.y - ny }
+  ];
+  const bounds = polygon.reduce((result, point) => ({
+    minX: Math.min(result.minX, point.x),
+    minY: Math.min(result.minY, point.y),
+    maxX: Math.max(result.maxX, point.x),
+    maxY: Math.max(result.maxY, point.y)
+  }), { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
+  const colors = canvasPalette();
+
+  context.save();
+  context.beginPath();
+  context.moveTo(polygon[0].x, polygon[0].y);
+  polygon.slice(1).forEach((point) => context.lineTo(point.x, point.y));
+  context.closePath();
+  context.fillStyle = colors.observationGapFill;
+  context.fill();
+  context.clip();
+  context.strokeStyle = colors.observationGapHatch;
+  context.lineWidth = 1;
+  context.setLineDash([]);
+  for (let x = bounds.minX - bounds.maxY; x < bounds.maxX + bounds.maxY; x += 9) {
+    context.beginPath();
+    context.moveTo(x, bounds.maxY + 12);
+    context.lineTo(x + bounds.maxY - bounds.minY + 12, bounds.minY - 12);
+    context.stroke();
+  }
+  context.restore();
+
+  context.save();
+  context.strokeStyle = colors.observationGapStroke;
+  context.lineWidth = 1.5;
+  context.setLineDash([2, 3]);
+  for (const point of [start, end]) {
+    context.beginPath();
+    context.arc(point.x, point.y, POINT_RADIUS + 3, 0, Math.PI * 2);
+    context.stroke();
+  }
+  context.restore();
+}
+
+function drawObservationGapBands(layer) {
+  for (let index = 1; index < layer.points.length; index += 1) {
+    const from = layer.points[index - 1];
+    const to = layer.points[index];
+    const fromAt = observationPointTimestamp(from);
+    const toAt = observationPointTimestamp(to);
+    if (fromAt === null || toAt === null || toAt - fromAt < OBSERVATION_GAP_THRESHOLD_MS) {
+      continue;
+    }
+    drawObservationGapBand(from, to, toAt - fromAt);
+  }
+}
 function drawObservationLayer(layer) {
   const colors = canvasPalette();
   const isSelected = layer.loaded && isLoadedObservationSelected(layer.id);
@@ -2022,6 +2121,7 @@ function drawObservationLayer(layer) {
   const targetScreen = layer.target ? worldToScreen(layer.target) : null;
 
   context.save();
+  drawObservationGapBands(layer);
   if (targetScreen) {
     context.beginPath();
     context.moveTo(startScreen.x, startScreen.y);
@@ -2080,8 +2180,32 @@ function drawRouteResult() {
   context.restore();
 }
 
+function currentLocationStatus() {
+  if (!validGeo(state.currentGeo)) {
+    return "waiting";
+  }
+
+  if (state.lastLocationError) {
+    return "stale";
+  }
+
+  if (!state.followCurrentLocation && !state.screenFollowCurrentLocation) {
+    return "observed";
+  }
+
+  const updatedAt = Number(state.lastLocationUpdateAt);
+  return Number.isFinite(updatedAt) && Date.now() - updatedAt <= LOCATION_STALE_AFTER_MS ? "fresh" : "stale";
+}
+
+function currentLocationIsFresh() {
+  return currentLocationStatus() === "fresh";
+}
+
+function currentLocationLabel() {
+  return currentLocationStatus() === "stale" ? t("message.lastObservedLocation") : t("message.currentLocation");
+}
 function currentLocationGlowActive() {
-  return Boolean(currentLocationPoint()) && (state.followCurrentLocation || state.screenFollowCurrentLocation);
+  return Boolean(currentLocationPoint()) && currentLocationIsFresh() && (state.followCurrentLocation || state.screenFollowCurrentLocation);
 }
 
 function drawCurrentLocationGlow(screen, colors) {
@@ -2124,6 +2248,8 @@ function syncLocationGlowAnimation() {
 
   const animate = () => {
     if (!currentLocationGlowActive()) {
+      draw();
+      renderStatus();
       locationGlowFrame = 0;
       return;
     }
@@ -2142,21 +2268,43 @@ function drawCurrentLocation() {
   const colors = canvasPalette();
   const screen = worldToScreen(location);
   const isSelected = isPointSelected(CURRENT_LOCATION_ID);
+  const isStale = currentLocationStatus() === "stale";
 
   drawCurrentLocationGlow(screen, colors);
 
+  context.save();
   context.beginPath();
   context.arc(screen.x, screen.y, POINT_RADIUS, 0, Math.PI * 2);
-  context.fillStyle = colors.currentFill;
-  context.fill();
+  if (isStale) {
+    context.fillStyle = colors.currentStale;
+    context.globalAlpha = 0.18;
+    context.fill();
+    context.globalAlpha = 0.92;
+    context.lineWidth = 2;
+    context.strokeStyle = colors.currentStale;
+    context.setLineDash([3, 3]);
+    context.stroke();
+    context.setLineDash([]);
+    context.beginPath();
+    context.moveTo(screen.x - POINT_RADIUS - 5, screen.y);
+    context.lineTo(screen.x + POINT_RADIUS + 5, screen.y);
+    context.moveTo(screen.x, screen.y - POINT_RADIUS - 5);
+    context.lineTo(screen.x, screen.y + POINT_RADIUS + 5);
+    context.stroke();
+  } else {
+    context.fillStyle = colors.currentFill;
+    context.fill();
+  }
 
   if (isSelected) {
+    context.beginPath();
+    context.arc(screen.x, screen.y, POINT_RADIUS + 2, 0, Math.PI * 2);
     context.lineWidth = 4;
     context.strokeStyle = colors.selected;
     context.stroke();
   }
+  context.restore();
 }
-
 function drawRouteStartSnapshot() {
   const snapshot = currentRouteStartSnapshot();
   if (!snapshot) {
@@ -2512,7 +2660,16 @@ function selectedLinksDistance(links) {
 }
 
 function renderStatus() {
-  elements.statusLine.value = `${t("status.grid")} ${formatDistance(chooseGridStep())}`;
+  const status = currentLocationStatus();
+  const locationText = status === "fresh"
+    ? t("status.locationFresh")
+    : status === "stale"
+      ? t("status.locationStale")
+      : status === "waiting" && (state.followCurrentLocation || state.screenFollowCurrentLocation)
+        ? t("status.locationWaiting")
+        : "";
+  const suffix = locationText ? ` | ${locationText}` : "";
+  elements.statusLine.value = `${t("status.grid")} ${formatDistance(chooseGridStep())}${suffix}`;
 }
 
 function renderActionButtons() {
@@ -2622,7 +2779,7 @@ function renderPointInfoDialog() {
   elements.pointInfoComment.classList.toggle("is-muted", !point.note);
   elements.pointInfoCoords.textContent = `${formatCoordinate(geo.lat)}, ${formatCoordinate(geo.lng)}${accuracy}`;
   elements.pointInfoList.textContent = pointListNameForPoint(point) || t("label.none");
-  elements.pointInfoCreated.textContent = point.isVirtual ? t("message.currentLocation") : formatOptionalDate(point.createdAt);
+  elements.pointInfoCreated.textContent = point.isVirtual ? currentLocationLabel() : formatOptionalDate(point.createdAt);
   elements.pointInfoUpdated.textContent = formatOptionalDate(point.updatedAt);
   elements.pointInfoDistance.textContent = distance;
 
@@ -2778,7 +2935,7 @@ function renderDetails() {
   elements.detailNoteLabel.textContent = t("field.note");
   elements.detailTitle.textContent = point.title;
   elements.detailCoords.textContent = `${formatCoordinate(geo.lat)}, ${formatCoordinate(geo.lng)}${accuracy}`;
-  elements.detailCreated.textContent = point.isVirtual ? t("message.currentLocation") : formatDate(point.createdAt);
+  elements.detailCreated.textContent = point.isVirtual ? currentLocationLabel() : formatDate(point.createdAt);
   elements.detailNote.textContent = point.note || t("label.none");
   elements.mapOpenActions.hidden = false;
   renderTargetActions(point);
@@ -3417,7 +3574,7 @@ function renderPointIndex() {
     const distance = document.createElement("span");
     distance.className = "point-index-distance";
     distance.textContent = point.id === CURRENT_LOCATION_ID
-      ? t("message.currentLocation")
+      ? currentLocationLabel()
       : current
         ? formatDistance(distanceBetween(current, point))
         : `${formatCoordinate(pointGeo(point).lat)}, ${formatCoordinate(pointGeo(point).lng)}`;
@@ -5756,6 +5913,7 @@ function centerAndFollowCurrentLocation() {
         fillForm: state.locationFollowFillForm
       }),
       (error) => {
+        state.lastLocationError = error;
         const message = locationErrorMessage(error, "現在地エラー");
         stopScreenFollow({ render: false });
         elements.shareImportStatus.value = message;
@@ -6081,6 +6239,8 @@ function updateCurrentLocationFromPosition(position, options = {}) {
   });
 
   state.currentGeo = geo;
+  state.lastLocationUpdateAt = Date.now();
+  state.lastLocationError = null;
   if (options.center && !state.followCurrentLocation && !state.screenFollowCurrentLocation) {
     setProjectionCenterGeo(geo);
   }
@@ -6265,6 +6425,7 @@ function startLocationFollow(options = {}) {
         fillForm: state.locationFollowFillForm
       }),
       (error) => {
+        state.lastLocationError = error;
         const message = locationErrorMessage(error, "追跡エラー");
         state.screenFollowCurrentLocation = false;
         stopLocationFollow();
@@ -6371,12 +6532,17 @@ function currentLocationPoint() {
     id: CURRENT_LOCATION_ID,
     x: projected.x,
     y: projected.y,
-    title: "現在地",
-    note: "端末から取得した現在地です。",
+    title: currentLocationLabel(),
+    note: currentLocationStatus() === "stale"
+      ? "最後に位置情報を取得した地点です。現在の位置は確認できません。"
+      : "端末の位置情報から取得した地点です。",
     photo: "",
     photoName: "",
     geo: state.currentGeo,
     createdAt: new Date().toISOString(),
+    recordedAt: Number.isFinite(Number(state.lastLocationUpdateAt))
+      ? new Date(Number(state.lastLocationUpdateAt)).toISOString()
+      : new Date().toISOString(),
     isVirtual: true
   };
 }
