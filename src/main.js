@@ -609,9 +609,6 @@ const TRANSLATIONS = {
     "backup.export": "バックアップ保存",
     "backup.restore": "バックアップから復元",
     "status.grid": "格子",
-    "status.locationFresh": "位置更新あり",
-    "status.locationStale": "最終観測位置（更新なし）",
-    "status.locationWaiting": "位置情報を待機中",
     "label.points": "点",
     "label.links": "線",
     "label.observations": "観察",
@@ -850,9 +847,6 @@ const TRANSLATIONS = {
     "backup.export": "Save backup",
     "backup.restore": "Restore backup",
     "status.grid": "Grid",
-    "status.locationFresh": "Location updating",
-    "status.locationStale": "Last observed position (not updating)",
-    "status.locationWaiting": "Waiting for location",
     "label.points": "pts",
     "label.links": "lines",
     "label.observations": "observations",
@@ -2660,16 +2654,7 @@ function selectedLinksDistance(links) {
 }
 
 function renderStatus() {
-  const status = currentLocationStatus();
-  const locationText = status === "fresh"
-    ? t("status.locationFresh")
-    : status === "stale"
-      ? t("status.locationStale")
-      : status === "waiting" && (state.followCurrentLocation || state.screenFollowCurrentLocation)
-        ? t("status.locationWaiting")
-        : "";
-  const suffix = locationText ? ` | ${locationText}` : "";
-  elements.statusLine.value = `${t("status.grid")} ${formatDistance(chooseGridStep())}${suffix}`;
+  elements.statusLine.value = `${t("status.grid")} ${formatDistance(chooseGridStep())}`;
 }
 
 function renderActionButtons() {
