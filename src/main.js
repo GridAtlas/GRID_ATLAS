@@ -43,7 +43,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.709";
+const WEB_VERSION = "0.710";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -424,13 +424,13 @@ const TRANSLATIONS = {
     "settings.unitsMetric": "km",
     "settings.unitsImperial": "mile",
     "systemUpdate.label": "システム更新",
-    "systemUpdate.action": "確認",
-    "systemUpdate.notice": "最新版を確認し、アプリを再読み込みします。",
+    "systemUpdate.action": "更新",
+    "systemUpdate.notice": "最新版を確認して更新します。",
     "systemUpdate.version": "WEB版",
     "systemUpdate.checking": "更新を確認しています…",
     "systemUpdate.applying": "更新を適用しています…",
     "systemUpdate.latest": "最新版です。",
-    "systemUpdate.reloading": "確認しました。再読み込みします…",
+    "systemUpdate.reloading": "更新しました。再読み込みします…",
     "systemUpdate.unsupported": "この環境ではシステム更新を利用できません。",
     "systemUpdate.failed": "更新を確認できませんでした。通信状態を確認してください。",
     "edition.web": "WEB版",
@@ -662,13 +662,13 @@ const TRANSLATIONS = {
     "settings.unitsMetric": "km",
     "settings.unitsImperial": "mile",
     "systemUpdate.label": "System update",
-    "systemUpdate.action": "Check",
-    "systemUpdate.notice": "Checks for the latest version and reloads the app.",
+    "systemUpdate.action": "Update",
+    "systemUpdate.notice": "Checks for the latest version and applies the update.",
     "systemUpdate.version": "Web version",
     "systemUpdate.checking": "Checking for updates…",
     "systemUpdate.applying": "Applying the update…",
     "systemUpdate.latest": "You are up to date.",
-    "systemUpdate.reloading": "Checked. Reloading…",
+    "systemUpdate.reloading": "Updated. Reloading…",
     "systemUpdate.unsupported": "System updates are unavailable in this environment.",
     "systemUpdate.failed": "Could not check for updates. Check your connection.",
     "edition.web": "Web",
@@ -4408,7 +4408,9 @@ function setupPointIndexGesture(row, { point, list }) {
       ghost: null,
       timerId: 0,
       autoTimerId: 0,
-      actionTriggered: false
+      actionTriggered: false,
+      scrolling: false,
+      scrollContainer: row.closest(".point-list-preview-items, .mobile-content-panel, [data-mobile-panel], .sidebar")
     };
     activePointIndexDrag = dragState;
     const cleanup = () => {
@@ -4421,11 +4423,25 @@ function setupPointIndexGesture(row, { point, list }) {
     };
     const onMove = (moveEvent) => {
       if (moveEvent.pointerId !== dragState.pointerId || activePointIndexDrag !== dragState) return;
+      const deltaY = moveEvent.clientY - dragState.lastY;
       dragState.lastX = moveEvent.clientX;
       dragState.lastY = moveEvent.clientY;
       const distance = Math.hypot(moveEvent.clientX - dragState.startX, moveEvent.clientY - dragState.startY);
+      if (dragState.scrolling) {
+        moveEvent.preventDefault();
+        if (dragState.scrollContainer) dragState.scrollContainer.scrollTop -= deltaY;
+        return;
+      }
       if (!dragState.longPressed) {
         if (distance <= 10) return;
+        if (moveEvent.pointerType !== "mouse") {
+          dragState.scrolling = true;
+          window.clearTimeout(dragState.timerId);
+          window.clearTimeout(dragState.autoTimerId);
+          moveEvent.preventDefault();
+          if (dragState.scrollContainer) dragState.scrollContainer.scrollTop -= deltaY;
+          return;
+        }
         dragState.cancelled = true;
         cleanup();
         return;
@@ -4446,6 +4462,7 @@ function setupPointIndexGesture(row, { point, list }) {
     const onUp = async (upEvent) => {
       if (upEvent.pointerId !== dragState.pointerId || activePointIndexDrag !== dragState) return;
       if (!dragState.dragging) {
+        if (dragState.scrolling) row.dataset.pointIndexSuppressClick = "true";
         cleanup();
         return;
       }
@@ -7657,9 +7674,17 @@ async function clearGridAtlasStaticCaches() {
     .map((key) => caches.delete(key)));
 }
 
+function reloadGridAtlasPage() {
+  if (window.__gridAtlasReloadStarted) return;
+  window.__gridAtlasReloadStarted = true;
+  const url = new URL(window.location.href);
+  url.searchParams.set("gridatlas_update", String(Date.now()));
+  window.location.replace(url.toString());
+}
+
 function reloadAfterSystemUpdateCheck() {
   setSystemUpdateStatus("systemUpdate.reloading");
-  window.location.reload();
+  reloadGridAtlasPage();
 }
 
 function waitForServiceWorkerActivation(worker) {
@@ -7755,7 +7780,7 @@ function registerServiceWorker() {
       return;
     }
     reloadingForServiceWorker = true;
-    window.location.reload();
+    reloadGridAtlasPage();
   };
 
   navigator.serviceWorker.addEventListener("controllerchange", () => {
