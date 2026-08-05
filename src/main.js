@@ -43,7 +43,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.708";
+const WEB_VERSION = "0.709";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -563,7 +563,7 @@ const TRANSLATIONS = {
     "storage.moveDevice": "端末に移動",
     "storage.connectFirst": "先にクラウドへ接続してください",
     "storage.importMoveOnly": "インポートリストは、個別の転送操作でマイリストへ移動またはコピーできます。",
-    "storage.dragHint": "リストを長押ししてドラッグすると、順番や保存場所を変更できます。",
+    "storage.dragHint": "短く長押ししてから動かすと、順番や保存場所を変更できます。動かさず長く押し続けるとプレビューを表示します。",
     "storage.dragReordered": "リストの順番を変更しました",
     "storage.dragMoveCloud": "クラウド保管へ移動",
     "storage.dragMoveDevice": "端末へ移動",
@@ -801,7 +801,7 @@ const TRANSLATIONS = {
     "storage.moveDevice": "Move to device",
     "storage.connectFirst": "Connect to the cloud first",
     "storage.importMoveOnly": "Move or copy imported lists to My Lists from the individual transfer dialog.",
-    "storage.dragHint": "Press and hold a list, then drag to reorder it or change its storage.",
+    "storage.dragHint": "Hold briefly, then drag to reorder or change storage. Keep holding without moving to open the preview.",
     "storage.dragReordered": "List order updated",
     "storage.dragMoveCloud": "Move to cloud storage",
     "storage.dragMoveDevice": "Move to device",
@@ -4205,7 +4205,9 @@ function setupStorageListDrag(row, entry) {
       ghost: null,
       timerId: 0,
       autoTimerId: 0,
-      actionTriggered: false
+      actionTriggered: false,
+      scrolling: false,
+      scrollContainer: row.closest(".mobile-content-panel, [data-mobile-panel], .sidebar")
     };
     activeStorageListDrag = dragState;
 
@@ -4219,11 +4221,25 @@ function setupStorageListDrag(row, entry) {
     };
     const onMove = (moveEvent) => {
       if (moveEvent.pointerId !== dragState.pointerId || activeStorageListDrag !== dragState) return;
+      const deltaY = moveEvent.clientY - dragState.lastY;
       dragState.lastX = moveEvent.clientX;
       dragState.lastY = moveEvent.clientY;
       const distance = Math.hypot(moveEvent.clientX - dragState.startX, moveEvent.clientY - dragState.startY);
+      if (dragState.scrolling) {
+        moveEvent.preventDefault();
+        if (dragState.scrollContainer) dragState.scrollContainer.scrollTop -= deltaY;
+        return;
+      }
       if (!dragState.longPressed) {
         if (distance <= 10) return;
+        if (moveEvent.pointerType !== "mouse") {
+          dragState.scrolling = true;
+          window.clearTimeout(dragState.timerId);
+          window.clearTimeout(dragState.autoTimerId);
+          moveEvent.preventDefault();
+          if (dragState.scrollContainer) dragState.scrollContainer.scrollTop -= deltaY;
+          return;
+        }
         dragState.cancelled = true;
         cleanup();
         return;
@@ -4239,6 +4255,7 @@ function setupStorageListDrag(row, entry) {
     const onUp = (upEvent) => {
       if (upEvent.pointerId !== dragState.pointerId || activeStorageListDrag !== dragState) return;
       if (!dragState.dragging) {
+        if (dragState.scrolling) row.dataset.storageDragSuppressClick = "true";
         cleanup();
         return;
       }
