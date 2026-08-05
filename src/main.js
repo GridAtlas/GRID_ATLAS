@@ -43,7 +43,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.706";
+const WEB_VERSION = "0.707";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -4205,8 +4205,7 @@ function setupStorageListDrag(row, entry) {
       ghost: null,
       timerId: 0,
       autoTimerId: 0,
-      actionTriggered: false,
-      previewShown: false
+      actionTriggered: false
     };
     activeStorageListDrag = dragState;
 
@@ -4231,10 +4230,6 @@ function setupStorageListDrag(row, entry) {
       }
       if (!dragState.dragging) {
         if (distance <= 10) return;
-        if (dragState.previewShown) {
-          if (elements.pointListPreviewDialog?.open) elements.pointListPreviewDialog.close("drag");
-          dragState.previewShown = false;
-        }
         beginStorageListDrag(dragState);
       }
       moveEvent.preventDefault();
@@ -4271,8 +4266,9 @@ function setupStorageListDrag(row, entry) {
         || dragState.cancelled
       ) return;
       dragState.actionTriggered = true;
-      dragState.previewShown = true;
       row.dataset.storageDragSuppressClick = "true";
+      cleanup();
+      finishStorageListDrag(dragState);
       showPointListPreview(entry.storageId);
     }, 1000);
     dragState.timerId = window.setTimeout(() => {
@@ -4395,8 +4391,7 @@ function setupPointIndexGesture(row, { point, list }) {
       ghost: null,
       timerId: 0,
       autoTimerId: 0,
-      actionTriggered: false,
-      previewShown: false
+      actionTriggered: false
     };
     activePointIndexDrag = dragState;
     const cleanup = () => {
@@ -4424,10 +4419,6 @@ function setupPointIndexGesture(row, { point, list }) {
           dragState.cancelled = true;
           cleanup();
           return;
-        }
-        if (dragState.previewShown) {
-          if (elements.pointInfoDialog?.open) elements.pointInfoDialog.close("drag");
-          dragState.previewShown = false;
         }
         beginPointIndexDrag(dragState);
       }
@@ -4469,8 +4460,9 @@ function setupPointIndexGesture(row, { point, list }) {
         || dragState.cancelled
       ) return;
       dragState.actionTriggered = true;
-      dragState.previewShown = true;
       row.dataset.pointIndexSuppressClick = "true";
+      cleanup();
+      finishPointIndexDrag(dragState);
       setSelection([{ type: "point", id: point.id }], { render: false });
       showSelectedPointInfoDialog();
     }, 1000);
