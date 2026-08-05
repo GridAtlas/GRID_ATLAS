@@ -43,15 +43,15 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.669";
+const WEB_VERSION = "0.681";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
 const POINTER_MOVE_THRESHOLD = 3;
 const RANGE_SELECTION_LONG_PRESS_MS = 450;
 const RANGE_SELECTION_MIN_SIZE = 8;
-const ZOOM_STAGE_NAMES = ["全体", "近景", "接近", "詳細"];
-const ZOOM_STAGE_FACTOR = 1.6;
+const ZOOM_STAGE_NAMES = ["全体", "広域", "近景", "接近", "詳細", "超詳細", "精密", "最大"];
+const ZOOM_STAGE_FACTOR = 1.8;
 const ZOOM_STAGE_COUNT = ZOOM_STAGE_NAMES.length;
 const CURRENT_LOCATION_ID = "__current_location__";
 const LOADED_OBSERVATION_PREFIX = "__loaded_observation__";
@@ -2934,11 +2934,7 @@ function renderStatus() {
     return;
   }
 
-  const zoomLabel = Number.isInteger(state.zoomStage)
-    ? ZOOM_STAGE_NAMES[state.zoomStage]
-    : "自由";
-  elements.statusLine.value = t("status.grid") + " " + formatDistance(chooseGridStep())
-    + " | " + t("status.zoom") + " " + zoomLabel;
+  elements.statusLine.value = t("status.grid") + " " + formatDistance(chooseGridStep());
 }
 
 function renderActionButtons() {
@@ -7745,6 +7741,199 @@ function readJsonFile(file) {
   });
 }
 
+function pointListGridAtlasUrlDocument(list) {
+  list.gridAtlas = list.gridAtlas && typeof list.gridAtlas === "object" ? list.gridAtlas : {};
+  list.gridAtlas.documentId = list.gridAtlas.documentId || list.cloudId || list.id || createId();
+
+  const places = list.points.map((point) => {
+    const geo = pointGeo(point);
+    const place = {
+      id: point.gridAtlas?.placeId || point.id,
+      name: point.title || "Point",
+      position: { latitude: geo.lat, longitude: geo.lng }
+    };
+    if (point.note) place.note = point.note;
+    if (point.createdAt) place.createdAt = point.createdAt;
+    if (point.updatedAt) place.updatedAt = point.updatedAt;
+    if (point.gridAtlas?.extensions && Object.keys(point.gridAtlas.extensions).length > 0) {
+      place.extensions = clonePlain(point.gridAtlas.extensions);
+    }
+    return place;
+  });
+
+  const document = {
+    type: "place-list",
+    schemaVersion: 1,
+    id: list.gridAtlas.documentId,
+    name: list.name || "地点リスト",
+    places
+  };
+  if (list.description) document.description = list.description;
+  if (list.author) document.attribution = { name: list.author };
+  if (list.createdAt) document.createdAt = list.createdAt;
+  if (list.updatedAt) document.updatedAt = list.updatedAt;
+  if (list.gridAtlas.documentExtensions && Object.keys(list.gridAtlas.documentExtensions).length > 0) {
+    document.extensions = clonePlain(list.gridAtlas.documentExtensions);
+  }
+  return document;
+}
+
+function gridAtlasShareUrl(document) {
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = new URLSearchParams({
+    [GRIDATLAS_URL_PARAMETER]: encodeGridAtlasUrlPayload(document)
+  }).toString();
+  return url.href;
+}
+
+function showAppToast(message, options = {}) {
+  if (!elements.appToast || !message) return;
+  window.clearTimeout(appToastTimerId);
+  elements.appToast.value = message;
+  elements.appToast.hidden = false;
+  elements.appToast.classList.toggle("is-error", options.error === true);
+  appToastTimerId = window.setTimeout(() => {
+    elements.appToast.hidden = true;
+    elements.appToast.value = "";
+  }, options.duration ?? 4200);
+}
+
+function setShareFeedback(message, options = {}) {
+  setCloudStatus(message, { menu: false, error: options.error === true });
+  if (elements.shareLinkDialog?.open) {
+    elements.shareLinkDialogStatus.value = message;
+    elements.shareLinkDialogStatus.classList.toggle("is-error", options.error === true);
+  }
+  showAppToast(message, options);
+}
+
+async function copyShareLink(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const input = document.createElement("textarea");
+  input.value = text;
+  input.setAttribute("readonly", "");
+  input.style.position = "fixed";
+  input.style.opacity = "0";
+  document.body.append(input);
+  input.select();
+  const copied = document.execCommand("copy");
+  input.remove();
+  if (!copied) throw new Error("Clipboard unavailable");
+}
+
+async function copyPendingShareLink() {
+  const share = pendingShareLink;
+  if (!share) return;
+  try {
+    await copyShareLink(share.url);
+    if (elements.shareLinkDialog?.open) elements.shareLinkDialog.close("copied");
+    setShareFeedback(t("list.shareCopied"));
+  } catch (error) {
+    console.warn("GRID ATLAS share link copy failed", error);
+    elements.shareLinkValue.focus();
+    elements.shareLinkValue.select();
+    setShareFeedback(t("list.shareCopyFailed"), { error: true });
+  }
+}
+
+async function sharePendingLinkNatively() {
+  const share = pendingShareLink;
+  if (!share || typeof navigator.share !== "function") return;
+  try {
+    await navigator.share({
+      title: `GRID ATLAS — ${share.title}`,
+      text: cloudText(`GRID ATLAS「${share.title}」`, `GRID ATLAS “${share.title}”`),
+      url: share.url
+    });
+    if (elements.shareLinkDialog?.open) elements.shareLinkDialog.close("shared");
+    setShareFeedback(t("list.shareCompleted"));
+  } catch (error) {
+    if (error?.name === "AbortError") return;
+    console.warn("GRID ATLAS native share failed", error);
+    setShareFeedback(t("list.shareNativeFailed"), { error: true });
+  }
+}
+
+async function sharePointListLink(list, options = {}) {
+  if (!list) {
+    setShareFeedback(t("list.shareUnavailable"), { error: true });
+    return;
+  }
+
+  try {
+    const document = pointListGridAtlasUrlDocument(list);
+    const url = gridAtlasShareUrl(document);
+    if (new TextEncoder().encode(url).byteLength > GRIDATLAS_RECOMMENDED_SHARE_URL_BYTES) {
+      setShareFeedback(t("list.shareTooLong"), { error: true, duration: 6500 });
+      return;
+    }
+
+    const title = list.name || "地点リスト";
+    const summary = t("list.shareSummary")
+      .replace("{name}", title)
+      .replace("{count}", String(list.points.length));
+    pendingShareLink = { url, title };
+    if (options.persist === true) persistWorkspace();
+
+    if (!elements.shareLinkDialog?.showModal) {
+      const confirmed = window.confirm(`${summary}\n${t("list.sharePrivacy")}\n\n${t("list.shareCopy")}?`);
+      if (!confirmed) return;
+      await copyPendingShareLink();
+      return;
+    }
+
+    elements.shareLinkSummary.textContent = summary;
+    elements.shareLinkValue.value = url;
+    elements.shareLinkDialogStatus.value = "";
+    elements.shareLinkDialogStatus.classList.remove("is-error");
+    elements.shareLinkNativeButton.hidden = typeof navigator.share !== "function";
+    if (elements.shareLinkDialog.open) elements.shareLinkDialog.close();
+    elements.shareLinkDialog.showModal();
+  } catch (error) {
+    console.warn("GRID ATLAS share link generation failed", error);
+    pendingShareLink = null;
+    setShareFeedback(t("list.shareGenerateFailed"), { error: true });
+  }
+}
+
+async function shareStorageListLink(storageId) {
+  const entry = findStorageListEntry(storageId);
+  await sharePointListLink(entry?.local || entry?.preview, { persist: true });
+}
+
+async function shareSelectedPointsLink() {
+  normalizeSelection();
+  const points = selectedPointIds()
+    .filter((pointId) => pointId !== CURRENT_LOCATION_ID)
+    .map(findPoint)
+    .filter(Boolean);
+  if (points.length === 0) {
+    setShareFeedback(t("list.shareSelectedUnavailable"), { error: true });
+    return;
+  }
+
+  const defaultName = t("list.shareSelectedDefaultName");
+  const input = window.prompt(t("list.shareSelectedNamePrompt"), defaultName);
+  if (input === null) return;
+  const name = input.trim() || defaultName;
+  const now = new Date().toISOString();
+  const list = {
+    id: createId(),
+    name,
+    description: "",
+    author: "",
+    createdAt: now,
+    updatedAt: now,
+    gridAtlas: { documentId: createId() },
+    points: points.map(clonePlain)
+  };
+  await sharePointListLink(list);
+}
 function gridAtlasFileLikely(file) {
   return Boolean(file) && (
     String(file.name || "").toLowerCase().endsWith(".gridatlas")
