@@ -42,7 +42,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.625";
+const WEB_VERSION = "0.635";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -132,7 +132,6 @@ const elements = {
   mobileGridTabs: Array.from(document.querySelectorAll("[data-mobile-grid-page]")),
   mobileGridPanels: Array.from(document.querySelectorAll("[data-mobile-grid-panel]")),
   mobilePointCount: document.querySelector("#mobilePointCount"),
-  mobilePointHeading: document.querySelector("[data-mobile-grid-panel=\"points\"] h2"),
   mobilePointItems: document.querySelector("#mobilePointItems"),
   pointForm: document.querySelector("#pointForm"),
   pointTitle: document.querySelector("#pointTitle"),
@@ -152,6 +151,10 @@ const elements = {
   shareLinkCopyButton: document.querySelector("#shareLinkCopyButton"),
   shareLinkNativeButton: document.querySelector("#shareLinkNativeButton"),
   pointInfoDialog: document.querySelector("#pointInfoDialog"),
+  pointListPreviewDialog: document.querySelector("#pointListPreviewDialog"),
+  pointListPreviewDialogTitle: document.querySelector("#pointListPreviewDialogTitle"),
+  pointListPreviewCount: document.querySelector("#pointListPreviewCount"),
+  pointListPreviewItems: document.querySelector("#pointListPreviewItems"),
   pointInfoPhoto: document.querySelector("#pointInfoPhoto"),
   pointInfoName: document.querySelector("#pointInfoName"),
   pointInfoComment: document.querySelector("#pointInfoComment"),
@@ -257,7 +260,7 @@ const state = {
   mode: "inspect",
   mobilePage: "map",
   mobileGridPage: "grid",
-  mobilePointListFilter: null,
+  mobilePointPreviewStorageId: null,
   selection: [],
   selectedPointId: null,
   selectedLinkId: null,
@@ -2630,6 +2633,7 @@ function render() {
   renderPointDestinationSelect();
   renderStorageLists();
   renderPointIndex();
+  renderPointListPreview();
   renderMobileGridTabs();
   renderSelectedSummary();
   renderSelectionInfo();
@@ -3705,57 +3709,47 @@ function pointListStorageIdForIndex(list) {
   return list?.cloudId || list?.id || "";
 }
 
-function pointListMatchesStorageId(list, storageId) {
-  return !storageId || pointListStorageIdForIndex(list) === storageId;
+function pointListForPreviewStorageId(storageId) {
+  const entry = storageId ? findStorageListEntry(storageId) : null;
+  if (!entry) return null;
+  if (entry.local?.storagePlaceholder && entry.preview) return entry.preview;
+  return entry.local ?? entry.preview ?? null;
 }
 
-function showPointListPoints(storageId) {
-  state.mobilePointListFilter = storageId || null;
-  setMobilePage("map");
-  setMobileGridPage("points");
-  render();
+function showPointListPreview(storageId) {
+  const list = pointListForPreviewStorageId(storageId);
+  if (!list || !elements.pointListPreviewDialog?.showModal) return;
+  state.mobilePointPreviewStorageId = storageId;
+  renderPointListPreview();
+  if (!elements.pointListPreviewDialog.open) {
+    elements.pointListPreviewDialog.showModal();
+  }
 }
 
-function renderPointIndex() {
-  if (!elements.mobilePointItems || !elements.mobilePointCount) {
+function renderPointListPreview() {
+  const list = pointListForPreviewStorageId(state.mobilePointPreviewStorageId);
+  if (!list || !elements.pointListPreviewDialog) {
+    if (elements.pointListPreviewDialog?.open) {
+      elements.pointListPreviewDialog.close("list-missing");
+    }
     return;
   }
 
-  ensurePointLists();
-  const filterId = state.mobilePointListFilter;
-  const filterEntry = filterId ? findStorageListEntry(filterId) : null;
-  const filterName = filterEntry?.local?.name || filterEntry?.cloud?.name || "";
-  if (elements.mobilePointHeading) {
-    elements.mobilePointHeading.textContent = filterName
-      ? `${t("panel.points")} · ${filterName}`
-      : t("panel.points");
-  }
-  const current = !filterId && state.gpsEnabled ? currentLocationPoint() : null;
-  const localLists = filterId
-    ? state.pointLists.filter((list) => pointListMatchesStorageId(list, filterId))
-    : visiblePointLists();
-  const rows = localLists.flatMap((list) => (
-    list.points.map((point) => ({ point, list, isCloud: false }))
-  ));
-  if (state.cloud.connected) {
-    const cloudRows = filterId
-      ? state.cloud.pointLists
-        .filter((list) => pointListMatchesStorageId(list, filterId))
-        .flatMap((list) => list.points.map((point) => ({ point, list, isCloud: true })))
-      : visibleCloudPointRows();
-    rows.push(...cloudRows);
-  }
-  if (current) {
-    rows.unshift({ point: current, list: null, isCloud: false });
-  }
-  elements.mobilePointCount.textContent = `${rows.length}${t("label.points")}`;
-  elements.mobilePointItems.replaceChildren();
+  const rows = list.points.map((point) => ({ point, list, isCloud: list.source === "cloud" }));
+  elements.pointListPreviewDialogTitle.textContent = list.name;
+  elements.pointListPreviewCount.textContent = `${rows.length}${t("label.points")}`;
+  renderPointIndexRows(elements.pointListPreviewItems, rows);
+}
+
+function renderPointIndexRows(container, rows, current = null) {
+  if (!container) return;
+  container.replaceChildren();
 
   if (rows.length === 0) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
     empty.textContent = t("state.noPoints");
-    elements.mobilePointItems.append(empty);
+    container.append(empty);
     return;
   }
 
@@ -3806,8 +3800,28 @@ function renderPointIndex() {
       toggleSelection("point", point.id);
     });
     setupPointIndexGesture(row, { point, list, isCloud });
-    elements.mobilePointItems.append(row);
+    container.append(row);
   }
+}
+
+function renderPointIndex() {
+  if (!elements.mobilePointItems || !elements.mobilePointCount) {
+    return;
+  }
+
+  ensurePointLists();
+  const current = state.gpsEnabled ? currentLocationPoint() : null;
+  const rows = visiblePointLists().flatMap((list) => (
+    list.points.map((point) => ({ point, list, isCloud: false }))
+  ));
+  if (state.cloud.connected) {
+    rows.push(...visibleCloudPointRows());
+  }
+  if (current) {
+    rows.unshift({ point: current, list: null, isCloud: false });
+  }
+  elements.mobilePointCount.textContent = `${rows.length}${t("label.points")}`;
+  renderPointIndexRows(elements.mobilePointItems, rows, current);
 }
 function applyCloudListOrder() {
   const metadata = Array.isArray(state.cloud.lists) ? state.cloud.lists : [];
@@ -4208,7 +4222,7 @@ function setupStorageListDrag(row, entry) {
       row.dataset.storageDragSuppressClick = "true";
       cleanup();
       finishStorageListDrag(dragState);
-      showPointListPoints(entry.storageId);
+      showPointListPreview(entry.storageId);
     }, 1000);
   });
 }
@@ -8622,6 +8636,12 @@ function bindEvents() {
   elements.pointInfoDialog.addEventListener("click", (event) => {
     if (event.target === elements.pointInfoDialog) elements.pointInfoDialog.close("cancel");
   });
+  elements.pointListPreviewDialog.addEventListener("close", () => {
+    state.mobilePointPreviewStorageId = null;
+  });
+  elements.pointListPreviewDialog.addEventListener("click", (event) => {
+    if (event.target === elements.pointListPreviewDialog) elements.pointListPreviewDialog.close("cancel");
+  });
   elements.useLocationButton.addEventListener("click", useCurrentLocation);
   elements.zoomInButton.addEventListener("click", () => zoomAt({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 1.25));
   elements.zoomOutButton.addEventListener("click", () => zoomAt({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 0.8));
@@ -8681,9 +8701,6 @@ function bindEvents() {
   }
   for (const tab of elements.mobileGridTabs) {
     tab.addEventListener("click", () => {
-      if (tab.dataset.mobileGridPage === "points") {
-        state.mobilePointListFilter = null;
-      }
       setMobileGridPage(tab.dataset.mobileGridPage);
       if (tab.closest(".sidebar")) {
         setMobilePage("map");

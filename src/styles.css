@@ -1760,6 +1760,7 @@ textarea {
 
 .share-link-dialog,
 .point-info-dialog,
+.point-list-preview-dialog,
 .point-transfer-dialog {
   width: min(560px, calc(100vw - 24px));
   max-height: calc(100dvh - 24px);
@@ -1773,6 +1774,7 @@ textarea {
 
 .share-link-dialog::backdrop,
 .point-info-dialog::backdrop,
+.point-list-preview-dialog::backdrop,
 .point-transfer-dialog::backdrop {
   background: rgb(0 0 0 / 0.58);
   backdrop-filter: blur(3px);
@@ -1780,6 +1782,7 @@ textarea {
 
 .share-link-dialog-form,
 .point-info-dialog-form,
+.point-list-preview-dialog-form,
 .point-transfer-dialog-form {
   display: grid;
   gap: 14px;
@@ -1788,6 +1791,7 @@ textarea {
 
 .share-link-dialog-heading,
 .point-info-dialog-heading,
+.point-list-preview-dialog-heading,
 .point-transfer-dialog-heading {
   display: flex;
   align-items: center;
@@ -1797,6 +1801,7 @@ textarea {
 
 .share-link-dialog-heading h2,
 .point-info-dialog-heading h2,
+.point-list-preview-dialog-heading h2,
 .point-transfer-dialog-heading h2 {
   margin: 0;
   font-size: 18px;
@@ -1817,6 +1822,17 @@ textarea {
   height: 18px;
 }
 
+.point-list-preview-dialog-heading > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.point-list-preview-items {
+  max-height: min(64dvh, 560px);
+  overflow-y: auto;
+  padding: 2px;
+}
 .point-transfer-dialog {
   width: min(480px, calc(100vw - 24px));
 }
@@ -2099,6 +2115,7 @@ textarea {
   }
   .share-link-dialog-form,
   .point-info-dialog-form,
+  .point-list-preview-dialog-form,
   .point-transfer-dialog-form {
     padding: 15px;
   }
