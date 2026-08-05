@@ -43,7 +43,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.751";
+const WEB_VERSION = "0.761";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -245,6 +245,7 @@ const state = {
   points: [],
   pointLists: [],
   activePointListId: DEFAULT_POINT_LIST_ID,
+  favoriteListIds: new Set(),
   pointDestinationListId: null,
 
   pointTransferDestinationListId: "",
@@ -598,8 +599,16 @@ const TRANSLATIONS = {
     "list.shareCopyFailed": "共有リンクをコピーできませんでした。表示されたリンクを長押ししてコピーできます",
     "list.shareGenerateFailed": "共有リンクを作れませんでした。リスト内容を確認してください",
     "list.shareNativeFailed": "共有画面を開けませんでした",
-    "list.rename": "リスト名変更",
+    "list.edit": "編集",
+    "list.rename": "リスト名を変更",
     "list.renamePrompt": "新しいリスト名",
+    "list.setHome": "ホームに設定",
+    "list.unsetHome": "ホーム設定を解除",
+    "list.favorite": "お気に入り",
+    "list.addFavorite": "お気に入りに追加",
+    "list.removeFavorite": "お気に入りから外す",
+    "list.favoriteStatus": "お気に入り",
+    "list.delete": "削除",
     "list.showOnGrid": "グリッドに表示",
 
     "list.visible": "グリッド表示中",
@@ -835,8 +844,16 @@ const TRANSLATIONS = {
     "list.shareCopyFailed": "Could not copy the link. You can press and hold the displayed link to copy it",
     "list.shareGenerateFailed": "Could not create the share link. Check the list contents",
     "list.shareNativeFailed": "Could not open the share sheet",
+    "list.edit": "Edit",
     "list.rename": "Rename list",
     "list.renamePrompt": "New list name",
+    "list.setHome": "Set as home",
+    "list.unsetHome": "Unset as home",
+    "list.favorite": "Favorite",
+    "list.addFavorite": "Add to favorites",
+    "list.removeFavorite": "Remove from favorites",
+    "list.favoriteStatus": "Favorite",
+    "list.delete": "Delete",
     "list.showOnGrid": "Show on grid",
 
     "list.visible": "Shown on grid",
@@ -1105,6 +1122,11 @@ function applyWorkspace(workspace) {
   state.cloud.listOrder = Array.isArray(workspace.cloudListOrder)
     ? workspace.cloudListOrder.filter((id) => typeof id === "string" && id)
     : [];
+  state.favoriteListIds = new Set(
+    Array.isArray(workspace.favoriteListIds)
+      ? workspace.favoriteListIds.filter((id) => typeof id === "string" && id)
+      : []
+  );
 
   if (Array.isArray(workspace.pointLists)) {
     state.pointLists = workspace.pointLists
@@ -1909,6 +1931,7 @@ function workspaceSnapshot() {
     projection: { mode: "local", version: 1 },
     pointLists,
     activePointListId: state.activePointListId,
+    favoriteListIds: [...state.favoriteListIds],
     links: state.links,
     cloudHiddenListIds: [...state.cloud.hiddenListIds],
     cloudListOrder: [...state.cloud.listOrder]
@@ -3925,9 +3948,24 @@ function storageListIsVisible(entry) {
     : cloudListVisible(entry?.cloud?.id);
 }
 
+function storageListIsFavorite(storageId) {
+  return typeof storageId === "string" && state.favoriteListIds.has(storageId);
+}
+
+function toggleStorageListFavorite(storageId) {
+  if (storageListIsFavorite(storageId)) {
+    state.favoriteListIds.delete(storageId);
+    setCloudStatus(t("list.removeFavorite"), { menu: false });
+  } else {
+    state.favoriteListIds.add(storageId);
+    setCloudStatus(t("list.addFavorite"), { menu: false });
+  }
+  persistWorkspace();
+  renderStorageLists();
+}
 function setupStorageListVisibility(row, entry) {
   const isRowControl = (target) => target instanceof Element
-    && Boolean(target.closest("button, input, select, textarea, a"));
+    && Boolean(target.closest("button, summary, input, select, textarea, a"));
 
   const toggleVisibility = () => {
     const currentEntry = findStorageListEntry(entry.storageId) ?? entry;
@@ -3946,6 +3984,7 @@ function setupStorageListVisibility(row, entry) {
   });
   row.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" && event.key !== " ") return;
+    if (isRowControl(event.target)) return;
     event.preventDefault();
     toggleVisibility();
   });
@@ -4195,7 +4234,7 @@ async function applyStorageListDrop(dragState) {
 }
 function setupStorageListDrag(row, entry) {
   const isRowControl = (target) => target instanceof Element
-    && Boolean(target.closest("button, input, select, textarea, a"));
+    && Boolean(target.closest("button, summary, input, select, textarea, a"));
 
   row.addEventListener("pointerdown", (event) => {
     if ((event.pointerType === "mouse" && event.button !== 0) || state.cloud.busy || isRowControl(event.target)) return;
@@ -4523,6 +4562,7 @@ function createStorageListRow(entry) {
   row.setAttribute("role", "button");
   row.setAttribute("aria-pressed", String(visible));
   const listName = entry.local?.name || entry.cloud?.name || "地点リスト";
+  const favorite = storageListIsFavorite(entry.storageId);
 
   const name = document.createElement("div");
   name.className = "point-list-name point-list-select";
@@ -4531,7 +4571,8 @@ function createStorageListRow(entry) {
   title.append(document.createTextNode(listName));
   const meta = document.createElement("span");
   const pointCount = entry.local?.points.length ?? entry.preview?.points.length ?? 0;
-  const metaParts = [`${pointCount}${t("label.points")}`];
+  const metaParts = [String(pointCount) + t("label.points")];
+  if (favorite) metaParts.push(t("list.favoriteStatus"));
   if (visible) metaParts.push(t("list.visible"));
   meta.textContent = metaParts.join(" · ");
   name.append(title, meta);
@@ -4544,60 +4585,79 @@ function createStorageListRow(entry) {
   share.className = "storage-share-button";
   share.append(createIcon("share"));
   share.title = t("list.share");
-  share.setAttribute("aria-label", cloudText(`「${listName}」の共有リンクを作成`, `Create a share link for “${listName}”`));
+  share.setAttribute("aria-label", cloudText("「" + listName + "」の共有リンクを作成", "Create a share link for “" + listName + "”"));
   share.disabled = state.cloud.busy || (!entry.local && !entry.preview);
   share.addEventListener("click", () => void shareStorageListLink(entry.storageId));
 
-  const rename = document.createElement("button");
-  rename.type = "button";
-  rename.className = "storage-rename-button";
-  rename.append(createIcon("edit"));
-  rename.title = t("list.rename");
-  rename.setAttribute("aria-label", cloudText(`「${listName}」の名前を変更`, `Rename “${listName}”`));
-  rename.disabled = state.cloud.busy || !(entry.local?.editable || entry.preview?.editable);
-  rename.addEventListener("click", () => void renameStorageList(entry.storageId));
+  const editMenu = document.createElement("details");
+  editMenu.className = "storage-list-edit-menu";
+  const editSummary = document.createElement("summary");
+  editSummary.className = "storage-list-edit-button";
+  editSummary.append(createIcon("edit"));
+  editSummary.title = t("list.edit");
+  editSummary.setAttribute("aria-label", cloudText("「" + listName + "」を編集", "Edit “" + listName + "”"));
+  editMenu.append(editSummary);
 
-  const destinationButton = document.createElement("button");
-  destinationButton.type = "button";
-  destinationButton.className = "storage-destination-button";
+  const editPanel = document.createElement("div");
+  editPanel.className = "storage-list-edit-panel";
+  editMenu.append(editPanel);
+  editMenu.addEventListener("click", (event) => event.stopPropagation());
+
+  const addEditAction = (iconName, label, options = {}) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "storage-list-edit-action";
+    if (options.className) button.classList.add(options.className);
+    button.append(createIcon(iconName), document.createTextNode(label));
+    button.disabled = Boolean(options.disabled);
+    if (options.pressed !== undefined) button.setAttribute("aria-pressed", String(options.pressed));
+    if (options.title) button.title = options.title;
+    button.addEventListener("click", () => {
+      editMenu.open = false;
+      options.onClick?.();
+    });
+    editPanel.append(button);
+    return button;
+  };
+
+  addEditAction("edit", t("list.rename"), {
+    disabled: state.cloud.busy || !(entry.local?.editable || entry.preview?.editable),
+    onClick: () => void renameStorageList(entry.storageId)
+  });
+
   const destinationList = entry.local ?? (isMyCloudStorageEntry(entry) ? entry.preview : null);
   const isDestination = destinationList && pointListStorageKey(destinationList) === state.activePointListId;
   if (isDestination) metaParts.push(t("list.active"));
   meta.textContent = metaParts.join(" · ");
-  destinationButton.append(createIcon(isDestination ? "home-filled" : "home"));
-  destinationButton.classList.toggle("is-active", isDestination);
-  destinationButton.title = cloudText(
-    isDestination ? "登録先を解除" : "登録先に指定",
-    isDestination ? "Unset as destination" : "Set as destination"
-  );
-  destinationButton.setAttribute("aria-pressed", String(isDestination));
-  destinationButton.setAttribute("aria-label", cloudText(
-    isDestination
-      ? "「" + listName + "」を登録先から解除"
-      : "「" + listName + "」を登録先に指定",
-    isDestination
-      ? "Unset “" + listName + "” as the destination"
-      : "Set “" + listName + "” as the destination"
-  ));
-  destinationButton.disabled = !destinationList?.editable || state.cloud.busy;
-  destinationButton.addEventListener("click", () => toggleActivePointList(pointListStorageKey(destinationList)));
+  addEditAction(isDestination ? "home-filled" : "home", isDestination ? t("list.unsetHome") : t("list.setHome"), {
+    className: isDestination ? "is-active" : "",
+    disabled: !destinationList?.editable || state.cloud.busy,
+    pressed: isDestination,
+    title: isDestination ? t("list.unsetHome") : t("list.setHome"),
+    onClick: () => toggleActivePointList(pointListStorageKey(destinationList))
+  });
 
-  const remove = document.createElement("button");
-  remove.type = "button";
-  remove.className = "storage-delete-button danger-button";
-  remove.append(createIcon("trash"));
-  remove.title = t("action.delete");
-  remove.setAttribute("aria-label", cloudText("「" + listName + "」を削除", "Delete “" + listName + "”"));
-  remove.disabled = state.cloud.busy || Boolean(entry.cloud && !state.cloud.connected);
-  remove.addEventListener("click", () => void deleteStoredList(entry.storageId));
+  addEditAction(favorite ? "star-filled" : "star", favorite ? t("list.removeFavorite") : t("list.addFavorite"), {
+    className: favorite ? "is-active" : "",
+    disabled: state.cloud.busy,
+    pressed: favorite,
+    title: favorite ? t("list.removeFavorite") : t("list.addFavorite"),
+    onClick: () => toggleStorageListFavorite(entry.storageId)
+  });
 
-  rowActions.append(share, rename, destinationButton, remove);
+  addEditAction("trash", t("list.delete"), {
+    className: "danger-button",
+    disabled: state.cloud.busy || Boolean(entry.cloud && !state.cloud.connected),
+    title: t("list.delete"),
+    onClick: () => void deleteStoredList(entry.storageId)
+  });
+
+  rowActions.append(share, editMenu);
   row.append(name, rowActions);
   setupStorageListVisibility(row, entry);
   setupStorageListDrag(row, entry);
   return row;
 }
-
 function isMyCloudStorageEntry(entry) {
   return Boolean(entry?.cloud);
 }
@@ -5078,6 +5138,8 @@ async function deleteStoredList(storageId, options = {}) {
     }
     if (entry.local) removeLocalListForStorageChange(entry.local.id);
     else persistWorkspace();
+    state.favoriteListIds.delete(entry.storageId);
+    persistWorkspace();
     deleted = true;
   } catch (error) {
     setCloudStatus(cloudErrorMessage(error), { error: true });
