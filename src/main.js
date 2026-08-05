@@ -43,7 +43,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.692";
+const WEB_VERSION = "0.693";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -2391,21 +2391,36 @@ function deviceOrientationHeading(event) {
     return compassHeading;
   }
 
-  if (event.alpha === null || event.alpha === undefined) {
-    return null;
-  }
-
-  if (event.absolute === false) {
+  if (event.alpha === null || event.alpha === undefined || event.absolute === false) {
     return null;
   }
 
   const alpha = Number(event.alpha);
+  const beta = event.beta === null || event.beta === undefined ? null : Number(event.beta);
+  const gamma = event.gamma === null || event.gamma === undefined ? null : Number(event.gamma);
   if (!Number.isFinite(alpha)) {
     return null;
   }
 
-  const orientation = Number(window.screen?.orientation?.angle ?? window.orientation ?? 0);
-  return normalizeHeading(360 - alpha + orientation);
+  if (Number.isFinite(beta) && Number.isFinite(gamma)) {
+    const radians = Math.PI / 180;
+    const x = beta * radians;
+    const y = gamma * radians;
+    const z = alpha * radians;
+    const cosX = Math.cos(x);
+    const cosY = Math.cos(y);
+    const cosZ = Math.cos(z);
+    const sinX = Math.sin(x);
+    const sinY = Math.sin(y);
+    const sinZ = Math.sin(z);
+    const vectorX = -cosZ * sinY - sinZ * sinX * cosY;
+    const vectorY = -sinZ * sinY + cosZ * sinX * cosY;
+    if (Math.hypot(vectorX, vectorY) > 1e-6) {
+      return normalizeHeading(Math.atan2(vectorX, vectorY) / radians);
+    }
+  }
+
+  return normalizeHeading(360 - alpha);
 }
 
 function handleDeviceOrientation(event) {
