@@ -160,6 +160,9 @@ const elements = {
   pointInfoUpdated: document.querySelector("#pointInfoUpdated"),
   pointInfoDistance: document.querySelector("#pointInfoDistance"),
   appToast: document.querySelector("#appToast"),
+  cloudProgress: document.querySelector("#cloudProgress"),
+  cloudProgressTitle: document.querySelector("#cloudProgressTitle"),
+  cloudProgressPattern: document.querySelector("#cloudProgressPattern"),
   useLocationButton: document.querySelector("#useLocationButton"),
   zoomInButton: document.querySelector("#zoomInButton"),
   zoomOutButton: document.querySelector("#zoomOutButton"),
@@ -1280,40 +1283,52 @@ function cloudPointListForPoint(pointId) {
   return state.cloud.pointLists.find((list) => findPointIn(pointId, list.points)) ?? null;
 }
 
-async function cloudPhotoAssetsForList(list, cloudId, client) {
+async function cloudPhotoAssetsForList(list, cloudId, client, options = {}) {
   const photoAssets = new Map();
-  for (const point of Array.isArray(list?.points) ? list.points : []) {
+  const photoPoints = (Array.isArray(list?.points) ? list.points : [])
+    .filter((point) => point.cloudPhoto || point.photoAssetId || point.photo);
+  const total = photoPoints.length;
+  let completed = 0;
+  options.onProgress?.(completed, total);
+
+  for (const point of photoPoints) {
     if (point.cloudPhoto) {
       photoAssets.set(point.id, point.cloudPhoto);
     }
     if (!point.photoAssetId && point.photo) {
       await ensureStoredPointPhoto(point);
     }
-    if (!point.photoAssetId) {
-      continue;
+    if (point.photoAssetId) {
+      const localAsset = await getGridAtlasAsset(point.photoAssetId);
+      if (localAsset?.blob) {
+        const uploaded = await client.uploadAsset(cloudId, localAsset.id, localAsset.blob, {
+          name: localAsset.name,
+          mediaType: localAsset.mediaType
+        });
+        if (uploaded?.id) {
+          photoAssets.set(point.id, {
+            assetId: uploaded.id,
+            mediaType: uploaded.mediaType || localAsset.mediaType,
+            name: uploaded.name || localAsset.name || "",
+            byteLength: uploaded.byteLength || localAsset.byteLength
+          });
+        }
+      }
     }
-    const localAsset = await getGridAtlasAsset(point.photoAssetId);
-    if (!localAsset?.blob) {
-      continue;
-    }
-    const uploaded = await client.uploadAsset(cloudId, localAsset.id, localAsset.blob, {
-      name: localAsset.name,
-      mediaType: localAsset.mediaType
-    });
-    if (uploaded?.id) {
-      photoAssets.set(point.id, {
-        assetId: uploaded.id,
-        mediaType: uploaded.mediaType || localAsset.mediaType,
-        name: uploaded.name || localAsset.name || "",
-        byteLength: uploaded.byteLength || localAsset.byteLength
-      });
-    }
+    completed += 1;
+    options.onProgress?.(completed, total);
   }
   return photoAssets;
 }
 
 async function cloudPayloadWithPhotos(list, cloudId, client) {
-  const photoAssets = await cloudPhotoAssetsForList(list, cloudId, client);
+  const photoAssets = await cloudPhotoAssetsForList(list, cloudId, client, {
+    onProgress: (completed, total) => setCloudProgress(
+      completed,
+      total,
+      cloudText("画像をアップロード中", "Uploading images")
+    )
+  });
   return pointListToCloudPayload({ ...list, cloudId }, pointGeo, { photoAssets });
 }
 
@@ -1343,17 +1358,18 @@ async function updateCloudPointList(list, nextList, options = {}) {
     return false;
   }
 
+  setCloudBusy(true);
   let payload;
   let client;
   try {
     client = cloudClientFromInputs();
     payload = await cloudPayloadWithPhotos(nextList, cloudId, client);
   } catch (error) {
+    setCloudBusy(false);
     setCloudStatus(cloudErrorMessage(error), { error: true });
     return false;
   }
 
-  setCloudBusy(true);
   let updated = false;
   try {
     await client.updateList(cloudId, meta.revision, payload);
@@ -1835,6 +1851,14 @@ async function hydrateWorkspaceAssetPhotos() {
   if (changed) persistWorkspace();
   refreshVisiblePoints();
   render();
+}
+
+async function hydratePointPhotoForDisplay(point) {
+  if (!point || point.photo || !point.photoAssetId) return false;
+  const url = await gridAtlasAssetUrl(point.photoAssetId);
+  if (!url) return false;
+  point.photo = url;
+  return true;
 }
 
 function syncCanvasSize() {
@@ -2921,6 +2945,13 @@ function renderPointInfoDialog() {
   elements.pointInfoUpdated.textContent = formatOptionalDate(point.updatedAt);
   elements.pointInfoDistance.textContent = distance;
 
+  if (!point.photo && point.photoAssetId) {
+    void hydratePointPhotoForDisplay(point).then((changed) => {
+      if (changed && elements.pointInfoDialog.open && singleSelectedPoint()?.id === point.id) {
+        renderPointInfoDialog();
+      }
+    }).catch(() => {});
+  }
   if (point.photo) {
     elements.pointInfoPhoto.hidden = false;
     elements.pointInfoPhoto.src = point.photo;
@@ -4363,8 +4394,30 @@ function setCloudStatus(message, options = {}) {
     status.classList.toggle("is-error", options.error === true);
   }
 }
+function setCloudProgress(completed, total, message) {
+  if (!elements.cloudProgress || !elements.cloudProgressPattern || !elements.cloudProgressTitle) return;
+  if (!Number.isFinite(total) || total <= 0) {
+    elements.cloudProgress.hidden = true;
+    return;
+  }
+  const width = 7;
+  const ratio = Math.max(0, Math.min(1, completed / total));
+  const filled = completed >= total ? width : Math.floor(ratio * width);
+  elements.cloudProgressTitle.textContent = message || cloudText("処理中", "Working");
+  elements.cloudProgressPattern.textContent = "■".repeat(filled) + "□".repeat(width - filled);
+  elements.cloudProgress.hidden = false;
+}
+
+function clearCloudProgress() {
+  if (!elements.cloudProgress) return;
+  elements.cloudProgress.hidden = true;
+  if (elements.cloudProgressTitle) elements.cloudProgressTitle.textContent = "";
+  if (elements.cloudProgressPattern) elements.cloudProgressPattern.textContent = "";
+}
+
 function setCloudBusy(busy) {
   state.cloud.busy = Boolean(busy);
+  if (!busy) clearCloudProgress();
   renderStorageLists();
 }
 
@@ -6251,6 +6304,15 @@ async function submitPoint(event) {
     return;
   }
 
+  const file = elements.pointPhoto.files[0] ?? null;
+  const photo = file ? await readPhoto(file) : null;
+  let storedPhoto = null;
+  if (photo) {
+    try { storedPhoto = await storeGridAtlasDataUrl(photo, { name: file?.name || "" }); }
+    catch (error) { console.warn("GRID ATLAS photo storage failed; keeping local fallback", error); }
+  }
+  const photoDisplay = storedPhoto?.url || photo;
+
   if (editingPoint && editingList) {
     const updatedAt = new Date().toISOString();
     const nextList = {
@@ -6263,7 +6325,12 @@ async function submitPoint(event) {
           title: elements.pointTitle.value.trim() || point.title || "Point",
           note: elements.pointNote.value.trim(),
           geo,
-          updatedAt
+          updatedAt,
+          ...(photoDisplay ? {
+            photo: photoDisplay,
+            photoName: file?.name ?? "",
+            photoAssetId: storedPhoto?.id || ""
+          } : {})
         }
         : point),
       updatedAt
@@ -6283,14 +6350,6 @@ async function submitPoint(event) {
     return;
   }
 
-  const file = elements.pointPhoto.files[0] ?? null;
-  const photo = file ? await readPhoto(file) : null;
-  let storedPhoto = null;
-  if (photo) {
-    try { storedPhoto = await storeGridAtlasDataUrl(photo, { name: file?.name || "" }); }
-    catch (error) { console.warn("GRID ATLAS photo storage failed; keeping local fallback", error); }
-  }
-  const photoDisplay = storedPhoto?.url || photo;
   const createdAt = new Date().toISOString();
   const list = localPointList();
   const point = {
@@ -6299,9 +6358,9 @@ async function submitPoint(event) {
     y: projected.y,
     title: elements.pointTitle.value.trim() || `Point ${list.points.length + 1}`,
     note: elements.pointNote.value.trim(),
-    photo: list.source === "cloud" ? "" : photoDisplay,
-    photoName: list.source === "cloud" ? "" : file?.name ?? "",
-    photoAssetId: list.source === "cloud" ? "" : storedPhoto?.id || "",
+    photo: photoDisplay || "",
+    photoName: file?.name ?? "",
+    photoAssetId: storedPhoto?.id || "",
     geo,
     createdAt
   };

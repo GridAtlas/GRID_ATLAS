@@ -2027,6 +2027,36 @@ textarea {
   line-height: 1.35;
 }
 
+.cloud-progress {
+  position: fixed;
+  z-index: 3100;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  gap: 7px;
+  min-width: min(260px, calc(100vw - 32px));
+  padding: 16px 20px;
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: var(--status-bg);
+  color: var(--accent-strong);
+  box-shadow: var(--shadow), var(--brand-glow);
+  text-align: center;
+  pointer-events: none;
+}
+
+.cloud-progress[hidden] {
+  display: none;
+}
+
+.cloud-progress-pattern {
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 20px;
+  letter-spacing: 2px;
+  line-height: 1;
+}
 .app-toast {
   position: fixed;
   z-index: 3000;
