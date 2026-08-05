@@ -42,7 +42,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.624";
+const WEB_VERSION = "0.625";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -4075,6 +4075,7 @@ function updateStorageListDragGhost(dragState, clientX, clientY) {
 function beginStorageListDrag(dragState) {
   if (activeStorageListDrag !== dragState || dragState.dragging) return;
   window.clearTimeout(dragState.timerId);
+  window.clearTimeout(dragState.autoTimerId);
   dragState.dragging = true;
   dragState.row.classList.add("is-dragging");
   dragState.row.setAttribute("aria-grabbed", "true");
@@ -4093,6 +4094,7 @@ function beginStorageListDrag(dragState) {
 
 function finishStorageListDrag(dragState) {
   window.clearTimeout(dragState.timerId);
+  window.clearTimeout(dragState.autoTimerId);
   clearStorageListDragHover();
   dragState.row.classList.remove("is-dragging");
   dragState.row.classList.remove("is-long-pressed");
@@ -4135,12 +4137,15 @@ function setupStorageListDrag(row, entry) {
       dragging: false,
       drop: null,
       ghost: null,
-      timerId: 0
+      timerId: 0,
+      autoTimerId: 0,
+      actionTriggered: false
     };
     activeStorageListDrag = dragState;
 
     const cleanup = () => {
       window.clearTimeout(dragState.timerId);
+      window.clearTimeout(dragState.autoTimerId);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
@@ -4168,12 +4173,7 @@ function setupStorageListDrag(row, entry) {
     const onUp = (upEvent) => {
       if (upEvent.pointerId !== dragState.pointerId || activeStorageListDrag !== dragState) return;
       if (!dragState.dragging) {
-        const longPressed = dragState.longPressed && !dragState.cancelled;
         cleanup();
-        if (longPressed) {
-          row.dataset.storageDragSuppressClick = "true";
-          showPointListPoints(entry.storageId);
-        }
         return;
       }
       upEvent.preventDefault();
@@ -4197,6 +4197,19 @@ function setupStorageListDrag(row, entry) {
       dragState.longPressed = true;
       row.classList.add("is-long-pressed");
     }, 360);
+    dragState.autoTimerId = window.setTimeout(() => {
+      if (
+        activeStorageListDrag !== dragState
+        || !dragState.longPressed
+        || dragState.dragging
+        || dragState.cancelled
+      ) return;
+      dragState.actionTriggered = true;
+      row.dataset.storageDragSuppressClick = "true";
+      cleanup();
+      finishStorageListDrag(dragState);
+      showPointListPoints(entry.storageId);
+    }, 1000);
   });
 }
 
@@ -4227,6 +4240,7 @@ function updatePointIndexDragGhost(dragState, clientX, clientY) {
 function beginPointIndexDrag(dragState) {
   if (activePointIndexDrag !== dragState || dragState.dragging || !dragState.canReorder) return;
   window.clearTimeout(dragState.timerId);
+  window.clearTimeout(dragState.autoTimerId);
   dragState.dragging = true;
   dragState.row.classList.add("is-dragging");
   dragState.row.setAttribute("aria-grabbed", "true");
@@ -4244,6 +4258,7 @@ function beginPointIndexDrag(dragState) {
 
 function finishPointIndexDrag(dragState) {
   window.clearTimeout(dragState.timerId);
+  window.clearTimeout(dragState.autoTimerId);
   clearPointIndexDragHover();
   dragState.row.classList.remove("is-dragging", "is-long-pressed");
   dragState.row.removeAttribute("aria-grabbed");
@@ -4307,11 +4322,14 @@ function setupPointIndexGesture(row, { point, list }) {
       dragging: false,
       drop: null,
       ghost: null,
-      timerId: 0
+      timerId: 0,
+      autoTimerId: 0,
+      actionTriggered: false
     };
     activePointIndexDrag = dragState;
     const cleanup = () => {
       window.clearTimeout(dragState.timerId);
+      window.clearTimeout(dragState.autoTimerId);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
@@ -4344,13 +4362,7 @@ function setupPointIndexGesture(row, { point, list }) {
     const onUp = async (upEvent) => {
       if (upEvent.pointerId !== dragState.pointerId || activePointIndexDrag !== dragState) return;
       if (!dragState.dragging) {
-        const longPressed = dragState.longPressed && !dragState.cancelled;
         cleanup();
-        if (longPressed) {
-          row.dataset.pointIndexSuppressClick = "true";
-          setSelection([{ type: "point", id: point.id }], { render: false });
-          showSelectedPointInfoDialog();
-        }
         return;
       }
       upEvent.preventDefault();
@@ -4373,6 +4385,20 @@ function setupPointIndexGesture(row, { point, list }) {
       dragState.longPressed = true;
       row.classList.add("is-long-pressed");
     }, 360);
+    dragState.autoTimerId = window.setTimeout(() => {
+      if (
+        activePointIndexDrag !== dragState
+        || !dragState.longPressed
+        || dragState.dragging
+        || dragState.cancelled
+      ) return;
+      dragState.actionTriggered = true;
+      row.dataset.pointIndexSuppressClick = "true";
+      cleanup();
+      finishPointIndexDrag(dragState);
+      setSelection([{ type: "point", id: point.id }], { render: false });
+      showSelectedPointInfoDialog();
+    }, 1000);
   });
 }
 function createStorageListRow(entry) {
@@ -5058,7 +5084,10 @@ function findPoint(id) {
   if (id === CURRENT_LOCATION_ID) {
     return currentLocationPoint();
   }
-  return findPointIn(id, state.points) ?? syncProjectedPoint(findVisibleCloudPoint(id));
+  // The point index can intentionally show a hidden list. Selection and
+  // information actions must still resolve those points even though they are
+  // excluded from the map's visible point projection.
+  return findPointIn(id, allPointListPoints()) ?? syncProjectedPoint(findCloudPointAny(id));
 }
 
 function findPointIn(id, points) {
