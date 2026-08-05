@@ -42,7 +42,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.620";
+const WEB_VERSION = "0.621";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -4298,7 +4298,6 @@ function renderStorageLists() {
   elements.backupListSelect.disabled = localEntries.length === 0 || state.cloud.busy;
   elements.backupExportButton.disabled = localEntries.length === 0 || state.cloud.busy;
   syncCloudControls();
-  syncStorageListActionButtons(entries);
 }
 function defaultCloudApiUrl() {
   return ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname)
@@ -4377,7 +4376,6 @@ function syncCloudControls() {
   for (const button of document.querySelectorAll(".storage-rename-button")) {
     button.disabled = state.cloud.busy;
   }
-  syncStorageListActionButtons();
 }
 async function connectCloud() {
   try {
