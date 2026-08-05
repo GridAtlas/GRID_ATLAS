@@ -43,7 +43,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.704";
+const WEB_VERSION = "0.705";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -4239,12 +4239,7 @@ function setupStorageListDrag(row, entry) {
     const onUp = (upEvent) => {
       if (upEvent.pointerId !== dragState.pointerId || activeStorageListDrag !== dragState) return;
       if (!dragState.dragging) {
-        const longPressed = dragState.longPressed && !dragState.cancelled;
         cleanup();
-        if (longPressed) {
-          row.dataset.storageDragSuppressClick = "true";
-          showPointListPreview(entry.storageId);
-        }
         return;
       }
       upEvent.preventDefault();
@@ -4263,7 +4258,19 @@ function setupStorageListDrag(row, entry) {
     window.addEventListener("pointermove", onMove, { passive: false });
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onCancel);
-    dragState.timerId = window.setTimeout(() => {
+    dragState.autoTimerId = window.setTimeout(() => {
+      if (
+        activeStorageListDrag !== dragState
+        || !dragState.longPressed
+        || dragState.dragging
+        || dragState.cancelled
+      ) return;
+      dragState.actionTriggered = true;
+      row.dataset.storageDragSuppressClick = "true";
+      cleanup();
+      finishStorageListDrag(dragState);
+      showPointListPreview(entry.storageId);
+    }, 1000);    dragState.timerId = window.setTimeout(() => {
       if (activeStorageListDrag !== dragState || dragState.cancelled) return;
       dragState.longPressed = true;
       row.classList.add("is-long-pressed");
