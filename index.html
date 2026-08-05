@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=61">
-    <script src="src/main.js?v=153" type="module" defer></script>
+    <script src="src/main.js?v=154" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -97,6 +97,9 @@
 
               <div class="settings-nav settings-nav-subtle">
                 <button class="settings-nav-button" type="button" data-mobile-page="data" aria-pressed="false" data-i18n="page.lists">リスト</button>
+              </div>
+              <div class="settings-nav settings-nav-subtle">
+                <button id="openGridAtlasButton" class="settings-nav-button" type="button" data-i18n="settings.openGridAtlas">.gridatlasを開く</button>
               </div>
               <section class="settings-nav settings-update">
                 <div class="system-update-row">

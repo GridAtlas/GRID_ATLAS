@@ -43,7 +43,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.666";
+const WEB_VERSION = "0.667";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -114,6 +114,7 @@ const elements = {
   webVersionBadge: document.querySelector("#webVersionBadge"),
   settingsMenu: document.querySelector("#settingsMenu"),
   settingsMenuButton: document.querySelector("#settingsMenuButton"),
+  openGridAtlasButton: document.querySelector("#openGridAtlasButton"),
   settingsPanel: document.querySelector("#settingsPanel"),
   settingsThemeSelect: document.querySelector("#settingsThemeSelect"),
   settingsLanguageSelect: document.querySelector("#settingsLanguageSelect"),
@@ -400,6 +401,7 @@ const TRANSLATIONS = {
   ja: {
     "settings.title": "設定",
     "settings.menu": "メニュー",
+    "settings.openGridAtlas": ".gridatlasを開く",
     "settings.design": "デザイン",
     "settings.language": "言語",
     "settings.units": "距離単位",
@@ -635,6 +637,7 @@ const TRANSLATIONS = {
   en: {
     "settings.title": "Settings",
     "settings.menu": "Menu",
+    "settings.openGridAtlas": "Open .gridatlas",
     "settings.design": "Design",
     "settings.language": "Language",
     "settings.units": "Distance Unit",
@@ -8054,6 +8057,10 @@ function bindEvents() {
   elements.settingsMenuButton.addEventListener("click", (event) => {
     event.stopPropagation();
     toggleSettingsMenu();
+  });
+  elements.openGridAtlasButton.addEventListener("click", () => {
+    setSettingsMenuOpen(false);
+    elements.pointImportFile.click();
   });
   elements.settingsMenu.addEventListener("click", (event) => event.stopPropagation());
   elements.settingsThemeSelect.addEventListener("change", () => {
