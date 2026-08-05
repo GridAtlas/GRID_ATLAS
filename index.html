@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=61">
-    <script src="src/main.js?v=151" type="module" defer></script>
+    <script src="src/main.js?v=152" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -41,6 +41,7 @@
       <symbol id="icon-home" viewBox="0 0 24 24"><path d="m3 11 9-7 9 7M5 10v10h14V10M9 20v-6h6v6"></path></symbol>
       <symbol id="icon-home-filled" viewBox="0 0 24 24"><path d="M3 10.8 12 4l9 6.8V21H3Z" style="fill:currentColor;stroke:none"></path></symbol>
       <symbol id="icon-cloud" viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .7-7.9A6 6 0 0 0 6.2 8.7 4.5 4.5 0 0 0 7 18Z"></path></symbol>
+      <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.8-4L4 9M4 5v4h4M4 13a8 8 0 0 0 14.8 4L20 15M20 19v-4h-4"></path></symbol>
       <symbol id="icon-current" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"></circle><circle cx="12" cy="12" r="8"></circle></symbol>
     </svg>
     <div class="app-shell">
@@ -55,27 +56,7 @@
             <button id="settingsMenuButton" class="settings-menu-button" type="button" aria-expanded="false" aria-controls="settingsPanel" title="設定"><svg class="ui-icon" aria-hidden="true"><use href="#icon-menu"></use></svg></button>
             <div id="settingsPanel" class="settings-panel" hidden>
               <h2 data-i18n="settings.title">設定</h2>
-              <section class="cloud-menu-section">
-                <h2 data-i18n="cloud.menuTitle">クラウド機能</h2>
-                <label class="cloud-access-code-label">
-                  <span data-i18n="cloud.accessToken">アクセスコード</span>
-                  <input id="cloudAccessToken" type="password" autocomplete="off" spellcheck="false" placeholder="ga_ から始まるコード">
-                </label>
-                <div class="button-row">
-                  <button id="cloudConnectButton" class="primary-button" type="button" data-i18n="cloud.connect">接続</button>
-                  <button id="cloudDisconnectButton" type="button" data-i18n="cloud.disconnect">切断</button>
-                </div>
 
-                <output id="cloudMenuStatus" class="form-status cloud-status" data-cloud-status aria-live="polite"></output>
-              </section>
-              <section class="settings-nav">
-                <div class="system-update-row">
-                  <button id="systemUpdateButton" class="settings-nav-button" type="button" data-i18n="systemUpdate.action">システム更新</button>
-                  <output id="systemUpdateVersion" class="system-update-version" aria-live="polite"></output>
-                </div>
-                <p class="cloud-note" data-i18n="systemUpdate.notice">最新版を確認し、更新時は自動で再読み込みします。</p>
-                <output id="systemUpdateStatus" class="form-status" aria-live="polite"></output>
-              </section>
               <label>
                 <span data-i18n="settings.design">デザイン</span>
                 <select id="settingsThemeSelect">
@@ -117,6 +98,31 @@
               <div class="settings-nav settings-nav-subtle">
                 <button class="settings-nav-button" type="button" data-mobile-page="data" aria-pressed="false" data-i18n="page.lists">リスト</button>
               </div>
+              <section class="settings-nav settings-update">
+                <div class="system-update-row">
+                  <span class="system-update-label" data-i18n="systemUpdate.label">システム更新</span>
+                  <output id="systemUpdateVersion" class="system-update-version" aria-live="polite"></output>
+                  <button id="systemUpdateButton" class="system-update-button" type="button" data-i18n-title="systemUpdate.notice"><svg class="ui-icon" aria-hidden="true"><use href="#icon-refresh"></use></svg><span data-i18n="systemUpdate.action">確認</span></button>
+                </div>
+                <output id="systemUpdateStatus" class="form-status system-update-status" aria-live="polite"></output>
+              </section>
+              <details class="cloud-menu-section">
+                <summary class="cloud-menu-summary">
+                  <span data-i18n="cloud.menuTitle">テスターアクセスコード</span>
+                  <span class="cloud-menu-caption" data-i18n="cloud.experimental">実験機能</span>
+                </summary>
+                <div class="cloud-menu-content">
+                  <label class="cloud-access-code-label">
+                    <span data-i18n="cloud.accessToken">アクセスコード</span>
+                    <input id="cloudAccessToken" type="password" autocomplete="off" spellcheck="false" placeholder="ga_ から始まるコード">
+                  </label>
+                  <div class="button-row">
+                    <button id="cloudConnectButton" class="primary-button" type="button" data-i18n="cloud.connect">接続</button>
+                    <button id="cloudDisconnectButton" type="button" data-i18n="cloud.disconnect">切断</button>
+                  </div>
+                  <output id="cloudMenuStatus" class="form-status cloud-status" data-cloud-status aria-live="polite"></output>
+                </div>
+              </details>
             </div>
           </div>
         </div>

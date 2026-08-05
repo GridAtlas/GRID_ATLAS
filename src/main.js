@@ -42,7 +42,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.655";
+const WEB_VERSION = "0.656";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -410,7 +410,8 @@ const TRANSLATIONS = {
     "settings.languageEn": "English",
     "settings.unitsMetric": "km",
     "settings.unitsImperial": "mile",
-    "systemUpdate.action": "システム更新",
+    "systemUpdate.label": "システム更新",
+    "systemUpdate.action": "確認",
     "systemUpdate.notice": "最新版を確認し、アプリを再読み込みします。",
     "systemUpdate.version": "WEB版",
     "systemUpdate.checking": "更新を確認しています…",
@@ -523,7 +524,8 @@ const TRANSLATIONS = {
     "data.pointLists": "地点リスト",
     "data.cloud": "マイリスト（クラウド）",
     "data.grid": "グリッド",
-    "cloud.menuTitle": "クラウド機能",
+    "cloud.menuTitle": "テスターアクセスコード",
+    "cloud.experimental": "実験機能",
     "cloud.dataNotice": "接続中のマイリスト（クラウド）です。",
     "cloud.pointSource": "マイリスト（クラウド）",
     "cloud.apiUrl": "Cloud API URL",
@@ -640,7 +642,8 @@ const TRANSLATIONS = {
     "settings.languageEn": "English",
     "settings.unitsMetric": "km",
     "settings.unitsImperial": "mile",
-    "systemUpdate.action": "System Update",
+    "systemUpdate.label": "System update",
+    "systemUpdate.action": "Check",
     "systemUpdate.notice": "Checks for the latest version and reloads the app.",
     "systemUpdate.version": "Web version",
     "systemUpdate.checking": "Checking for updates…",
@@ -753,7 +756,8 @@ const TRANSLATIONS = {
     "data.pointLists": "Point Lists",
     "data.cloud": "My Lists (Cloud)",
     "data.grid": "Grid",
-    "cloud.menuTitle": "Cloud features",
+    "cloud.menuTitle": "Tester access code",
+    "cloud.experimental": "Experimental",
     "cloud.dataNotice": "My Lists stored in the connected cloud.",
     "cloud.pointSource": "My List (Cloud)",
     "cloud.apiUrl": "Cloud API URL",
