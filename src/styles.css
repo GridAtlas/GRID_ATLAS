@@ -322,30 +322,6 @@ textarea:focus-visible {
   width: 100%;
 }
 
-.settings-maintenance {
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-}
-
-.settings-maintenance summary {
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.settings-maintenance-content {
-  display: grid;
-  gap: 12px;
-  padding-top: 10px;
-}
-
-.settings-maintenance h3 {
-  margin: 0;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 800;
-}
 
 .settings-nav-subtle {
   gap: 0;
@@ -396,6 +372,14 @@ textarea:focus-visible {
   box-shadow: var(--brand-glow);
 }
 
+.web-version-badge {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  opacity: 0.72;
+  white-space: nowrap;
+}
 .theme-toggle {
   min-height: 28px;
   display: inline-flex;
@@ -1254,26 +1238,7 @@ textarea {
   gap: 8px;
 }
 
-.backup-group {
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
-}
 
-.backup-group summary {
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.backup-group[open] summary {
-  margin-bottom: 8px;
-}
-
-.backup-group label {
-  display: grid;
-  gap: 6px;
-}
 .cloud-data-group {
   padding-top: 10px;
   border-top: 1px solid var(--line);

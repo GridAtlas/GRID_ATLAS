@@ -42,7 +42,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.635";
+const WEB_VERSION = "0.655";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -50,6 +50,7 @@ const POINTER_MOVE_THRESHOLD = 3;
 const CURRENT_LOCATION_ID = "__current_location__";
 const LOADED_OBSERVATION_PREFIX = "__loaded_observation__";
 const DEFAULT_POINT_LIST_ID = "local";
+const NEW_POINT_LIST_ID = "__new_point_list__";
 const FOLLOW_SCALE_MANUAL = "manual";
 const FOLLOW_SCALE_CENTER = "center";
 const FOLLOW_SCALE_TARGET = "target";
@@ -109,6 +110,7 @@ const elements = {
   actionEditButton: document.querySelector("#actionEditButton"),
   actionMapButton: document.querySelector("#actionMapButton"),
   editionBadge: document.querySelector("#editionBadge"),
+  webVersionBadge: document.querySelector("#webVersionBadge"),
   settingsMenu: document.querySelector("#settingsMenu"),
   settingsMenuButton: document.querySelector("#settingsMenuButton"),
   settingsPanel: document.querySelector("#settingsPanel"),
@@ -204,22 +206,14 @@ const elements = {
   routeList: document.querySelector("#routeList"),
   newPointListButtons: Array.from(document.querySelectorAll("[data-new-point-list]")),
 
-  backupListSelect: document.querySelector("#backupListSelect"),
-  backupExportButton: document.querySelector("#backupExportButton"),
-  replacePointsButton: document.querySelector("#replacePointsButton"),
   pointImportFile: document.querySelector("#pointImportFile"),
   storageListContainers: Array.from(document.querySelectorAll("[data-storage-list-items]")),
-  exportObservationButton: document.querySelector("#exportObservationButton"),
-  replaceObservationButton: document.querySelector("#replaceObservationButton"),
-  appendObservationButton: document.querySelector("#appendObservationButton"),
-  observationImportFile: document.querySelector("#observationImportFile"),
 
   cloudAccessToken: document.querySelector("#cloudAccessToken"),
   cloudConnectButton: document.querySelector("#cloudConnectButton"),
   cloudDisconnectButton: document.querySelector("#cloudDisconnectButton"),
 
   cloudStatuses: Array.from(document.querySelectorAll("[data-cloud-status]")),
-  clearButton: document.querySelector("#clearButton")
 };
 
 const ICON_NAMESPACE = "http://www.w3.org/2000/svg";
@@ -242,6 +236,7 @@ const state = {
   points: [],
   pointLists: [],
   activePointListId: DEFAULT_POINT_LIST_ID,
+  pointDestinationListId: null,
 
   pointTransferDestinationListId: "",
   pendingPointTransferMode: null,
@@ -304,7 +299,6 @@ const state = {
   pointer: createPointerGestureState()
 };
 
-let pendingObservationImportMode = "replace";
 let pendingShareLink = null;
 let appToastTimerId = 0;
 let activeStorageListDrag = null;
@@ -469,11 +463,6 @@ const TRANSLATIONS = {
     "button.clearTarget": "ターゲット解除",
     "button.optimize": "最適順",
     "button.clear": "解除",
-    "button.save": "保存",
-    "button.load": "読込",
-    "button.replaceLoad": "新規読込",
-    "button.appendLoad": "追加読込",
-    "button.clearGrid": "グリッド初期化",
     "panel.register": "地点登録",
     "panel.details": "選択地点",
     "panel.multiSelect": "複数選択",
@@ -490,6 +479,9 @@ const TRANSLATIONS = {
     "field.photo": "写真",
     "field.note": "コメント",
     "list.destination": "登録先リスト",
+    "list.newOption": "新しいリスト",
+    "list.nameRequired": "リスト名を入力してください",
+    "list.movedPoint": "「{name}」へ地点を移動しました",
     "field.coords": "緯度経度",
     "field.created": "登録",
     "field.count": "件数",
@@ -530,7 +522,6 @@ const TRANSLATIONS = {
     "route.toStart": "スタートへ",
     "data.pointLists": "地点リスト",
     "data.cloud": "マイリスト（クラウド）",
-    "data.observations": "観察記録",
     "data.grid": "グリッド",
     "cloud.menuTitle": "クラウド機能",
     "cloud.dataNotice": "接続中のマイリスト（クラウド）です。",
@@ -565,7 +556,7 @@ const TRANSLATIONS = {
     "storage.dragImportedDestination": "インポートリストはコピー先・移動先にできません。",
     "storage.targetMineDevice": "マイリスト（端末内）",
     "storage.targetMineCloud": "マイリスト（クラウド）",
-    "list.new": "新規作成",
+    "list.new": "新規",
     "list.newPrompt": "新しいリストの名前",
     "list.created": "新しいリストを作成し、登録先にしました",
     "list.active": "地点登録先",
@@ -612,12 +603,6 @@ const TRANSLATIONS = {
     "list.section.imported": "インポートリスト",
 
     "list.none": "リストなし",
-    "maintenance.title": "バックアップ・初期化",
-    "backup.title": "バックアップ",
-    "backup.notice": "端末のリストを保存・復元できます。",
-    "backup.list": "対象リスト",
-    "backup.export": "バックアップ保存",
-    "backup.restore": "バックアップから復元",
     "status.grid": "格子",
     "label.points": "点",
     "label.links": "線",
@@ -708,11 +693,6 @@ const TRANSLATIONS = {
     "button.clearTarget": "Clear Target",
     "button.optimize": "Optimize",
     "button.clear": "Clear",
-    "button.save": "Save",
-    "button.load": "Load",
-    "button.replaceLoad": "Replace Load",
-    "button.appendLoad": "Add Load",
-    "button.clearGrid": "Reset Grid",
     "panel.register": "Add Point",
     "panel.details": "Selected Point",
     "panel.multiSelect": "Multiple Selection",
@@ -729,6 +709,9 @@ const TRANSLATIONS = {
     "field.photo": "Photo",
     "field.note": "Comment",
     "list.destination": "Destination list",
+    "list.newOption": "New list",
+    "list.nameRequired": "Enter a list name",
+    "list.movedPoint": "Moved the point to “{name}”",
     "field.coords": "Coordinates",
     "field.created": "Created",
     "field.count": "Count",
@@ -769,7 +752,6 @@ const TRANSLATIONS = {
     "route.toStart": "To start",
     "data.pointLists": "Point Lists",
     "data.cloud": "My Lists (Cloud)",
-    "data.observations": "Observation Records",
     "data.grid": "Grid",
     "cloud.menuTitle": "Cloud features",
     "cloud.dataNotice": "My Lists stored in the connected cloud.",
@@ -804,7 +786,7 @@ const TRANSLATIONS = {
     "storage.dragImportedDestination": "Imported Lists cannot be a copy or move destination.",
     "storage.targetMineDevice": "My Lists (Device)",
     "storage.targetMineCloud": "My Lists (Cloud)",
-    "list.new": "New list",
+    "list.new": "New",
     "list.newPrompt": "Name the new list",
     "list.created": "Created a new list and set it as the destination",
     "list.active": "Destination",
@@ -851,12 +833,6 @@ const TRANSLATIONS = {
     "list.section.imported": "Imported Lists",
 
     "list.none": "No lists",
-    "maintenance.title": "Backup & reset",
-    "backup.title": "Backup",
-    "backup.notice": "Save or restore lists stored on this device.",
-    "backup.list": "List",
-    "backup.export": "Save backup",
-    "backup.restore": "Restore backup",
     "status.grid": "Grid",
     "label.points": "pts",
     "label.links": "lines",
@@ -1438,6 +1414,40 @@ function pointListByStorageKey(storageKey) {
   return editablePointLists().find((list) => pointListStorageKey(list) === storageKey) ?? null;
 }
 
+function defaultPointDestinationListId() {
+  const home = pointListByStorageKey(state.activePointListId);
+  return home ? pointListStorageKey(home) : NEW_POINT_LIST_ID;
+}
+
+function createNamedLocalPointList(name) {
+  const now = new Date().toISOString();
+  const list = createPointList({
+    name,
+    visible: true,
+    editable: true,
+    source: "local",
+    importedAt: "",
+    createdAt: now,
+    updatedAt: now,
+    points: []
+  });
+  state.pointLists.push(list);
+  persistWorkspace();
+  return list;
+}
+
+function promptNewPointListForRegistration() {
+  const suggestedName = cloudText("新しいリスト", "New list");
+  const input = window.prompt(t("list.newPrompt"), suggestedName);
+  if (input === null) return null;
+  const name = input.trim();
+  if (!name) {
+    elements.shareImportStatus.value = t("list.nameRequired");
+    return null;
+  }
+  return createNamedLocalPointList(name);
+}
+
 function localPointList() {
   ensurePointLists();
   let list = pointListByStorageKey(state.activePointListId);
@@ -1462,11 +1472,21 @@ function setActivePointList(listId) {
   render();
 }
 
+function syncPointFormDestinationWithHome(previousHomeKey) {
+  if (state.editingPointId) return;
+  const previousDefault = previousHomeKey || NEW_POINT_LIST_ID;
+  if (state.pointDestinationListId !== previousDefault) return;
+  const home = pointListByStorageKey(state.activePointListId);
+  state.pointDestinationListId = home ? pointListStorageKey(home) : NEW_POINT_LIST_ID;
+}
+
 function toggleActivePointList(listId) {
   const list = pointListByStorageKey(listId);
   if (!list) return;
+  const previousHomeKey = state.activePointListId;
   const key = pointListStorageKey(list);
   state.activePointListId = state.activePointListId === key ? null : key;
+  syncPointFormDestinationWithHome(previousHomeKey);
   if (list.source !== "cloud") persistWorkspace();
   render();
 }
@@ -3200,7 +3220,6 @@ function confirmObservationReset(actionLabel) {
 
   const confirmed = window.confirm(`${actionLabel}しますか。記録中の実軌道はリセットされます。`);
   if (confirmed) {
-    maybeSaveObservationRecord();
   }
 
   return confirmed;
@@ -3467,73 +3486,6 @@ function loadedObservationInfoText(observation = selectedObservation()) {
   return parts.join(" | ");
 }
 
-function observationSnapshot(options = {}) {
-  const start = observationStartPoint();
-  const target = targetPoint();
-  if (!observationScopeValid(start, target)) {
-    return null;
-  }
-
-  const trail = state.observationTrail.map(clonePlain);
-  if (options.includeTarget && target) {
-    const finalTarget = cloneObservationPoint(target);
-    const last = trail.at(-1);
-    if (!last || distanceBetween(last, finalTarget) > 1) {
-      trail.push(finalTarget);
-    }
-  }
-
-  if (trail.length === 0) {
-    return null;
-  }
-
-  const path = [start, ...trail];
-  const current = trail.at(-1);
-  const traveled = path.slice(1).reduce((total, point, index) => total + distanceBetween(path[index], point), 0);
-  const directToCurrent = distanceBetween(start, current);
-  const endedAt = current.recordedAt ?? new Date().toISOString();
-
-  return {
-    type: "grid-atlas-observation",
-    version: 1,
-    title: observationRecordName(start, target, endedAt),
-    exportedAt: new Date().toISOString(),
-    startedAt: state.observationStart?.recordedAt ?? trail[0]?.recordedAt ?? new Date().toISOString(),
-    endedAt,
-    start: exportObservationPoint(start),
-    target: target ? exportObservationPoint(target) : null,
-    trail: trail.map(exportObservationPoint),
-    metrics: {
-      remaining: target ? distanceBetween(current, target) : NaN,
-      traveled,
-      ratio: directToCurrent > 1 ? traveled / directToCurrent : NaN
-    }
-  };
-}
-
-function exportObservationPoint(point) {
-  const geo = pointGeo(point);
-  return {
-    id: point.id,
-    title: point.title,
-    geo,
-    x: point.x,
-    y: point.y,
-    recordedAt: point.recordedAt
-  };
-}
-
-function maybeSaveObservationRecord() {
-  const snapshot = observationSnapshot();
-  if (!snapshot) {
-    return;
-  }
-
-  if (window.confirm("観察記録を保存しますか。")) {
-    downloadJson(snapshot, `grid-atlas-observation-${dateTimeStamp()}.json`);
-  }
-}
-
 function toggleTargetForSelection() {
   const point = singleTargetableSelectedPoint();
   if (!point) {
@@ -3783,15 +3735,19 @@ function renderPointIndexRows(container, rows, current = null) {
     meta.textContent = list?.name || (isCloud ? "地点リスト" : t("label.gps"));
     name.append(title, meta);
 
-    const distance = document.createElement("span");
-    distance.className = "point-index-distance";
-    distance.textContent = point.id === CURRENT_LOCATION_ID
+    const distanceText = point.id === CURRENT_LOCATION_ID
       ? currentLocationLabel()
       : current
         ? formatDistance(distanceBetween(current, point))
-        : `${formatCoordinate(pointGeo(point).lat)}, ${formatCoordinate(pointGeo(point).lng)}`;
-
-    row.append(name, distance);
+        : "";
+    if (distanceText) {
+      const distance = document.createElement("span");
+      distance.className = "point-index-distance";
+      distance.textContent = distanceText;
+      row.append(name, distance);
+    } else {
+      row.append(name);
+    }
     row.addEventListener("click", () => {
       if (row.dataset.pointIndexSuppressClick === "true") {
         delete row.dataset.pointIndexSuppressClick;
@@ -4542,19 +4498,27 @@ function renderPointDestinationSelect() {
   const select = elements.pointDestinationListSelect;
   if (!select) return;
   const lists = editablePointLists();
-  const activeList = pointListByStorageKey(state.activePointListId) ?? lists[0] ?? null;
-  if (activeList && state.activePointListId !== pointListStorageKey(activeList)) {
-    state.activePointListId = pointListStorageKey(activeList);
+  const editingList = state.editingPointId ? pointListForPoint(state.editingPointId) : null;
+  let selectedKey = state.pointDestinationListId
+    || (editingList ? pointListStorageKey(editingList) : defaultPointDestinationListId());
+  if (selectedKey !== NEW_POINT_LIST_ID && !lists.some((list) => pointListStorageKey(list) === selectedKey)) {
+    selectedKey = defaultPointDestinationListId();
   }
+  state.pointDestinationListId = selectedKey;
+
   select.replaceChildren();
+  const newListOption = document.createElement("option");
+  newListOption.value = NEW_POINT_LIST_ID;
+  newListOption.textContent = t("list.newOption");
+  select.append(newListOption);
   for (const list of lists) {
     const option = document.createElement("option");
     option.value = pointListStorageKey(list);
     option.textContent = list.name || "地点リスト";
     select.append(option);
   }
-  select.value = activeList ? pointListStorageKey(activeList) : "";
-  select.disabled = state.editingPointId !== null || lists.length === 0;
+  select.value = selectedKey;
+  select.disabled = state.cloud.busy;
 }
 function renderStorageLists() {
   const entries = storageListEntries();
@@ -4573,22 +4537,6 @@ function renderStorageLists() {
 
   renderPointTransferDialog();
 
-  const previousBackupListId = elements.backupListSelect.value;
-  const localEntries = entries.filter((entry) => entry.local);
-  elements.backupListSelect.replaceChildren();
-  for (const entry of localEntries) {
-    const option = document.createElement("option");
-    option.value = entry.local.id;
-    option.textContent = entry.local.name || "地点リスト";
-    elements.backupListSelect.append(option);
-  }
-  if (localEntries.some((entry) => entry.local.id === previousBackupListId)) {
-    elements.backupListSelect.value = previousBackupListId;
-  } else if (localEntries.some((entry) => entry.local.id === state.activePointListId)) {
-    elements.backupListSelect.value = state.activePointListId;
-  }
-  elements.backupListSelect.disabled = localEntries.length === 0 || state.cloud.busy;
-  elements.backupExportButton.disabled = localEntries.length === 0 || state.cloud.busy;
   syncCloudControls();
 }
 function defaultCloudApiUrl() {
@@ -5715,6 +5663,7 @@ function startEditingSelectedPoint() {
   elements.pointPhoto.value = "";
   fillFormFromGeo(geo);
   const editingList = pointListForPoint(point.id);
+  state.pointDestinationListId = editingList ? pointListStorageKey(editingList) : NEW_POINT_LIST_ID;
   elements.shareImportStatus.value = editingList?.cloudId
     ? cloudText("クラウド保管中のマイリストを編集中。保存するとクラウドへ反映します", "Editing a cloud-stored my list. Saving will update cloud storage.")
     : "編集: 内容を更新できます";
@@ -6466,11 +6415,53 @@ function resetPointFormAfterSubmit() {
   elements.shareImportStatus.textContent = "";
   state.pendingGeo = null;
   state.editingPointId = null;
+  state.pointDestinationListId = null;
   state.pendingLinkPointId = null;
   state.mode = "inspect";
   if (mobilePageUiActive()) {
     setMobilePage("map");
   }
+}
+async function saveEditedPointToDestination(editingList, destinationList, updatedPoint, updatedAt) {
+  if (editingList === destinationList) {
+    const nextList = {
+      ...editingList,
+      points: editingList.points.map((point) => point.id === updatedPoint.id ? updatedPoint : point),
+      updatedAt
+    };
+    if (editingList.source === "cloud") {
+      return updateCloudPointList(editingList, nextList);
+    }
+    Object.assign(editingList, nextList);
+    persistWorkspace();
+    return true;
+  }
+
+  const sourceNext = {
+    ...editingList,
+    points: editingList.points.filter((point) => point.id !== updatedPoint.id),
+    updatedAt
+  };
+  const destinationNext = {
+    ...destinationList,
+    points: [...destinationList.points, updatedPoint],
+    updatedAt
+  };
+
+  if (destinationList.source === "cloud") {
+    const currentDestination = state.cloud.pointLists.find((list) => pointListStorageKey(list) === pointListStorageKey(destinationList)) || destinationList;
+    if (!(await updateCloudPointList(currentDestination, destinationNext))) return false;
+  }
+  if (editingList.source === "cloud") {
+    const currentSource = state.cloud.pointLists.find((list) => pointListStorageKey(list) === pointListStorageKey(editingList)) || editingList;
+    if (!(await updateCloudPointList(currentSource, sourceNext))) return false;
+  }
+
+  if (editingList.source !== "cloud") Object.assign(editingList, sourceNext);
+  if (destinationList.source !== "cloud") Object.assign(destinationList, destinationNext);
+  refreshVisiblePoints();
+  persistWorkspace();
+  return true;
 }
 async function submitPoint(event) {
   event.preventDefault();
@@ -6496,6 +6487,17 @@ async function submitPoint(event) {
     return;
   }
 
+  const destinationKey = elements.pointDestinationListSelect.value || state.pointDestinationListId || NEW_POINT_LIST_ID;
+  let destinationList = destinationKey === NEW_POINT_LIST_ID ? null : pointListByStorageKey(destinationKey);
+  if (destinationKey !== NEW_POINT_LIST_ID && !destinationList) {
+    elements.shareImportStatus.value = t("list.nameRequired");
+    return;
+  }
+  if (destinationKey === NEW_POINT_LIST_ID) {
+    destinationList = promptNewPointListForRegistration();
+    if (!destinationList) return;
+    state.pointDestinationListId = pointListStorageKey(destinationList);
+  }
   const file = elements.pointPhoto.files[0] ?? null;
   const photo = file ? await readPhoto(file) : null;
   let storedPhoto = null;
@@ -6507,43 +6509,35 @@ async function submitPoint(event) {
 
   if (editingPoint && editingList) {
     const updatedAt = new Date().toISOString();
-    const nextList = {
-      ...editingList,
-      points: editingList.points.map((point) => point.id === editingPoint.id
-        ? {
-          ...point,
-          x: projected.x,
-          y: projected.y,
-          title: elements.pointTitle.value.trim() || point.title || "Point",
-          note: elements.pointNote.value.trim(),
-          geo,
-          updatedAt,
-          ...(photoDisplay ? {
-            photo: photoDisplay,
-            photoName: file?.name ?? "",
-            photoAssetId: storedPhoto?.id || ""
-          } : {})
-        }
-        : point),
-      updatedAt
+    const updatedPoint = {
+      ...editingPoint,
+      x: projected.x,
+      y: projected.y,
+      title: elements.pointTitle.value.trim() || editingPoint.title || "Point",
+      note: elements.pointNote.value.trim(),
+      geo,
+      updatedAt,
+      ...(photoDisplay ? {
+        photo: photoDisplay,
+        photoName: file?.name ?? "",
+        photoAssetId: storedPhoto?.id || ""
+      } : {})
     };
-    if (editingList.source === "cloud") {
-      const updated = await updateCloudPointList(editingList, nextList);
-      if (!updated) { render(); return; }
-    } else {
-      Object.assign(editingList, nextList);
-      persistWorkspace();
+    const moved = editingList !== destinationList;
+    const updated = await saveEditedPointToDestination(editingList, destinationList, updatedPoint, updatedAt);
+    if (!updated) { render(); return; }
+    if (moved) {
+      showAppToast(t("list.movedPoint").replace("{name}", destinationList.name));
     }
-    state.selection = [{ type: "point", id: editingPoint.id }];
+    state.selection = [{ type: "point", id: updatedPoint.id }];
     normalizeSelection();
     resetPointFormAfterSubmit();
     syncCanvasSize();
     render();
     return;
   }
-
   const createdAt = new Date().toISOString();
-  const list = localPointList();
+  const list = destinationList;
   const point = {
     id: createId(),
     x: projected.x,
@@ -6734,7 +6728,7 @@ function toggleLocationFollow(options = {}) {
         return;
       }
 
-      finishObservation({ includeTarget: action === "arrived" });
+      clearSelection({ render: false });
       stopLocationFollow({ render: false });
       clearObservationAssignments();
       elements.shareImportStatus.value = action === "arrived" ? "到着として観察を終了しました" : action === "finish" ? "観察を終了しました" : "観察を中断終了しました";
@@ -6764,17 +6758,6 @@ function chooseObservationStopAction() {
     : "abort";
 }
 
-function finishObservation(options = {}) {
-  const snapshot = observationSnapshot({ includeTarget: Boolean(options.includeTarget) });
-  if (!snapshot) {
-    clearSelection({ render: false });
-    return;
-  }
-
-  const observation = withObservationId(snapshot, new Set(state.loadedObservations.map((item) => item.id)));
-  state.loadedObservations.push(observation);
-  setSelection([{ type: "observation", id: observation.id }], { render: false });
-}
 
 function clearObservationAssignments() {
   state.routeStartPointId = null;
@@ -7371,10 +7354,12 @@ function activateWaitingServiceWorker(registration) {
 
 function renderWebVersion() {
   if (elements.systemUpdateVersion) {
-    elements.systemUpdateVersion.textContent = `${t("systemUpdate.version")} ${WEB_VERSION}`;
+    elements.systemUpdateVersion.textContent = t("systemUpdate.version") + " " + WEB_VERSION;
+  }
+  if (elements.webVersionBadge) {
+    elements.webVersionBadge.textContent = "v" + WEB_VERSION;
   }
 }
-
 function setSystemUpdateStatus(key) {
   if (elements.systemUpdateStatus) {
     elements.systemUpdateStatus.textContent = t(key);
@@ -7519,29 +7504,6 @@ function registerServiceWorker() {
     }).catch(() => {});
   });
 }
-function dateStamp() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function dateTimeStamp() {
-  return new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
-}
-
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
-function downloadJson(payload, filename) {
-  downloadBlob(new Blob([JSON.stringify(payload, null, 2)], {
-    type: "application/json"
-  }), filename);
-}
-
 function selectedFiles(fileList) {
   return Array.from(fileList ?? []).filter(Boolean);
 }
@@ -7871,324 +7833,6 @@ async function ensureStoredPointPhoto(point) {
   return getGridAtlasAsset(stored.id);
 }
 
-async function pointListGridAtlasPackage(list) {
-  list.gridAtlas = list.gridAtlas && typeof list.gridAtlas === "object" ? list.gridAtlas : {};
-  list.gridAtlas.documentId = list.gridAtlas.documentId || createId();
-
-  const resourceRecords = new Map();
-  for (const resource of Array.isArray(list.gridAtlas.resources) ? list.gridAtlas.resources : []) {
-    const metadata = resource?.metadata;
-    if (!metadata?.id) continue;
-    let asset = resource.assetId ? await getGridAtlasAsset(resource.assetId) : null;
-    if (!asset && resource.dataUrl) {
-      const blob = await dataUrlToBlob(resource.dataUrl);
-      const stored = await putGridAtlasAsset(blob, {
-        name: metadata.path?.split("/").pop() || "",
-        mediaType: metadata.mediaType || blob.type
-      });
-      asset = await getGridAtlasAsset(stored.id);
-    }
-    if (!asset?.blob) continue;
-    resourceRecords.set(metadata.id, {
-      assetId: asset.id,
-      entry: {
-        id: metadata.id,
-        path: metadata.path || ("assets/" + asset.id + "." + imageExtension(asset.mediaType)),
-        mediaType: metadata.mediaType || asset.mediaType,
-        bytes: new Uint8Array(await asset.blob.arrayBuffer()),
-        image: metadata.image
-      }
-    });
-  }
-
-  const pointPhotoResources = new Map();
-  for (const point of list.points) {
-    const asset = await ensureStoredPointPhoto(point);
-    if (!asset?.blob) continue;
-    const existingPhotoMedia = Array.isArray(point.gridAtlas?.media)
-      ? point.gridAtlas.media.find((media) => media.role === "photo" && resourceRecords.has(media.resourceId))
-      : null;
-    const resourceId = existingPhotoMedia?.resourceId || asset.id;
-    if (!resourceRecords.has(resourceId)) {
-      resourceRecords.set(resourceId, {
-        assetId: asset.id,
-        entry: {
-          id: resourceId,
-          path: "assets/" + asset.id + "." + imageExtension(asset.mediaType),
-          mediaType: asset.mediaType,
-          bytes: new Uint8Array(await asset.blob.arrayBuffer())
-        }
-      });
-    }
-    pointPhotoResources.set(point.id, resourceId);
-  }
-
-  const places = list.points.map((point) => {
-    const geo = pointGeo(point);
-    const media = (Array.isArray(point.gridAtlas?.media) ? clonePlain(point.gridAtlas.media) : [])
-      .filter((item) => resourceRecords.has(item.resourceId));
-    const photoResourceId = pointPhotoResources.get(point.id);
-    if (photoResourceId && !media.some((item) => item.role === "photo" && item.resourceId === photoResourceId)) {
-      const withoutOldPhoto = media.filter((item) => item.role !== "photo");
-      media.splice(0, media.length, { resourceId: photoResourceId, role: "photo" }, ...withoutOldPhoto);
-    }
-    const place = {
-      id: point.gridAtlas?.placeId || point.id,
-      name: point.title || "Point",
-      position: { latitude: geo.lat, longitude: geo.lng }
-    };
-    if (point.note) place.note = point.note;
-    if (point.createdAt) place.createdAt = point.createdAt;
-    if (point.updatedAt) place.updatedAt = point.updatedAt;
-    if (media.length > 0) place.media = media;
-    if (point.gridAtlas?.extensions && Object.keys(point.gridAtlas.extensions).length > 0) {
-      place.extensions = clonePlain(point.gridAtlas.extensions);
-    }
-    return place;
-  });
-
-  const document = {
-    type: "place-list",
-    schemaVersion: 1,
-    id: list.gridAtlas.documentId,
-    name: list.name || "地点リスト",
-    places
-  };
-  if (list.description) document.description = list.description;
-  if (list.author) document.attribution = { name: list.author };
-  if (list.createdAt) document.createdAt = list.createdAt;
-  if (list.updatedAt) document.updatedAt = list.updatedAt;
-  const documentMedia = (Array.isArray(list.gridAtlas.documentMedia) ? clonePlain(list.gridAtlas.documentMedia) : [])
-    .filter((item) => resourceRecords.has(item.resourceId));
-  if (documentMedia.length > 0) document.media = documentMedia;
-  if (list.gridAtlas.documentExtensions && Object.keys(list.gridAtlas.documentExtensions).length > 0) {
-    document.extensions = clonePlain(list.gridAtlas.documentExtensions);
-  }
-
-  const result = await buildGridAtlasArchive(
-    document,
-    Array.from(resourceRecords.values(), (resource) => resource.entry),
-    { requiredExtensions: list.gridAtlas.requiredExtensions || [] }
-  );
-  list.gridAtlas.documentDigest = result.documentDigest;
-  list.gridAtlas.documentMedia = clonePlain(document.media || []);
-  list.gridAtlas.resources = result.manifest.resources.map((metadata) => ({
-    metadata: clonePlain(metadata),
-    assetId: resourceRecords.get(metadata.id)?.assetId || "",
-    dataUrl: ""
-  }));
-  persistWorkspace();
-  return result;
-}
-
-function pointListGridAtlasUrlDocument(list) {
-  list.gridAtlas = list.gridAtlas && typeof list.gridAtlas === "object" ? list.gridAtlas : {};
-  list.gridAtlas.documentId = list.gridAtlas.documentId || list.cloudId || list.id || createId();
-
-  const places = list.points.map((point) => {
-    const geo = pointGeo(point);
-    const place = {
-      id: point.gridAtlas?.placeId || point.id,
-      name: point.title || "Point",
-      position: { latitude: geo.lat, longitude: geo.lng }
-    };
-    if (point.note) place.note = point.note;
-    if (point.createdAt) place.createdAt = point.createdAt;
-    if (point.updatedAt) place.updatedAt = point.updatedAt;
-    if (point.gridAtlas?.extensions && Object.keys(point.gridAtlas.extensions).length > 0) {
-      place.extensions = clonePlain(point.gridAtlas.extensions);
-    }
-    return place;
-  });
-
-  const document = {
-    type: "place-list",
-    schemaVersion: 1,
-    id: list.gridAtlas.documentId,
-    name: list.name || "地点リスト",
-    places
-  };
-  if (list.description) document.description = list.description;
-  if (list.author) document.attribution = { name: list.author };
-  if (list.createdAt) document.createdAt = list.createdAt;
-  if (list.updatedAt) document.updatedAt = list.updatedAt;
-  if (list.gridAtlas.documentExtensions && Object.keys(list.gridAtlas.documentExtensions).length > 0) {
-    document.extensions = clonePlain(list.gridAtlas.documentExtensions);
-  }
-  return document;
-}
-
-function gridAtlasShareUrl(document) {
-  const url = new URL(window.location.href);
-  url.search = "";
-  url.hash = new URLSearchParams({
-    [GRIDATLAS_URL_PARAMETER]: encodeGridAtlasUrlPayload(document)
-  }).toString();
-  return url.href;
-}
-
-function showAppToast(message, options = {}) {
-  if (!elements.appToast || !message) return;
-  window.clearTimeout(appToastTimerId);
-  elements.appToast.value = message;
-  elements.appToast.hidden = false;
-  elements.appToast.classList.toggle("is-error", options.error === true);
-  appToastTimerId = window.setTimeout(() => {
-    elements.appToast.hidden = true;
-    elements.appToast.value = "";
-  }, options.duration ?? 4200);
-}
-
-function setShareFeedback(message, options = {}) {
-  setCloudStatus(message, { menu: false, error: options.error === true });
-  if (elements.shareLinkDialog?.open) {
-    elements.shareLinkDialogStatus.value = message;
-    elements.shareLinkDialogStatus.classList.toggle("is-error", options.error === true);
-  }
-  showAppToast(message, options);
-}
-
-async function copyShareLink(text) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-
-  const input = document.createElement("textarea");
-  input.value = text;
-  input.setAttribute("readonly", "");
-  input.style.position = "fixed";
-  input.style.opacity = "0";
-  document.body.append(input);
-  input.select();
-  const copied = document.execCommand("copy");
-  input.remove();
-  if (!copied) throw new Error("Clipboard unavailable");
-}
-
-async function copyPendingShareLink() {
-  const share = pendingShareLink;
-  if (!share) return;
-  try {
-    await copyShareLink(share.url);
-    if (elements.shareLinkDialog?.open) elements.shareLinkDialog.close("copied");
-    setShareFeedback(t("list.shareCopied"));
-  } catch (error) {
-    console.warn("GRID ATLAS share link copy failed", error);
-    elements.shareLinkValue.focus();
-    elements.shareLinkValue.select();
-    setShareFeedback(t("list.shareCopyFailed"), { error: true });
-  }
-}
-
-async function sharePendingLinkNatively() {
-  const share = pendingShareLink;
-  if (!share || typeof navigator.share !== "function") return;
-  try {
-    await navigator.share({
-      title: `GRID ATLAS — ${share.title}`,
-      text: cloudText(`GRID ATLAS「${share.title}」`, `GRID ATLAS “${share.title}”`),
-      url: share.url
-    });
-    if (elements.shareLinkDialog?.open) elements.shareLinkDialog.close("shared");
-    setShareFeedback(t("list.shareCompleted"));
-  } catch (error) {
-    if (error?.name === "AbortError") return;
-    console.warn("GRID ATLAS native share failed", error);
-    setShareFeedback(t("list.shareNativeFailed"), { error: true });
-  }
-}
-
-async function sharePointListLink(list, options = {}) {
-  if (!list) {
-    setShareFeedback(t("list.shareUnavailable"), { error: true });
-    return;
-  }
-
-  try {
-    const document = pointListGridAtlasUrlDocument(list);
-    const url = gridAtlasShareUrl(document);
-    if (new TextEncoder().encode(url).byteLength > GRIDATLAS_RECOMMENDED_SHARE_URL_BYTES) {
-      setShareFeedback(t("list.shareTooLong"), { error: true, duration: 6500 });
-      return;
-    }
-
-    const title = list.name || "地点リスト";
-    const summary = t("list.shareSummary")
-      .replace("{name}", title)
-      .replace("{count}", String(list.points.length));
-    pendingShareLink = { url, title };
-    if (options.persist === true) persistWorkspace();
-
-    if (!elements.shareLinkDialog?.showModal) {
-      const confirmed = window.confirm(`${summary}\n${t("list.sharePrivacy")}\n\n${t("list.shareCopy")}?`);
-      if (!confirmed) return;
-      await copyPendingShareLink();
-      return;
-    }
-
-    elements.shareLinkSummary.textContent = summary;
-    elements.shareLinkValue.value = url;
-    elements.shareLinkDialogStatus.value = "";
-    elements.shareLinkDialogStatus.classList.remove("is-error");
-    elements.shareLinkNativeButton.hidden = typeof navigator.share !== "function";
-    if (elements.shareLinkDialog.open) elements.shareLinkDialog.close();
-    elements.shareLinkDialog.showModal();
-  } catch (error) {
-    console.warn("GRID ATLAS share link generation failed", error);
-    pendingShareLink = null;
-    setShareFeedback(t("list.shareGenerateFailed"), { error: true });
-  }
-}
-
-async function shareStorageListLink(storageId) {
-  const entry = findStorageListEntry(storageId);
-  await sharePointListLink(entry?.local || entry?.preview, { persist: true });
-}
-
-async function shareSelectedPointsLink() {
-  normalizeSelection();
-  const points = selectedPointIds()
-    .filter((pointId) => pointId !== CURRENT_LOCATION_ID)
-    .map(findPoint)
-    .filter(Boolean);
-  if (points.length === 0) {
-    setShareFeedback(t("list.shareSelectedUnavailable"), { error: true });
-    return;
-  }
-
-  const defaultName = t("list.shareSelectedDefaultName");
-  const input = window.prompt(t("list.shareSelectedNamePrompt"), defaultName);
-  if (input === null) return;
-  const name = input.trim() || defaultName;
-  const now = new Date().toISOString();
-  const list = {
-    id: createId(),
-    name,
-    description: "",
-    author: "",
-    createdAt: now,
-    updatedAt: now,
-    gridAtlas: { documentId: createId() },
-    points: points.map(clonePlain)
-  };
-  await sharePointListLink(list);
-}
-async function exportPointList(listId = DEFAULT_POINT_LIST_ID) {
-  const list = state.pointLists.find((item) => item.id === listId) ?? localPointList();
-  try {
-    const result = await pointListGridAtlasPackage(list);
-    downloadBlob(
-      new Blob([result.bytes], { type: GRIDATLAS_MIME_TYPE }),
-      "grid-atlas-" + safeFilenamePart(list.name) + "-" + dateStamp() + ".gridatlas"
-    );
-    elements.shareImportStatus.value = cloudText(".gridatlasを保存しました", "Saved .gridatlas");
-  } catch (error) {
-    console.warn("GRID ATLAS export failed", error);
-    elements.shareImportStatus.value = cloudText("バックアップを保存できませんでした", "Could not save backup");
-  }
-}
-
 function pointListFromPayload(parsed, fileName, existingIds) {
   if (parsed?.type !== "grid-atlas-point-list" || parsed.version !== 2 || !Array.isArray(parsed.points)) {
     throw new Error("Invalid point list");
@@ -8233,187 +7877,6 @@ async function importPointListFiles(files) {
     elements.shareImportStatus.value = "地点リスト読み込みエラー";
   }
 }
-function observationExportRecords() {
-  const records = state.loadedObservations.map((observation) => ({
-    ...clonePlain(observation),
-    exportedAt: new Date().toISOString()
-  }));
-  const snapshot = observationSnapshot();
-  if (snapshot) {
-    records.push(snapshot);
-  }
-
-  return records;
-}
-
-function observationExportPayload() {
-  const records = observationExportRecords();
-  if (records.length === 0) {
-    return null;
-  }
-
-  if (records.length === 1) {
-    return {
-      ...clonePlain(records[0]),
-      exportedAt: new Date().toISOString()
-    };
-  }
-
-  return {
-    type: "grid-atlas-observations",
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    records: records.map((record) => ({
-      ...clonePlain(record),
-      exportedAt: record.exportedAt ?? new Date().toISOString()
-    }))
-  };
-}
-
-function exportObservationRecord() {
-  const payload = observationExportPayload();
-  if (!payload) {
-    elements.shareImportStatus.value = "観察記録なし";
-    return;
-  }
-
-  downloadJson(payload, `grid-atlas-observation-${dateTimeStamp()}.json`);
-}
-
-function normalizeObservationPoint(point, fallbackTitle) {
-  if (!point || typeof point !== "object") {
-    return null;
-  }
-
-  const geo = pointGeoFromAny(point, null);
-  if (!geo) {
-    return null;
-  }
-
-  const projected = projectLatLng(geo.lat, geo.lng);
-  return {
-    id: typeof point.id === "string" && point.id ? point.id : createId(),
-    title: typeof point.title === "string" && point.title.trim() ? point.title.trim() : fallbackTitle,
-    x: projected.x,
-    y: projected.y,
-    geo,
-    recordedAt: typeof point.recordedAt === "string" ? point.recordedAt : new Date().toISOString()
-  };
-}
-
-function normalizeObservationRecord(parsed) {
-  if (parsed?.type !== "grid-atlas-observation" || !Array.isArray(parsed.trail)) {
-    throw new Error("Invalid observation");
-  }
-
-  const start = normalizeObservationPoint(parsed.start, "起点");
-  const target = parsed.target ? normalizeObservationPoint(parsed.target, "対象") : null;
-  const trail = parsed.trail.map((point) => normalizeObservationPoint(point, "現在地")).filter(Boolean);
-  if (!start || trail.length === 0 || (parsed.target && !target)) {
-    throw new Error("Invalid observation points");
-  }
-
-  const path = [start, ...trail];
-  const traveled = path.slice(1).reduce((total, point, index) => total + distanceBetween(path[index], point), 0);
-  const current = trail.at(-1);
-  const directToCurrent = distanceBetween(start, current);
-  const endedAt = typeof parsed.endedAt === "string" ? parsed.endedAt : trail.at(-1).recordedAt;
-  return {
-    id: typeof parsed.id === "string" && parsed.id ? parsed.id : createObservationId(),
-    type: "grid-atlas-observation",
-    version: 1,
-    title: typeof parsed.title === "string" && parsed.title.trim() ? parsed.title.trim() : observationRecordName(start, target, endedAt),
-    exportedAt: typeof parsed.exportedAt === "string" ? parsed.exportedAt : new Date().toISOString(),
-    startedAt: typeof parsed.startedAt === "string" ? parsed.startedAt : trail[0].recordedAt,
-    endedAt,
-    start,
-    target,
-    trail,
-    metrics: {
-      remaining: target ? distanceBetween(current, target) : NaN,
-      traveled,
-      ratio: directToCurrent > 1 ? traveled / directToCurrent : NaN
-    }
-  };
-}
-
-function normalizeObservationRecordsPayload(parsed) {
-  if (parsed?.type === "grid-atlas-observations") {
-    const records = Array.isArray(parsed.records)
-      ? parsed.records
-      : Array.isArray(parsed.observations)
-        ? parsed.observations
-        : [];
-    return records.map(normalizeObservationRecord);
-  }
-
-  return [normalizeObservationRecord(parsed)];
-}
-
-async function importObservationFiles(files, mode) {
-  const fileItems = selectedFiles(files);
-  if (fileItems.length === 0) {
-    return;
-  }
-
-  try {
-    const parsedFiles = await Promise.all(fileItems.map(readJsonFile));
-    const observations = parsedFiles.flatMap(normalizeObservationRecordsPayload);
-    if (observations.length === 0) {
-      throw new Error("No observations");
-    }
-
-    const action = mode === "replace" ? "観察記録を新規読み込み" : "観察記録を追加読み込み";
-    if (observationResetNeedsConfirmation() && !confirmObservationReset(action)) {
-      return;
-    }
-
-    if (state.followCurrentLocation) {
-      stopLocationFollow({ render: false });
-    }
-    resetObservationTrail();
-
-    if (mode === "replace") {
-      state.loadedObservations = [];
-    }
-
-    const existingIds = new Set(state.loadedObservations.map((observation) => observation.id));
-    const importedObservations = observations.map((observation) => withObservationId(observation, existingIds));
-    state.loadedObservations.push(...importedObservations);
-    setSelection(importedObservations.map((observation) => ({ type: "observation", id: observation.id })), { render: false });
-    elements.shareImportStatus.value = mode === "replace" ? "観察記録を新規読み込みしました" : "観察記録を追加しました";
-    fitToPoints();
-  } catch {
-    elements.shareImportStatus.value = "読み込みエラー";
-  }
-}
-function clearWorkspace() {
-  const confirmed = window.confirm("グリッドを初期化しますか。登録地点、線、読み込み観察を消去します。\nバックアップには影響しません。");
-  if (!confirmed) {
-    return;
-  }
-
-  state.pointLists = [createLocalPointList()];
-  state.activePointListId = DEFAULT_POINT_LIST_ID;
-  refreshVisiblePoints();
-  state.links = [];
-  state.selection = [];
-  state.selectedPointId = null;
-  state.selectedLinkId = null;
-  state.pendingLinkPointId = null;
-  state.editingPointId = null;
-  state.lastDeleted = null;
-  state.routeSelectionIds = [];
-  state.routeStartPointId = null;
-  state.routeStartSnapshot = null;
-  state.routeReturnToStart = false;
-  state.routeResult = null;
-  state.loadedObservations = [];
-  clearTarget({ render: false });
-  localStorage.removeItem(STORAGE_KEY);
-  render();
-}
-
 async function deleteSelectedPoint() {
   normalizeSelection();
   const selectedIds = selectedPointIds().filter((id) => id !== CURRENT_LOCATION_ID);
@@ -8617,7 +8080,7 @@ function bindEvents() {
 
   elements.pointForm.addEventListener("submit", submitPoint);
   elements.pointDestinationListSelect.addEventListener("change", () => {
-    setActivePointList(elements.pointDestinationListSelect.value);
+    state.pointDestinationListId = elements.pointDestinationListSelect.value || NEW_POINT_LIST_ID;
   });
   elements.readClipboardButton.addEventListener("click", readClipboardShare);
   elements.shareLinkCopyButton.addEventListener("click", () => void copyPendingShareLink());
@@ -8662,12 +8125,6 @@ function bindEvents() {
     button.addEventListener("click", createNewPointList);
   }
 
-  elements.backupExportButton.addEventListener("click", () => {
-    if (elements.backupListSelect.value) void exportPointList(elements.backupListSelect.value);
-  });
-  elements.replacePointsButton.addEventListener("click", () => {
-    elements.pointImportFile.click();
-  });
   elements.pointImportFile.addEventListener("change", async () => {
     const files = selectedFiles(elements.pointImportFile.files);
     const gridAtlasFiles = files.filter(gridAtlasFileLikely);
@@ -8676,23 +8133,6 @@ function bindEvents() {
     if (jsonFiles.length > 0) await importPointListFiles(jsonFiles);
     elements.pointImportFile.value = "";
   });
-  elements.exportObservationButton.addEventListener("click", exportObservationRecord);
-  elements.replaceObservationButton.addEventListener("click", () => {
-    pendingObservationImportMode = "replace";
-    elements.observationImportFile.click();
-  });
-  elements.appendObservationButton.addEventListener("click", () => {
-    pendingObservationImportMode = "append";
-    elements.observationImportFile.click();
-  });
-  elements.observationImportFile.addEventListener("change", () => {
-    const files = selectedFiles(elements.observationImportFile.files);
-    if (files.length > 0) {
-      void importObservationFiles(files, pendingObservationImportMode);
-    }
-    elements.observationImportFile.value = "";
-  });
-  elements.clearButton.addEventListener("click", clearWorkspace);
   for (const tab of elements.mobilePageTabs) {
     tab.addEventListener("click", () => {
       setMobilePage(tab.dataset.mobilePage);
