@@ -98,7 +98,12 @@ export async function hydrateGridAtlasAssets(pointLists) {
       try {
         if (point.photoAssetId) {
           const url = await gridAtlasAssetUrl(point.photoAssetId);
-          if (url) point.photo = url;
+          if (url) {
+            point.photo = url;
+          } else if (point.photo) {
+            point.photo = "";
+            changed = true;
+          }
         } else if (typeof point.photo === "string" && point.photo.startsWith("data:")) {
           const asset = await storeGridAtlasDataUrl(point.photo, { name: point.photoName });
           point.photoAssetId = asset.id;

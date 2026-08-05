@@ -42,7 +42,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.622";
+const WEB_VERSION = "0.623";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -1300,7 +1300,14 @@ async function cloudPhotoAssetsForList(list, cloudId, client, options = {}) {
     }
     if (point.photoAssetId) {
       const localAsset = await getGridAtlasAsset(point.photoAssetId);
-      if (localAsset?.blob) {
+      if (!localAsset?.blob) {
+        if (!point.cloudPhoto) {
+          throw new CloudApiError(cloudText(
+            `「${point.title || "名称なし"}」の画像を端末から読み出せません。画像を復元してからクラウドを更新してください。`,
+            `The image for “${point.title || "Untitled"}” is missing on this device. Restore it before updating the cloud list.`
+          ));
+        }
+      } else {
         const uploaded = await client.uploadAsset(cloudId, localAsset.id, localAsset.blob, {
           name: localAsset.name,
           mediaType: localAsset.mediaType
@@ -1332,7 +1339,7 @@ async function cloudPayloadWithPhotos(list, cloudId, client) {
   return pointListToCloudPayload({ ...list, cloudId }, pointGeo, { photoAssets });
 }
 
-async function hydrateCloudPointListAssets(list, client) {
+async function hydrateCloudPointListAssets(list, client, options = {}) {
   const photoPoints = (list?.points || []).filter((point) => point.photoAssetId);
   await Promise.all(photoPoints.map(async (point) => {
     try {
@@ -1345,6 +1352,12 @@ async function hydrateCloudPointListAssets(list, client) {
       point.photo = await gridAtlasAssetUrl(local.id);
     } catch (error) {
       console.warn("GRID ATLAS cloud photo hydration failed", error);
+      if (options.required === true) {
+        throw new CloudApiError(cloudText(
+          `「${point.title || "名称なし"}」の画像を端末へ保存できませんでした。クラウド側のリストは保持しています。`,
+          `Could not save the image for “${point.title || "Untitled"}” to this device. The cloud list was kept.`
+        ));
+      }
     }
   }));
   return list;
@@ -1854,11 +1867,18 @@ async function hydrateWorkspaceAssetPhotos() {
 }
 
 async function hydratePointPhotoForDisplay(point) {
-  if (!point || point.photo || !point.photoAssetId) return false;
+  if (!point || !point.photoAssetId) return false;
   const url = await gridAtlasAssetUrl(point.photoAssetId);
-  if (!url) return false;
-  point.photo = url;
-  return true;
+  if (url) {
+    if (point.photo === url) return false;
+    point.photo = url;
+    return true;
+  }
+  if (point.photo) {
+    point.photo = "";
+    return true;
+  }
+  return false;
 }
 
 function syncCanvasSize() {
@@ -2942,7 +2962,7 @@ function renderPointInfoDialog() {
   elements.pointInfoUpdated.textContent = formatOptionalDate(point.updatedAt);
   elements.pointInfoDistance.textContent = distance;
 
-  if (!point.photo && point.photoAssetId) {
+  if (point.photoAssetId && (!point.photo || point.photo.startsWith("blob:"))) {
     void hydratePointPhotoForDisplay(point).then((changed) => {
       if (changed && elements.pointInfoDialog.open && singleSelectedPoint()?.id === point.id) {
         renderPointInfoDialog();
@@ -4599,7 +4619,7 @@ async function moveListToDevice(storageId, options = {}) {
   try {
     const client = cloudClientFromInputs();
     const result = await client.getList(entry.cloud.id);
-    const imported = await hydrateCloudPointListAssets(cloudPayloadToPointList(result.list, { localId: uniqueLocalListId(result.list.list.id), revision: result.revision, editable: true }), client);
+    const imported = await hydrateCloudPointListAssets(cloudPayloadToPointList(result.list, { localId: uniqueLocalListId(result.list.list.id), revision: result.revision, editable: true }), client, { required: true });
     const normalized = normalizePointList({
       ...imported,
       id: uniqueLocalListId(imported.id),
