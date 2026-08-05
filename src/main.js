@@ -43,7 +43,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.681";
+const WEB_VERSION = "0.692";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -6161,12 +6161,13 @@ function zoomAtStage(screenPoint, direction) {
   render();
 }
 
-function fitToPoints() {
+function fitToPoints(fitPointsOverride = null) {
   syncCanvasSize();
   pauseLocationFollowForManualView();
   state.zoomStage = 0;
 
-  let fitPoints = fitTargetPoints();
+  const overridePoints = Array.isArray(fitPointsOverride) ? fitPointsOverride.filter(Boolean) : null;
+  let fitPoints = overridePoints ?? fitTargetPoints();
 
   if (fitPoints.length === 0) {
     setProjectionCenterGeo(DEFAULT_GEO);
@@ -6180,7 +6181,7 @@ function fitToPoints() {
   const centerGeo = geographicCenter(fitPoints);
   if (centerGeo) {
     setProjectionCenterGeo(centerGeo);
-    fitPoints = fitTargetPoints();
+    fitPoints = overridePoints ?? fitTargetPoints();
   }
 
   const size = canvasSize();
@@ -6494,6 +6495,7 @@ function selectPointsInRange(range) {
   state.selectedPointId = selectedPoints[0]?.id ?? null;
   state.selectedLinkId = null;
   normalizeSelection();
+  return selectedPoints;
 }
 
 function finishRangeSelection() {
@@ -6512,8 +6514,12 @@ function finishRangeSelection() {
   }
 
   pauseLocationFollowForManualView();
-  selectPointsInRange(range);
-  render();
+  const selectedPoints = selectPointsInRange(range);
+  if (selectedPoints.length > 0) {
+    fitToPoints(selectedPoints);
+  } else {
+    render();
+  }
 }
 
 function startPinchGesture() {
