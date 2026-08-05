@@ -775,6 +775,20 @@ textarea:focus-visible {
   margin: 0;
 }
 
+.panel-close-button {
+  display: none;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  place-items: center;
+}
+
+.panel-close-button .ui-icon {
+  width: 18px;
+  height: 18px;
+}
+
 .point-form,
 .point-form label {
   display: grid;
@@ -1744,6 +1758,14 @@ textarea {
     overflow-y: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
+  }
+
+  .point-registration-heading {
+    margin-bottom: 12px;
+  }
+
+  .panel-close-button {
+    display: grid;
   }
 
   .sidebar [data-mobile-panel].data-panel.is-mobile-active {

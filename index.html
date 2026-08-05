@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=64">
-    <script src="src/main.js?v=171" type="module" defer></script>
+    <script src="src/main.js?v=175" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -23,7 +23,7 @@
       <symbol id="icon-connect" viewBox="0 0 24 24"><path d="m8 16-2 2a3.5 3.5 0 0 1-5-5l3-3M16 8l2-2a3.5 3.5 0 0 1 5 5l-3 3M7 17l10-10"></path></symbol>
       <symbol id="icon-center" viewBox="0 0 24 24"><path d="m12 3 9 9-9 9-9-9 9-9Z"></path></symbol>
       <symbol id="icon-clear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"></circle><path d="m9 9 6 6M15 9l-6 6"></path></symbol>
-      <symbol id="icon-start" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5.5" fill="currentColor" stroke="none"></circle></symbol>
+      <symbol id="icon-start" viewBox="0 0 24 24"><path d="m7 5 10 7-10 7V5Z"></path></symbol>
       <symbol id="icon-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"></circle><circle cx="12" cy="12" r="3"></circle></symbol>
       <symbol id="icon-route" viewBox="0 0 24 24"><path d="M4 18c6 0 4-12 10-12h6M17 3l3 3-3 3"></path></symbol>
       <symbol id="icon-trash" viewBox="0 0 24 24"><path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"></path></symbol>
@@ -78,10 +78,6 @@
                   <option value="metric" data-i18n="settings.unitsMetric">km</option>
                   <option value="imperial" data-i18n="settings.unitsImperial">mile</option>
                 </select>
-              </label>
-              <label class="settings-check">
-                <input id="settingsRouteReturnToStart" type="checkbox">
-                <span data-i18n="settings.routeReturn">巡回で起点に戻る</span>
               </label>
               <label>
                 <span data-i18n="settings.mapProvider">地図サービス</span>
@@ -256,7 +252,10 @@
             <strong id="sidebarSelectedTitle">未選択</strong>
           </div>
           <section class="panel is-mobile-active" data-mobile-panel="register">
-            <h2 data-i18n="panel.register">地点登録</h2>
+            <div class="panel-heading point-registration-heading">
+              <h2 data-i18n="panel.register">地点登録</h2>
+              <button id="closePointRegistrationButton" class="panel-close-button" type="button" aria-label="閉じる" title="地点登録を閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
+            </div>
             <form id="pointForm" class="point-form">
               <label>
                 <span data-i18n="field.title">見出し</span>

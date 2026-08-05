@@ -43,7 +43,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.720";
+const WEB_VERSION = "0.751";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -124,7 +124,6 @@ const elements = {
   settingsThemeSelect: document.querySelector("#settingsThemeSelect"),
   settingsLanguageSelect: document.querySelector("#settingsLanguageSelect"),
   settingsUnitSelect: document.querySelector("#settingsUnitSelect"),
-  settingsRouteReturnToStart: document.querySelector("#settingsRouteReturnToStart"),
   settingsGpsEnabled: document.querySelector("#settingsGpsEnabled"),
   settingsMapProviderSelect: document.querySelector("#settingsMapProviderSelect"),
   systemUpdateButton: document.querySelector("#systemUpdateButton"),
@@ -143,6 +142,7 @@ const elements = {
   mobilePointCount: document.querySelector("#mobilePointCount"),
   mobilePointItems: document.querySelector("#mobilePointItems"),
   pointForm: document.querySelector("#pointForm"),
+  closePointRegistrationButton: document.querySelector("#closePointRegistrationButton"),
   pointTitle: document.querySelector("#pointTitle"),
   pointLat: document.querySelector("#pointLat"),
   pointLng: document.querySelector("#pointLng"),
@@ -274,7 +274,7 @@ const state = {
   routeSelectionIds: [],
   routeStartPointId: null,
   routeStartSnapshot: null,
-  routeReturnToStart: false,
+  routeReturnToStart: true,
   routeResult: null,
   targetPointId: null,
   observationStartId: null,
@@ -411,7 +411,6 @@ const TRANSLATIONS = {
     "settings.design": "デザイン",
     "settings.language": "言語",
     "settings.units": "距離単位",
-    "settings.routeReturn": "巡回で起点に戻る",
     "settings.gps": "GPS機能を使用",
     "settings.mapProvider": "地図サービス",
     "settings.mapGoogle": "Googleマップ",
@@ -649,7 +648,6 @@ const TRANSLATIONS = {
     "settings.design": "Design",
     "settings.language": "Language",
     "settings.units": "Distance Unit",
-    "settings.routeReturn": "Return to start in route",
     "settings.gps": "Use GPS",
     "settings.mapProvider": "Map service",
     "settings.mapGoogle": "Google Maps",
@@ -996,7 +994,6 @@ function syncSettingsControls() {
   elements.settingsThemeSelect.value = currentTheme();
   elements.settingsLanguageSelect.value = activeLanguage();
   elements.settingsUnitSelect.value = state.distanceUnit;
-  elements.settingsRouteReturnToStart.checked = state.routeReturnToStart;
   elements.settingsGpsEnabled.checked = state.gpsEnabled;
   elements.settingsMapProviderSelect.value = state.mapProvider;
   elements.routeReturnToStart.checked = state.routeReturnToStart;
@@ -1005,7 +1002,7 @@ function syncSettingsControls() {
 function loadPreferences() {
   let language = JA_LANGUAGE;
   let unit = METRIC_UNIT;
-  let returnToStart = false;
+  let returnToStart = true;
   let gpsEnabled = false;
   let mapProvider = defaultMapProvider();
   try {
@@ -1443,9 +1440,17 @@ function pointListByStorageKey(storageKey) {
   return editablePointLists().find((list) => pointListStorageKey(list) === storageKey) ?? null;
 }
 
+function isEmptyStoragePlaceholder(list) {
+  return Boolean(list?.storagePlaceholder && Array.isArray(list.points) && list.points.length === 0);
+}
+
+function registrationDestinationPointLists() {
+  return editablePointLists().filter((list) => !isEmptyStoragePlaceholder(list));
+}
+
 function defaultPointDestinationListId() {
   const home = pointListByStorageKey(state.activePointListId);
-  return home ? pointListStorageKey(home) : NEW_POINT_LIST_ID;
+  return home && !isEmptyStoragePlaceholder(home) ? pointListStorageKey(home) : NEW_POINT_LIST_ID;
 }
 
 function createNamedLocalPointList(name) {
@@ -2571,7 +2576,6 @@ function drawRouteStartSnapshot() {
   const colors = canvasPalette();
   const screen = worldToScreen(snapshot);
   context.save();
-
   context.beginPath();
   context.arc(screen.x, screen.y, POINT_RADIUS, 0, Math.PI * 2);
   context.fillStyle = colors.routeStart;
@@ -2998,6 +3002,11 @@ function renderActionButtons() {
   elements.actionRestoreButton.disabled = restoreCandidateCount === 0;
   elements.actionEditButton.disabled = !editCandidate;
   elements.actionMapButton.disabled = !mapCandidate;
+  elements.actionMapButton.title = mapCandidate?.isPending
+    ? "仮ポイントを地図で開く"
+    : mapCandidate
+      ? "選択地点を地図で開く"
+      : "地点を選択または仮ポイントを作成すると地図で開けます";
   elements.actionInfoButton.disabled = !infoCandidate;
 
   elements.actionRegisterButton.classList.remove("is-active");
@@ -4630,7 +4639,7 @@ function createStorageListSection(section, entries) {
 function renderPointDestinationSelect() {
   const select = elements.pointDestinationListSelect;
   if (!select) return;
-  const lists = editablePointLists();
+  const lists = registrationDestinationPointLists();
   const editingList = state.editingPointId ? pointListForPoint(state.editingPointId) : null;
   let selectedKey = state.pointDestinationListId
     || (editingList ? pointListStorageKey(editingList) : defaultPointDestinationListId());
@@ -5351,7 +5360,22 @@ function editableSelectedPoint() {
 }
 
 function mapPointForSelection() {
-  return singleSelectedPoint();
+  const selected = singleSelectedPoint();
+  if (selected) {
+    return selected;
+  }
+
+  if (!validGeo(state.pendingGeo)) {
+    return null;
+  }
+
+  return {
+    id: "__pending_point__",
+    title: elements.pointTitle.value.trim() || "仮ポイント",
+    geo: normalizeGeo(state.pendingGeo),
+    isPending: true,
+    isVirtual: true
+  };
 }
 
 function deletedSnapshotItemCount() {
@@ -8527,10 +8551,6 @@ function bindEvents() {
     setDistanceUnit(elements.settingsUnitSelect.value);
     render();
   });
-  elements.settingsRouteReturnToStart.addEventListener("change", () => {
-    setRouteReturnToStart(elements.settingsRouteReturnToStart.checked);
-    render();
-  });
   elements.settingsMapProviderSelect.addEventListener("change", () => {
     setMapProvider(elements.settingsMapProviderSelect.value);
     render();
@@ -8578,6 +8598,7 @@ function bindEvents() {
   });
   elements.actionLinkButton.addEventListener("click", connectSelectedPoints);
   elements.actionRegisterButton.addEventListener("click", submitPendingPoint);
+  elements.closePointRegistrationButton.addEventListener("click", () => setMobilePage("map"));
   elements.actionRouteButton.addEventListener("click", setRouteFromSelectedPoints);
   elements.clearSelectionButton.addEventListener("click", () => clearSelection());
   elements.actionTargetButton.addEventListener("click", toggleTargetForSelection);
