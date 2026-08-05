@@ -43,7 +43,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.693";
+const WEB_VERSION = "0.703";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -3964,7 +3964,7 @@ function storageListSectionEntryList(sectionKey) {
   return [];
 }
 
-function reorderStorageLists(sourceEntry, targetEntry, before) {
+async function reorderStorageLists(sourceEntry, targetEntry, before) {
   const sectionKey = storageListSectionKey(sourceEntry);
   if (sectionKey !== storageListSectionKey(targetEntry)) return false;
   const lists = storageListSectionEntryList(sectionKey);
@@ -3974,6 +3974,9 @@ function reorderStorageLists(sourceEntry, targetEntry, before) {
   const sourceIndex = lists.findIndex((list) => listKey(list) === sourceKey);
   const targetIndex = lists.findIndex((list) => listKey(list) === targetKey);
   if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return false;
+
+  const previousCloudLists = sectionKey === "mineCloud" ? lists.slice() : null;
+  const previousCloudOrder = sectionKey === "mineCloud" ? state.cloud.listOrder.slice() : null;
   const [source] = lists.splice(sourceIndex, 1);
   let insertIndex = lists.findIndex((list) => listKey(list) === targetKey);
   if (!before) insertIndex += 1;
@@ -3989,7 +3992,26 @@ function reorderStorageLists(sourceEntry, targetEntry, before) {
   persistWorkspace();
   setCloudStatus(t("storage.dragReordered"), { menu: false });
   render();
-  return true;
+
+  if (sectionKey !== "mineCloud") return true;
+
+  setCloudBusy(true);
+  try {
+    await cloudClientFromInputs().updateListOrder(state.cloud.listOrder);
+    setCloudBusy(false);
+    setCloudStatus(t("storage.dragReordered"), { menu: false });
+    render();
+    return true;
+  } catch (error) {
+    state.cloud.pointLists = previousCloudLists;
+    state.cloud.listOrder = previousCloudOrder;
+    applyCloudListOrder();
+    persistWorkspace();
+    setCloudBusy(false);
+    setCloudStatus(cloudErrorMessage(error), { error: true });
+    render();
+    return false;
+  }
 }
 
 function storageListTransferReason(sourceEntry, targetSection) {
@@ -4148,12 +4170,12 @@ function finishStorageListDrag(dragState) {
   if (activeStorageListDrag === dragState) activeStorageListDrag = null;
 }
 
-function applyStorageListDrop(dragState) {
+async function applyStorageListDrop(dragState) {
   const drop = dragState.drop;
   const entry = findStorageListEntry(dragState.storageId);
   if (!drop || !entry) return;
   if (drop.type === "reorder") {
-    reorderStorageLists(entry, drop.targetEntry, drop.before);
+    await reorderStorageLists(entry, drop.targetEntry, drop.before);
   } else if (drop.type === "transfer") {
     openStorageTransferDialog(entry.storageId, drop.targetSection);
   } else if (drop.type === "invalid") {
@@ -4224,7 +4246,7 @@ function setupStorageListDrag(row, entry) {
       updateStorageListDragHover(dragState, upEvent.clientX, upEvent.clientY);
       cleanup();
       row.dataset.storageDragSuppressClick = "true";
-      applyStorageListDrop(dragState);
+      void applyStorageListDrop(dragState);
       finishStorageListDrag(dragState);
     };
     const onCancel = (cancelEvent) => {
@@ -4750,6 +4772,7 @@ async function refreshCloudLists(options = {}) {
     state.cloud.lists = response.lists.filter((list) => (
       list && typeof list.id === "string" && Number.isInteger(list.revision)
     ));
+    state.cloud.listOrder = state.cloud.lists.map((list) => list.id);
 
     const details = await Promise.all(state.cloud.lists.map((list) => client.getList(list.id)));
     state.cloud.pointLists = await Promise.all(details.map(async (result) => {

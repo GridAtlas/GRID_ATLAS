@@ -187,6 +187,36 @@ describe("GRID ATLAS Cloud API", () => {
     expect(missing.status).toBe(404);
   });
 
+  it("stores cloud list order per owner and returns it consistently", async () => {
+    const token = await issueToken("owner-order");
+    for (const [id, name] of [["list-a", "先に作ったリスト"], ["list-b", "後に作ったリスト"]]) {
+      const payload = samplePayload({ name });
+      payload.list.id = id;
+      expect((await api("/v1/me/lists", { method: "POST", token, body: payload })).status).toBe(201);
+    }
+
+    const initial = await api("/v1/me/lists", { token });
+    expect((await initial.json()).lists.map((list) => list.id)).toEqual(["list-a", "list-b"]);
+
+    const reordered = await api("/v1/me/lists/order", {
+      method: "PUT",
+      token,
+      body: { listIds: ["list-b", "list-a"] }
+    });
+    expect(reordered.status).toBe(200);
+    expect((await reordered.json()).listIds).toEqual(["list-b", "list-a"]);
+
+    const collection = await api("/v1/me/lists", { token });
+    expect((await collection.json()).lists.map((list) => list.id)).toEqual(["list-b", "list-a"]);
+
+    const duplicate = await api("/v1/me/lists/order", {
+      method: "PUT",
+      token,
+      body: { listIds: ["list-b", "list-b"] }
+    });
+    expect(duplicate.status).toBe(400);
+  });
+
   it("normalizes legacy cloud scope and allows update and deletion", async () => {
     const token = await issueToken("owner-legacy-scope");
     const legacyPayload = samplePayload({ name: "クラウドリスト" });

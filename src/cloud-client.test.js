@@ -63,6 +63,25 @@ describe("Cloud client", () => {
     expect(JSON.parse(init.body).payload.type).toBe("grid-atlas-share");
   });
 
+  it("updates the authenticated cloud list order", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ listIds: ["list-b", "list-a"] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    }));
+    const client = createCloudClient({
+      baseUrl: "https://api.example.com",
+      getAccessToken: () => "test-token",
+      fetchImpl
+    });
+
+    const response = await client.updateListOrder(["list-b", "list-a"]);
+    expect(response.listIds).toEqual(["list-b", "list-a"]);
+    const [url, init] = fetchImpl.mock.calls[0];
+    expect(url.pathname).toBe("/v1/me/lists/order");
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body)).toEqual({ listIds: ["list-b", "list-a"] });
+  });
+
   it("uploads and downloads authenticated binary assets", async () => {
     const fetchImpl = vi.fn(async (url, init) => {
       if (init.method === "PUT") {

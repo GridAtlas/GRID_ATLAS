@@ -4,6 +4,7 @@ const MAX_BODY_BYTES = 256 * 1024;
 const MAX_ASSET_BYTES = 10 * 1024 * 1024;
 const ALLOWED_ASSET_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const MAX_POINTS = 5000;
+const MAX_LIST_ORDER_ITEMS = 1000;
 const ID_PATTERN = /^[A-Za-z0-9._:-]+$/;
 
 export default {
@@ -29,6 +30,9 @@ export default {
 
       if (route.assetId) {
         return await handleAsset(request, env, cors, user.id, route.listId, route.assetId);
+      }
+      if (route.listOrder) {
+        return await handleListOrder(request, env, cors, user.id);
       }
       return route.listId
         ? await handleListItem(request, env, cors, user.id, route.listId)
@@ -65,6 +69,9 @@ function parseRoute(pathname) {
   if (parts.length === 3 && parts[0] === "v1" && parts[1] === "me" && parts[2] === "lists") {
     return { listId: null };
   }
+  if (parts.length === 4 && parts[0] === "v1" && parts[1] === "me" && parts[2] === "lists" && parts[3] === "order") {
+    return { listId: null, listOrder: true };
+  }
   if (parts.length === 4 && parts[0] === "v1" && parts[1] === "me" && parts[2] === "lists" && parts[3]) {
     let listId;
     try {
@@ -78,13 +85,62 @@ function parseRoute(pathname) {
   return null;
 }
 
+async function orderedCloudListIds(db, ownerId) {
+  const result = await db.prepare(
+    `SELECT id
+     FROM cloud_lists
+     WHERE owner_id = ?1 AND deleted_at IS NULL
+     ORDER BY sort_order ASC, updated_at DESC, id ASC`
+  ).bind(ownerId).all();
+  return result.results.map((row) => row.id);
+}
+
+async function handleListOrder(request, env, cors, ownerId) {
+  if (request.method !== "PUT") return methodNotAllowed(["PUT"], cors);
+
+  const body = await readJsonObject(request);
+  if (!Array.isArray(body.listIds) || body.listIds.length > MAX_LIST_ORDER_ITEMS) {
+    throw new HttpError("listIdsの形式が不正です", 400);
+  }
+
+  const requestedIds = [];
+  const seen = new Set();
+  for (const id of body.listIds) {
+    validateId(id, "リストID");
+    if (seen.has(id)) throw new HttpError("listIdsに重複があります", 400);
+    seen.add(id);
+    requestedIds.push(id);
+  }
+
+  const currentIds = await orderedCloudListIds(env.DB, ownerId);
+  const sameSet = currentIds.length === requestedIds.length
+    && currentIds.every((id) => seen.has(id));
+  if (!sameSet) {
+    return jsonResponse({
+      error: "クラウドリストが更新されています",
+      listIds: currentIds
+    }, 409, cors);
+  }
+
+  if (!currentIds.every((id, index) => id === requestedIds[index])) {
+    await env.DB.batch(requestedIds.map((id, index) => (
+      env.DB.prepare(
+        `UPDATE cloud_lists
+         SET sort_order = ?1
+         WHERE owner_id = ?2 AND id = ?3 AND deleted_at IS NULL`
+      ).bind(index, ownerId, id)
+    )));
+  }
+
+  return jsonResponse({ listIds: requestedIds }, 200, cors);
+}
 async function handleListCollection(request, env, cors, ownerId) {
   if (request.method === "GET") {
     const result = await env.DB.prepare(
-      `SELECT id, name, description, payload_json, revision, created_at, updated_at
+      `SELECT id, name, description, payload_json, revision, sort_order, created_at, updated_at
        FROM cloud_lists
        WHERE owner_id = ?1 AND deleted_at IS NULL
-       ORDER BY updated_at DESC`
+       ORDER BY sort_order ASC, updated_at DESC, id ASC`
     ).bind(ownerId).all();
     return jsonResponse({ lists: result.results.map(toListMeta) }, 200, cors);
   }
@@ -94,17 +150,24 @@ async function handleListCollection(request, env, cors, ownerId) {
     const now = new Date().toISOString();
     const normalized = normalizePayload(payload, now);
     await ensurePayloadAssets(env, ownerId, normalized);
+    const nextOrder = await env.DB.prepare(
+      `SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_sort_order
+       FROM cloud_lists
+       WHERE owner_id = ?1 AND deleted_at IS NULL`
+    ).bind(ownerId).first();
+    const sortOrder = Number(nextOrder?.next_sort_order ?? 0);
     try {
       await env.DB.prepare(
         `INSERT INTO cloud_lists
-          (id, owner_id, name, description, payload_json, revision, created_at, updated_at, deleted_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?7, NULL)`
+          (id, owner_id, name, description, payload_json, revision, sort_order, created_at, updated_at, deleted_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?7, ?8, NULL)`
       ).bind(
         normalized.list.id,
         ownerId,
         normalized.list.name,
         normalized.list.description || "",
         JSON.stringify(normalized),
+        sortOrder,
         normalized.list.createdAt,
         now
       ).run();
@@ -506,6 +569,7 @@ function toListMeta(row) {
     description: row.description,
     scope: "mine",
     revision: row.revision,
+    sortOrder: row.sort_order,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };

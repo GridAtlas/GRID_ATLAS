@@ -61,6 +61,10 @@ export function createCloudClient({ baseUrl, getAccessToken, fetchImpl = globalT
   }
   return {
     listLists: () => request("v1/me/lists"),
+    updateListOrder: (listIds) => request("v1/me/lists/order", {
+      method: "PUT",
+      body: { listIds }
+    }),
     getList: (listId) => request("v1/me/lists/" + encodeURIComponent(listId)),
     createList: (payload) => request("v1/me/lists", { method: "POST", body: { payload } }),
     updateList: (listId, expectedRevision, payload) => request("v1/me/lists/" + encodeURIComponent(listId), {
