@@ -1172,7 +1172,7 @@ textarea {
   border-radius: 8px;
   background: var(--field-bg);
   cursor: pointer;
-  touch-action: pan-y;
+  touch-action: none;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
