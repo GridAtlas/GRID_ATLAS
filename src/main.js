@@ -42,7 +42,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.621";
+const WEB_VERSION = "0.622";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -2403,9 +2403,9 @@ function drawCurrentLocationHeading(screen, colors, isStale) {
   const angle = heading * Math.PI / 180;
   const direction = { x: Math.sin(angle), y: -Math.cos(angle) };
   const perpendicular = { x: Math.cos(angle), y: Math.sin(angle) };
-  const baseDistance = POINT_RADIUS - 1;
-  const tipDistance = POINT_RADIUS + 14;
-  const halfWidth = 5;
+  const baseDistance = POINT_RADIUS + 4;
+  const tipDistance = POINT_RADIUS + 12;
+  const halfWidth = 4;
 
   context.save();
   context.beginPath();
@@ -2423,9 +2423,6 @@ function drawCurrentLocationHeading(screen, colors, isStale) {
   context.globalAlpha = isStale ? 0.5 : 0.95;
   context.fill();
   context.globalAlpha = 1;
-  context.lineWidth = 1.5;
-  context.strokeStyle = colors.pointBaseStroke;
-  context.stroke();
   context.restore();
 }
 function drawCurrentLocation() {
@@ -4018,6 +4015,7 @@ function updateStorageListDragGhost(dragState, clientX, clientY) {
 
 function beginStorageListDrag(dragState) {
   if (activeStorageListDrag !== dragState || dragState.dragging) return;
+  window.clearTimeout(dragState.timerId);
   dragState.dragging = true;
   dragState.row.classList.add("is-dragging");
   dragState.row.setAttribute("aria-grabbed", "true");
@@ -4091,8 +4089,8 @@ function setupStorageListDrag(row, entry) {
       dragState.lastY = moveEvent.clientY;
       if (!dragState.dragging) {
         const distance = Math.hypot(moveEvent.clientX - dragState.startX, moveEvent.clientY - dragState.startY);
-        if (distance > 10) cleanup();
-        return;
+        if (distance <= 10) return;
+        beginStorageListDrag(dragState);
       }
       moveEvent.preventDefault();
       updateStorageListDragGhost(dragState, moveEvent.clientX, moveEvent.clientY);
