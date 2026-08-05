@@ -690,6 +690,9 @@ textarea:focus-visible {
   touch-action: none;
   cursor: crosshair;
 }
+#gridCanvas.is-range-selecting {
+  cursor: cell;
+}
 
 .canvas-tools {
   position: absolute;

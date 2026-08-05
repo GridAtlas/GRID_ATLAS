@@ -43,11 +43,16 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.668";
+const WEB_VERSION = "0.669";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
 const POINTER_MOVE_THRESHOLD = 3;
+const RANGE_SELECTION_LONG_PRESS_MS = 450;
+const RANGE_SELECTION_MIN_SIZE = 8;
+const ZOOM_STAGE_NAMES = ["全体", "近景", "接近", "詳細"];
+const ZOOM_STAGE_FACTOR = 1.6;
+const ZOOM_STAGE_COUNT = ZOOM_STAGE_NAMES.length;
 const CURRENT_LOCATION_ID = "__current_location__";
 const LOADED_OBSERVATION_PREFIX = "__loaded_observation__";
 const DEFAULT_POINT_LIST_ID = "local";
@@ -302,6 +307,7 @@ const state = {
     y: DEFAULT_CENTER.y,
     scale: 0.7
   },
+  zoomStage: 0,
   pointer: createPointerGestureState()
 };
 
@@ -616,6 +622,8 @@ const TRANSLATIONS = {
 
     "list.none": "リストなし",
     "status.grid": "格子",
+    "status.zoom": "ズーム",
+    "status.rangeSelect": "範囲選択中",
     "label.points": "点",
     "label.links": "線",
     "label.observations": "観察",
@@ -852,6 +860,8 @@ const TRANSLATIONS = {
 
     "list.none": "No lists",
     "status.grid": "Grid",
+    "status.zoom": "Zoom",
+    "status.rangeSelect": "Selecting range",
     "label.points": "pts",
     "label.links": "lines",
     "label.observations": "observations",
@@ -2658,6 +2668,31 @@ function draw() {
   drawCloudPoints({ priority: true });
   drawPoints({ priority: true });
   drawRouteBadges();
+  drawRangeSelection();
+}
+
+function drawRangeSelection() {
+  const range = state.pointer.range;
+  if (!range) {
+    return;
+  }
+
+  const left = Math.min(range.start.x, range.current.x);
+  const top = Math.min(range.start.y, range.current.y);
+  const width = Math.abs(range.current.x - range.start.x);
+  const height = Math.abs(range.current.y - range.start.y);
+  const colors = canvasPalette();
+
+  context.save();
+  context.fillStyle = colors.selected;
+  context.globalAlpha = 0.12;
+  context.fillRect(left, top, width, height);
+  context.globalAlpha = 0.9;
+  context.strokeStyle = colors.selected;
+  context.lineWidth = 1.5;
+  context.setLineDash([6, 4]);
+  context.strokeRect(left + 0.5, top + 0.5, width, height);
+  context.restore();
 }
 
 function render() {
@@ -2894,7 +2929,16 @@ function selectedLinksDistance(links) {
 }
 
 function renderStatus() {
-  elements.statusLine.value = `${t("status.grid")} ${formatDistance(chooseGridStep())}`;
+  if (state.pointer.range) {
+    elements.statusLine.value = t("status.rangeSelect");
+    return;
+  }
+
+  const zoomLabel = Number.isInteger(state.zoomStage)
+    ? ZOOM_STAGE_NAMES[state.zoomStage]
+    : "自由";
+  elements.statusLine.value = t("status.grid") + " " + formatDistance(chooseGridStep())
+    + " | " + t("status.zoom") + " " + zoomLabel;
 }
 
 function renderActionButtons() {
@@ -6092,6 +6136,27 @@ function sumDistances(distances) {
 }
 function zoomAt(screenPoint, factor) {
   state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
+  state.zoomStage = null;
+  const before = screenToWorld(screenPoint);
+  state.viewport.scale = clampScale(state.viewport.scale * factor);
+  const after = screenToWorld(screenPoint);
+  state.viewport.x += before.x - after.x;
+  state.viewport.y += before.y - after.y;
+  render();
+}
+
+function zoomAtStage(screenPoint, direction) {
+  const currentStage = Number.isInteger(state.zoomStage)
+    ? state.zoomStage
+    : direction > 0 ? 0 : 1;
+  const nextStage = Math.max(0, Math.min(ZOOM_STAGE_COUNT - 1, currentStage + direction));
+  if (nextStage === currentStage) {
+    return;
+  }
+
+  const factor = direction > 0 ? ZOOM_STAGE_FACTOR : 1 / ZOOM_STAGE_FACTOR;
+  state.zoomStage = nextStage;
+  state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
   const before = screenToWorld(screenPoint);
   state.viewport.scale = clampScale(state.viewport.scale * factor);
   const after = screenToWorld(screenPoint);
@@ -6103,6 +6168,7 @@ function zoomAt(screenPoint, factor) {
 function fitToPoints() {
   syncCanvasSize();
   pauseLocationFollowForManualView();
+  state.zoomStage = 0;
 
   let fitPoints = fitTargetPoints();
 
@@ -6338,7 +6404,8 @@ function createPointerGestureState() {
   return {
     active: new Map(),
     drag: null,
-    pinch: null
+    pinch: null,
+    range: null
   };
 }
 
@@ -6358,14 +6425,99 @@ function pointerMidpoint(a, b) {
 }
 
 function startDragGesture(pointerId, point, options = {}) {
-  state.pointer.drag = {
+  const drag = {
     id: pointerId,
     start: point,
     last: point,
     viewportX: state.viewport.x,
     viewportY: state.viewport.y,
-    moved: Boolean(options.moved)
+    moved: Boolean(options.moved),
+    longPressed: false,
+    cancelled: false,
+    longPressTimerId: null
   };
+  state.pointer.drag = drag;
+
+  if (!options.moved) {
+    drag.longPressTimerId = window.setTimeout(() => {
+      if (
+        state.pointer.drag !== drag
+        || state.pointer.active.size !== 1
+        || drag.moved
+        || drag.cancelled
+      ) {
+        return;
+      }
+
+      drag.longPressed = true;
+      state.pointer.range = {
+        start: { ...drag.start },
+        current: { ...drag.start }
+      };
+      canvas.classList.add("is-range-selecting");
+      draw();
+      renderStatus();
+    }, RANGE_SELECTION_LONG_PRESS_MS);
+  }
+}
+
+function clearDragLongPressTimer(drag) {
+  if (!drag?.longPressTimerId) {
+    return;
+  }
+
+  window.clearTimeout(drag.longPressTimerId);
+  drag.longPressTimerId = null;
+}
+
+function clearRangeSelectionPreview() {
+  state.pointer.range = null;
+  canvas.classList.remove("is-range-selecting");
+}
+
+function selectPointsInRange(range) {
+  const left = Math.min(range.start.x, range.current.x);
+  const right = Math.max(range.start.x, range.current.x);
+  const top = Math.min(range.start.y, range.current.y);
+  const bottom = Math.max(range.start.y, range.current.y);
+  const worldA = screenToWorld({ x: left, y: top });
+  const worldB = screenToWorld({ x: right, y: bottom });
+  const minX = Math.min(worldA.x, worldB.x);
+  const maxX = Math.max(worldA.x, worldB.x);
+  const minY = Math.min(worldA.y, worldB.y);
+  const maxY = Math.max(worldA.y, worldB.y);
+  const selectedPoints = visibleSelectablePoints().filter((point) => (
+    point.id !== CURRENT_LOCATION_ID
+    && point.x >= minX
+    && point.x <= maxX
+    && point.y >= minY
+    && point.y <= maxY
+  ));
+
+  state.selection = selectedPoints.map((point) => ({ type: "point", id: point.id }));
+  state.selectedPointId = selectedPoints[0]?.id ?? null;
+  state.selectedLinkId = null;
+  normalizeSelection();
+}
+
+function finishRangeSelection() {
+  const range = state.pointer.range;
+  if (!range) {
+    return;
+  }
+
+  const width = Math.abs(range.current.x - range.start.x);
+  const height = Math.abs(range.current.y - range.start.y);
+  clearRangeSelectionPreview();
+
+  if (width < RANGE_SELECTION_MIN_SIZE && height < RANGE_SELECTION_MIN_SIZE) {
+    renderStatus();
+    return;
+  }
+
+  pauseLocationFollowForManualView();
+  selectPointsInRange(range);
+  render();
 }
 
 function startPinchGesture() {
@@ -6377,6 +6529,8 @@ function startPinchGesture() {
 
   const [, first] = entries[0];
   const [, second] = entries[1];
+  clearDragLongPressTimer(state.pointer.drag);
+  clearRangeSelectionPreview();
   const midpoint = pointerMidpoint(first, second);
   state.pointer.drag = null;
   state.pointer.pinch = {
@@ -6415,6 +6569,7 @@ function updatePinchGesture() {
   const size = canvasSize();
   const nextScale = clampScale(pinch.startScale * (distance / pinch.startDistance));
   state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
+  state.zoomStage = null;
   state.viewport.scale = nextScale;
   state.viewport.x = pinch.startWorld.x - (pinch.startMidpoint.x - size.width / 2) / nextScale;
   state.viewport.y = pinch.startWorld.y + (pinch.startMidpoint.y - size.height / 2) / nextScale;
@@ -6440,6 +6595,8 @@ function removePointer(event, options = {}) {
 
   state.pointer.active.delete(event.pointerId);
 
+  clearDragLongPressTimer(drag);
+
   try {
     canvas.releasePointerCapture(event.pointerId);
   } catch {
@@ -6458,6 +6615,16 @@ function removePointer(event, options = {}) {
   }
 
   state.pointer.drag = null;
+
+  if (drag?.longPressed) {
+    if (allowTap) {
+      finishRangeSelection();
+    } else {
+      clearRangeSelectionPreview();
+      render();
+    }
+    return;
+  }
 
   if (wasTap) {
     handleCanvasClick(point);
@@ -8170,8 +8337,8 @@ function bindEvents() {
     if (event.target === elements.pointListPreviewDialog) elements.pointListPreviewDialog.close("cancel");
   });
   elements.useLocationButton.addEventListener("click", useCurrentLocation);
-  elements.zoomInButton.addEventListener("click", () => zoomAt({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 1.25));
-  elements.zoomOutButton.addEventListener("click", () => zoomAt({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 0.8));
+  elements.zoomInButton.addEventListener("click", () => zoomAtStage({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 1));
+  elements.zoomOutButton.addEventListener("click", () => zoomAtStage({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, -1));
   elements.fitButton.addEventListener("click", fitToPoints);
   elements.originButton.addEventListener("click", centerAndFollowCurrentLocation);
   elements.routeStartSelect.addEventListener("change", () => setRouteStart(elements.routeStartSelect.value));
@@ -8254,6 +8421,14 @@ function bindEvents() {
     const dy = point.y - drag.start.y;
 
     if (Math.hypot(dx, dy) > POINTER_MOVE_THRESHOLD) {
+      clearDragLongPressTimer(drag);
+      if (drag.longPressed) {
+        state.pointer.range.current = point;
+        draw();
+        renderStatus();
+        drag.last = point;
+        return;
+      }
       if (!drag.moved) {
         pauseLocationFollowForManualView();
       }
