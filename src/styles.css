@@ -2126,6 +2126,55 @@ textarea {
   font-weight: 700;
 }
 
+.storage-list-row.is-long-pressed,
+.point-index-row.is-long-pressed {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 2px rgb(120 90 150 / 0.14);
+}
+
+.point-index-row {
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.point-index-row.is-dragging {
+  opacity: 0.48;
+  border-color: var(--accent-strong);
+}
+
+.point-index-row.is-drop-before {
+  border-top: 3px solid var(--accent-strong);
+}
+
+.point-index-row.is-drop-after {
+  border-bottom: 3px solid var(--accent-strong);
+}
+
+.point-index-drag-ghost {
+  position: fixed;
+  z-index: 1000;
+  max-width: min(260px, 70vw);
+  padding: 8px 12px;
+  border: 1px solid var(--accent-strong);
+  border-radius: 8px;
+  background: var(--field-bg);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 900;
+  pointer-events: none;
+}
+
+body.is-point-index-dragging,
+body.is-point-index-dragging .point-index-row {
+  cursor: grabbing;
+}
+
+body.is-point-index-dragging .point-index-row {
+  touch-action: none;
+}
 .storage-list-row.is-dragging {
   opacity: 0.48;
   border-color: var(--accent-strong);

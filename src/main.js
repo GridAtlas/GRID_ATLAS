@@ -42,7 +42,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.623";
+const WEB_VERSION = "0.624";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -132,6 +132,7 @@ const elements = {
   mobileGridTabs: Array.from(document.querySelectorAll("[data-mobile-grid-page]")),
   mobileGridPanels: Array.from(document.querySelectorAll("[data-mobile-grid-panel]")),
   mobilePointCount: document.querySelector("#mobilePointCount"),
+  mobilePointHeading: document.querySelector("[data-mobile-grid-panel=\"points\"] h2"),
   mobilePointItems: document.querySelector("#mobilePointItems"),
   pointForm: document.querySelector("#pointForm"),
   pointTitle: document.querySelector("#pointTitle"),
@@ -256,6 +257,7 @@ const state = {
   mode: "inspect",
   mobilePage: "map",
   mobileGridPage: "grid",
+  mobilePointListFilter: null,
   selection: [],
   selectedPointId: null,
   selectedLinkId: null,
@@ -303,6 +305,7 @@ let pendingObservationImportMode = "replace";
 let pendingShareLink = null;
 let appToastTimerId = 0;
 let activeStorageListDrag = null;
+let activePointIndexDrag = null;
 
 const CANVAS_PALETTES = {
   pastel: {
@@ -3698,18 +3701,49 @@ function pointRouteOrder(pointId) {
   return index >= 0 ? index : null;
 }
 
+function pointListStorageIdForIndex(list) {
+  return list?.cloudId || list?.id || "";
+}
+
+function pointListMatchesStorageId(list, storageId) {
+  return !storageId || pointListStorageIdForIndex(list) === storageId;
+}
+
+function showPointListPoints(storageId) {
+  state.mobilePointListFilter = storageId || null;
+  setMobilePage("map");
+  setMobileGridPage("points");
+  render();
+}
+
 function renderPointIndex() {
   if (!elements.mobilePointItems || !elements.mobilePointCount) {
     return;
   }
 
   ensurePointLists();
-  const current = state.gpsEnabled ? currentLocationPoint() : null;
-  const rows = visiblePointLists().flatMap((list) => (
+  const filterId = state.mobilePointListFilter;
+  const filterEntry = filterId ? findStorageListEntry(filterId) : null;
+  const filterName = filterEntry?.local?.name || filterEntry?.cloud?.name || "";
+  if (elements.mobilePointHeading) {
+    elements.mobilePointHeading.textContent = filterName
+      ? `${t("panel.points")} · ${filterName}`
+      : t("panel.points");
+  }
+  const current = !filterId && state.gpsEnabled ? currentLocationPoint() : null;
+  const localLists = filterId
+    ? state.pointLists.filter((list) => pointListMatchesStorageId(list, filterId))
+    : visiblePointLists();
+  const rows = localLists.flatMap((list) => (
     list.points.map((point) => ({ point, list, isCloud: false }))
   ));
   if (state.cloud.connected) {
-    rows.push(...visibleCloudPointRows());
+    const cloudRows = filterId
+      ? state.cloud.pointLists
+        .filter((list) => pointListMatchesStorageId(list, filterId))
+        .flatMap((list) => list.points.map((point) => ({ point, list, isCloud: true })))
+      : visibleCloudPointRows();
+    rows.push(...cloudRows);
   }
   if (current) {
     rows.unshift({ point: current, list: null, isCloud: false });
@@ -3731,6 +3765,8 @@ function renderPointIndex() {
     row.classList.toggle("is-active", isPointSelected(point.id));
     row.setAttribute("aria-pressed", String(isPointSelected(point.id)));
     row.classList.add("point-index-row");
+    row.dataset.pointIndexId = point.id;
+    row.dataset.pointIndexListId = pointListStorageIdForIndex(list);
 
     const routeOrder = pointRouteOrder(point.id);
     if (routeOrder !== null) {
@@ -3750,11 +3786,7 @@ function renderPointIndex() {
     }
     title.append(document.createTextNode(point.title || "Point"));
     const meta = document.createElement("span");
-    if (isCloud) {
-      meta.textContent = list?.name || "地点リスト";
-    } else {
-      meta.textContent = list?.name || t("label.gps");
-    }
+    meta.textContent = list?.name || (isCloud ? "地点リスト" : t("label.gps"));
     name.append(title, meta);
 
     const distance = document.createElement("span");
@@ -3766,7 +3798,14 @@ function renderPointIndex() {
         : `${formatCoordinate(pointGeo(point).lat)}, ${formatCoordinate(pointGeo(point).lng)}`;
 
     row.append(name, distance);
-    row.addEventListener("click", () => toggleSelection("point", point.id));
+    row.addEventListener("click", () => {
+      if (row.dataset.pointIndexSuppressClick === "true") {
+        delete row.dataset.pointIndexSuppressClick;
+        return;
+      }
+      toggleSelection("point", point.id);
+    });
+    setupPointIndexGesture(row, { point, list, isCloud });
     elements.mobilePointItems.append(row);
   }
 }
@@ -4053,8 +4092,10 @@ function beginStorageListDrag(dragState) {
 }
 
 function finishStorageListDrag(dragState) {
+  window.clearTimeout(dragState.timerId);
   clearStorageListDragHover();
   dragState.row.classList.remove("is-dragging");
+  dragState.row.classList.remove("is-long-pressed");
   dragState.row.removeAttribute("aria-grabbed");
   if (dragState.ghost) dragState.ghost.remove();
   document.body.classList.remove("is-storage-list-dragging");
@@ -4089,6 +4130,8 @@ function setupStorageListDrag(row, entry) {
       startY: event.clientY,
       lastX: event.clientX,
       lastY: event.clientY,
+      longPressed: false,
+      cancelled: false,
       dragging: false,
       drop: null,
       ghost: null,
@@ -4107,8 +4150,14 @@ function setupStorageListDrag(row, entry) {
       if (moveEvent.pointerId !== dragState.pointerId || activeStorageListDrag !== dragState) return;
       dragState.lastX = moveEvent.clientX;
       dragState.lastY = moveEvent.clientY;
+      const distance = Math.hypot(moveEvent.clientX - dragState.startX, moveEvent.clientY - dragState.startY);
+      if (!dragState.longPressed) {
+        if (distance <= 10) return;
+        dragState.cancelled = true;
+        cleanup();
+        return;
+      }
       if (!dragState.dragging) {
-        const distance = Math.hypot(moveEvent.clientX - dragState.startX, moveEvent.clientY - dragState.startY);
         if (distance <= 10) return;
         beginStorageListDrag(dragState);
       }
@@ -4119,7 +4168,12 @@ function setupStorageListDrag(row, entry) {
     const onUp = (upEvent) => {
       if (upEvent.pointerId !== dragState.pointerId || activeStorageListDrag !== dragState) return;
       if (!dragState.dragging) {
+        const longPressed = dragState.longPressed && !dragState.cancelled;
         cleanup();
+        if (longPressed) {
+          row.dataset.storageDragSuppressClick = "true";
+          showPointListPoints(entry.storageId);
+        }
         return;
       }
       upEvent.preventDefault();
@@ -4138,7 +4192,187 @@ function setupStorageListDrag(row, entry) {
     window.addEventListener("pointermove", onMove, { passive: false });
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onCancel);
-    dragState.timerId = window.setTimeout(() => beginStorageListDrag(dragState), 360);
+    dragState.timerId = window.setTimeout(() => {
+      if (activeStorageListDrag !== dragState || dragState.cancelled) return;
+      dragState.longPressed = true;
+      row.classList.add("is-long-pressed");
+    }, 360);
+  });
+}
+
+function clearPointIndexDragHover() {
+  for (const element of document.querySelectorAll(".point-index-row.is-drop-before, .point-index-row.is-drop-after")) {
+    element.classList.remove("is-drop-before", "is-drop-after");
+  }
+}
+
+function updatePointIndexDragHover(dragState, clientX, clientY) {
+  clearPointIndexDragHover();
+  dragState.drop = null;
+  if (!dragState.dragging) return;
+  const element = document.elementFromPoint(clientX, clientY);
+  const targetRow = element instanceof Element ? element.closest("[data-point-index-id]") : null;
+  if (!targetRow || targetRow === dragState.row || targetRow.dataset.pointIndexListId !== dragState.listStorageId) return;
+  const rect = targetRow.getBoundingClientRect();
+  const before = clientY < rect.top + rect.height / 2;
+  dragState.drop = { targetPointId: targetRow.dataset.pointIndexId, before };
+  targetRow.classList.add(before ? "is-drop-before" : "is-drop-after");
+}
+
+function updatePointIndexDragGhost(dragState, clientX, clientY) {
+  if (!dragState.ghost) return;
+  dragState.ghost.style.transform = `translate3d(${clientX + 14}px, ${clientY + 14}px, 0)`;
+}
+
+function beginPointIndexDrag(dragState) {
+  if (activePointIndexDrag !== dragState || dragState.dragging || !dragState.canReorder) return;
+  window.clearTimeout(dragState.timerId);
+  dragState.dragging = true;
+  dragState.row.classList.add("is-dragging");
+  dragState.row.setAttribute("aria-grabbed", "true");
+  document.body.classList.add("is-point-index-dragging");
+  const ghost = document.createElement("div");
+  ghost.className = "point-index-drag-ghost";
+  ghost.textContent = dragState.point.title || "Point";
+  document.body.append(ghost);
+  dragState.ghost = ghost;
+  try {
+    dragState.row.setPointerCapture(dragState.pointerId);
+  } catch {}
+  updatePointIndexDragGhost(dragState, dragState.lastX, dragState.lastY);
+}
+
+function finishPointIndexDrag(dragState) {
+  window.clearTimeout(dragState.timerId);
+  clearPointIndexDragHover();
+  dragState.row.classList.remove("is-dragging", "is-long-pressed");
+  dragState.row.removeAttribute("aria-grabbed");
+  if (dragState.ghost) dragState.ghost.remove();
+  document.body.classList.remove("is-point-index-dragging");
+  if (activePointIndexDrag === dragState) activePointIndexDrag = null;
+}
+
+async function reorderPointIndexPoints(list, sourcePointId, targetPointId, before) {
+  if (!list?.editable || sourcePointId === targetPointId) return false;
+  const sourceIndex = list.points.findIndex((point) => point.id === sourcePointId);
+  const targetIndex = list.points.findIndex((point) => point.id === targetPointId);
+  if (sourceIndex < 0 || targetIndex < 0) return false;
+  const points = list.points.slice();
+  const [source] = points.splice(sourceIndex, 1);
+  let insertIndex = points.findIndex((point) => point.id === targetPointId);
+  if (!before) insertIndex += 1;
+  points.splice(insertIndex, 0, source);
+  const nextList = { ...list, points, updatedAt: new Date().toISOString() };
+  if (list.source === "cloud") {
+    return updateCloudPointList(list, nextList, {
+      message: cloudText("地点の順番を変更しました", "Point order updated")
+    });
+  }
+  list.points = points;
+  list.updatedAt = nextList.updatedAt;
+  refreshVisiblePoints();
+  persistWorkspace();
+  setCloudStatus(cloudText("地点の順番を変更しました", "Point order updated"), { menu: false });
+  render();
+  return true;
+}
+
+async function applyPointIndexDrop(dragState) {
+  const drop = dragState.drop;
+  if (!drop) return;
+  const list = dragState.list;
+  if (await reorderPointIndexPoints(list, dragState.point.id, drop.targetPointId, drop.before)) {
+    showAppToast(cloudText("地点の順番を変更しました", "Point order updated"));
+  }
+}
+
+function setupPointIndexGesture(row, { point, list }) {
+  row.addEventListener("pointerdown", (event) => {
+    if ((event.pointerType === "mouse" && event.button !== 0) || state.cloud.busy) return;
+    if (activePointIndexDrag) finishPointIndexDrag(activePointIndexDrag);
+    const listStorageId = pointListStorageIdForIndex(list);
+    const dragState = {
+      row,
+      point,
+      list,
+      listStorageId,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
+      longPressed: false,
+      cancelled: false,
+      canReorder: Boolean(list?.editable),
+      dragging: false,
+      drop: null,
+      ghost: null,
+      timerId: 0
+    };
+    activePointIndexDrag = dragState;
+    const cleanup = () => {
+      window.clearTimeout(dragState.timerId);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      if (activePointIndexDrag === dragState && !dragState.dragging) activePointIndexDrag = null;
+    };
+    const onMove = (moveEvent) => {
+      if (moveEvent.pointerId !== dragState.pointerId || activePointIndexDrag !== dragState) return;
+      dragState.lastX = moveEvent.clientX;
+      dragState.lastY = moveEvent.clientY;
+      const distance = Math.hypot(moveEvent.clientX - dragState.startX, moveEvent.clientY - dragState.startY);
+      if (!dragState.longPressed) {
+        if (distance <= 10) return;
+        dragState.cancelled = true;
+        cleanup();
+        return;
+      }
+      if (!dragState.dragging) {
+        if (distance <= 10) return;
+        if (!dragState.canReorder) {
+          dragState.cancelled = true;
+          cleanup();
+          return;
+        }
+        beginPointIndexDrag(dragState);
+      }
+      moveEvent.preventDefault();
+      updatePointIndexDragGhost(dragState, moveEvent.clientX, moveEvent.clientY);
+      updatePointIndexDragHover(dragState, moveEvent.clientX, moveEvent.clientY);
+    };
+    const onUp = async (upEvent) => {
+      if (upEvent.pointerId !== dragState.pointerId || activePointIndexDrag !== dragState) return;
+      if (!dragState.dragging) {
+        const longPressed = dragState.longPressed && !dragState.cancelled;
+        cleanup();
+        if (longPressed) {
+          row.dataset.pointIndexSuppressClick = "true";
+          setSelection([{ type: "point", id: point.id }], { render: false });
+          showSelectedPointInfoDialog();
+        }
+        return;
+      }
+      upEvent.preventDefault();
+      updatePointIndexDragHover(dragState, upEvent.clientX, upEvent.clientY);
+      cleanup();
+      row.dataset.pointIndexSuppressClick = "true";
+      await applyPointIndexDrop(dragState);
+      finishPointIndexDrag(dragState);
+    };
+    const onCancel = (cancelEvent) => {
+      if (cancelEvent.pointerId !== dragState.pointerId || activePointIndexDrag !== dragState) return;
+      cleanup();
+      finishPointIndexDrag(dragState);
+    };
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    dragState.timerId = window.setTimeout(() => {
+      if (activePointIndexDrag !== dragState || dragState.cancelled) return;
+      dragState.longPressed = true;
+      row.classList.add("is-long-pressed");
+    }, 360);
   });
 }
 function createStorageListRow(entry) {
@@ -8418,6 +8652,9 @@ function bindEvents() {
   }
   for (const tab of elements.mobileGridTabs) {
     tab.addEventListener("click", () => {
+      if (tab.dataset.mobileGridPage === "points") {
+        state.mobilePointListFilter = null;
+      }
       setMobileGridPage(tab.dataset.mobileGridPage);
       if (tab.closest(".sidebar")) {
         setMobilePage("map");
