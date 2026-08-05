@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=61">
-    <script src="src/main.js?v=152" type="module" defer></script>
+    <script src="src/main.js?v=153" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -118,8 +118,10 @@
                   </label>
                   <div class="button-row">
                     <button id="cloudConnectButton" class="primary-button" type="button" data-i18n="cloud.connect">接続</button>
+                    <button id="cloudRefreshButton" type="button" data-i18n="cloud.refresh">更新</button>
                     <button id="cloudDisconnectButton" type="button" data-i18n="cloud.disconnect">切断</button>
                   </div>
+                  <output id="cloudLastFetched" class="form-status cloud-last-fetched" aria-live="polite"></output>
                   <output id="cloudMenuStatus" class="form-status cloud-status" data-cloud-status aria-live="polite"></output>
                 </div>
               </details>

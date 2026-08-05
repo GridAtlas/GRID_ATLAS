@@ -37,12 +37,13 @@ const GPS_ENABLED_KEY = "grid-atlas-gps-enabled";
 
 const CLOUD_ACCESS_TOKEN_KEY = "grid-atlas-cloud-access-token";
 const CLOUD_PRODUCTION_API_URL = "https://grid-atlas-cloud-staging.kazki1981.workers.dev";
+const CLOUD_AUTO_REFRESH_INTERVAL_MS = 30_000;
 const PASTEL_THEME = "pastel";
 const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.656";
+const WEB_VERSION = "0.666";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -211,7 +212,9 @@ const elements = {
 
   cloudAccessToken: document.querySelector("#cloudAccessToken"),
   cloudConnectButton: document.querySelector("#cloudConnectButton"),
+  cloudRefreshButton: document.querySelector("#cloudRefreshButton"),
   cloudDisconnectButton: document.querySelector("#cloudDisconnectButton"),
+  cloudLastFetched: document.querySelector("#cloudLastFetched"),
 
   cloudStatuses: Array.from(document.querySelectorAll("[data-cloud-status]")),
 };
@@ -248,6 +251,8 @@ const state = {
     lists: [],
     pointLists: [],
     pointRows: [],
+    lastFetchedAt: 0,
+    lastAutoRefreshAt: 0,
     hiddenListIds: new Set(),
     listOrder: [],
   },
@@ -531,7 +536,10 @@ const TRANSLATIONS = {
     "cloud.apiUrl": "Cloud API URL",
     "cloud.accessToken": "アクセスコード",
     "cloud.connect": "接続",
+    "cloud.refresh": "更新",
     "cloud.disconnect": "切断",
+    "cloud.neverFetched": "まだクラウドを確認していません",
+    "cloud.lastFetched": "最終確認 {time}",
     "cloud.advanced": "接続設定",
     "cloud.localList": "クラウドへ移動する端末内リスト",
     "cloud.save": "マイリスト（クラウド）として保存",
@@ -763,7 +771,10 @@ const TRANSLATIONS = {
     "cloud.apiUrl": "Cloud API URL",
     "cloud.accessToken": "Access code",
     "cloud.connect": "Connect",
+    "cloud.refresh": "Refresh",
     "cloud.disconnect": "Disconnect",
+    "cloud.neverFetched": "Cloud has not been checked yet",
+    "cloud.lastFetched": "Last checked {time}",
     "cloud.advanced": "Connection settings",
     "cloud.localList": "Device list to move to cloud",
     "cloud.save": "Save as My List (Cloud)",
@@ -889,6 +900,7 @@ function setLanguage(language, options = {}) {
   }
   applyStaticTranslations();
   syncSettingsControls();
+  renderCloudLastFetched();
 }
 
 function setDistanceUnit(unit, options = {}) {
@@ -4541,6 +4553,7 @@ function renderStorageLists() {
 
   renderPointTransferDialog();
 
+  renderCloudLastFetched();
   syncCloudControls();
 }
 function defaultCloudApiUrl() {
@@ -4600,6 +4613,20 @@ function setCloudProgress(completed, total, message) {
   elements.cloudProgress.hidden = false;
 }
 
+function renderCloudLastFetched() {
+  if (!elements.cloudLastFetched) return;
+  if (!state.cloud.lastFetchedAt) {
+    elements.cloudLastFetched.textContent = t("cloud.neverFetched");
+    return;
+  }
+  const locale = activeLanguage() === EN_LANGUAGE ? "en-US" : "ja-JP";
+  const time = new Intl.DateTimeFormat(locale, {
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(state.cloud.lastFetchedAt));
+  elements.cloudLastFetched.textContent = t("cloud.lastFetched").replace("{time}", time);
+}
+
 function clearCloudProgress() {
   if (!elements.cloudProgress) return;
   elements.cloudProgress.hidden = true;
@@ -4616,6 +4643,7 @@ function setCloudBusy(busy) {
 function syncCloudControls() {
   elements.cloudAccessToken.disabled = state.cloud.busy;
   elements.cloudConnectButton.disabled = state.cloud.busy;
+  elements.cloudRefreshButton.disabled = state.cloud.busy || !state.cloud.connected;
   elements.cloudDisconnectButton.disabled = state.cloud.busy || (!state.cloud.connected && !elements.cloudAccessToken.value);
   for (const button of document.querySelectorAll(".storage-rename-button")) {
     button.disabled = state.cloud.busy;
@@ -4649,6 +4677,8 @@ function disconnectCloud() {
   state.cloud.lists = [];
   state.cloud.pointLists = [];
   state.cloud.pointRows = [];
+  state.cloud.lastFetchedAt = 0;
+  state.cloud.lastAutoRefreshAt = 0;
   setCloudStatus(cloudText("切断しました", "Disconnected"));
   renderStorageLists();
   render();
@@ -4679,6 +4709,7 @@ async function refreshCloudLists(options = {}) {
     ));
     syncProjectedCoordinates();
     state.cloud.connected = true;
+    state.cloud.lastFetchedAt = Date.now();
     if (options.quiet !== true) {
       setCloudStatus(cloudText(
         `${state.cloud.lists.length}件のマイリスト（クラウド）を読み込みました`,
@@ -4695,6 +4726,23 @@ async function refreshCloudLists(options = {}) {
     setCloudBusy(false);
     render();
   }
+}
+
+async function requestCloudRefresh() {
+  if (!state.cloud.connected) {
+    setCloudStatus(t("storage.connectFirst"), { error: true });
+    return;
+  }
+  await refreshCloudLists();
+}
+
+function maybeAutoRefreshCloudLists() {
+  if (document.visibilityState !== "visible" || !state.cloud.connected || state.cloud.busy) return;
+  const now = Date.now();
+  if (now - state.cloud.lastAutoRefreshAt < CLOUD_AUTO_REFRESH_INTERVAL_MS) return;
+  if (state.cloud.lastFetchedAt && now - state.cloud.lastFetchedAt < CLOUD_AUTO_REFRESH_INTERVAL_MS) return;
+  state.cloud.lastAutoRefreshAt = now;
+  void refreshCloudLists({ quiet: true });
 }
 
 async function renameStorageList(storageId) {
@@ -8052,8 +8100,11 @@ function bindEvents() {
   });
   elements.systemUpdateButton.addEventListener("click", () => void requestSystemUpdate());
   elements.cloudConnectButton.addEventListener("click", () => void connectCloud());
+  elements.cloudRefreshButton.addEventListener("click", () => void requestCloudRefresh());
   elements.cloudDisconnectButton.addEventListener("click", disconnectCloud);
   elements.cloudAccessToken.addEventListener("input", renderStorageLists);
+  document.addEventListener("visibilitychange", maybeAutoRefreshCloudLists);
+  window.addEventListener("focus", maybeAutoRefreshCloudLists);
   document.addEventListener("click", () => setSettingsMenuOpen(false));
   document.addEventListener("dblclick", (event) => {
     if (event.target instanceof Element && event.target.closest("input, textarea, [contenteditable=\"true\"]")) {
