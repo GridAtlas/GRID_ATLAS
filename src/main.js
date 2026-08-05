@@ -43,7 +43,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.667";
+const WEB_VERSION = "0.668";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -7583,6 +7583,8 @@ function gridAtlasFileLikely(file) {
     String(file.name || "").toLowerCase().endsWith(".gridatlas")
     || file.type === "application/vnd.gridatlas+zip"
     || file.type === "application/zip"
+    || file.type === "application/x-zip-compressed"
+    || file.type === "application/octet-stream"
   );
 }
 
