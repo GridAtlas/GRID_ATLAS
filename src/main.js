@@ -43,7 +43,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.710";
+const WEB_VERSION = "0.720";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -2956,7 +2956,6 @@ function renderActionButtons() {
   const hasPendingPoint = validGeo(state.pendingGeo);
   const pointIds = selectedPointIds();
   const linkIds = selectedLinkIds();
-  const pointPair = selectedPointPair();
   const singlePointCandidate = singleSelectedPoint();
   const targetCandidate = singleTargetableSelectedPoint();
   const routeStartCandidate = singlePointCandidate;
@@ -2982,7 +2981,7 @@ function renderActionButtons() {
 
   const canOpenRegisterPage = !hasPendingPoint && state.selection.length === 0 && mobilePageUiActive();
   elements.actionRegisterButton.disabled = !hasPendingPoint && !canOpenRegisterPage;
-  elements.actionLinkButton.disabled = !pointPair;
+  elements.actionLinkButton.disabled = pointIds.length < 2;
   elements.actionRouteButton.disabled = !routeActive && !routePlan;
   elements.deletePointButton.disabled = !canDelete;
   elements.clearSelectionButton.disabled = state.selection.length === 0 && !hasPendingPoint;
@@ -3004,9 +3003,12 @@ function renderActionButtons() {
   elements.actionRegisterButton.classList.remove("is-active");
   elements.actionRegisterButton.title = hasPendingPoint ? "仮ポイントを登録" : canOpenRegisterPage ? "地点登録画面を開く" : "仮ポイントを作成すると登録できます";
   elements.actionLinkButton.classList.toggle("is-active", false);
+  elements.actionLinkButton.title = pointIds.length >= 2
+    ? `選択順に${pointIds.length}地点を接続`
+    : "2地点以上を選択すると接続できます";
   elements.actionRouteButton.classList.toggle("is-active", routeActive);
   elements.actionRouteButton.setAttribute("aria-pressed", String(routeActive));
-  elements.actionRouteButton.title = routeActive ? "巡回表示を解除" : routePlan ? "選択点を起点から巡回計算" : "複数選択と起点指定が必要";
+  elements.actionRouteButton.title = routeActive ? "巡回表示を解除" : routePlan ? "選択点を起点から巡回計算" : "起点を指定するか3地点以上を選択";
   elements.actionTargetButton.title = targetSwitchesFromRouteStart ? "起点から対象に切り替え" : "選択地点を対象にする";
   elements.actionRouteStartButton.title = routeStartSwitchesFromTarget ? "対象から起点に切り替え" : "選択地点を起点にする";
   elements.deletePointButton.classList.toggle("is-active", false);
@@ -5129,7 +5131,7 @@ function renderRoute() {
   const selectedPoints = selectedPointIds().map(findPoint).filter(Boolean);
   const resultPoints = routeResultPoints();
   const routePlan = routePlanFromCurrentSelection();
-  const start = routeStartPoint();
+  const start = routePlan?.start ?? routeStartPoint();
   elements.routeSelectedCount.textContent = selectedPoints.length > 0 ? `${selectedPoints.length}点` : `${resultPoints.length}点`;
   elements.routeStartSelect.replaceChildren();
 
@@ -5550,7 +5552,7 @@ function effectiveRouteStartPointId() {
 
 function routePlanFromCurrentSelection() {
   const selectedPoints = selectedPointIds().map(findPoint).filter(Boolean);
-  const start = routeStartPoint();
+  const start = routeStartPoint() ?? (selectedPoints.length >= 3 ? selectedPoints[0] : null);
   if (!start || selectedPoints.length < 2) {
     return null;
   }
@@ -5746,24 +5748,29 @@ function formatDate(value) {
 }
 
 function connectSelectedPoints() {
-  const pair = selectedPointPair();
-  if (!pair) {
+  const pointIds = selectedPointIds();
+  if (pointIds.length < 2) {
     return;
   }
 
-  const [a, b] = pair;
-  if (a === b) {
-    return;
-  }
+  let created = false;
+  for (let index = 1; index < pointIds.length; index += 1) {
+    const a = pointIds[index - 1];
+    const b = pointIds[index];
+    if (findLinkBetween(a, b)) {
+      continue;
+    }
 
-  const existing = findLinkBetween(a, b);
-  if (!existing) {
     state.links.push({
       id: createId(),
       a,
       b,
       createdAt: new Date().toISOString()
     });
+    created = true;
+  }
+
+  if (created) {
     persistWorkspace();
   }
 
