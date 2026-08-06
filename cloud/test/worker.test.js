@@ -62,6 +62,19 @@ describe("GRID ATLAS Cloud API", () => {
     }), personalEnv)).rejects.toMatchObject({ status: 401, message: "アクセスコードが違います" });
   });
 
+  it("allows JWT users during access-code migration", async () => {
+    const mixedEnv = {
+      PERSONAL_ACCESS_CODE: "ga_personal_test",
+      PERSONAL_OWNER_ID: "personal-test",
+      AUTH_JWKS_URL: JWKS_URL,
+      AUTH_ISSUER: ISSUER,
+      AUTH_AUDIENCE: AUDIENCE
+    };
+    const authorized = await authenticateRequest(new Request("https://api.test/v1/me/lists", {
+      headers: { Authorization: "Bearer " + await issueToken("jwt-owner") }
+    }), mixedEnv);
+    expect(authorized).toEqual({ id: "jwt-owner" });
+  });
   it("keeps personal and friend access-code data separate", async () => {
     const accessEnv = {
       DB: env.DB,

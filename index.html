@@ -4,13 +4,15 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#020806">
+    <meta name="grid-atlas-supabase-url" content="">
+    <meta name="grid-atlas-supabase-publishable-key" content="">
     <title>GRID ATLAS</title>
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="assets/icon-grid.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=64">
-    <script src="src/main.js?v=177" type="module" defer></script>
+    <script src="src/main.js?v=179" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -45,6 +47,7 @@
       <symbol id="icon-cloud" viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .7-7.9A6 6 0 0 0 6.2 8.7 4.5 4.5 0 0 0 7 18Z"></path></symbol>
       <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.8-4L4 9M4 5v4h4M4 13a8 8 0 0 0 14.8 4L20 15M20 19v-4h-4"></path></symbol>
       <symbol id="icon-current" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"></circle><circle cx="12" cy="12" r="8"></circle></symbol>
+      <symbol id="icon-camera" viewBox="0 0 24 24"><path d="M5 8.5h3l1.5-2h5l1.5 2h3A2 2 0 0 1 21 10.5v7A2 2 0 0 1 19 19.5H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Z"></path><circle cx="12" cy="14" r="3.25"></circle></symbol>
     </svg>
     <div class="app-shell">
       <header class="topbar">
@@ -104,22 +107,41 @@
                   <button id="systemUpdateButton" class="system-update-button" type="button" data-i18n-title="systemUpdate.notice"><svg class="ui-icon" aria-hidden="true"><use href="#icon-refresh"></use></svg><span data-i18n="systemUpdate.action">更新</span></button>
                 </div>
                 <output id="systemUpdateStatus" class="form-status system-update-status" aria-live="polite"></output>
-              </section>
-              <details class="cloud-menu-section">
+              </section>              <details class="cloud-menu-section">
                 <summary class="cloud-menu-summary">
-                  <span data-i18n="cloud.menuTitle">テスターアクセスコード</span>
+                  <span data-i18n="cloud.menuTitle">クラウド</span>
                   <span class="cloud-menu-caption" data-i18n="cloud.experimental">実験機能</span>
                 </summary>
                 <div class="cloud-menu-content">
-                  <label class="cloud-access-code-label">
-                    <span data-i18n="cloud.accessToken">アクセスコード</span>
-                    <input id="cloudAccessToken" type="password" autocomplete="off" spellcheck="false" placeholder="ga_ から始まるコード">
-                  </label>
-                  <div class="button-row">
-                    <button id="cloudConnectButton" class="primary-button" type="button" data-i18n="cloud.connect">接続</button>
-                    <button id="cloudRefreshButton" type="button" data-i18n="cloud.refresh">更新</button>
-                    <button id="cloudDisconnectButton" type="button" data-i18n="cloud.disconnect">切断</button>
-                  </div>
+                  <section id="cloudAuthPanel" class="cloud-auth-panel" hidden>
+                    <span class="cloud-auth-title" data-i18n="cloud.authTitle">アカウント</span>
+                    <label>
+                      <span data-i18n="cloud.email">メールアドレス</span>
+                      <input id="cloudAuthEmail" type="email" autocomplete="email" spellcheck="false">
+                    </label>
+                    <label>
+                      <span data-i18n="cloud.password">パスワード</span>
+                      <input id="cloudAuthPassword" type="password" autocomplete="current-password">
+                    </label>
+                    <div class="button-row">
+                      <button id="cloudSignUpButton" class="primary-button" type="button" data-i18n="cloud.signUp">登録</button>
+                      <button id="cloudSignInButton" type="button" data-i18n="cloud.signIn">ログイン</button>
+                      <button id="cloudSignOutButton" type="button" data-i18n="cloud.signOut">ログアウト</button>
+                    </div>
+                    <output id="cloudAuthStatus" class="form-status cloud-status" aria-live="polite"></output>
+                  </section>
+                  <details class="cloud-access-code-section">
+                    <summary data-i18n="cloud.accessCodeAdvanced">テスターアクセスコード</summary>
+                    <label class="cloud-access-code-label">
+                      <span data-i18n="cloud.accessToken">アクセスコード</span>
+                      <input id="cloudAccessToken" type="password" autocomplete="off" spellcheck="false" placeholder="ga_ から始まるコード">
+                    </label>
+                    <div class="button-row">
+                      <button id="cloudConnectButton" class="primary-button" type="button" data-i18n="cloud.connect">接続</button>
+                      <button id="cloudRefreshButton" type="button" data-i18n="cloud.refresh">更新</button>
+                      <button id="cloudDisconnectButton" type="button" data-i18n="cloud.disconnect">切断</button>
+                    </div>
+                  </details>
                   <output id="cloudLastFetched" class="form-status cloud-last-fetched" aria-live="polite"></output>
                   <output id="cloudMenuStatus" class="form-status cloud-status" data-cloud-status aria-live="polite"></output>
                 </div>

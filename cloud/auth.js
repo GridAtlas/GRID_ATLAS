@@ -67,13 +67,12 @@ export async function authenticateRequest(request, env) {
       accessCodeOwners.map((entry) => secretsMatch(match[1], entry.code))
     );
     const matchedIndex = matches.indexOf(true);
-    if (matchedIndex < 0) throw new AuthError("アクセスコードが違います", 401);
-    return { id: accessCodeOwners[matchedIndex].ownerId };
+    if (matchedIndex >= 0) return { id: accessCodeOwners[matchedIndex].ownerId };
   }
 
   const requiredConfig = ["AUTH_JWKS_URL", "AUTH_ISSUER", "AUTH_AUDIENCE"];
   if (requiredConfig.some((key) => !env[key])) {
-    throw new AuthError("認証基盤が未設定です", 503);
+    throw new AuthError(accessCodeOwners.length > 0 ? "アクセスコードが違います" : "認証基盤が未設定です", 401);
   }
 
   const claims = await verifyJwt(match[1], env);

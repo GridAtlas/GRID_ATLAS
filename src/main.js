@@ -4,6 +4,7 @@ import {
   createCloudClient,
   pointListToCloudPayload
 } from "./cloud-client.js?v=3";
+import { cloudAuthConfig, createCloudAuthClient } from "./cloud-auth.js?v=1";
 import {
   GRIDATLAS_MIME_TYPE,
   GRIDATLAS_URL_PARAMETER,
@@ -43,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.762";
+const WEB_VERSION = "0.773";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -216,6 +217,13 @@ const elements = {
   pointImportFile: document.querySelector("#pointImportFile"),
   storageListContainers: Array.from(document.querySelectorAll("[data-storage-list-items]")),
 
+  cloudAuthPanel: document.querySelector("#cloudAuthPanel"),
+  cloudAuthEmail: document.querySelector("#cloudAuthEmail"),
+  cloudAuthPassword: document.querySelector("#cloudAuthPassword"),
+  cloudSignUpButton: document.querySelector("#cloudSignUpButton"),
+  cloudSignInButton: document.querySelector("#cloudSignInButton"),
+  cloudSignOutButton: document.querySelector("#cloudSignOutButton"),
+  cloudAuthStatus: document.querySelector("#cloudAuthStatus"),
   cloudAccessToken: document.querySelector("#cloudAccessToken"),
   cloudConnectButton: document.querySelector("#cloudConnectButton"),
   cloudRefreshButton: document.querySelector("#cloudRefreshButton"),
@@ -253,6 +261,11 @@ const state = {
   pendingStorageTransfer: null,
   cloud: {
     connected: false,
+    authConfigured: false,
+    authClient: null,
+    authSession: null,
+    authUser: null,
+    authBusy: false,
     busy: false,
     apiUrl: "",
     lists: [],
@@ -537,7 +550,14 @@ const TRANSLATIONS = {
     "data.pointLists": "地点リスト",
     "data.cloud": "マイリスト（クラウド）",
     "data.grid": "グリッド",
-    "cloud.menuTitle": "テスターアクセスコード",
+    "cloud.menuTitle": "クラウド",
+    "cloud.authTitle": "アカウント",
+    "cloud.email": "メールアドレス",
+    "cloud.password": "パスワード",
+    "cloud.signUp": "登録",
+    "cloud.signIn": "ログイン",
+    "cloud.signOut": "ログアウト",
+    "cloud.accessCodeAdvanced": "テスターアクセスコード",
     "cloud.experimental": "実験機能",
     "cloud.dataNotice": "接続中のマイリスト（クラウド）です。",
     "cloud.pointSource": "マイリスト（クラウド）",
@@ -782,7 +802,14 @@ const TRANSLATIONS = {
     "data.pointLists": "Point Lists",
     "data.cloud": "My Lists (Cloud)",
     "data.grid": "Grid",
-    "cloud.menuTitle": "Tester access code",
+    "cloud.menuTitle": "Cloud",
+    "cloud.authTitle": "Account",
+    "cloud.email": "Email address",
+    "cloud.password": "Password",
+    "cloud.signUp": "Sign up",
+    "cloud.signIn": "Sign in",
+    "cloud.signOut": "Sign out",
+    "cloud.accessCodeAdvanced": "Tester access code",
     "cloud.experimental": "Experimental",
     "cloud.dataNotice": "My Lists stored in the connected cloud.",
     "cloud.pointSource": "My List (Cloud)",
@@ -3846,7 +3873,7 @@ function renderPointIndexRows(container, rows, current = null) {
     const meta = document.createElement("span");
     meta.append(document.createTextNode(list?.name || (isCloud ? "地点リスト" : t("label.gps"))));
     if (pointHasPhoto(point)) {
-      meta.append(document.createTextNode(" 📷"));
+      meta.append(createIcon("camera"));
     }
     name.append(title, meta);
 
@@ -4777,10 +4804,151 @@ function cloudText(ja, en) {
   return activeLanguage() === EN_LANGUAGE ? en : ja;
 }
 
+function setCloudAuthStatus(message, options = {}) {
+  if (!elements.cloudAuthStatus) return;
+  elements.cloudAuthStatus.textContent = message || "";
+  elements.cloudAuthStatus.classList.toggle("is-error", options.error === true);
+}
+
+function renderCloudAuthControls() {
+  if (!elements.cloudAuthPanel) return;
+  elements.cloudAuthPanel.hidden = !state.cloud.authConfigured;
+  const signedIn = Boolean(state.cloud.authSession?.access_token);
+  const busy = state.cloud.busy || state.cloud.authBusy;
+  if (elements.cloudSignUpButton) elements.cloudSignUpButton.disabled = busy || signedIn;
+  if (elements.cloudSignInButton) elements.cloudSignInButton.disabled = busy || signedIn;
+  if (elements.cloudSignOutButton) elements.cloudSignOutButton.disabled = busy || !signedIn;
+  if (signedIn && state.cloud.authUser?.email && elements.cloudAuthStatus && !elements.cloudAuthStatus.classList.contains("is-error")) {
+    elements.cloudAuthStatus.textContent = cloudText(
+      `${state.cloud.authUser.email} でログイン中`,
+      `Signed in as ${state.cloud.authUser.email}`
+    );
+  }
+}
+
+function applyCloudAuthSession(session, options = {}) {
+  const hadSession = Boolean(state.cloud.authSession?.access_token);
+  state.cloud.authSession = session || null;
+  state.cloud.authUser = session?.user || null;
+  if (session?.access_token) {
+    state.cloud.connected = true;
+    if (options.refresh !== false && (!hadSession || options.forceRefresh === true)) {
+      void refreshCloudLists({ quiet: true });
+    }
+  } else if (!elements.cloudAccessToken?.value.trim()) {
+    state.cloud.connected = false;
+    state.cloud.lists = [];
+    state.cloud.pointLists = [];
+    state.cloud.pointRows = [];
+  }
+  renderCloudAuthControls();
+  renderStorageLists();
+  syncCloudControls();
+}
+
+async function initializeCloudAuth() {
+  const config = cloudAuthConfig();
+  state.cloud.authConfigured = Boolean(config.url && config.publishableKey);
+  state.cloud.authClient = await createCloudAuthClient();
+  renderCloudAuthControls();
+  if (!state.cloud.authClient) return;
+
+  state.cloud.authClient.auth.onAuthStateChange((_event, session) => {
+    applyCloudAuthSession(session, { forceRefresh: true });
+  });
+  try {
+    const { data, error } = await state.cloud.authClient.auth.getSession();
+    if (error) throw error;
+    applyCloudAuthSession(data.session, { refresh: Boolean(data.session), forceRefresh: true });
+    if (!data.session && state.cloud.connected) void refreshCloudLists({ quiet: true });
+  } catch (error) {
+    setCloudAuthStatus(error?.message || cloudText("認証状態を確認できません", "Could not check authentication"), { error: true });
+  }
+}
+
+async function signUpCloud() {
+  if (!state.cloud.authClient) return;
+  const email = elements.cloudAuthEmail.value.trim();
+  const password = elements.cloudAuthPassword.value;
+  if (!email || !password) {
+    setCloudAuthStatus(cloudText("メールアドレスとパスワードを入力してください", "Enter an email address and password"), { error: true });
+    return;
+  }
+  state.cloud.authBusy = true;
+  renderCloudAuthControls();
+  try {
+    const { data, error } = await state.cloud.authClient.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: window.location.href.split("#", 1)[0] }
+    });
+    if (error) throw error;
+    if (data.session) {
+      applyCloudAuthSession(data.session, { forceRefresh: true });
+      setCloudAuthStatus(cloudText("登録してログインしました", "Signed up and signed in"));
+    } else {
+      setCloudAuthStatus(cloudText("確認メールを送信しました。メールのリンクを開いてください", "Confirmation email sent. Open the link to continue"));
+    }
+  } catch (error) {
+    setCloudAuthStatus(error?.message || cloudText("登録に失敗しました", "Sign-up failed"), { error: true });
+  } finally {
+    state.cloud.authBusy = false;
+    renderCloudAuthControls();
+  }
+}
+
+async function signInCloud() {
+  if (!state.cloud.authClient) return;
+  const email = elements.cloudAuthEmail.value.trim();
+  const password = elements.cloudAuthPassword.value;
+  if (!email || !password) {
+    setCloudAuthStatus(cloudText("メールアドレスとパスワードを入力してください", "Enter an email address and password"), { error: true });
+    return;
+  }
+  state.cloud.authBusy = true;
+  renderCloudAuthControls();
+  try {
+    const { data, error } = await state.cloud.authClient.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    applyCloudAuthSession(data.session, { forceRefresh: true });
+    setCloudAuthStatus(cloudText("ログインしました", "Signed in"));
+  } catch (error) {
+    setCloudAuthStatus(error?.message || cloudText("ログインに失敗しました", "Sign-in failed"), { error: true });
+  } finally {
+    state.cloud.authBusy = false;
+    renderCloudAuthControls();
+  }
+}
+
+async function signOutCloud() {
+  if (!state.cloud.authClient) return;
+  state.cloud.authBusy = true;
+  renderCloudAuthControls();
+  try {
+    const { error } = await state.cloud.authClient.auth.signOut({ scope: "local" });
+    if (error) throw error;
+    applyCloudAuthSession(null, { refresh: false });
+    disconnectCloud();
+    setCloudAuthStatus(cloudText("ログアウトしました", "Signed out"));
+  } catch (error) {
+    setCloudAuthStatus(error?.message || cloudText("ログアウトに失敗しました", "Sign-out failed"), { error: true });
+  } finally {
+    state.cloud.authBusy = false;
+    renderCloudAuthControls();
+  }
+}
+
 function cloudClientFromInputs() {
   return createCloudClient({
     baseUrl: state.cloud.apiUrl,
-    getAccessToken: () => elements.cloudAccessToken.value
+    getAccessToken: async () => {
+      if (state.cloud.authClient) {
+        const { data } = await state.cloud.authClient.auth.getSession();
+        applyCloudAuthSession(data?.session, { refresh: false });
+        if (data?.session?.access_token) return data.session.access_token;
+      }
+      return elements.cloudAccessToken.value;
+    }
   });
 }
 function setCloudStatus(message, options = {}) {
@@ -4834,6 +5002,7 @@ function setCloudBusy(busy) {
 }
 
 function syncCloudControls() {
+  renderCloudAuthControls();
   elements.cloudAccessToken.disabled = state.cloud.busy;
   elements.cloudConnectButton.disabled = state.cloud.busy;
   elements.cloudRefreshButton.disabled = state.cloud.busy || !state.cloud.connected;
@@ -8647,6 +8816,9 @@ function bindEvents() {
     setGpsEnabled(elements.settingsGpsEnabled.checked);
   });
   elements.systemUpdateButton.addEventListener("click", () => void requestSystemUpdate());
+  elements.cloudSignUpButton?.addEventListener("click", () => void signUpCloud());
+  elements.cloudSignInButton?.addEventListener("click", () => void signInCloud());
+  elements.cloudSignOutButton?.addEventListener("click", () => void signOutCloud());
   elements.cloudConnectButton.addEventListener("click", () => void connectCloud());
   elements.cloudRefreshButton.addEventListener("click", () => void requestCloudRefresh());
   elements.cloudDisconnectButton.addEventListener("click", disconnectCloud);
@@ -8839,6 +9011,7 @@ loadPreferences();
 loadCloudSettings();
 registerGridAtlasFileLaunchHandler();
 bindEvents();
+void initializeCloudAuth();
 initMobilePages();
 resizeCanvas();
 void hydrateWorkspaceAssetPhotos()
@@ -8848,4 +9021,4 @@ handleIncomingShare();
 locateOnStartup();
 registerServiceWorker();
 render();
-if (state.cloud.connected) void refreshCloudLists();
+if (state.cloud.connected && !state.cloud.authConfigured) void refreshCloudLists();
