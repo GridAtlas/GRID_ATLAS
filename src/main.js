@@ -43,7 +43,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.761";
+const WEB_VERSION = "0.762";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -3801,6 +3801,10 @@ function renderPointListPreview() {
   renderPointIndexRows(elements.pointListPreviewItems, rows);
 }
 
+function pointHasPhoto(point) {
+  return Boolean(point?.photo || point?.photoAssetId || point?.cloudPhoto);
+}
+
 function renderPointIndexRows(container, rows, current = null) {
   if (!container) return;
   container.replaceChildren();
@@ -3840,7 +3844,10 @@ function renderPointIndexRows(container, rows, current = null) {
     }
     title.append(document.createTextNode(point.title || "Point"));
     const meta = document.createElement("span");
-    meta.textContent = list?.name || (isCloud ? "地点リスト" : t("label.gps"));
+    meta.append(document.createTextNode(list?.name || (isCloud ? "地点リスト" : t("label.gps"))));
+    if (pointHasPhoto(point)) {
+      meta.append(document.createTextNode(" 📷"));
+    }
     name.append(title, meta);
 
     const distanceText = point.id === CURRENT_LOCATION_ID
