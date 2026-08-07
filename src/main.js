@@ -43,7 +43,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0817";
+const WEB_VERSION = "0.0818";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -283,6 +283,8 @@ const state = {
   mobileGridPage: "grid",
   mobilePointPreviewStorageId: null,
   pointListPreviewReturnStorageId: null,
+  pointInfoBackdropClickPending: false,
+  pointInfoBackdropClickSuppressed: false,
   selection: [],
   selectedPointId: null,
   selectedLinkId: null,
@@ -3175,6 +3177,19 @@ function closePointListPreviewDialog(reason = "cancel") {
   }
 }
 
+function markPointInfoOpenedFromPointLongPress() {
+  state.pointInfoBackdropClickPending = true;
+}
+
+function handlePointInfoRelease() {
+  if (!state.pointInfoBackdropClickPending) return;
+  state.pointInfoBackdropClickPending = false;
+  state.pointInfoBackdropClickSuppressed = true;
+  window.setTimeout(() => {
+    state.pointInfoBackdropClickSuppressed = false;
+  }, 250);
+}
+
 function showSelectedPointInfoDialog() {
   const point = singleSelectedPoint();
   if (!point) {
@@ -4605,6 +4620,7 @@ function setupPointIndexGesture(row, { point, list }) {
       cleanup();
       finishPointIndexDrag(dragState);
       setSelection([{ type: "point", id: point.id }], { render: false });
+      markPointInfoOpenedFromPointLongPress();
       showSelectedPointInfoDialog();
     }, 1000);
   });
@@ -4658,6 +4674,7 @@ function createStorageListRow(entry) {
   const editPanel = document.createElement("div");
   editPanel.className = "storage-list-edit-panel";
   editMenu.append(editPanel);
+  editMenu.addEventListener("pointerdown", (event) => event.stopPropagation());
   editMenu.addEventListener("click", (event) => event.stopPropagation());
 
   const addEditAction = (iconName, label, options = {}) => {
@@ -8923,9 +8940,20 @@ function bindEvents() {
   elements.shareLinkDialog.addEventListener("click", (event) => {
     if (event.target === elements.shareLinkDialog) elements.shareLinkDialog.close("cancel");
   });
+  window.addEventListener("pointerup", handlePointInfoRelease, true);
+  window.addEventListener("pointercancel", () => {
+    state.pointInfoBackdropClickPending = false;
+    state.pointInfoBackdropClickSuppressed = false;
+  }, true);
   elements.pointInfoDialog.addEventListener("close", renderActionButtons);
   elements.pointInfoDialog.addEventListener("click", (event) => {
-    if (event.target === elements.pointInfoDialog) elements.pointInfoDialog.close("cancel");
+    if (event.target !== elements.pointInfoDialog) return;
+    if (state.pointInfoBackdropClickSuppressed) {
+      state.pointInfoBackdropClickSuppressed = false;
+      event.preventDefault();
+      return;
+    }
+    elements.pointInfoDialog.close("cancel");
   });
   elements.pointListPreviewDialog.addEventListener("close", () => {
     state.mobilePointPreviewStorageId = null;
