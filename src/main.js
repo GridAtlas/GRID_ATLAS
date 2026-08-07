@@ -43,7 +43,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0806";
+const WEB_VERSION = "0.0816";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -3835,16 +3835,17 @@ function renderPointListPreview() {
   const rows = list.points.map((point) => ({ point, list, isCloud: list.source === "cloud" }));
   elements.pointListPreviewDialogTitle.textContent = list.name;
   elements.pointListPreviewCount.textContent = `${rows.length}${t("label.points")}`;
-  renderPointIndexRows(elements.pointListPreviewItems, rows);
+  renderPointIndexRows(elements.pointListPreviewItems, rows, null, { allowSelection: false });
 }
 
 function pointHasPhoto(point) {
   return Boolean(point?.photo || point?.photoAssetId || point?.cloudPhoto);
 }
 
-function renderPointIndexRows(container, rows, current = null) {
+function renderPointIndexRows(container, rows, current = null, options = {}) {
   if (!container) return;
   container.replaceChildren();
+  const allowSelection = options.allowSelection !== false;
 
   if (rows.length === 0) {
     const empty = document.createElement("div");
@@ -3856,10 +3857,12 @@ function renderPointIndexRows(container, rows, current = null) {
 
   for (const { point, list, isCloud = false } of rows) {
     const row = document.createElement("div");
-    row.classList.toggle("is-active", isPointSelected(point.id));
-    row.setAttribute("aria-pressed", String(isPointSelected(point.id)));
-    row.setAttribute("role", "button");
-    row.tabIndex = 0;
+    if (allowSelection) {
+      row.classList.toggle("is-active", isPointSelected(point.id));
+      row.setAttribute("aria-pressed", String(isPointSelected(point.id)));
+      row.setAttribute("role", "button");
+      row.tabIndex = 0;
+    }
     row.classList.add("point-index-row");
     row.dataset.pointIndexId = point.id;
     row.dataset.pointIndexListId = pointListStorageIdForIndex(list);
@@ -3902,18 +3905,20 @@ function renderPointIndexRows(container, rows, current = null) {
       row.append(name);
     }
 
-    row.addEventListener("click", () => {
-      if (row.dataset.pointIndexSuppressClick === "true") {
-        delete row.dataset.pointIndexSuppressClick;
-        return;
-      }
-      toggleSelection("point", point.id);
-    });
-    row.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      toggleSelection("point", point.id);
-    });
+    if (allowSelection) {
+      row.addEventListener("click", () => {
+        if (row.dataset.pointIndexSuppressClick === "true") {
+          delete row.dataset.pointIndexSuppressClick;
+          return;
+        }
+        toggleSelection("point", point.id);
+      });
+      row.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        toggleSelection("point", point.id);
+      });
+    }
     setupPointIndexGesture(row, { point, list, isCloud });
     container.append(row);
   }
