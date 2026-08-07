@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.784";
+const WEB_VERSION = "0.785";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -3925,10 +3925,12 @@ function renderPointIndexRows(container, rows, current = null, options = {}) {
       }, { disabled: state.cloud.busy || !pointEditable(point.id) });
       addAction("map", t("action.map"), () => {
         selectPreviewPoint();
+        elements.pointListPreviewDialog?.close("map");
         openSelectedPointInPreferredMap();
       });
       addAction("info", t("action.info"), () => {
         selectPreviewPoint();
+        elements.pointListPreviewDialog?.close("info");
         showSelectedPointInfoDialog();
       });
       row.append(actions);
