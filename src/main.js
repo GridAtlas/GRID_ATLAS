@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.773";
+const WEB_VERSION = "0.784";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -3825,14 +3825,14 @@ function renderPointListPreview() {
   const rows = list.points.map((point) => ({ point, list, isCloud: list.source === "cloud" }));
   elements.pointListPreviewDialogTitle.textContent = list.name;
   elements.pointListPreviewCount.textContent = `${rows.length}${t("label.points")}`;
-  renderPointIndexRows(elements.pointListPreviewItems, rows);
+  renderPointIndexRows(elements.pointListPreviewItems, rows, null, { preview: true });
 }
 
 function pointHasPhoto(point) {
   return Boolean(point?.photo || point?.photoAssetId || point?.cloudPhoto);
 }
 
-function renderPointIndexRows(container, rows, current = null) {
+function renderPointIndexRows(container, rows, current = null, options = {}) {
   if (!container) return;
   container.replaceChildren();
 
@@ -3844,12 +3844,15 @@ function renderPointIndexRows(container, rows, current = null) {
     return;
   }
 
+  const isPreview = options.preview === true;
   for (const { point, list, isCloud = false } of rows) {
-    const row = document.createElement("button");
-    row.type = "button";
+    const row = document.createElement("div");
     row.classList.toggle("is-active", isPointSelected(point.id));
     row.setAttribute("aria-pressed", String(isPointSelected(point.id)));
+    row.setAttribute("role", "button");
+    row.tabIndex = 0;
     row.classList.add("point-index-row");
+    row.classList.toggle("has-preview-actions", isPreview);
     row.dataset.pointIndexId = point.id;
     row.dataset.pointIndexListId = pointListStorageIdForIndex(list);
 
@@ -3890,11 +3893,56 @@ function renderPointIndexRows(container, rows, current = null) {
     } else {
       row.append(name);
     }
+    if (isPreview) {
+      const actions = document.createElement("div");
+      actions.className = "point-index-actions";
+      actions.addEventListener("pointerdown", (event) => event.stopPropagation());
+      actions.addEventListener("click", (event) => event.stopPropagation());
+
+      const addAction = (iconName, label, onClick, options = {}) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "point-index-action-button";
+        button.append(createIcon(iconName), document.createTextNode(label));
+        button.title = label;
+        button.setAttribute("aria-label", label);
+        button.disabled = options.disabled === true;
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (!button.disabled) onClick();
+        });
+        actions.append(button);
+      };
+
+      const selectPreviewPoint = () => {
+        setSelection([{ type: "point", id: point.id }]);
+      };
+      addAction("edit", t("action.edit"), () => {
+        selectPreviewPoint();
+        elements.pointListPreviewDialog?.close("edit");
+        startEditingSelectedPoint();
+      }, { disabled: state.cloud.busy || !pointEditable(point.id) });
+      addAction("map", t("action.map"), () => {
+        selectPreviewPoint();
+        openSelectedPointInPreferredMap();
+      });
+      addAction("info", t("action.info"), () => {
+        selectPreviewPoint();
+        showSelectedPointInfoDialog();
+      });
+      row.append(actions);
+    }
     row.addEventListener("click", () => {
       if (row.dataset.pointIndexSuppressClick === "true") {
         delete row.dataset.pointIndexSuppressClick;
         return;
       }
+      toggleSelection("point", point.id);
+    });
+    row.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
       toggleSelection("point", point.id);
     });
     setupPointIndexGesture(row, { point, list, isCloud });
@@ -3999,6 +4047,7 @@ function toggleStorageListFavorite(storageId) {
 }
 function setupStorageListVisibility(row, entry) {
   const isRowControl = (target) => target instanceof Element
+    && target !== row
     && Boolean(target.closest("button, summary, input, select, textarea, a"));
 
   const toggleVisibility = () => {
@@ -4268,6 +4317,7 @@ async function applyStorageListDrop(dragState) {
 }
 function setupStorageListDrag(row, entry) {
   const isRowControl = (target) => target instanceof Element
+    && target !== row
     && Boolean(target.closest("button, summary, input, select, textarea, a"));
 
   row.addEventListener("pointerdown", (event) => {
