@@ -43,7 +43,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0816";
+const WEB_VERSION = "0.0817";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -8903,7 +8903,6 @@ function bindEvents() {
   });
   elements.pointInfoMapButton.addEventListener("click", () => {
     elements.pointInfoDialog.close("map");
-    closePointListPreviewDialog("map");
     openSelectedPointInPreferredMap();
   });
 
