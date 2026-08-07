@@ -402,7 +402,6 @@ textarea:focus-visible {
   width: 100%;
 }
 
-
 .settings-nav-subtle {
   gap: 0;
   padding: 10px 0 0;
@@ -473,7 +472,6 @@ textarea:focus-visible {
   font-weight: 800;
   letter-spacing: 0.08em;
 }
-
 
 :root[data-theme="retro"] .brand h1,
 :root[data-theme="retro"] .theme-toggle,
@@ -633,7 +631,6 @@ textarea:focus-visible {
   width: 17px;
   height: 17px;
 }
-
 
 .compact-button {
   display: inline-flex;
@@ -894,7 +891,6 @@ textarea {
   margin: 0;
   overflow-wrap: anywhere;
 }
-
 
 .map-open-actions {
   display: grid;
@@ -1206,9 +1202,6 @@ textarea {
   color: var(--muted);
 }
 
-
-
-
 .storage-destination-button.is-active {
   border-color: var(--accent);
   background: var(--active-bg);
@@ -1408,7 +1401,6 @@ textarea {
   justify-content: space-between;
   gap: 8px;
 }
-
 
 .cloud-data-group {
   padding-top: 10px;
@@ -1626,40 +1618,6 @@ textarea {
   color: var(--accent-strong);
 }
 
-.point-index-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.point-index-action-button {
-  min-width: 42px;
-  min-height: 36px;
-  padding: 3px 5px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  border-color: transparent;
-  background: transparent;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.point-index-action-button:hover:not(:disabled) {
-  border-color: var(--line);
-  background: var(--surface);
-  color: var(--accent-strong);
-}
-
-.point-index-action-button .ui-icon {
-  width: 16px;
-  height: 16px;
-}
-
 .point-index-row.has-route-order {
   grid-template-columns: auto minmax(0, 1fr) auto;
 }
@@ -1676,7 +1634,6 @@ textarea {
   font-weight: 900;
   line-height: 1;
 }
-
 
 .point-index-name {
   min-width: 0;
@@ -2157,6 +2114,13 @@ textarea {
   gap: 8px;
 }
 
+.point-info-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .share-link-primary {
   border-color: var(--accent);
   background: var(--accent);
@@ -2311,8 +2275,6 @@ textarea {
     bottom: calc(76px + env(safe-area-inset-bottom));
   }
 }
-
-
 
 .storage-list-drag-hint {
   flex: 0 0 100%;

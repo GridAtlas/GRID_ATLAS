@@ -35,7 +35,6 @@ const MAP_PROVIDER_APPLE = "apple";
 const GRIDATLAS_RECOMMENDED_SHARE_URL_BYTES = 8192;
 const GPS_ENABLED_KEY = "grid-atlas-gps-enabled";
 
-
 const CLOUD_ACCESS_TOKEN_KEY = "grid-atlas-cloud-access-token";
 const CLOUD_PRODUCTION_API_URL = "https://grid-atlas-cloud-staging.kazki1981.workers.dev";
 const CLOUD_AUTO_REFRESH_INTERVAL_MS = 30_000;
@@ -44,7 +43,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.785";
+const WEB_VERSION = "0.795";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -173,6 +172,8 @@ const elements = {
   pointInfoCreated: document.querySelector("#pointInfoCreated"),
   pointInfoUpdated: document.querySelector("#pointInfoUpdated"),
   pointInfoDistance: document.querySelector("#pointInfoDistance"),
+  pointInfoEditButton: document.querySelector("#pointInfoEditButton"),
+  pointInfoMapButton: document.querySelector("#pointInfoMapButton"),
   appToast: document.querySelector("#appToast"),
   cloudProgress: document.querySelector("#cloudProgress"),
   cloudProgressTitle: document.querySelector("#cloudProgressTitle"),
@@ -3123,6 +3124,9 @@ function renderPointInfoDialog() {
   elements.pointInfoCreated.textContent = point.isVirtual ? currentLocationLabel() : formatOptionalDate(point.createdAt);
   elements.pointInfoUpdated.textContent = formatOptionalDate(point.updatedAt);
   elements.pointInfoDistance.textContent = distance;
+  elements.pointInfoEditButton.disabled = state.cloud.busy || !pointEditable(point.id);
+  elements.pointInfoEditButton.textContent = t("action.edit");
+  elements.pointInfoMapButton.textContent = t("action.map");
 
   if (point.photoAssetId && (!point.photo || point.photo.startsWith("blob:"))) {
     void hydratePointPhotoForDisplay(point).then((changed) => {
@@ -3773,7 +3777,6 @@ function renderAnalysis() {
   }
 }
 
-
 function pointRoleIcons(point) {
   const icons = [];
   if (point.id === CURRENT_LOCATION_ID) {
@@ -3825,14 +3828,14 @@ function renderPointListPreview() {
   const rows = list.points.map((point) => ({ point, list, isCloud: list.source === "cloud" }));
   elements.pointListPreviewDialogTitle.textContent = list.name;
   elements.pointListPreviewCount.textContent = `${rows.length}${t("label.points")}`;
-  renderPointIndexRows(elements.pointListPreviewItems, rows, null, { preview: true });
+  renderPointIndexRows(elements.pointListPreviewItems, rows);
 }
 
 function pointHasPhoto(point) {
   return Boolean(point?.photo || point?.photoAssetId || point?.cloudPhoto);
 }
 
-function renderPointIndexRows(container, rows, current = null, options = {}) {
+function renderPointIndexRows(container, rows, current = null) {
   if (!container) return;
   container.replaceChildren();
 
@@ -3844,7 +3847,6 @@ function renderPointIndexRows(container, rows, current = null, options = {}) {
     return;
   }
 
-  const isPreview = options.preview === true;
   for (const { point, list, isCloud = false } of rows) {
     const row = document.createElement("div");
     row.classList.toggle("is-active", isPointSelected(point.id));
@@ -3852,7 +3854,6 @@ function renderPointIndexRows(container, rows, current = null, options = {}) {
     row.setAttribute("role", "button");
     row.tabIndex = 0;
     row.classList.add("point-index-row");
-    row.classList.toggle("has-preview-actions", isPreview);
     row.dataset.pointIndexId = point.id;
     row.dataset.pointIndexListId = pointListStorageIdForIndex(list);
 
@@ -3893,48 +3894,7 @@ function renderPointIndexRows(container, rows, current = null, options = {}) {
     } else {
       row.append(name);
     }
-    if (isPreview) {
-      const actions = document.createElement("div");
-      actions.className = "point-index-actions";
-      actions.addEventListener("pointerdown", (event) => event.stopPropagation());
-      actions.addEventListener("click", (event) => event.stopPropagation());
 
-      const addAction = (iconName, label, onClick, options = {}) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "point-index-action-button";
-        button.append(createIcon(iconName), document.createTextNode(label));
-        button.title = label;
-        button.setAttribute("aria-label", label);
-        button.disabled = options.disabled === true;
-        button.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          if (!button.disabled) onClick();
-        });
-        actions.append(button);
-      };
-
-      const selectPreviewPoint = () => {
-        setSelection([{ type: "point", id: point.id }]);
-      };
-      addAction("edit", t("action.edit"), () => {
-        selectPreviewPoint();
-        elements.pointListPreviewDialog?.close("edit");
-        startEditingSelectedPoint();
-      }, { disabled: state.cloud.busy || !pointEditable(point.id) });
-      addAction("map", t("action.map"), () => {
-        selectPreviewPoint();
-        elements.pointListPreviewDialog?.close("map");
-        openSelectedPointInPreferredMap();
-      });
-      addAction("info", t("action.info"), () => {
-        selectPreviewPoint();
-        elements.pointListPreviewDialog?.close("info");
-        showSelectedPointInfoDialog();
-      });
-      row.append(actions);
-    }
     row.addEventListener("click", () => {
       if (row.dataset.pointIndexSuppressClick === "true") {
         delete row.dataset.pointIndexSuppressClick;
@@ -4024,7 +3984,6 @@ function storageListEntries() {
 function findStorageListEntry(storageId) {
   return storageListEntries().find((entry) => entry.storageId === storageId) ?? null;
 }
-
 
 function storageListIsVisible(entry) {
   return entry?.local
@@ -7376,7 +7335,6 @@ function chooseObservationStopAction() {
     : "abort";
 }
 
-
 function clearObservationAssignments() {
   state.routeStartPointId = null;
   state.routeStartSnapshot = null;
@@ -7698,7 +7656,6 @@ function isSameGeo(a, b) {
   return validGeo(a) && validGeo(b) && Math.abs(a.lat - b.lat) < 0.000001 && Math.abs(a.lng - b.lng) < 0.000001;
 }
 
-
 async function readClipboardShare() {
   if (!navigator.clipboard?.readText) {
     elements.shareImportStatus.value = "このブラウザではクリップボードを読めません";
@@ -7848,7 +7805,6 @@ function coordinatesFromText(value) {
 
   return null;
 }
-
 
 function coordinatesFromCardinalText(value) {
   const latFirst = value.match(/([北南NS])\s*(\d+(?:\.\d+)?)\s*[°º]?\s*[,、，]\s*([東西EW])\s*(\d+(?:\.\d+)?)\s*[°º]?/i);
@@ -8905,6 +8861,15 @@ function bindEvents() {
   elements.actionRestoreButton.addEventListener("click", restoreLastDeleted);
   elements.actionEditButton.addEventListener("click", startEditingSelectedPoint);
   elements.actionMapButton.addEventListener("click", openSelectedPointInPreferredMap);
+  elements.pointInfoEditButton.addEventListener("click", () => {
+    if (elements.pointInfoEditButton.disabled) return;
+    elements.pointInfoDialog.close("edit");
+    startEditingSelectedPoint();
+  });
+  elements.pointInfoMapButton.addEventListener("click", () => {
+    elements.pointInfoDialog.close("map");
+    openSelectedPointInPreferredMap();
+  });
 
   elements.pointForm.addEventListener("submit", submitPoint);
   elements.pointDestinationListSelect.addEventListener("change", () => {
