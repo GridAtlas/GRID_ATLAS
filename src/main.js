@@ -43,7 +43,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0818";
+const WEB_VERSION = "0.0819";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -282,7 +282,8 @@ const state = {
   mobilePage: "map",
   mobileGridPage: "grid",
   mobilePointPreviewStorageId: null,
-  pointListPreviewReturnStorageId: null,
+  pointInfoReturnContext: null,
+  pointInfoReturnPhase: null,
   pointInfoBackdropClickPending: false,
   pointInfoBackdropClickSuppressed: false,
   selection: [],
@@ -3177,6 +3178,50 @@ function closePointListPreviewDialog(reason = "cancel") {
   }
 }
 
+function currentPointInfoOrigin() {
+  if (elements.pointListPreviewDialog?.open && state.mobilePointPreviewStorageId) {
+    return {
+      kind: "preview",
+      storageId: state.mobilePointPreviewStorageId
+    };
+  }
+  return {
+    kind: state.mobileGridPage === "points" ? "points" : "grid"
+  };
+}
+
+function beginPointInfoEditingReturn() {
+  const point = singleSelectedPoint();
+  if (!point) return;
+  state.pointInfoReturnContext = {
+    pointId: point.id,
+    origin: currentPointInfoOrigin()
+  };
+  state.pointInfoReturnPhase = "editing";
+}
+
+function restorePointInfoAfterEditing() {
+  const context = state.pointInfoReturnContext;
+  if (!context) return false;
+  state.pointInfoReturnPhase = "info";
+  setSelection([{ type: "point", id: context.pointId }], { render: false });
+  showSelectedPointInfoDialog();
+  return true;
+}
+
+function restorePointInfoOrigin() {
+  const context = state.pointInfoReturnContext;
+  state.pointInfoReturnContext = null;
+  state.pointInfoReturnPhase = null;
+  if (!context) return;
+
+  if (context.origin?.kind === "preview") {
+    showPointListPreview(context.origin.storageId);
+    return;
+  }
+  setMobilePage("map");
+  setMobileGridPage(context.origin?.kind === "points" ? "points" : "grid");
+}
 function markPointInfoOpenedFromPointLongPress() {
   state.pointInfoBackdropClickPending = true;
 }
@@ -7015,15 +7060,6 @@ function removePointer(event, options = {}) {
   }
 }
 
-function restorePointListPreviewAfterEditing() {
-  const storageId = state.pointListPreviewReturnStorageId;
-  state.pointListPreviewReturnStorageId = null;
-  if (!storageId || !pointListForPreviewStorageId(storageId)) {
-    return;
-  }
-  showPointListPreview(storageId);
-}
-
 function resetPointFormAfterSubmit() {
   elements.pointForm.reset();
   elements.shareImportStatus.value = "";
@@ -7036,11 +7072,11 @@ function resetPointFormAfterSubmit() {
   if (mobilePageUiActive()) {
     setMobilePage("map");
   }
-  restorePointListPreviewAfterEditing();
+  restorePointInfoAfterEditing();
 }
 
 function closePointRegistration() {
-  if (state.pointListPreviewReturnStorageId) {
+  if (state.pointInfoReturnContext) {
     resetPointFormAfterSubmit();
     render();
     return;
@@ -8911,9 +8947,7 @@ function bindEvents() {
   elements.actionMapButton.addEventListener("click", openSelectedPointInPreferredMap);
   elements.pointInfoEditButton.addEventListener("click", () => {
     if (elements.pointInfoEditButton.disabled) return;
-    state.pointListPreviewReturnStorageId = elements.pointListPreviewDialog?.open
-      ? state.mobilePointPreviewStorageId
-      : null;
+    beginPointInfoEditingReturn();
     elements.pointInfoDialog.close("edit");
     closePointListPreviewDialog("edit");
     startEditingSelectedPoint();
@@ -8945,7 +8979,12 @@ function bindEvents() {
     state.pointInfoBackdropClickPending = false;
     state.pointInfoBackdropClickSuppressed = false;
   }, true);
-  elements.pointInfoDialog.addEventListener("close", renderActionButtons);
+  elements.pointInfoDialog.addEventListener("close", () => {
+    renderActionButtons();
+    if (state.pointInfoReturnPhase === "info") {
+      restorePointInfoOrigin();
+    }
+  });
   elements.pointInfoDialog.addEventListener("click", (event) => {
     if (event.target !== elements.pointInfoDialog) return;
     if (state.pointInfoBackdropClickSuppressed) {
