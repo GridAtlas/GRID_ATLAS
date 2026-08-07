@@ -43,7 +43,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0796";
+const WEB_VERSION = "0.0806";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -282,6 +282,7 @@ const state = {
   mobilePage: "map",
   mobileGridPage: "grid",
   mobilePointPreviewStorageId: null,
+  pointListPreviewReturnStorageId: null,
   selection: [],
   selectedPointId: null,
   selectedLinkId: null,
@@ -3180,8 +3181,6 @@ function showSelectedPointInfoDialog() {
     showAppToast(t("info.unavailable"), { error: true });
     return;
   }
-
-  closePointListPreviewDialog("info");
 
   if (!elements.pointInfoDialog?.showModal) {
     const geo = pointGeo(point);
@@ -6994,6 +6993,15 @@ function removePointer(event, options = {}) {
   }
 }
 
+function restorePointListPreviewAfterEditing() {
+  const storageId = state.pointListPreviewReturnStorageId;
+  state.pointListPreviewReturnStorageId = null;
+  if (!storageId || !pointListForPreviewStorageId(storageId)) {
+    return;
+  }
+  showPointListPreview(storageId);
+}
+
 function resetPointFormAfterSubmit() {
   elements.pointForm.reset();
   elements.shareImportStatus.value = "";
@@ -7006,6 +7014,16 @@ function resetPointFormAfterSubmit() {
   if (mobilePageUiActive()) {
     setMobilePage("map");
   }
+  restorePointListPreviewAfterEditing();
+}
+
+function closePointRegistration() {
+  if (state.pointListPreviewReturnStorageId) {
+    resetPointFormAfterSubmit();
+    render();
+    return;
+  }
+  setMobilePage("map");
 }
 async function saveEditedPointToDestination(editingList, destinationList, updatedPoint, updatedAt) {
   if (editingList === destinationList) {
@@ -8855,7 +8873,7 @@ function bindEvents() {
   });
   elements.actionLinkButton.addEventListener("click", connectSelectedPoints);
   elements.actionRegisterButton.addEventListener("click", submitPendingPoint);
-  elements.closePointRegistrationButton.addEventListener("click", () => setMobilePage("map"));
+  elements.closePointRegistrationButton.addEventListener("click", closePointRegistration);
   elements.actionRouteButton.addEventListener("click", setRouteFromSelectedPoints);
   elements.clearSelectionButton.addEventListener("click", () => clearSelection());
   elements.actionTargetButton.addEventListener("click", toggleTargetForSelection);
@@ -8871,6 +8889,9 @@ function bindEvents() {
   elements.actionMapButton.addEventListener("click", openSelectedPointInPreferredMap);
   elements.pointInfoEditButton.addEventListener("click", () => {
     if (elements.pointInfoEditButton.disabled) return;
+    state.pointListPreviewReturnStorageId = elements.pointListPreviewDialog?.open
+      ? state.mobilePointPreviewStorageId
+      : null;
     elements.pointInfoDialog.close("edit");
     closePointListPreviewDialog("edit");
     startEditingSelectedPoint();
