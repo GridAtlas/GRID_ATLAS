@@ -43,7 +43,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0795";
+const WEB_VERSION = "0.0796";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -3168,12 +3168,20 @@ function pointListNameForPoint(point) {
   return cloudList?.name || "";
 }
 
+function closePointListPreviewDialog(reason = "cancel") {
+  if (elements.pointListPreviewDialog?.open) {
+    elements.pointListPreviewDialog.close(reason);
+  }
+}
+
 function showSelectedPointInfoDialog() {
   const point = singleSelectedPoint();
   if (!point) {
     showAppToast(t("info.unavailable"), { error: true });
     return;
   }
+
+  closePointListPreviewDialog("info");
 
   if (!elements.pointInfoDialog?.showModal) {
     const geo = pointGeo(point);
@@ -8864,10 +8872,12 @@ function bindEvents() {
   elements.pointInfoEditButton.addEventListener("click", () => {
     if (elements.pointInfoEditButton.disabled) return;
     elements.pointInfoDialog.close("edit");
+    closePointListPreviewDialog("edit");
     startEditingSelectedPoint();
   });
   elements.pointInfoMapButton.addEventListener("click", () => {
     elements.pointInfoDialog.close("map");
+    closePointListPreviewDialog("map");
     openSelectedPointInPreferredMap();
   });
 
