@@ -17,9 +17,9 @@ The shared contract is authoritative for product philosophy and common semantics
 
 For every user-visible Web update, automatically classify the change and bump the displayed Web version before committing:
 
-- `+0.001`: bug fixes, small visual changes, or wording changes
-- `+0.010`: small-to-medium feature additions or interaction changes
-- `+0.100`: large feature groups or development milestones
-- `1.000`: only for the separately approved 2027-01 formal release
+- `+0.0001`: bug fixes, small visual changes, or wording changes
+- `+0.0010`: small-to-medium feature additions or interaction changes
+- `+0.0100`: large feature groups or development milestones
+- `+0.1000`: only after an explicit user decision; never auto-bumped
 
-Keep `src/main.js` (`WEB_VERSION`) and the version line in `README.md` synchronized. Use `npm run version:web -- --kind patch|feature|milestone` to apply the bump, and include the resulting version in the handoff. Do not wait for the user to request a version bump.
+Use four decimal places for Web versions. Keep `src/main.js` (`WEB_VERSION`) and the version line in `README.md` synchronized. Use `npm run version:web -- --kind patch|feature|milestone` to apply the bump, and include the resulting version in the handoff. Do not wait for the user to request a version bump.
