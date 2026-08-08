@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0834";
+const WEB_VERSION = "0.0835";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -1875,7 +1875,12 @@ function pruneHiddenPointReferences() {
   if (current) {
     visibleIds.add(CURRENT_LOCATION_ID);
   }
-  state.selection = state.selection.filter((entry) => entry.type !== "point" || visibleIds.has(entry.id));
+  const pointInfoReturnId = state.pointInfoReturnContext?.pointId;
+  state.selection = state.selection.filter((entry) => (
+    entry.type !== "point"
+    || visibleIds.has(entry.id)
+    || entry.id === pointInfoReturnId
+  ));
   state.routeSelectionIds = state.routeSelectionIds.filter((id) => visibleIds.has(id));
 
   if (state.routeStartPointId && state.routeStartPointId !== CURRENT_LOCATION_ID && !visibleIds.has(state.routeStartPointId)) {
