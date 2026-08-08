@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0858";
+const WEB_VERSION = "0.0859";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -178,8 +178,11 @@ const elements = {
   pointInfoMapButton: document.querySelector("#pointInfoMapButton"),
   gridPointQuickDialog: document.querySelector("#gridPointQuickDialog"),
   gridPointQuickName: document.querySelector("#gridPointQuickName"),
+  gridPointQuickList: document.querySelector("#gridPointQuickList"),
   gridPointQuickStartButton: document.querySelector("#gridPointQuickStartButton"),
+  gridPointQuickStartLabel: document.querySelector("#gridPointQuickStartLabel"),
   gridPointQuickTargetButton: document.querySelector("#gridPointQuickTargetButton"),
+  gridPointQuickTargetLabel: document.querySelector("#gridPointQuickTargetLabel"),
   appToast: document.querySelector("#appToast"),
   cloudProgress: document.querySelector("#cloudProgress"),
   cloudProgressTitle: document.querySelector("#cloudProgressTitle"),
@@ -3391,6 +3394,9 @@ function renderGridPointQuickDialog() {
   const isStart = canSetObservationRole && point.id === state.routeStartPointId;
   const isTarget = canSetObservationRole && point.id === state.targetPointId;
   elements.gridPointQuickName.textContent = point.title;
+  elements.gridPointQuickList.textContent = pointListNameForPoint(point) || t("label.none");
+  elements.gridPointQuickStartLabel.textContent = t("action.start");
+  elements.gridPointQuickTargetLabel.textContent = t("action.target");
   elements.gridPointQuickStartButton.disabled = !canSetObservationRole;
   elements.gridPointQuickStartButton.classList.toggle("is-active", isStart);
   elements.gridPointQuickStartButton.setAttribute("aria-pressed", String(isStart));

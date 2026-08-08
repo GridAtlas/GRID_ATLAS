@@ -2122,10 +2122,10 @@ textarea {
 }
 
 .grid-point-quick-dialog {
-  width: min(260px, calc(100vw - 24px));
+  width: min(220px, calc(100vw - 20px));
   padding: 0;
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--surface);
   color: var(--text);
   box-shadow: var(--shadow), var(--brand-glow);
@@ -2137,46 +2137,62 @@ textarea {
 
 .grid-point-quick-dialog-form {
   display: grid;
-  gap: 8px;
-  padding: 8px 10px 10px;
+  gap: 5px;
+  padding: 7px 8px 8px;
 }
 
 .grid-point-quick-heading {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: grid;
+  gap: 1px;
+  min-width: 0;
 }
 
 .grid-point-quick-name {
   min-width: 0;
-  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 15px;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.grid-point-quick-list {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: 1.2;
 }
 
 .grid-point-quick-actions {
   display: flex;
-  gap: 6px;
+  gap: 5px;
 }
 
 .grid-point-quick-role-button {
-  width: 36px;
-  min-width: 36px;
-  height: 32px;
-  padding: 4px;
+  min-width: 0;
+  min-height: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
 }
 
-.grid-point-quick-role-button .ui-icon {
-  width: 17px;
-  height: 17px;
+.grid-point-quick-role-mark {
+  display: inline-block;
+  margin-right: 3px;
+  font-size: 12px;
+  line-height: 1;
 }
 
 .grid-point-quick-role-button.is-active {
   border-color: var(--accent);
-  background: var(--accent);
-  color: var(--on-accent);
+  background: var(--active-bg);
+  color: var(--accent-strong);
 }
 
 .share-link-primary {
