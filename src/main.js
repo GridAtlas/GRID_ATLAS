@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0847";
+const WEB_VERSION = "0.0857";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -174,6 +174,8 @@ const elements = {
   pointInfoCreated: document.querySelector("#pointInfoCreated"),
   pointInfoUpdated: document.querySelector("#pointInfoUpdated"),
   pointInfoDistance: document.querySelector("#pointInfoDistance"),
+  pointInfoStartButton: document.querySelector("#pointInfoStartButton"),
+  pointInfoTargetButton: document.querySelector("#pointInfoTargetButton"),
   pointInfoEditButton: document.querySelector("#pointInfoEditButton"),
   pointInfoMapButton: document.querySelector("#pointInfoMapButton"),
   appToast: document.querySelector("#appToast"),
@@ -496,6 +498,8 @@ const TRANSLATIONS = {
     "button.googleMaps": "Googleマップ",
     "button.setTarget": "ターゲットにする",
     "button.clearTarget": "ターゲット解除",
+    "button.setStart": "起点にする",
+    "button.clearStart": "起点解除",
     "button.optimize": "最適順",
     "button.clear": "解除",
     "panel.register": "地点登録",
@@ -754,6 +758,8 @@ const TRANSLATIONS = {
     "button.googleMaps": "Google Maps",
     "button.setTarget": "Set Target",
     "button.clearTarget": "Clear Target",
+    "button.setStart": "Set Start",
+    "button.clearStart": "Clear Start",
     "button.optimize": "Optimize",
     "button.clear": "Clear",
     "panel.register": "Add Point",
@@ -3165,6 +3171,17 @@ function renderPointInfoDialog() {
   elements.pointInfoCreated.textContent = point.isVirtual ? currentLocationLabel() : formatOptionalDate(point.createdAt);
   elements.pointInfoUpdated.textContent = formatOptionalDate(point.updatedAt);
   elements.pointInfoDistance.textContent = distance;
+  const canSetObservationRole = !point.isVirtual;
+  const isStart = canSetObservationRole && point.id === state.routeStartPointId;
+  const isTarget = canSetObservationRole && point.id === state.targetPointId;
+  elements.pointInfoStartButton.disabled = !canSetObservationRole;
+  elements.pointInfoStartButton.textContent = isStart ? t("button.clearStart") : t("button.setStart");
+  elements.pointInfoStartButton.classList.toggle("is-active", isStart);
+  elements.pointInfoStartButton.setAttribute("aria-pressed", String(isStart));
+  elements.pointInfoTargetButton.disabled = !canSetObservationRole;
+  elements.pointInfoTargetButton.textContent = isTarget ? t("button.clearTarget") : t("button.setTarget");
+  elements.pointInfoTargetButton.classList.toggle("is-active", isTarget);
+  elements.pointInfoTargetButton.setAttribute("aria-pressed", String(isTarget));
   elements.pointInfoEditButton.disabled = state.cloud.busy || !pointEditable(point.id);
   elements.pointInfoEditButton.textContent = t("action.edit");
   elements.pointInfoMapButton.textContent = t("action.map");
@@ -3829,8 +3846,7 @@ function loadedObservationInfoText(observation = selectedObservation()) {
   return parts.join(" | ");
 }
 
-function toggleTargetForSelection() {
-  const point = singleTargetableSelectedPoint();
+function toggleTargetForPoint(point) {
   if (!point) {
     return;
   }
@@ -3877,6 +3893,10 @@ function toggleTargetForSelection() {
 
   setSelection([], { render: false });
   render();
+}
+
+function toggleTargetForSelection() {
+  toggleTargetForPoint(singleTargetableSelectedPoint());
 }
 
 function clearTarget(options = {}) {
@@ -6144,8 +6164,7 @@ function setRouteFromSelectedPoints() {
   render();
 }
 
-function setRouteStartFromSelection() {
-  const point = singleSelectedPoint();
+function setRouteStartForPoint(point) {
   if (!point) {
     return;
   }
@@ -6176,6 +6195,9 @@ function setRouteStartFromSelection() {
   updateRouteStartSnapshot(point);
   setSelection([], { render: false });
   render();
+}
+function setRouteStartFromSelection() {
+  setRouteStartForPoint(singleSelectedPoint());
 }
 function findNearestPoint(screenPoint) {
   let nearest = null;
@@ -7060,6 +7082,7 @@ function pointerMidpoint(a, b) {
 }
 
 function startDragGesture(pointerId, point, options = {}) {
+  const longPressPoint = options.moved ? null : findNearestPoint(point);
   const drag = {
     id: pointerId,
     start: point,
@@ -7068,6 +7091,7 @@ function startDragGesture(pointerId, point, options = {}) {
     viewportY: state.viewport.y,
     moved: Boolean(options.moved),
     longPressed: false,
+    longPressPoint,
     cancelled: false,
     longPressTimerId: null
   };
@@ -7085,6 +7109,10 @@ function startDragGesture(pointerId, point, options = {}) {
       }
 
       drag.longPressed = true;
+      if (drag.longPressPoint) {
+        openPointInfoForPoint(drag.longPressPoint, { fromLongPress: true });
+        return;
+      }
       state.pointer.range = {
         start: { ...drag.start },
         current: { ...drag.start }
@@ -7257,6 +7285,9 @@ function removePointer(event, options = {}) {
   state.pointer.drag = null;
 
   if (drag?.longPressed) {
+    if (drag.longPressPoint) {
+      return;
+    }
     if (allowTap) {
       finishRangeSelection();
     } else {
@@ -9165,6 +9196,14 @@ function bindEvents() {
     closePointListPreviewDialog("edit");
     startEditingPointInfoTarget();
   });
+  elements.pointInfoStartButton.addEventListener("click", () => {
+    const point = state.pointInfoTargetId ? findPoint(state.pointInfoTargetId) : null;
+    setRouteStartForPoint(point);
+  });
+  elements.pointInfoTargetButton.addEventListener("click", () => {
+    const point = state.pointInfoTargetId ? findPoint(state.pointInfoTargetId) : null;
+    toggleTargetForPoint(point);
+  });
   elements.pointInfoMapButton.addEventListener("click", () => {
     beginPointInfoMapReturn();
     openPointInfoTargetInPreferredMap();
@@ -9302,6 +9341,10 @@ function bindEvents() {
     if (Math.hypot(dx, dy) > POINTER_MOVE_THRESHOLD) {
       clearDragLongPressTimer(drag);
       if (drag.longPressed) {
+        if (drag.longPressPoint) {
+          drag.last = point;
+          return;
+        }
         state.pointer.range.current = point;
         draw();
         renderStatus();
