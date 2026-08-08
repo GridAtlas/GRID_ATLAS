@@ -30,6 +30,7 @@ const LANGUAGE_KEY = "grid-atlas-language";
 const DISTANCE_UNIT_KEY = "grid-atlas-distance-unit";
 const ROUTE_RETURN_KEY = "grid-atlas-route-return";
 const MAP_PROVIDER_KEY = "grid-atlas-map-provider";
+const POINT_INFO_MAP_RETURN_KEY = "grid-atlas-point-info-map-return";
 const MAP_PROVIDER_GOOGLE = "google";
 const MAP_PROVIDER_APPLE = "apple";
 const GRIDATLAS_RECOMMENDED_SHARE_URL_BYTES = 8192;
@@ -43,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0819";
+const WEB_VERSION = "0.0820";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -3190,14 +3191,27 @@ function currentPointInfoOrigin() {
   };
 }
 
-function beginPointInfoEditingReturn() {
+function capturePointInfoReturnContext() {
   const point = singleSelectedPoint();
-  if (!point) return;
+  if (!point) return false;
   state.pointInfoReturnContext = {
     pointId: point.id,
     origin: currentPointInfoOrigin()
   };
+  return true;
+}
+
+function beginPointInfoEditingReturn() {
+  if (!capturePointInfoReturnContext()) return;
   state.pointInfoReturnPhase = "editing";
+}
+
+function beginPointInfoMapReturn() {
+  if (!capturePointInfoReturnContext()) return;
+  state.pointInfoReturnPhase = "info";
+  try {
+    sessionStorage.setItem(POINT_INFO_MAP_RETURN_KEY, JSON.stringify(state.pointInfoReturnContext));
+  } catch {}
 }
 
 function restorePointInfoAfterEditing() {
@@ -3213,6 +3227,9 @@ function restorePointInfoOrigin() {
   const context = state.pointInfoReturnContext;
   state.pointInfoReturnContext = null;
   state.pointInfoReturnPhase = null;
+  try {
+    sessionStorage.removeItem(POINT_INFO_MAP_RETURN_KEY);
+  } catch {}
   if (!context) return;
 
   if (context.origin?.kind === "preview") {
@@ -3221,6 +3238,37 @@ function restorePointInfoOrigin() {
   }
   setMobilePage("map");
   setMobileGridPage(context.origin?.kind === "points" ? "points" : "grid");
+}
+
+function restorePointInfoMapReturn() {
+  if (elements.pointInfoDialog?.open) {
+    try {
+      sessionStorage.removeItem(POINT_INFO_MAP_RETURN_KEY);
+    } catch {}
+    return;
+  }
+
+  let raw = "";
+  try {
+    raw = sessionStorage.getItem(POINT_INFO_MAP_RETURN_KEY) || "";
+    sessionStorage.removeItem(POINT_INFO_MAP_RETURN_KEY);
+  } catch {
+    return;
+  }
+  if (!raw) return;
+
+  let context;
+  try {
+    context = JSON.parse(raw);
+  } catch {
+    return;
+  }
+  if (!context?.pointId || !context.origin) return;
+  state.pointInfoReturnContext = context;
+  state.pointInfoReturnPhase = "info";
+  setSelection([{ type: "point", id: context.pointId }], { render: false });
+  render();
+  showSelectedPointInfoDialog();
 }
 function markPointInfoOpenedFromPointLongPress() {
   state.pointInfoBackdropClickPending = true;
@@ -8846,6 +8894,7 @@ if (cloudPointIdSet.size > 0) {
 }
 
 function bindEvents() {
+  window.addEventListener("pageshow", restorePointInfoMapReturn);
   window.addEventListener("resize", scheduleCanvasResize);
   window.visualViewport?.addEventListener("resize", scheduleCanvasResize);
   window.visualViewport?.addEventListener("scroll", scheduleCanvasResize);
@@ -8953,7 +9002,7 @@ function bindEvents() {
     startEditingSelectedPoint();
   });
   elements.pointInfoMapButton.addEventListener("click", () => {
-    elements.pointInfoDialog.close("map");
+    beginPointInfoMapReturn();
     openSelectedPointInPreferredMap();
   });
 
@@ -9140,4 +9189,5 @@ handleIncomingShare();
 locateOnStartup();
 registerServiceWorker();
 render();
+restorePointInfoMapReturn();
 if (state.cloud.connected && !state.cloud.authConfigured) void refreshCloudLists();
