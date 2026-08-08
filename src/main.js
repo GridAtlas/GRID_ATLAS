@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0861";
+const WEB_VERSION = "0.0862";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -3411,12 +3411,34 @@ function renderGridPointQuickDialog() {
   elements.gridPointQuickTargetButton.title = isTarget ? t("button.clearTarget") : t("button.setTarget");
 }
 
-function openGridPointQuickDialog(point) {
+function positionGridPointQuickDialog(screenPoint) {
+  if (!screenPoint || !elements.gridPointQuickDialog?.open) return;
+  const canvasRect = canvas.getBoundingClientRect();
+  const dialogRect = elements.gridPointQuickDialog.getBoundingClientRect();
+  const viewportWidth = document.documentElement.clientWidth;
+  const viewportHeight = document.documentElement.clientHeight;
+  const pointX = canvasRect.left + screenPoint.x;
+  const pointY = canvasRect.top + screenPoint.y;
+  const margin = 8;
+  const gap = 10;
+  const maxLeft = Math.max(margin, viewportWidth - dialogRect.width - margin);
+  const left = Math.min(Math.max(margin, pointX - dialogRect.width / 2), maxLeft);
+  const aboveTop = pointY - dialogRect.height - gap;
+  const belowTop = pointY + gap;
+  const top = aboveTop >= margin
+    ? aboveTop
+    : Math.min(Math.max(margin, belowTop), Math.max(margin, viewportHeight - dialogRect.height - margin));
+  elements.gridPointQuickDialog.style.left = left + "px";
+  elements.gridPointQuickDialog.style.top = top + "px";
+}
+
+function openGridPointQuickDialog(point, screenPoint = null) {
   if (!point || !elements.gridPointQuickDialog?.show) return;
   hideGridPointHover();
   state.gridPointQuickPointId = point.id;
   if (!elements.gridPointQuickDialog.open) elements.gridPointQuickDialog.show();
   renderGridPointQuickDialog();
+  positionGridPointQuickDialog(screenPoint);
 }
 
 function showSelectedPointInfoDialog(pointOrId = null) {
@@ -3879,17 +3901,18 @@ function loadedObservationInfoText(observation = selectedObservation()) {
   return parts.join(" | ");
 }
 
-function toggleTargetForPoint(point) {
+function toggleTargetForPoint(point, options = {}) {
   if (!point) {
     return;
   }
+  const preserveSelection = options.preserveSelection === true;
 
   if (state.targetPointId === point.id) {
     if (!confirmObservationReset("対象を解除")) {
       return;
     }
     clearTarget({ render: false });
-    setSelection([], { render: false });
+    if (!preserveSelection) setSelection([], { render: false });
     render();
     return;
   }
@@ -3910,7 +3933,7 @@ function toggleTargetForPoint(point) {
   resetObservationTrail();
   if (!state.followCurrentLocation) {
     state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
-    setSelection([], { render: false });
+    if (!preserveSelection) setSelection([], { render: false });
     render();
     return;
   }
@@ -3919,12 +3942,12 @@ function toggleTargetForPoint(point) {
   const current = currentLocationPoint();
   if (current) {
     recordObservationPoint(current);
-    setSelection([], { render: false });
+    if (!preserveSelection) setSelection([], { render: false });
     fitTargetFromCurrent(current, point);
     return;
   }
 
-  setSelection([], { render: false });
+  if (!preserveSelection) setSelection([], { render: false });
   render();
 }
 
@@ -6193,21 +6216,22 @@ function setRouteFromSelectedPoints() {
   state.pendingLinkPointId = null;
   state.routeSelectionIds = [];
   state.routeResult = optimizeVisitOrder(plan.points, plan.start.id, state.routeReturnToStart);
-  setSelection([], { render: false });
+  if (!preserveSelection) setSelection([], { render: false });
   render();
 }
 
-function setRouteStartForPoint(point) {
+function setRouteStartForPoint(point, options = {}) {
   if (!point) {
     return;
   }
+  const preserveSelection = options.preserveSelection === true;
 
   if (state.routeStartPointId === point.id) {
     if (!confirmObservationReset("起点を解除")) {
       return;
     }
     clearRouteStartState();
-    setSelection([], { render: false });
+    if (!preserveSelection) setSelection([], { render: false });
     render();
     return;
   }
@@ -6226,7 +6250,7 @@ function setRouteStartForPoint(point) {
   resetObservationTrail();
   state.routeStartPointId = point.id;
   updateRouteStartSnapshot(point);
-  setSelection([], { render: false });
+  if (!preserveSelection) setSelection([], { render: false });
   render();
 }
 function setRouteStartFromSelection() {
@@ -6420,7 +6444,7 @@ function connectSelectedPoints() {
 
   state.mode = "inspect";
   state.pendingLinkPointId = null;
-  setSelection([], { render: false });
+  if (!preserveSelection) setSelection([], { render: false });
   render();
 }
 
@@ -6677,7 +6701,7 @@ function computeRouteFromSelection() {
 
   state.routeSelectionIds = [];
   state.routeResult = optimizeVisitOrder(plan.points, plan.start.id, state.routeReturnToStart);
-  setSelection([], { render: false });
+  if (!preserveSelection) setSelection([], { render: false });
   render();
 }
 
@@ -7182,7 +7206,7 @@ function startDragGesture(pointerId, point, options = {}) {
 
       drag.longPressed = true;
       if (drag.longPressPoint) {
-        openGridPointQuickDialog(drag.longPressPoint);
+        openGridPointQuickDialog(drag.longPressPoint, drag.start);
         return;
       }
       state.pointer.range = {
@@ -9271,11 +9295,11 @@ function bindEvents() {
 
   elements.gridPointQuickStartButton.addEventListener("click", () => {
     const point = state.gridPointQuickPointId ? findPoint(state.gridPointQuickPointId) : null;
-    setRouteStartForPoint(point);
+    setRouteStartForPoint(point, { preserveSelection: true });
   });
   elements.gridPointQuickTargetButton.addEventListener("click", () => {
     const point = state.gridPointQuickPointId ? findPoint(state.gridPointQuickPointId) : null;
-    toggleTargetForPoint(point);
+    toggleTargetForPoint(point, { preserveSelection: true });
   });
   elements.gridPointQuickDialog.addEventListener("close", () => {
     state.gridPointQuickPointId = null;
