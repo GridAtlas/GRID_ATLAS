@@ -12,7 +12,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=64">
-    <script src="src/main.js?v=203" type="module" defer></script>
+    <script src="src/main.js?v=204" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -167,6 +167,7 @@
           <div class="map-content">
             <section class="grid-stage is-mobile-grid-active" data-mobile-grid-panel="grid" aria-label="格子">
               <canvas id="gridCanvas" aria-label="地点格子"></canvas>
+              <div id="gridPointHoverLabel" class="grid-point-hover-label" role="tooltip" hidden></div>
               <div class="canvas-tools" aria-label="表示操作">
                 <button id="zoomInButton" class="icon-button" type="button" title="段階拡大">＋</button>
                 <button id="zoomOutButton" class="icon-button" type="button" title="段階縮小">−</button>

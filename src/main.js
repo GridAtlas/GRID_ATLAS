@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0860";
+const WEB_VERSION = "0.0861";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -183,6 +183,7 @@ const elements = {
   gridPointQuickStartLabel: document.querySelector("#gridPointQuickStartLabel"),
   gridPointQuickTargetButton: document.querySelector("#gridPointQuickTargetButton"),
   gridPointQuickTargetLabel: document.querySelector("#gridPointQuickTargetLabel"),
+  gridPointHoverLabel: document.querySelector("#gridPointHoverLabel"),
   appToast: document.querySelector("#appToast"),
   cloudProgress: document.querySelector("#cloudProgress"),
   cloudProgressTitle: document.querySelector("#cloudProgressTitle"),
@@ -295,6 +296,7 @@ const state = {
   pointInfoTargetId: null,
   pointInfoReturnPhase: null,
   gridPointQuickPointId: null,
+  gridPointHoverPointId: null,
   pointInfoBackdropClickPending: false,
   pointInfoBackdropClickSuppressed: false,
   selection: [],
@@ -3410,10 +3412,10 @@ function renderGridPointQuickDialog() {
 }
 
 function openGridPointQuickDialog(point) {
-  if (!point || !elements.gridPointQuickDialog?.showModal) return;
+  if (!point || !elements.gridPointQuickDialog?.show) return;
+  hideGridPointHover();
   state.gridPointQuickPointId = point.id;
-  if (elements.gridPointQuickDialog.open) elements.gridPointQuickDialog.close("refresh");
-  elements.gridPointQuickDialog.showModal();
+  if (!elements.gridPointQuickDialog.open) elements.gridPointQuickDialog.show();
   renderGridPointQuickDialog();
 }
 
@@ -6230,6 +6232,45 @@ function setRouteStartForPoint(point) {
 function setRouteStartFromSelection() {
   setRouteStartForPoint(singleSelectedPoint());
 }
+function hideGridPointHover() {
+  state.gridPointHoverPointId = null;
+  if (!elements.gridPointHoverLabel) return;
+  elements.gridPointHoverLabel.hidden = true;
+  elements.gridPointHoverLabel.textContent = "";
+}
+
+function updateGridPointHover(screenPoint, pointerType = "mouse") {
+  if (
+    pointerType !== "mouse"
+    || state.pointer.active.size > 0
+    || state.gridPointQuickPointId
+    || !elements.gridPointHoverLabel
+  ) {
+    hideGridPointHover();
+    return;
+  }
+
+  const point = findNearestPoint(screenPoint);
+  if (!point) {
+    hideGridPointHover();
+    return;
+  }
+
+  const stage = canvas.parentElement;
+  if (!stage) return;
+  const canvasRect = canvas.getBoundingClientRect();
+  const stageRect = stage.getBoundingClientRect();
+  const screen = worldToScreen(point);
+  const x = screen.x + canvasRect.left - stageRect.left;
+  const y = screen.y + canvasRect.top - stageRect.top;
+
+  state.gridPointHoverPointId = point.id;
+  elements.gridPointHoverLabel.hidden = false;
+  elements.gridPointHoverLabel.textContent = point.title;
+  elements.gridPointHoverLabel.style.left = `${x}px`;
+  elements.gridPointHoverLabel.style.top = `${Math.max(4, y - 8)}px`;
+}
+
 function findNearestPoint(screenPoint) {
   let nearest = null;
   let nearestDistance = Infinity;
@@ -9242,6 +9283,11 @@ function bindEvents() {
   elements.gridPointQuickDialog.addEventListener("click", (event) => {
     if (event.target === elements.gridPointQuickDialog) elements.gridPointQuickDialog.close("cancel");
   });
+  document.addEventListener("pointerdown", (event) => {
+    if (!elements.gridPointQuickDialog.open) return;
+    if (event.target instanceof Node && elements.gridPointQuickDialog.contains(event.target)) return;
+    elements.gridPointQuickDialog.close("outside");
+  }, true);
   elements.pointInfoMapButton.addEventListener("click", () => {
     beginPointInfoMapReturn();
     openPointInfoTargetInPreferredMap();
@@ -9357,8 +9403,10 @@ function bindEvents() {
 
   canvas.addEventListener("pointermove", (event) => {
     if (!state.pointer.active.has(event.pointerId)) {
+      updateGridPointHover(getCanvasPoint(event), event.pointerType);
       return;
     }
+    hideGridPointHover();
 
     const point = getCanvasPoint(event);
     state.pointer.active.set(event.pointerId, point);
@@ -9407,6 +9455,7 @@ function bindEvents() {
 
   canvas.addEventListener("pointerup", removePointer);
   canvas.addEventListener("pointercancel", (event) => removePointer(event, { allowTap: false }));
+  canvas.addEventListener("pointerleave", hideGridPointHover);
 
   canvas.addEventListener(
     "wheel",
