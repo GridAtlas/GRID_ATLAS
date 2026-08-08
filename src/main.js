@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0836";
+const WEB_VERSION = "0.0847";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -592,7 +592,7 @@ const TRANSLATIONS = {
     "storage.moveDevice": "端末に移動",
     "storage.connectFirst": "先にクラウドへ接続してください",
     "storage.importMoveOnly": "インポートリストは、個別の転送操作でマイリストへ移動またはコピーできます。",
-    "storage.dragHint": "短く長押ししてから動かすと、順番や保存場所を変更できます。動かさず長く押し続けるとプレビューを表示します。",
+    "storage.dragHint": "リストをタップするとグリッド表示をオン／オフできます。長押しすると地点一覧を表示します。少し長押ししてからドラッグすると、リストを移動できます。",
     "storage.dragReordering": "クラウドに並び順を保存中",
     "storage.dragReordered": "リストの順番を変更しました",
     "storage.transferCloudProgress": "クラウドへ保存中",
@@ -643,6 +643,7 @@ const TRANSLATIONS = {
     "list.favoriteStatus": "お気に入り",
     "list.delete": "削除",
     "list.showOnGrid": "グリッドに表示",
+    "list.selectOnGrid": "このリストを選択してグリッド表示",
 
     "list.visible": "グリッド表示中",
     "list.hidden": "グリッドで非表示",
@@ -849,7 +850,7 @@ const TRANSLATIONS = {
     "storage.moveDevice": "Move to device",
     "storage.connectFirst": "Connect to the cloud first",
     "storage.importMoveOnly": "Move or copy imported lists to My Lists from the individual transfer dialog.",
-    "storage.dragHint": "Hold briefly, then drag to reorder or change storage. Keep holding without moving to open the preview.",
+    "storage.dragHint": "Tap a list to toggle its grid display. Long-press to show its places. Hold briefly, then drag to move the list.",
     "storage.dragReordering": "Saving list order to the cloud",
     "storage.dragReordered": "List order updated",
     "storage.transferCloudProgress": "Saving to the cloud",
@@ -900,6 +901,7 @@ const TRANSLATIONS = {
     "list.favoriteStatus": "Favorite",
     "list.delete": "Delete",
     "list.showOnGrid": "Show on grid",
+    "list.selectOnGrid": "Select this list on the grid",
 
     "list.visible": "Shown on grid",
     "list.hidden": "Hidden from grid",
@@ -4249,6 +4251,33 @@ function setupStorageListVisibility(row, entry) {
     toggleVisibility();
   });
 }
+
+function selectStorageListOnGrid(storageId) {
+  const entry = findStorageListEntry(storageId);
+  const list = entry?.local ?? entry?.preview ?? null;
+  if (!entry || !list) return;
+
+  const points = (Array.isArray(list.points) ? list.points : [])
+    .map(syncProjectedPoint)
+    .filter(Boolean);
+  if (!storageListIsVisible(entry)) {
+    setStorageListVisible(storageId, true, { render: false });
+  }
+
+  state.mode = "inspect";
+  setMobilePage("map");
+  setMobileGridPage("grid");
+  setSelection(
+    points.map((point) => ({ type: "point", id: point.id })),
+    { render: false }
+  );
+
+  if (points.length > 0) {
+    fitToPoints(points);
+  } else {
+    render();
+  }
+}
 function reorderLocalPointLists(sourceId, targetId, before) {
   const sourceIndex = state.pointLists.findIndex((list) => list.id === sourceId);
   const targetIndex = state.pointLists.findIndex((list) => list.id === targetId);
@@ -4843,6 +4872,24 @@ function createStorageListRow(entry) {
   rowActions.className = "storage-list-row-actions";
 
   const share = document.createElement("button");
+  const grid = document.createElement("button");
+  grid.type = "button";
+  grid.className = "storage-grid-button";
+  const listPoints = entry.local?.points ?? entry.preview?.points ?? [];
+  const selected = listPoints.length > 0
+    && selectedPointIds().length === listPoints.length
+    && listPoints.every((point) => isPointSelected(point.id));
+  grid.classList.toggle("is-active", selected);
+  grid.append(createIcon(selected ? "grid-filled" : "grid"));
+  grid.title = t("list.selectOnGrid");
+  grid.setAttribute("aria-label", cloudText(
+    `「${listName}」の地点を選択してグリッドに表示`,
+    `Select the points in “${listName}” on the grid`
+  ));
+  grid.setAttribute("aria-pressed", String(selected));
+  grid.disabled = state.cloud.busy || (!entry.local && !entry.preview);
+  grid.addEventListener("click", () => selectStorageListOnGrid(entry.storageId));
+
   share.type = "button";
   share.className = "storage-share-button";
   share.append(createIcon("share"));
@@ -4915,7 +4962,7 @@ function createStorageListRow(entry) {
     onClick: () => void deleteStoredList(entry.storageId)
   });
 
-  rowActions.append(share, editMenu);
+  rowActions.append(grid, share, editMenu);
   row.append(name, rowActions);
   setupStorageListVisibility(row, entry);
   setupStorageListDrag(row, entry);
