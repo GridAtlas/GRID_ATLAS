@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0835";
+const WEB_VERSION = "0.0836";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -166,6 +166,7 @@ const elements = {
   pointListPreviewCount: document.querySelector("#pointListPreviewCount"),
   pointListPreviewItems: document.querySelector("#pointListPreviewItems"),
   pointInfoPhoto: document.querySelector("#pointInfoPhoto"),
+  pointInfoSummaryTitle: document.querySelector("#pointInfoSummaryTitle"),
   pointInfoName: document.querySelector("#pointInfoName"),
   pointInfoComment: document.querySelector("#pointInfoComment"),
   pointInfoCoords: document.querySelector("#pointInfoCoords"),
@@ -284,6 +285,7 @@ const state = {
   mobileGridPage: "grid",
   mobilePointPreviewStorageId: null,
   pointInfoReturnContext: null,
+  pointInfoTargetId: null,
   pointInfoReturnPhase: null,
   pointInfoBackdropClickPending: false,
   pointInfoBackdropClickSuppressed: false,
@@ -529,6 +531,7 @@ const TRANSLATIONS = {
     "field.endpoints": "端点",
     "info.dialogTitle": "地点情報",
     "info.summary": "選択地点",
+    "info.displayTarget": "表示地点",
     "info.other": "その他情報",
     "info.list": "リスト",
     "info.updated": "更新",
@@ -785,6 +788,7 @@ const TRANSLATIONS = {
     "field.endpoints": "Endpoints",
     "info.dialogTitle": "Point Info",
     "info.summary": "Selected Point",
+    "info.displayTarget": "Displayed Point",
     "info.other": "Other Info",
     "info.list": "List",
     "info.updated": "Updated",
@@ -1875,11 +1879,15 @@ function pruneHiddenPointReferences() {
   if (current) {
     visibleIds.add(CURRENT_LOCATION_ID);
   }
-  const pointInfoReturnId = state.pointInfoReturnContext?.pointId;
+  const pointInfoReturnSelectionIds = new Set(
+    (state.pointInfoReturnContext?.selection || [])
+      .filter((entry) => entry?.type === "point")
+      .map((entry) => entry.id)
+  );
   state.selection = state.selection.filter((entry) => (
     entry.type !== "point"
     || visibleIds.has(entry.id)
-    || entry.id === pointInfoReturnId
+    || pointInfoReturnSelectionIds.has(entry.id)
   ));
   state.routeSelectionIds = state.routeSelectionIds.filter((id) => visibleIds.has(id));
 
@@ -3128,7 +3136,9 @@ function renderPointInfoDialog() {
     return;
   }
 
-  const point = singleSelectedPoint();
+  const point = state.pointInfoTargetId
+    ? findPoint(state.pointInfoTargetId)
+    : singleSelectedPoint();
   if (!point) {
     elements.pointInfoDialog.close("selection-changed");
     return;
@@ -3141,6 +3151,10 @@ function renderPointInfoDialog() {
     ? formatDistance(distanceBetween(current, point))
     : t("label.none");
 
+  if (elements.pointInfoSummaryTitle) {
+    const isSelected = state.selection.some((entry) => entry.type === "point" && entry.id === point.id);
+    elements.pointInfoSummaryTitle.textContent = isSelected ? t("info.summary") : t("info.displayTarget");
+  }
   elements.pointInfoName.textContent = point.title;
   elements.pointInfoComment.textContent = point.note || t("info.noComment");
   elements.pointInfoComment.classList.toggle("is-muted", !point.note);
@@ -3155,7 +3169,7 @@ function renderPointInfoDialog() {
 
   if (point.photoAssetId && (!point.photo || point.photo.startsWith("blob:"))) {
     void hydratePointPhotoForDisplay(point).then((changed) => {
-      if (changed && elements.pointInfoDialog.open && singleSelectedPoint()?.id === point.id) {
+      if (changed && elements.pointInfoDialog.open && state.pointInfoTargetId === point.id) {
         renderPointInfoDialog();
       }
     }).catch(() => {});
@@ -3211,12 +3225,35 @@ function currentPointInfoOrigin() {
   };
 }
 
-function capturePointInfoReturnContext() {
-  const point = singleSelectedPoint();
+function pointInfoSelectionSnapshot(context) {
+  if (Array.isArray(context?.selection)) {
+    return context.selection
+      .filter((entry) => entry && typeof entry.type === "string" && typeof entry.id === "string")
+      .map((entry) => ({ type: entry.type, id: entry.id }));
+  }
+  return context?.pointId ? [{ type: "point", id: context.pointId }] : [];
+}
+
+function restorePointInfoSelection(context) {
+  state.selection = pointInfoSelectionSnapshot(context);
+  normalizeSelection();
+}
+
+function clearPointInfoReturnContext() {
+  state.pointInfoReturnContext = null;
+  state.pointInfoTargetId = null;
+  state.pointInfoReturnPhase = null;
+  try {
+    sessionStorage.removeItem(POINT_INFO_MAP_RETURN_KEY);
+  } catch {}
+}
+
+function capturePointInfoReturnContext(point = singleSelectedPoint()) {
   if (!point) return false;
   state.pointInfoReturnContext = {
     pointId: point.id,
-    origin: currentPointInfoOrigin()
+    origin: currentPointInfoOrigin(),
+    selection: state.selection.map((entry) => ({ type: entry.type, id: entry.id }))
   };
   return true;
 }
@@ -3248,27 +3285,29 @@ function restorePointInfoAfterEditing() {
       setMobileGridPage(context.origin?.kind === "points" ? "points" : "grid");
     }
   }
-  setSelection([{ type: "point", id: context.pointId }], { render: false });
+  restorePointInfoSelection(context);
+  state.pointInfoTargetId = context.pointId;
   render();
-  showSelectedPointInfoDialog();
+  showSelectedPointInfoDialog(context.pointId);
   return true;
 }
 
 function restorePointInfoOrigin() {
   const context = state.pointInfoReturnContext;
-  state.pointInfoReturnContext = null;
-  state.pointInfoReturnPhase = null;
-  try {
-    sessionStorage.removeItem(POINT_INFO_MAP_RETURN_KEY);
-  } catch {}
-  if (!context) return;
+  if (!context) {
+    clearPointInfoReturnContext();
+    return;
+  }
 
+  restorePointInfoSelection(context);
   if (context.origin?.kind === "preview") {
     showPointListPreview(context.origin.storageId);
+    clearPointInfoReturnContext();
     return;
   }
   setMobilePage("map");
   setMobileGridPage(context.origin?.kind === "points" ? "points" : "grid");
+  clearPointInfoReturnContext();
 }
 
 function restorePointInfoMapReturn() {
@@ -3297,10 +3336,12 @@ function restorePointInfoMapReturn() {
   if (!context?.pointId || !context.origin) return;
   state.pointInfoReturnContext = context;
   state.pointInfoReturnPhase = "info";
-  setSelection([{ type: "point", id: context.pointId }], { render: false });
+  restorePointInfoSelection(context);
+  state.pointInfoTargetId = context.pointId;
   render();
-  showSelectedPointInfoDialog();
+  showSelectedPointInfoDialog(context.pointId);
 }
+
 function markPointInfoOpenedFromPointLongPress() {
   state.pointInfoBackdropClickPending = true;
 }
@@ -3314,12 +3355,27 @@ function handlePointInfoRelease() {
   }, 250);
 }
 
-function showSelectedPointInfoDialog() {
-  const point = singleSelectedPoint();
+function openPointInfoForPoint(point, { fromLongPress = false } = {}) {
+  const resolved = typeof point === "string" ? findPointAny(point) : point;
+  if (!resolved) {
+    showAppToast(t("info.unavailable"), { error: true });
+    return;
+  }
+  capturePointInfoReturnContext(resolved);
+  state.pointInfoTargetId = resolved.id;
+  if (fromLongPress) markPointInfoOpenedFromPointLongPress();
+  showSelectedPointInfoDialog(resolved.id);
+}
+
+function showSelectedPointInfoDialog(pointOrId = null) {
+  const point = typeof pointOrId === "string"
+    ? findPoint(pointOrId)
+    : pointOrId || (state.pointInfoTargetId ? findPoint(state.pointInfoTargetId) : null) || singleSelectedPoint();
   if (!point) {
     showAppToast(t("info.unavailable"), { error: true });
     return;
   }
+  state.pointInfoTargetId = point.id;
 
   if (!elements.pointInfoDialog?.showModal) {
     const geo = pointGeo(point);
@@ -3843,6 +3899,15 @@ function openSelectedPointInExternalMap(provider) {
 
 function openSelectedPointInPreferredMap() {
   const point = mapPointForSelection();
+  if (!point) {
+    return;
+  }
+
+  openPointInExternalMap(point, preferredMapProvider());
+}
+
+function openPointInfoTargetInPreferredMap() {
+  const point = state.pointInfoTargetId ? findPoint(state.pointInfoTargetId) : null;
   if (!point) {
     return;
   }
@@ -4745,9 +4810,7 @@ function setupPointIndexGesture(row, { point, list }) {
       row.dataset.pointIndexSuppressClick = "true";
       cleanup();
       finishPointIndexDrag(dragState);
-      setSelection([{ type: "point", id: point.id }], { render: false });
-      markPointInfoOpenedFromPointLongPress();
-      showSelectedPointInfoDialog();
+      openPointInfoForPoint(point, { fromLongPress: true });
     }, 1000);
   });
 }
@@ -6262,10 +6325,9 @@ function createCenterPendingPoint() {
   render();
 }
 
-function startEditingSelectedPoint() {
-  const point = editableSelectedPoint();
-  if (!point) {
-    return;
+function startEditingPoint(point) {
+  if (!point || !pointEditable(point.id)) {
+    return false;
   }
 
   const geo = pointGeo(point);
@@ -6286,8 +6348,17 @@ function startEditingSelectedPoint() {
     setMobilePage("register");
   }
   render();
+  return true;
 }
 
+function startEditingPointInfoTarget() {
+  const point = state.pointInfoTargetId ? findPoint(state.pointInfoTargetId) : null;
+  return startEditingPoint(point);
+}
+
+function startEditingSelectedPoint() {
+  return startEditingPoint(editableSelectedPoint());
+}
 function restoreLastDeleted() {
   const snapshot = state.lastDeleted;
   if (!snapshot || deletedSnapshotItemCount() === 0) {
@@ -7282,8 +7353,10 @@ async function submitPoint(event) {
     if (moved) {
       showAppToast(t("list.movedPoint").replace("{name}", destinationList.name));
     }
-    state.selection = [{ type: "point", id: updatedPoint.id }];
-    normalizeSelection();
+    if (!state.pointInfoReturnContext) {
+      state.selection = [{ type: "point", id: updatedPoint.id }];
+      normalizeSelection();
+    }
     resetPointFormAfterSubmit();
     syncCanvasSize();
     render();
@@ -9043,11 +9116,11 @@ function bindEvents() {
     beginPointInfoEditingReturn();
     elements.pointInfoDialog.close("edit");
     closePointListPreviewDialog("edit");
-    startEditingSelectedPoint();
+    startEditingPointInfoTarget();
   });
   elements.pointInfoMapButton.addEventListener("click", () => {
     beginPointInfoMapReturn();
-    openSelectedPointInPreferredMap();
+    openPointInfoTargetInPreferredMap();
   });
 
   elements.pointForm.addEventListener("submit", submitPoint);
@@ -9076,6 +9149,8 @@ function bindEvents() {
     renderActionButtons();
     if (state.pointInfoReturnPhase === "info") {
       restorePointInfoOrigin();
+    } else if (state.pointInfoReturnPhase !== "editing") {
+      clearPointInfoReturnContext();
     }
   });
   elements.pointInfoDialog.addEventListener("click", (event) => {
