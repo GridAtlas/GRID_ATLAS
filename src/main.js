@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0820";
+const WEB_VERSION = "0.0821";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -3201,13 +3201,17 @@ function capturePointInfoReturnContext() {
   return true;
 }
 
+function ensurePointInfoReturnContext() {
+  return Boolean(state.pointInfoReturnContext) || capturePointInfoReturnContext();
+}
+
 function beginPointInfoEditingReturn() {
-  if (!capturePointInfoReturnContext()) return;
+  if (!ensurePointInfoReturnContext()) return;
   state.pointInfoReturnPhase = "editing";
 }
 
 function beginPointInfoMapReturn() {
-  if (!capturePointInfoReturnContext()) return;
+  if (!ensurePointInfoReturnContext()) return;
   state.pointInfoReturnPhase = "info";
   try {
     sessionStorage.setItem(POINT_INFO_MAP_RETURN_KEY, JSON.stringify(state.pointInfoReturnContext));
