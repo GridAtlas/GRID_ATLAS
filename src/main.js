@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0821";
+const WEB_VERSION = "0.0822";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -1229,6 +1229,7 @@ function normalizePoint(point, origin) {
   }
 
   const projected = projectLatLng(geo.lat, geo.lng);
+  const createdAt = point.createdAt || point.updatedAt || new Date().toISOString();
   return {
     id: point.id || createId(),
     x: projected.x,
@@ -1240,8 +1241,8 @@ function normalizePoint(point, origin) {
     photoAssetId: typeof point.photoAssetId === "string" ? point.photoAssetId : "",
     gridAtlas: point.gridAtlas && typeof point.gridAtlas === "object" ? clonePlain(point.gridAtlas) : null,
     geo,
-    createdAt: point.createdAt || new Date().toISOString(),
-    updatedAt: point.updatedAt || point.createdAt || new Date().toISOString()
+    createdAt,
+    updatedAt: point.updatedAt || ""
   };
 }
 
@@ -8492,7 +8493,7 @@ async function gridAtlasPackageToPointList(gridAtlasPackage, existingPointIds, e
     const media = Array.isArray(place.media) ? place.media : [];
     const primaryMedia = media.find((item) => item.role === "photo") ?? media[0] ?? null;
     const primaryResource = primaryMedia ? resourceData.get(primaryMedia.resourceId) : null;
-    const createdAt = place.createdAt || new Date().toISOString();
+    const createdAt = place.createdAt || place.updatedAt || new Date().toISOString();
     return {
       id: place.id,
       title: place.name,
@@ -8505,7 +8506,7 @@ async function gridAtlasPackageToPointList(gridAtlasPackage, existingPointIds, e
         lng: place.position.longitude
       },
       createdAt,
-      updatedAt: place.updatedAt || createdAt,
+      updatedAt: place.createdAt && place.updatedAt ? place.updatedAt : "",
       gridAtlas: {
         placeId: place.id,
         media: clonePlain(media),
