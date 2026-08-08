@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0833";
+const WEB_VERSION = "0.0834";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -3237,7 +3237,14 @@ function restorePointInfoAfterEditing() {
   const context = state.pointInfoReturnContext;
   if (!context) return false;
   state.pointInfoReturnPhase = "info";
+  if (mobilePageUiActive()) {
+    setMobilePage("map");
+    if (context.origin?.kind !== "preview") {
+      setMobileGridPage(context.origin?.kind === "points" ? "points" : "grid");
+    }
+  }
   setSelection([{ type: "point", id: context.pointId }], { render: false });
+  render();
   showSelectedPointInfoDialog();
   return true;
 }
@@ -7150,10 +7157,9 @@ function resetPointFormAfterSubmit() {
   state.pointDestinationListId = null;
   state.pendingLinkPointId = null;
   state.mode = "inspect";
-  if (mobilePageUiActive()) {
+  if (!restorePointInfoAfterEditing() && mobilePageUiActive()) {
     setMobilePage("map");
   }
-  restorePointInfoAfterEditing();
 }
 
 function closePointRegistration() {
