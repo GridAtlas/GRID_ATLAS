@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0822";
+const WEB_VERSION = "0.0833";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -590,7 +590,11 @@ const TRANSLATIONS = {
     "storage.connectFirst": "先にクラウドへ接続してください",
     "storage.importMoveOnly": "インポートリストは、個別の転送操作でマイリストへ移動またはコピーできます。",
     "storage.dragHint": "短く長押ししてから動かすと、順番や保存場所を変更できます。動かさず長く押し続けるとプレビューを表示します。",
+    "storage.dragReordering": "クラウドに並び順を保存中",
     "storage.dragReordered": "リストの順番を変更しました",
+    "storage.transferCloudProgress": "クラウドへ保存中",
+    "storage.transferDeviceProgress": "端末へ保存中",
+    "storage.transferDevicePhotos": "画像を端末へ復元中",
     "storage.dragMoveCloud": "クラウド保管へ移動",
     "storage.dragMoveDevice": "端末へ移動",
     "storage.transferTitle": "リストの移動／コピー",
@@ -842,7 +846,11 @@ const TRANSLATIONS = {
     "storage.connectFirst": "Connect to the cloud first",
     "storage.importMoveOnly": "Move or copy imported lists to My Lists from the individual transfer dialog.",
     "storage.dragHint": "Hold briefly, then drag to reorder or change storage. Keep holding without moving to open the preview.",
+    "storage.dragReordering": "Saving list order to the cloud",
     "storage.dragReordered": "List order updated",
+    "storage.transferCloudProgress": "Saving to the cloud",
+    "storage.transferDeviceProgress": "Saving to the device",
+    "storage.transferDevicePhotos": "Restoring images to the device",
     "storage.dragMoveCloud": "Move to cloud storage",
     "storage.dragMoveDevice": "Move to device",
     "storage.transferTitle": "List transfer",
@@ -1405,6 +1413,9 @@ async function cloudPayloadWithPhotos(list, cloudId, client) {
 
 async function hydrateCloudPointListAssets(list, client, options = {}) {
   const photoPoints = (list?.points || []).filter((point) => point.photoAssetId);
+  let completed = 0;
+  const total = photoPoints.length;
+  options.onProgress?.(completed, total);
   await Promise.all(photoPoints.map(async (point) => {
     try {
       const blob = await client.getAsset(list.cloudId, point.photoAssetId);
@@ -1422,6 +1433,9 @@ async function hydrateCloudPointListAssets(list, client, options = {}) {
           `Could not save the image for “${point.title || "Untitled"}” to this device. The cloud list was kept.`
         ));
       }
+    } finally {
+      completed += 1;
+      options.onProgress?.(completed, total);
     }
   }));
   return list;
@@ -4209,14 +4223,16 @@ async function reorderStorageLists(sourceEntry, targetEntry, before) {
     applyCloudListOrder();
   }
   persistWorkspace();
-  setCloudStatus(t("storage.dragReordered"), { menu: false });
+  setCloudStatus(sectionKey === "mineCloud" ? t("storage.dragReordering") : t("storage.dragReordered"), { menu: false });
   render();
 
   if (sectionKey !== "mineCloud") return true;
 
   setCloudBusy(true);
+  setCloudProgress(0, 1, t("storage.dragReordering"));
   try {
     await cloudClientFromInputs().updateListOrder(state.cloud.listOrder);
+    setCloudProgress(1, 1, t("storage.dragReordered"));
     setCloudBusy(false);
     setCloudStatus(t("storage.dragReordered"), { menu: false });
     render();
@@ -5350,6 +5366,7 @@ async function moveListToCloud(storageId, options = {}) {
     return false;
   }
   setCloudBusy(true);
+  setCloudProgress(0, 1, t("storage.transferCloudProgress"));
   let completed = false;
   try {
     const client = cloudClientFromInputs();
@@ -5359,6 +5376,9 @@ async function moveListToCloud(storageId, options = {}) {
       await client.updateList(targetCloudId, created?.revision || 1, photoPayload);
     }
     if (options.copy !== true) removeLocalListForStorageChange(source.id);
+    setCloudProgress(1, 1, options.copy === true
+      ? cloudText("クラウドへコピーしました", "Copied to the cloud")
+      : cloudText("クラウドへ移動しました", "Moved to the cloud"));
     completed = true;
   } catch (error) {
     setCloudStatus(cloudErrorMessage(error), { error: true });
@@ -5389,12 +5409,17 @@ async function moveListToDevice(storageId, options = {}) {
   }
   const name = entry.cloud.name || "地点リスト";
   setCloudBusy(true);
+  setCloudProgress(0, 1, t("storage.transferDeviceProgress"));
   let installed = false;
   let cloudDeleteFailed = false;
   try {
     const client = cloudClientFromInputs();
     const result = await client.getList(entry.cloud.id);
-    const imported = await hydrateCloudPointListAssets(cloudPayloadToPointList(result.list, { localId: uniqueLocalListId(result.list.list.id), revision: result.revision, editable: true }), client, { required: true });
+    const imported = await hydrateCloudPointListAssets(cloudPayloadToPointList(result.list, { localId: uniqueLocalListId(result.list.list.id), revision: result.revision, editable: true }), client, {
+      required: true,
+      onProgress: (completed, total) => setCloudProgress(completed, Math.max(total, 1), t("storage.transferDevicePhotos"))
+    });
+    setCloudProgress(1, 1, t("storage.transferDeviceProgress"));
     const normalized = normalizePointList({
       ...imported,
       id: uniqueLocalListId(imported.id),
@@ -5415,6 +5440,9 @@ async function moveListToDevice(storageId, options = {}) {
       try { await client.deleteList(entry.cloud.id, result.revision); }
       catch { cloudDeleteFailed = true; }
     }
+    setCloudProgress(1, 1, options.copy === true
+      ? cloudText("端末へコピーしました", "Copied to the device")
+      : cloudText("端末へ移動しました", "Moved to the device"));
   } catch (error) {
     setCloudStatus(cloudErrorMessage(error), { error: true });
   } finally {
