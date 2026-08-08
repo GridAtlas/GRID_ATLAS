@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0862";
+const WEB_VERSION = "0.0863";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -6216,7 +6216,7 @@ function setRouteFromSelectedPoints() {
   state.pendingLinkPointId = null;
   state.routeSelectionIds = [];
   state.routeResult = optimizeVisitOrder(plan.points, plan.start.id, state.routeReturnToStart);
-  if (!preserveSelection) setSelection([], { render: false });
+  setSelection([], { render: false });
   render();
 }
 
@@ -6444,7 +6444,7 @@ function connectSelectedPoints() {
 
   state.mode = "inspect";
   state.pendingLinkPointId = null;
-  if (!preserveSelection) setSelection([], { render: false });
+  setSelection([], { render: false });
   render();
 }
 
@@ -6701,7 +6701,7 @@ function computeRouteFromSelection() {
 
   state.routeSelectionIds = [];
   state.routeResult = optimizeVisitOrder(plan.points, plan.start.id, state.routeReturnToStart);
-  if (!preserveSelection) setSelection([], { render: false });
+  setSelection([], { render: false });
   render();
 }
 
@@ -9311,6 +9311,14 @@ function bindEvents() {
     if (!elements.gridPointQuickDialog.open) return;
     if (event.target instanceof Node && elements.gridPointQuickDialog.contains(event.target)) return;
     elements.gridPointQuickDialog.close("outside");
+  }, true);
+  document.addEventListener("click", (event) => {
+    if (!elements.gridPointQuickDialog.open) return;
+    if (event.target instanceof Node && elements.gridPointQuickDialog.contains(event.target)) return;
+    const target = event.target instanceof Element
+      ? event.target.closest("button, a, input, select, textarea, summary")
+      : null;
+    if (target) elements.gridPointQuickDialog.close("outside-control");
   }, true);
   elements.pointInfoMapButton.addEventListener("click", () => {
     beginPointInfoMapReturn();
