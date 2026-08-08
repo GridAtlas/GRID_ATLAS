@@ -2143,11 +2143,14 @@ textarea {
 
 .grid-point-quick-heading {
   display: grid;
+  justify-items: center;
   gap: 1px;
   min-width: 0;
+  text-align: center;
 }
 
 .grid-point-quick-name {
+  width: 100%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2157,6 +2160,7 @@ textarea {
 }
 
 .grid-point-quick-list {
+  width: 100%;
   min-width: 0;
   overflow: hidden;
   color: var(--muted);
@@ -2168,6 +2172,7 @@ textarea {
 
 .grid-point-quick-actions {
   display: flex;
+  justify-content: center;
   gap: 5px;
 }
 
