@@ -2121,6 +2121,64 @@ textarea {
   gap: 8px;
 }
 
+.grid-point-quick-dialog {
+  width: min(260px, calc(100vw - 24px));
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow), var(--brand-glow);
+}
+
+.grid-point-quick-dialog::backdrop {
+  background: transparent;
+}
+
+.grid-point-quick-dialog-form {
+  display: grid;
+  gap: 8px;
+  padding: 8px 10px 10px;
+}
+
+.grid-point-quick-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.grid-point-quick-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+}
+
+.grid-point-quick-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.grid-point-quick-role-button {
+  width: 36px;
+  min-width: 36px;
+  height: 32px;
+  padding: 4px;
+}
+
+.grid-point-quick-role-button .ui-icon {
+  width: 17px;
+  height: 17px;
+}
+
+.grid-point-quick-role-button.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
 .share-link-primary {
   border-color: var(--accent);
   background: var(--accent);

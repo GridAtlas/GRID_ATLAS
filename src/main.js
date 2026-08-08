@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0857";
+const WEB_VERSION = "0.0858";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -174,10 +174,12 @@ const elements = {
   pointInfoCreated: document.querySelector("#pointInfoCreated"),
   pointInfoUpdated: document.querySelector("#pointInfoUpdated"),
   pointInfoDistance: document.querySelector("#pointInfoDistance"),
-  pointInfoStartButton: document.querySelector("#pointInfoStartButton"),
-  pointInfoTargetButton: document.querySelector("#pointInfoTargetButton"),
   pointInfoEditButton: document.querySelector("#pointInfoEditButton"),
   pointInfoMapButton: document.querySelector("#pointInfoMapButton"),
+  gridPointQuickDialog: document.querySelector("#gridPointQuickDialog"),
+  gridPointQuickName: document.querySelector("#gridPointQuickName"),
+  gridPointQuickStartButton: document.querySelector("#gridPointQuickStartButton"),
+  gridPointQuickTargetButton: document.querySelector("#gridPointQuickTargetButton"),
   appToast: document.querySelector("#appToast"),
   cloudProgress: document.querySelector("#cloudProgress"),
   cloudProgressTitle: document.querySelector("#cloudProgressTitle"),
@@ -289,6 +291,7 @@ const state = {
   pointInfoReturnContext: null,
   pointInfoTargetId: null,
   pointInfoReturnPhase: null,
+  gridPointQuickPointId: null,
   pointInfoBackdropClickPending: false,
   pointInfoBackdropClickSuppressed: false,
   selection: [],
@@ -2826,6 +2829,7 @@ function render() {
   renderWebVersion();
   renderActionButtons();
   renderPointInfoDialog();
+  renderGridPointQuickDialog();
   syncSettingsControls();
   syncLocationGlowAnimation();
 }
@@ -3171,17 +3175,6 @@ function renderPointInfoDialog() {
   elements.pointInfoCreated.textContent = point.isVirtual ? currentLocationLabel() : formatOptionalDate(point.createdAt);
   elements.pointInfoUpdated.textContent = formatOptionalDate(point.updatedAt);
   elements.pointInfoDistance.textContent = distance;
-  const canSetObservationRole = !point.isVirtual;
-  const isStart = canSetObservationRole && point.id === state.routeStartPointId;
-  const isTarget = canSetObservationRole && point.id === state.targetPointId;
-  elements.pointInfoStartButton.disabled = !canSetObservationRole;
-  elements.pointInfoStartButton.textContent = isStart ? t("button.clearStart") : t("button.setStart");
-  elements.pointInfoStartButton.classList.toggle("is-active", isStart);
-  elements.pointInfoStartButton.setAttribute("aria-pressed", String(isStart));
-  elements.pointInfoTargetButton.disabled = !canSetObservationRole;
-  elements.pointInfoTargetButton.textContent = isTarget ? t("button.clearTarget") : t("button.setTarget");
-  elements.pointInfoTargetButton.classList.toggle("is-active", isTarget);
-  elements.pointInfoTargetButton.setAttribute("aria-pressed", String(isTarget));
   elements.pointInfoEditButton.disabled = state.cloud.busy || !pointEditable(point.id);
   elements.pointInfoEditButton.textContent = t("action.edit");
   elements.pointInfoMapButton.textContent = t("action.map");
@@ -3384,6 +3377,38 @@ function openPointInfoForPoint(point, { fromLongPress = false } = {}) {
   state.pointInfoTargetId = resolved.id;
   if (fromLongPress) markPointInfoOpenedFromPointLongPress();
   showSelectedPointInfoDialog(resolved.id);
+}
+
+function renderGridPointQuickDialog() {
+  if (!elements.gridPointQuickDialog?.open) return;
+  const point = state.gridPointQuickPointId ? findPoint(state.gridPointQuickPointId) : null;
+  if (!point) {
+    elements.gridPointQuickDialog.close("selection-changed");
+    return;
+  }
+
+  const canSetObservationRole = !point.isVirtual;
+  const isStart = canSetObservationRole && point.id === state.routeStartPointId;
+  const isTarget = canSetObservationRole && point.id === state.targetPointId;
+  elements.gridPointQuickName.textContent = point.title;
+  elements.gridPointQuickStartButton.disabled = !canSetObservationRole;
+  elements.gridPointQuickStartButton.classList.toggle("is-active", isStart);
+  elements.gridPointQuickStartButton.setAttribute("aria-pressed", String(isStart));
+  elements.gridPointQuickStartButton.setAttribute("aria-label", isStart ? t("button.clearStart") : t("button.setStart"));
+  elements.gridPointQuickStartButton.title = isStart ? t("button.clearStart") : t("button.setStart");
+  elements.gridPointQuickTargetButton.disabled = !canSetObservationRole;
+  elements.gridPointQuickTargetButton.classList.toggle("is-active", isTarget);
+  elements.gridPointQuickTargetButton.setAttribute("aria-pressed", String(isTarget));
+  elements.gridPointQuickTargetButton.setAttribute("aria-label", isTarget ? t("button.clearTarget") : t("button.setTarget"));
+  elements.gridPointQuickTargetButton.title = isTarget ? t("button.clearTarget") : t("button.setTarget");
+}
+
+function openGridPointQuickDialog(point) {
+  if (!point || !elements.gridPointQuickDialog?.showModal) return;
+  state.gridPointQuickPointId = point.id;
+  if (elements.gridPointQuickDialog.open) elements.gridPointQuickDialog.close("refresh");
+  elements.gridPointQuickDialog.showModal();
+  renderGridPointQuickDialog();
 }
 
 function showSelectedPointInfoDialog(pointOrId = null) {
@@ -7110,7 +7135,7 @@ function startDragGesture(pointerId, point, options = {}) {
 
       drag.longPressed = true;
       if (drag.longPressPoint) {
-        openPointInfoForPoint(drag.longPressPoint, { fromLongPress: true });
+        openGridPointQuickDialog(drag.longPressPoint);
         return;
       }
       state.pointer.range = {
@@ -9196,13 +9221,20 @@ function bindEvents() {
     closePointListPreviewDialog("edit");
     startEditingPointInfoTarget();
   });
-  elements.pointInfoStartButton.addEventListener("click", () => {
-    const point = state.pointInfoTargetId ? findPoint(state.pointInfoTargetId) : null;
+
+  elements.gridPointQuickStartButton.addEventListener("click", () => {
+    const point = state.gridPointQuickPointId ? findPoint(state.gridPointQuickPointId) : null;
     setRouteStartForPoint(point);
   });
-  elements.pointInfoTargetButton.addEventListener("click", () => {
-    const point = state.pointInfoTargetId ? findPoint(state.pointInfoTargetId) : null;
+  elements.gridPointQuickTargetButton.addEventListener("click", () => {
+    const point = state.gridPointQuickPointId ? findPoint(state.gridPointQuickPointId) : null;
     toggleTargetForPoint(point);
+  });
+  elements.gridPointQuickDialog.addEventListener("close", () => {
+    state.gridPointQuickPointId = null;
+  });
+  elements.gridPointQuickDialog.addEventListener("click", (event) => {
+    if (event.target === elements.gridPointQuickDialog) elements.gridPointQuickDialog.close("cancel");
   });
   elements.pointInfoMapButton.addEventListener("click", () => {
     beginPointInfoMapReturn();
