@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0863";
+const WEB_VERSION = "0.0864";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -9295,10 +9295,12 @@ function bindEvents() {
 
   elements.gridPointQuickStartButton.addEventListener("click", () => {
     const point = state.gridPointQuickPointId ? findPoint(state.gridPointQuickPointId) : null;
+    if (elements.gridPointQuickDialog.open) elements.gridPointQuickDialog.close("role-selected");
     setRouteStartForPoint(point, { preserveSelection: true });
   });
   elements.gridPointQuickTargetButton.addEventListener("click", () => {
     const point = state.gridPointQuickPointId ? findPoint(state.gridPointQuickPointId) : null;
+    if (elements.gridPointQuickDialog.open) elements.gridPointQuickDialog.close("role-selected");
     toggleTargetForPoint(point, { preserveSelection: true });
   });
   elements.gridPointQuickDialog.addEventListener("close", () => {
