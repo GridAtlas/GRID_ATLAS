@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0896";
+const WEB_VERSION = "0.0906";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -142,6 +142,7 @@ const elements = {
   mobileGridPanels: Array.from(document.querySelectorAll("[data-mobile-grid-panel]")),
   mobilePointCount: document.querySelector("#mobilePointCount"),
   mobilePointItems: document.querySelector("#mobilePointItems"),
+  pointRegistrationDialog: document.querySelector("#pointRegistrationDialog"),
   pointForm: document.querySelector("#pointForm"),
   closePointRegistrationButton: document.querySelector("#closePointRegistrationButton"),
   pointTitle: document.querySelector("#pointTitle"),
@@ -3153,8 +3154,8 @@ function renderActionButtons() {
   const canDelete = deletablePointCount + linkIds.length > 0 || observationSelected;
   const transferablePointCount = transferableSelectedPoints().length;
 
-  const canOpenRegisterPage = !hasPendingPoint && state.selection.length === 0 && mobilePageUiActive();
-  elements.actionRegisterButton.disabled = !hasPendingPoint && !canOpenRegisterPage;
+  const canOpenRegistration = !hasPendingPoint && state.selection.length === 0;
+  elements.actionRegisterButton.disabled = !hasPendingPoint && !canOpenRegistration;
   elements.actionLinkButton.disabled = pointIds.length < 2;
   elements.actionRouteButton.disabled = !routeActive && !routePlan;
   elements.deletePointButton.disabled = !canDelete;
@@ -3180,7 +3181,7 @@ function renderActionButtons() {
   elements.actionInfoButton.disabled = !infoCandidate;
 
   elements.actionRegisterButton.classList.remove("is-active");
-  elements.actionRegisterButton.title = hasPendingPoint ? "仮ポイントを登録" : canOpenRegisterPage ? "地点登録画面を開く" : "仮ポイントを作成すると登録できます";
+  elements.actionRegisterButton.title = hasPendingPoint ? "仮ポイントを登録" : canOpenRegistration ? "地点登録画面を開く" : "仮ポイントを作成すると登録できます";
   elements.actionLinkButton.classList.toggle("is-active", false);
   elements.actionLinkButton.title = pointIds.length >= 3
     ? `選択順に${pointIds.length}地点を接続（最後と最初も接続）`
@@ -6585,15 +6586,23 @@ function connectSelectedPoints() {
   render();
 }
 
+function openPointRegistrationDialog() {
+  const dialog = elements.pointRegistrationDialog;
+  if (!dialog?.showModal || dialog.open) return;
+  dialog.showModal();
+  window.setTimeout(() => elements.pointTitle?.focus(), 0);
+}
+
 function submitPendingPoint() {
   if (!validGeo(state.pendingGeo)) {
-    if (state.selection.length === 0 && mobilePageUiActive()) {
+    if (state.selection.length === 0) {
       state.mode = "add";
       state.editingPointId = null;
       state.pointDestinationListId = null;
       state.pendingLinkPointId = null;
       elements.shareImportStatus.value = "地点情報を入力できます";
-      setMobilePage("register");
+      openPointRegistrationDialog();
+      render();
     }
     return;
   }
@@ -6628,6 +6637,7 @@ function createCenterPendingPoint() {
   elements.pointPhoto.value = "";
   fillFormFromGeo(geo);
   setSelection([], { clearPending: false, render: false });
+  openPointRegistrationDialog();
   render();
 }
 
@@ -6650,9 +6660,7 @@ function startEditingPoint(point) {
   elements.shareImportStatus.value = editingList?.cloudId
     ? cloudText("クラウド保管中のマイリストを編集中。保存するとクラウドへ反映します", "Editing a cloud-stored my list. Saving will update cloud storage.")
     : "編集: 内容を更新できます";
-  if (mobilePageUiActive()) {
-    setMobilePage("register");
-  }
+  openPointRegistrationDialog();
   render();
   return true;
 }
@@ -6743,6 +6751,7 @@ function fillFormFromWorld(point) {
   state.pointDestinationListId = null;
   state.pendingLinkPointId = null;
   fillFormFromGeo(state.pendingGeo);
+  openPointRegistrationDialog();
 }
 
 function fillFormFromGeo(geo) {
@@ -7549,6 +7558,9 @@ function resetPointFormAfterSubmit() {
   state.pointDestinationListId = null;
   state.pendingLinkPointId = null;
   state.mode = "inspect";
+  if (elements.pointRegistrationDialog?.open) {
+    elements.pointRegistrationDialog.close("reset");
+  }
   if (!restorePointInfoAfterEditing() && mobilePageUiActive()) {
     setMobilePage("map");
   }
@@ -7792,6 +7804,7 @@ function updateCurrentLocationFromPosition(position, options = {}) {
     state.pointDestinationListId = null;
     state.pendingLinkPointId = null;
     fillFormFromGeo(geo);
+    openPointRegistrationDialog();
   }
 
   if (options.center) {
@@ -8314,6 +8327,7 @@ function applySharedLocationToForm(result, message, options = {}) {
   }
 
   elements.shareImportStatus.value = `${message}: ${formatCoordinate(geo.lat)}, ${formatCoordinate(geo.lng)}`;
+  openPointRegistrationDialog();
 }
 
 function parseSharedLocationPayload(payload) {
@@ -9439,9 +9453,9 @@ function bindEvents() {
     const point = findPointAny(elements.pointInfoDialog.dataset.pointId || state.pointInfoTargetId || state.pointInfoReturnContext?.pointId) || singleSelectedPoint();
     if (!point) return;
     beginPointInfoEditingReturn();
-    startEditingPoint(point);
     elements.pointInfoDialog.close("edit");
     closePointListPreviewDialog("edit");
+    startEditingPoint(point);
   });
 
   bindPointerActionButton(elements.gridPointQuickStartButton, () => {
@@ -9481,6 +9495,13 @@ function bindEvents() {
   });
 
   elements.pointForm.addEventListener("submit", submitPoint);
+  elements.pointRegistrationDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closePointRegistration();
+  });
+  elements.pointRegistrationDialog.addEventListener("click", (event) => {
+    if (event.target === elements.pointRegistrationDialog) closePointRegistration();
+  });
   elements.pointDestinationListSelect.addEventListener("change", () => {
     state.pointDestinationListId = elements.pointDestinationListSelect.value || NEW_POINT_LIST_ID;
   });

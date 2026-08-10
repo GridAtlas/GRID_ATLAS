@@ -1915,6 +1915,7 @@ textarea {
 }
 
 .share-link-dialog,
+.point-registration-dialog,
 .point-info-dialog,
 .point-list-preview-dialog,
 .point-transfer-dialog {
@@ -1929,6 +1930,7 @@ textarea {
 }
 
 .share-link-dialog::backdrop,
+.point-registration-dialog::backdrop,
 .point-info-dialog::backdrop,
 .point-list-preview-dialog::backdrop,
 .point-transfer-dialog::backdrop {
@@ -1937,6 +1939,7 @@ textarea {
 }
 
 .share-link-dialog-form,
+.point-registration-dialog-form,
 .point-info-dialog-form,
 .point-list-preview-dialog-form,
 .point-transfer-dialog-form {
@@ -1946,6 +1949,7 @@ textarea {
 }
 
 .share-link-dialog-heading,
+.point-registration-dialog-heading,
 .point-info-dialog-heading,
 .point-list-preview-dialog-heading,
 .point-transfer-dialog-heading {
@@ -1956,6 +1960,7 @@ textarea {
 }
 
 .share-link-dialog-heading h2,
+.point-registration-dialog-heading h2,
 .point-info-dialog-heading h2,
 .point-list-preview-dialog-heading h2,
 .point-transfer-dialog-heading h2 {
@@ -1976,6 +1981,17 @@ textarea {
 .share-link-close .ui-icon {
   width: 18px;
   height: 18px;
+}
+
+.point-registration-dialog-form {
+  width: min(560px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.point-registration-dialog-heading {
+  margin-bottom: 0;
 }
 
 .point-list-preview-dialog-heading > div {
@@ -2369,6 +2385,7 @@ textarea {
     grid-template-columns: 1fr;
   }
   .share-link-dialog-form,
+  .point-registration-dialog-form,
   .point-info-dialog-form,
   .point-list-preview-dialog-form,
   .point-transfer-dialog-form {

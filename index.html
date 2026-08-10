@@ -12,7 +12,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=64">
-    <script src="src/main.js?v=221" type="module" defer></script>
+    <script src="src/main.js?v=222" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -271,58 +271,11 @@
           </nav>
         </div>
 
-        <aside class="sidebar" aria-label="地点登録とリスト一覧">
+        <aside class="sidebar" aria-label="リスト一覧">
           <div class="selected-summary selected-summary-sidebar desktop-secondary-panel" aria-live="polite">
             <span data-i18n="summary.selected">選択中</span>
             <strong id="sidebarSelectedTitle">未選択</strong>
           </div>
-          <section class="panel is-mobile-active" data-mobile-panel="register">
-            <div class="panel-heading point-registration-heading">
-              <h2 data-i18n="panel.register">地点登録</h2>
-              <button id="closePointRegistrationButton" class="panel-close-button" type="button" aria-label="閉じる" title="地点登録を閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
-            </div>
-            <form id="pointForm" class="point-form">
-              <label>
-                <span data-i18n="field.title">見出し</span>
-                <input id="pointTitle" name="title" type="text" autocomplete="off" maxlength="80">
-              </label>
-
-              <div class="coordinate-fields">
-                <label>
-                  <span data-i18n="field.lat">緯度</span>
-                  <input id="pointLat" name="lat" type="number" step="0.000001" inputmode="decimal" placeholder="35.681236">
-                </label>
-                <label>
-                  <span data-i18n="field.lng">経度</span>
-                  <input id="pointLng" name="lng" type="number" step="0.000001" inputmode="decimal" placeholder="139.767125">
-                </label>
-              </div>
-
-              <div class="point-source-heading" data-i18n="section.pointSource">地点取得</div>
-              <div class="button-row point-source-actions">
-                <button id="useLocationButton" type="button" aria-pressed="false" title="現在地を登録フォームへ入力" data-i18n="button.currentLocation">現在地</button>
-                <button id="readClipboardButton" type="button" data-i18n="button.clipboard">クリップボード</button>
-              </div>
-              <output id="shareImportStatus" class="form-status" aria-live="polite"></output>
-
-              <label>
-                <span data-i18n="field.photo">写真</span>
-                <input id="pointPhoto" name="photo" type="file" accept="image/*">
-              </label>
-
-              <label>
-                <span data-i18n="field.note">コメント</span>
-                <textarea id="pointNote" name="note" rows="4"></textarea>
-              </label>
-
-              <label>
-                <span data-i18n="list.destination">登録先リスト</span>
-                <select id="pointDestinationListSelect" name="destinationList"></select>
-              </label>
-
-              <button id="pointSubmitButton" class="primary-button" type="submit" data-i18n="button.submitRegister">登録</button>
-            </form>
-          </section>
           <section class="panel desktop-secondary-panel" data-mobile-panel="detail">
             <div class="panel-heading">
               <h2 id="selectionHeading">選択地点</h2>
@@ -421,6 +374,53 @@
         </aside>
       </main>
     </div>
+    <dialog id="pointRegistrationDialog" class="point-registration-dialog" aria-labelledby="pointRegistrationDialogTitle">
+      <form id="pointForm" class="point-registration-dialog-form">
+        <div class="point-registration-dialog-heading">
+          <h2 id="pointRegistrationDialogTitle" data-i18n="panel.register">地点登録</h2>
+          <button id="closePointRegistrationButton" class="share-link-close" type="button" aria-label="閉じる" title="地点登録を閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
+        </div>
+        <label>
+          <span data-i18n="field.title">見出し</span>
+          <input id="pointTitle" name="title" type="text" autocomplete="off" maxlength="80">
+        </label>
+
+        <div class="coordinate-fields">
+          <label>
+            <span data-i18n="field.lat">緯度</span>
+            <input id="pointLat" name="lat" type="number" step="0.000001" inputmode="decimal" placeholder="35.681236">
+          </label>
+          <label>
+            <span data-i18n="field.lng">経度</span>
+            <input id="pointLng" name="lng" type="number" step="0.000001" inputmode="decimal" placeholder="139.767125">
+          </label>
+        </div>
+
+        <div class="point-source-heading" data-i18n="section.pointSource">地点取得</div>
+        <div class="button-row point-source-actions">
+          <button id="useLocationButton" type="button" aria-pressed="false" title="現在地を登録フォームへ入力" data-i18n="button.currentLocation">現在地</button>
+          <button id="readClipboardButton" type="button" data-i18n="button.clipboard">クリップボード</button>
+        </div>
+        <output id="shareImportStatus" class="form-status" aria-live="polite"></output>
+
+        <label>
+          <span data-i18n="field.photo">写真</span>
+          <input id="pointPhoto" name="photo" type="file" accept="image/*">
+        </label>
+
+        <label>
+          <span data-i18n="field.note">コメント</span>
+          <textarea id="pointNote" name="note" rows="4"></textarea>
+        </label>
+
+        <label>
+          <span data-i18n="list.destination">登録先リスト</span>
+          <select id="pointDestinationListSelect" name="destinationList"></select>
+        </label>
+
+        <button id="pointSubmitButton" class="primary-button" type="submit" data-i18n="button.submitRegister">登録</button>
+      </form>
+    </dialog>
     <dialog id="shareLinkDialog" class="share-link-dialog" aria-labelledby="shareLinkDialogTitle">
       <form class="share-link-dialog-form" method="dialog">
         <div class="share-link-dialog-heading">
