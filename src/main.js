@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0864";
+const WEB_VERSION = "0.0867";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -3409,6 +3409,31 @@ function renderGridPointQuickDialog() {
   elements.gridPointQuickTargetButton.setAttribute("aria-pressed", String(isTarget));
   elements.gridPointQuickTargetButton.setAttribute("aria-label", isTarget ? t("button.clearTarget") : t("button.setTarget"));
   elements.gridPointQuickTargetButton.title = isTarget ? t("button.clearTarget") : t("button.setTarget");
+}
+
+function setPointInfoActionLabel(button, label) {
+  const labelNode = button.querySelector("[data-i18n]");
+  if (labelNode) {
+    labelNode.textContent = label;
+    return;
+  }
+  button.textContent = label;
+}
+
+function bindPointerActionButton(button, action) {
+  let lastPointerActivationAt = 0;
+
+  button.addEventListener("pointerup", (event) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    event.preventDefault();
+    lastPointerActivationAt = performance.now();
+    action();
+  });
+
+  button.addEventListener("click", (event) => {
+    if (event.detail > 0 && performance.now() - lastPointerActivationAt < 500) return;
+    action();
+  });
 }
 
 function positionGridPointQuickDialog(screenPoint) {
@@ -9285,7 +9310,7 @@ function bindEvents() {
   elements.actionRestoreButton.addEventListener("click", restoreLastDeleted);
   elements.actionEditButton.addEventListener("click", startEditingSelectedPoint);
   elements.actionMapButton.addEventListener("click", openSelectedPointInPreferredMap);
-  elements.pointInfoEditButton.addEventListener("click", () => {
+  bindPointerActionButton(elements.pointInfoEditButton, () => {
     if (elements.pointInfoEditButton.disabled) return;
     beginPointInfoEditingReturn();
     elements.pointInfoDialog.close("edit");
@@ -9293,12 +9318,12 @@ function bindEvents() {
     startEditingPointInfoTarget();
   });
 
-  elements.gridPointQuickStartButton.addEventListener("click", () => {
+  bindPointerActionButton(elements.gridPointQuickStartButton, () => {
     const point = state.gridPointQuickPointId ? findPoint(state.gridPointQuickPointId) : null;
     if (elements.gridPointQuickDialog.open) elements.gridPointQuickDialog.close("role-selected");
     setRouteStartForPoint(point, { preserveSelection: true });
   });
-  elements.gridPointQuickTargetButton.addEventListener("click", () => {
+  bindPointerActionButton(elements.gridPointQuickTargetButton, () => {
     const point = state.gridPointQuickPointId ? findPoint(state.gridPointQuickPointId) : null;
     if (elements.gridPointQuickDialog.open) elements.gridPointQuickDialog.close("role-selected");
     toggleTargetForPoint(point, { preserveSelection: true });
@@ -9322,7 +9347,7 @@ function bindEvents() {
       : null;
     if (target) elements.gridPointQuickDialog.close("outside-control");
   }, true);
-  elements.pointInfoMapButton.addEventListener("click", () => {
+  bindPointerActionButton(elements.pointInfoMapButton, () => {
     beginPointInfoMapReturn();
     openPointInfoTargetInPreferredMap();
   });
