@@ -1984,7 +1984,8 @@ textarea {
 }
 
 .point-registration-dialog-form {
-  width: min(560px, calc(100vw - 24px));
+  width: 100%;
+  min-width: 0;
   max-height: calc(100dvh - 24px);
   box-sizing: border-box;
   overflow-y: auto;
@@ -1992,6 +1993,21 @@ textarea {
 
 .point-registration-dialog-heading {
   margin-bottom: 0;
+}
+
+.point-registration-dialog-form > *,
+.point-registration-dialog-form label,
+.point-registration-dialog-form input,
+.point-registration-dialog-form select,
+.point-registration-dialog-form textarea,
+.point-registration-dialog-form .coordinate-fields,
+.point-registration-dialog-form .button-row {
+  min-width: 0;
+}
+
+.point-registration-dialog-form input[type="file"] {
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .point-list-preview-dialog-heading > div {
@@ -2402,6 +2418,33 @@ textarea {
 
   .app-toast {
     bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 480px) {
+  .point-registration-dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+
+  .point-registration-dialog-form {
+    max-height: calc(100dvh - 16px);
+    padding: 13px;
+  }
+
+  .point-registration-dialog-form .coordinate-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .point-registration-dialog-form .point-source-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .point-registration-dialog-form .point-source-actions button {
+    min-width: 0;
+    width: 100%;
+    padding-inline: 6px;
   }
 }
 
