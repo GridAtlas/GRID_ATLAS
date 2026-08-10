@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0912";
+const WEB_VERSION = "0.0913";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -7247,11 +7247,6 @@ function geographicCenter(points) {
 
 function followFitTargetPoints(current) {
   const points = [...visibleSelectablePoints(), current];
-
-  if (validGeo(state.pendingGeo)) {
-    const pending = normalizeGeo(state.pendingGeo);
-    points.push({ ...projectLatLng(pending.lat, pending.lng), geo: pending });
-  }
 
   return points;
 }
