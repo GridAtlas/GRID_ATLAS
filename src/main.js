@@ -57,7 +57,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0929";
+const WEB_VERSION = "0.0930";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -375,6 +375,7 @@ let pendingConfirmResolve = null;
 let pendingTextInputResolve = null;
 let activeStorageListDrag = null;
 let activePointIndexDrag = null;
+let initialPresetFitPending = false;
 
 const CANVAS_PALETTES = {
   pastel: {
@@ -1213,6 +1214,7 @@ function loadWorkspace() {
       activePointListId: DEFAULT_POINT_LIST_ID
     });
     persistWorkspace();
+    initialPresetFitPending = true;
     return;
   }
 
@@ -9969,5 +9971,9 @@ handleIncomingShare();
 locateOnStartup();
 registerServiceWorker();
 render();
+if (initialPresetFitPending) {
+  initialPresetFitPending = false;
+  fitToPoints();
+}
 restorePointInfoMapReturn();
 if (state.cloud.connected && !state.cloud.authConfigured) void refreshCloudLists();
