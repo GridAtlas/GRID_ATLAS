@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0911";
+const WEB_VERSION = "0.0912";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -9548,8 +9548,22 @@ function bindEvents() {
     event.preventDefault();
     closePointRegistration();
   });
+  let pointRegistrationBackdropPointerDown = false;
+  elements.pointRegistrationDialog.addEventListener("pointerdown", (event) => {
+    pointRegistrationBackdropPointerDown = event.target === elements.pointRegistrationDialog;
+  });
+  elements.pointRegistrationDialog.addEventListener("pointerup", (event) => {
+    if (event.target !== elements.pointRegistrationDialog) {
+      pointRegistrationBackdropPointerDown = false;
+    }
+  });
+  elements.pointRegistrationDialog.addEventListener("pointercancel", () => {
+    pointRegistrationBackdropPointerDown = false;
+  });
   elements.pointRegistrationDialog.addEventListener("click", (event) => {
-    if (event.target === elements.pointRegistrationDialog) closePointRegistration();
+    const closeFromBackdrop = event.target === elements.pointRegistrationDialog && pointRegistrationBackdropPointerDown;
+    pointRegistrationBackdropPointerDown = false;
+    if (closeFromBackdrop) closePointRegistration();
   });
   elements.pointDestinationListSelect.addEventListener("change", () => {
     state.pointDestinationListId = elements.pointDestinationListSelect.value || NEW_POINT_LIST_ID;
