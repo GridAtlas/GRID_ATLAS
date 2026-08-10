@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0894";
+const WEB_VERSION = "0.0895";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -1391,6 +1391,9 @@ async function cloudPhotoAssetsForList(list, cloudId, client, options = {}) {
   for (const point of photoPoints) {
     if (point.cloudPhoto) {
       photoAssets.set(point.id, point.cloudPhoto);
+      completed += 1;
+      options.onProgress?.(completed, total);
+      continue;
     }
     if (!point.photoAssetId && point.photo) {
       await ensureStoredPointPhoto(point);
@@ -6587,6 +6590,7 @@ function submitPendingPoint() {
     if (state.selection.length === 0 && mobilePageUiActive()) {
       state.mode = "add";
       state.editingPointId = null;
+      state.pointDestinationListId = null;
       state.pendingLinkPointId = null;
       elements.shareImportStatus.value = "地点情報を入力できます";
       setMobilePage("register");
@@ -6594,6 +6598,8 @@ function submitPendingPoint() {
     return;
   }
 
+  state.editingPointId = null;
+  state.pointDestinationListId = null;
   if (typeof elements.pointForm.requestSubmit === "function") {
     elements.pointForm.requestSubmit();
     return;
@@ -6615,6 +6621,7 @@ function createCenterPendingPoint() {
   state.mode = "add";
   state.pendingGeo = geo;
   state.editingPointId = null;
+  state.pointDestinationListId = null;
   state.pendingLinkPointId = null;
   elements.pointTitle.value = "中心";
   elements.pointNote.value = `${points.length}点の中心`;
@@ -6733,6 +6740,7 @@ function fillFormFromWorld(point) {
   state.mode = "add";
   state.pendingGeo = unprojectWorld(point.x, point.y);
   state.editingPointId = null;
+  state.pointDestinationListId = null;
   state.pendingLinkPointId = null;
   fillFormFromGeo(state.pendingGeo);
 }
@@ -7547,12 +7555,8 @@ function resetPointFormAfterSubmit() {
 }
 
 function closePointRegistration() {
-  if (state.pointInfoReturnContext) {
-    resetPointFormAfterSubmit();
-    render();
-    return;
-  }
-  setMobilePage("map");
+  resetPointFormAfterSubmit();
+  render();
 }
 async function saveEditedPointToDestination(editingList, destinationList, updatedPoint, updatedAt) {
   if (editingList === destinationList) {
@@ -7652,7 +7656,8 @@ async function submitPoint(event) {
       ...(photoDisplay ? {
         photo: photoDisplay,
         photoName: file?.name ?? "",
-        photoAssetId: storedPhoto?.id || ""
+        photoAssetId: storedPhoto?.id || "",
+        cloudPhoto: null
       } : {})
     };
     const moved = editingList !== destinationList;
@@ -7783,6 +7788,9 @@ function updateCurrentLocationFromPosition(position, options = {}) {
   if (options.fillForm) {
     state.mode = "add";
     state.pendingGeo = geo;
+    state.editingPointId = null;
+    state.pointDestinationListId = null;
+    state.pendingLinkPointId = null;
     fillFormFromGeo(geo);
   }
 
@@ -8289,6 +8297,9 @@ function applySharedLocationToForm(result, message, options = {}) {
 
   state.mode = "add";
   state.pendingGeo = geo;
+  state.editingPointId = null;
+  state.pointDestinationListId = null;
+  state.pendingLinkPointId = null;
   state.viewport.x = projected.x;
   state.viewport.y = projected.y;
   state.viewport.scale = Math.max(state.viewport.scale, 0.7);
