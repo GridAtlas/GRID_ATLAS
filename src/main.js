@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0893";
+const WEB_VERSION = "0.0894";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -1475,6 +1475,8 @@ async function updateCloudPointList(list, nextList, options = {}) {
   }
 
   setCloudBusy(true);
+  const progressMessage = options.progressMessage || cloudText("クラウドを更新中", "Updating cloud");
+  setCloudProgress(0, 2, progressMessage);
   let payload;
   let client;
   try {
@@ -1486,10 +1488,12 @@ async function updateCloudPointList(list, nextList, options = {}) {
     return false;
   }
 
+  setCloudProgress(1, 2, cloudText("クラウドへ保存中", "Saving to cloud"));
   let updated = false;
   try {
     await client.updateList(cloudId, meta.revision, payload);
     updated = true;
+    setCloudProgress(2, 2, cloudText("クラウドを更新しました", "Cloud updated"));
   } catch (error) {
     setCloudStatus(cloudErrorMessage(error), { error: true });
   } finally {
@@ -1504,6 +1508,63 @@ async function updateCloudPointList(list, nextList, options = {}) {
 }
 function findCloudPointAny(pointId) {
   return findCloudPointInLists(pointId, state.cloud.pointLists);
+}
+
+function repairLocalCloudPointIdCollisions() {
+  const cloudPointIds = new Set(state.cloud.pointLists.flatMap((list) => list.points.map((point) => point.id)));
+  if (cloudPointIds.size === 0) return false;
+  const reservedIds = new Set([
+    ...state.pointLists.flatMap((list) => list.points.map((point) => point.id)),
+    ...cloudPointIds
+  ]);
+  let changed = false;
+
+  const remapReferences = (previousId, nextId) => {
+    for (const link of state.links) {
+      if (link.a === previousId) link.a = nextId;
+      if (link.b === previousId) link.b = nextId;
+    }
+    state.selection = state.selection.map((entry) => (
+      entry.type === "point" && entry.id === previousId ? { ...entry, id: nextId } : entry
+    ));
+    state.routeSelectionIds = state.routeSelectionIds.map((id) => id === previousId ? nextId : id);
+    if (state.selectedPointId === previousId) state.selectedPointId = nextId;
+    if (state.pendingLinkPointId === previousId) state.pendingLinkPointId = nextId;
+    if (state.routeStartPointId === previousId) state.routeStartPointId = nextId;
+    if (state.targetPointId === previousId) state.targetPointId = nextId;
+    if (state.editingPointId === previousId) state.editingPointId = nextId;
+    if (state.gridPointHoverPointId === previousId) state.gridPointHoverPointId = nextId;
+    if (state.gridPointQuickPointId === previousId) state.gridPointQuickPointId = nextId;
+    if (state.pointInfoTargetId === previousId) state.pointInfoTargetId = nextId;
+    if (state.pointInfoReturnContext?.pointId === previousId) state.pointInfoReturnContext.pointId = nextId;
+    if (Array.isArray(state.pointInfoReturnContext?.selection)) {
+      state.pointInfoReturnContext.selection = state.pointInfoReturnContext.selection.map((entry) => (
+        entry.type === "point" && entry.id === previousId ? { ...entry, id: nextId } : entry
+      ));
+    }
+    if (Array.isArray(state.routeResult?.pointIds)) {
+      state.routeResult.pointIds = state.routeResult.pointIds.map((id) => id === previousId ? nextId : id);
+    }
+  };
+
+  for (const list of state.pointLists) {
+    for (const point of list.points) {
+      if (!cloudPointIds.has(point.id)) continue;
+      const previousId = point.id;
+      let nextId = createId();
+      while (reservedIds.has(nextId)) nextId = createId();
+      reservedIds.add(nextId);
+      point.id = nextId;
+      remapReferences(previousId, nextId);
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    refreshVisiblePoints();
+    normalizeSelection();
+  }
+  return changed;
 }
 
 function visibleCloudPoints() {
@@ -5452,6 +5513,7 @@ async function refreshCloudLists(options = {}) {
       return hydrateCloudPointListAssets(list, client);
     }));
     applyCloudListOrder();
+    repairLocalCloudPointIdCollisions();
     persistWorkspace();
     state.cloud.pointRows = state.cloud.pointLists.flatMap((list) => (
       list.points.map((point) => ({ point, list, isCloud: true }))
@@ -5672,6 +5734,10 @@ async function moveListToDevice(storageId, options = {}) {
       onProgress: (completed, total) => setCloudProgress(completed, Math.max(total, 1), t("storage.transferDevicePhotos"))
     });
     setCloudProgress(1, 1, t("storage.transferDeviceProgress"));
+    const existingPointIds = new Set([
+      ...allPointListPoints().map((point) => point.id),
+      ...state.cloud.pointLists.flatMap((list) => list.points.map((point) => point.id))
+    ]);
     const normalized = normalizePointList({
       ...imported,
       id: uniqueLocalListId(imported.id),
@@ -5682,7 +5748,7 @@ async function moveListToDevice(storageId, options = {}) {
       source: "local",
       importedAt: "",
       editable: true
-    }, new Set(allPointListPoints().map((point) => point.id)), imported.name);
+    }, existingPointIds, imported.name);
     state.pointLists.push(normalized);
     state.activePointListId = normalized.id;
     refreshVisiblePoints();
@@ -9202,7 +9268,8 @@ if (cloudPointIdSet.size > 0) {
         points: list.points.filter((point) => !cloudPointIdSet.has(point.id))
       };
       const updated = await updateCloudPointList(list, nextList, {
-        message: cloudText("クラウド地点を削除しました", "Cloud point(s) deleted")
+        message: cloudText("クラウド地点を削除しました", "Cloud point(s) deleted"),
+        progressMessage: cloudText("クラウド地点を削除中", "Deleting cloud point(s)")
       });
       if (!updated) {
         render();
