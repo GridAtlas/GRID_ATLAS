@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0917";
+const WEB_VERSION = "0.0918";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -3612,12 +3612,12 @@ function showSelectedPointInfoDialog(pointOrId = null) {
 
   if (!elements.pointInfoDialog?.showModal) {
     const geo = pointGeo(point);
-    window.alert([
+    showAppToast([
       point.title,
       point.note || t("info.noComment"),
       `${t("field.coords")}: ${formatCoordinate(geo.lat)}, ${formatCoordinate(geo.lng)}`,
       `${t("info.list")}: ${pointListNameForPoint(point) || t("label.none")}`
-    ].join("\n"));
+    ].join(" | "), { duration: 7000 });
     return;
   }
 
