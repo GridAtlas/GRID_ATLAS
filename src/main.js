@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0882";
+const WEB_VERSION = "0.0883";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -5438,6 +5438,7 @@ async function refreshCloudLists(options = {}) {
       list && typeof list.id === "string" && Number.isInteger(list.revision)
     ));
     state.cloud.listOrder = state.cloud.lists.map((list) => list.id);
+    repairLocalCloudIdCollisions();
 
     const details = await Promise.all(state.cloud.lists.map((list) => client.getList(list.id)));
     state.cloud.pointLists = await Promise.all(details.map(async (result) => {
@@ -5623,10 +5624,30 @@ async function moveListToCloud(storageId, options = {}) {
   return completed;
 }function uniqueLocalListId(preferredId) {
   const existingIds = new Set(state.pointLists.map((list) => list.id));
-  if (preferredId !== DEFAULT_POINT_LIST_ID && !existingIds.has(preferredId)) return preferredId;
+  const cloudIds = new Set(state.cloud.lists.map((list) => list.id));
+  const preferred = typeof preferredId === "string" ? preferredId.trim() : "";
+  const isCloudId = preferred.startsWith("cloud:") || preferred.startsWith("cloud-preview:");
+  if (preferred && preferred !== DEFAULT_POINT_LIST_ID && !isCloudId && !existingIds.has(preferred) && !cloudIds.has(preferred)) {
+    return preferred;
+  }
   let nextId = createId();
-  while (existingIds.has(nextId)) nextId = createId();
+  while (existingIds.has(nextId) || cloudIds.has(nextId)) nextId = createId();
   return nextId;
+}
+
+function repairLocalCloudIdCollisions() {
+  const cloudIds = new Set(state.cloud.lists.map((list) => list.id));
+  if (cloudIds.size === 0) return false;
+  let changed = false;
+  for (const list of state.pointLists) {
+    if (list.cloudId || !cloudIds.has(list.id)) continue;
+    const previousId = list.id;
+    list.id = uniqueLocalListId();
+    if (state.activePointListId === previousId) state.activePointListId = list.id;
+    if (state.pointDestinationListId === previousId) state.pointDestinationListId = list.id;
+    changed = true;
+  }
+  return changed;
 }
 
 async function moveListToDevice(storageId, options = {}) {
