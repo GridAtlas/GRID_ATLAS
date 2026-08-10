@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0895";
+const WEB_VERSION = "0.0896";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -9228,15 +9228,15 @@ async function importPointListFiles(files) {
 async function deleteSelectedPoint() {
   normalizeSelection();
   const selectedIds = selectedPointIds().filter((id) => id !== CURRENT_LOCATION_ID);
-  const pointIds = selectedIds.filter((id) => pointEditable(id));
   const cloudPointIds = selectedIds.filter((id) => (
-    !pointIds.includes(id) && state.cloud.connected && cloudPointListForPoint(id)?.editable
+    state.cloud.connected && cloudPointListForPoint(id)?.editable
   ));
+  const cloudPointIdSet = new Set(cloudPointIds);
+  const pointIds = selectedIds.filter((id) => !cloudPointIdSet.has(id) && pointEditable(id));
   const explicitLinkIds = selectedLinkIds();
   const selectedObservations = selectedLoadedObservations();
   const selectedObservationIdSet = new Set(selectedObservations.map((observation) => observation.id));
   const pointIdSet = new Set(pointIds);
-  const cloudPointIdSet = new Set(cloudPointIds);
   const deletionPointIdSet = new Set([...pointIdSet, ...cloudPointIdSet]);
   const linkIdSet = new Set(explicitLinkIds);
 
