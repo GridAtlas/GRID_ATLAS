@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0915";
+const WEB_VERSION = "0.0916";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -104,6 +104,11 @@ const elements = {
   pointTransferDestinationList: document.querySelector("#pointTransferDestinationList"),
   createPointTransferListButton: document.querySelector("#createPointTransferListButton"),
   cancelPointTransferButton: document.querySelector("#cancelPointTransferButton"),
+  confirmDialog: document.querySelector("#confirmDialog"),
+  confirmDialogTitle: document.querySelector("#confirmDialogTitle"),
+  confirmDialogMessage: document.querySelector("#confirmDialogMessage"),
+  confirmDialogCancelButton: document.querySelector("#confirmDialogCancelButton"),
+  confirmDialogConfirmButton: document.querySelector("#confirmDialogConfirmButton"),
   actionCopyToListButton: document.querySelector("#actionCopyToListButton"),
   actionMoveToListButton: document.querySelector("#actionMoveToListButton"),
   actionShareSelectedButton: document.querySelector("#actionShareSelectedButton"),
@@ -346,6 +351,7 @@ const state = {
 
 let pendingShareLink = null;
 let appToastTimerId = 0;
+let pendingConfirmResolve = null;
 let activeStorageListDrag = null;
 let activePointIndexDrag = null;
 
@@ -5826,10 +5832,15 @@ async function deleteStoredList(storageId, options = {}) {
     return;
   }
   const name = entry.local?.name || entry.cloud?.name || "地点リスト";
-  if (options.confirm !== false && !window.confirm(cloudText(
-    `${name}を削除しますか？\n保存されている場所すべてから削除します。`,
-    `Delete ${name}?\nIt will be removed from every storage location.`
-  ))) return;
+  if (options.confirm !== false && !await requestConfirm({
+    title: cloudText("リスト削除の確認", "Confirm list deletion"),
+    message: cloudText(
+      `${name}を削除しますか？\n保存されている場所すべてから削除します。`,
+      `Delete ${name}?\nIt will be removed from every storage location.`
+    ),
+    confirmLabel: t("action.delete"),
+    danger: true
+  })) return;
 
   setCloudBusy(true);
   let deleted = false;
@@ -5876,13 +5887,21 @@ function setStorageListVisible(storageId, visible, options = {}) {
   if (options.render !== false) render();
 }
 
-function deletePointList(listId) {
+async function deletePointList(listId) {
   const list = state.pointLists.find((item) => item.id === listId);
   if (!list || list.id === DEFAULT_POINT_LIST_ID) {
     return;
   }
 
-  const confirmed = window.confirm(`${list.name || "地点リスト"}を削除しますか。`);
+  const confirmed = await requestConfirm({
+    title: cloudText("リスト削除の確認", "Confirm list deletion"),
+    message: cloudText(
+      `${list.name || "地点リスト"}を削除しますか。`,
+      `Delete ${list.name || "point list"}?`
+    ),
+    confirmLabel: t("action.delete"),
+    danger: true
+  });
   if (!confirmed) {
     return;
   }
@@ -6722,7 +6741,7 @@ function startEditingPointInfoTarget() {
 function startEditingSelectedPoint() {
   return startEditingPoint(editableSelectedPoint());
 }
-function restoreLastDeleted() {
+async function restoreLastDeleted() {
   const snapshot = state.lastDeleted;
   if (!snapshot || deletedSnapshotItemCount() === 0) {
     return;
@@ -6742,7 +6761,15 @@ function restoreLastDeleted() {
     parts.push(`${snapshotObservations.length}観察`);
   }
 
-  const confirmed = window.confirm(`直前に削除した${parts.join(" / ")}を復旧しますか。`);
+  const confirmed = await requestConfirm({
+    title: cloudText("復旧の確認", "Confirm restore"),
+    message: cloudText(
+      `直前に削除した${parts.join(" / ")}を復旧しますか。`,
+      `Restore the last deleted ${parts.join(" / ")}?`
+    ),
+    confirmLabel: t("action.restore"),
+    danger: false
+  });
   if (!confirmed) {
     return;
   }
@@ -8779,6 +8806,35 @@ function gridAtlasShareUrl(document) {
   return url.href;
 }
 
+function requestConfirm(options = {}) {
+  const dialog = elements.confirmDialog;
+  if (!dialog?.showModal) {
+    return Promise.resolve(false);
+  }
+
+  if (pendingConfirmResolve) {
+    const resolve = pendingConfirmResolve;
+    pendingConfirmResolve = null;
+    resolve(false);
+  }
+  if (dialog.open) {
+    dialog.close("cancel");
+  }
+
+  elements.confirmDialogTitle.textContent = options.title || cloudText("確認", "Confirm");
+  elements.confirmDialogMessage.textContent = options.message || "";
+  elements.confirmDialogCancelButton.textContent = options.cancelLabel || t("action.cancel");
+  elements.confirmDialogConfirmButton.textContent = options.confirmLabel || t("action.delete");
+  elements.confirmDialogConfirmButton.classList.toggle("danger-button", options.danger !== false);
+
+  const result = new Promise((resolve) => {
+    pendingConfirmResolve = resolve;
+  });
+  dialog.showModal();
+  elements.confirmDialogConfirmButton.focus();
+  return result;
+}
+
 function showAppToast(message, options = {}) {
   if (!elements.appToast || !message) return;
   window.clearTimeout(appToastTimerId);
@@ -9321,7 +9377,15 @@ if (cloudPointIdSet.size > 0) {
     parts.push(String(selectedObservationIdSet.size) + "観察（保存ファイルには影響しません）");
   }
 
-  const confirmed = window.confirm("選択中の" + parts.join(" / ") + "を削除しますか。");
+  const confirmed = await requestConfirm({
+    title: cloudText("削除の確認", "Confirm deletion"),
+    message: cloudText(
+      "選択中の" + parts.join(" / ") + "を削除しますか。",
+      `Delete the selected ${parts.join(" / ")}?`
+    ),
+    confirmLabel: t("action.delete"),
+    danger: true
+  });
   if (!confirmed) {
     return;
   }
@@ -9488,7 +9552,7 @@ function bindEvents() {
   elements.actionMoveToListButton.addEventListener("click", () => beginPointTransfer("move"));
   elements.actionShareSelectedButton.addEventListener("click", () => void shareSelectedPointsLink());
   elements.actionInfoButton.addEventListener("click", showSelectedPointInfoDialog);
-  elements.actionRestoreButton.addEventListener("click", restoreLastDeleted);
+  elements.actionRestoreButton.addEventListener("click", () => void restoreLastDeleted());
   elements.actionEditButton.addEventListener("click", startEditingSelectedPoint);
   elements.actionMapButton.addEventListener("click", openSelectedPointInPreferredMap);
   elements.pointInfoEditButton.addEventListener("click", () => {
@@ -9538,6 +9602,14 @@ function bindEvents() {
   });
 
   elements.pointForm.addEventListener("submit", submitPoint);
+  elements.confirmDialog.addEventListener("close", () => {
+    const resolve = pendingConfirmResolve;
+    pendingConfirmResolve = null;
+    resolve?.(elements.confirmDialog.returnValue === "confirm");
+  });
+  elements.confirmDialog.addEventListener("click", (event) => {
+    if (event.target === elements.confirmDialog) elements.confirmDialog.close("cancel");
+  });
   elements.pointRegistrationDialog.addEventListener("cancel", (event) => {
     event.preventDefault();
     closePointRegistration();

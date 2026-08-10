@@ -12,7 +12,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=64">
-    <script src="src/main.js?v=231" type="module" defer></script>
+    <script src="src/main.js?v=232" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -538,6 +538,18 @@
             <span data-i18n="list.transferDialogNew">新しいリストを作成</span>
           </button>
           <button id="cancelPointTransferButton" class="compact-button" type="submit" value="cancel" data-i18n="action.cancel">キャンセル</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="confirmDialog" class="confirm-dialog" aria-labelledby="confirmDialogTitle" aria-describedby="confirmDialogMessage">
+      <form class="confirm-dialog-form" method="dialog">
+        <div class="confirm-dialog-heading">
+          <h2 id="confirmDialogTitle">確認</h2>
+        </div>
+        <p id="confirmDialogMessage" class="confirm-dialog-message"></p>
+        <div class="confirm-dialog-actions">
+          <button id="confirmDialogCancelButton" class="compact-button" type="submit" value="cancel" data-i18n="action.cancel">キャンセル</button>
+          <button id="confirmDialogConfirmButton" class="danger-button" type="submit" value="confirm">確認</button>
         </div>
       </form>
     </dialog>

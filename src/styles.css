@@ -1918,7 +1918,8 @@ textarea {
 .point-registration-dialog,
 .point-info-dialog,
 .point-list-preview-dialog,
-.point-transfer-dialog {
+.point-transfer-dialog,
+.confirm-dialog {
   width: min(560px, calc(100vw - 24px));
   max-height: calc(100dvh - 24px);
   padding: 0;
@@ -1933,7 +1934,8 @@ textarea {
 .point-registration-dialog::backdrop,
 .point-info-dialog::backdrop,
 .point-list-preview-dialog::backdrop,
-.point-transfer-dialog::backdrop {
+.point-transfer-dialog::backdrop,
+.confirm-dialog::backdrop {
   background: rgb(0 0 0 / 0.58);
   backdrop-filter: blur(3px);
 }
@@ -1942,7 +1944,8 @@ textarea {
 .point-registration-dialog-form,
 .point-info-dialog-form,
 .point-list-preview-dialog-form,
-.point-transfer-dialog-form {
+.point-transfer-dialog-form,
+.confirm-dialog-form {
   display: grid;
   gap: 14px;
   padding: 18px;
@@ -1952,7 +1955,8 @@ textarea {
 .point-registration-dialog-heading,
 .point-info-dialog-heading,
 .point-list-preview-dialog-heading,
-.point-transfer-dialog-heading {
+.point-transfer-dialog-heading,
+.confirm-dialog-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1963,7 +1967,8 @@ textarea {
 .point-registration-dialog-heading h2,
 .point-info-dialog-heading h2,
 .point-list-preview-dialog-heading h2,
-.point-transfer-dialog-heading h2 {
+.point-transfer-dialog-heading h2,
+.confirm-dialog-heading h2 {
   margin: 0;
   font-size: 18px;
 }
@@ -2171,6 +2176,28 @@ textarea {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.confirm-dialog {
+  width: min(440px, calc(100vw - 24px));
+}
+
+.confirm-dialog-message {
+  margin: 0;
+  white-space: pre-line;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.confirm-dialog-actions .danger-button {
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 .grid-point-quick-dialog {
@@ -2404,7 +2431,8 @@ textarea {
   .point-registration-dialog-form,
   .point-info-dialog-form,
   .point-list-preview-dialog-form,
-  .point-transfer-dialog-form {
+  .point-transfer-dialog-form,
+  .confirm-dialog-form {
     padding: 15px;
   }
 
