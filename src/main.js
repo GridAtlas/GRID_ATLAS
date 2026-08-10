@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0907";
+const WEB_VERSION = "0.0908";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -6751,7 +6751,6 @@ function fillFormFromWorld(point) {
   state.pointDestinationListId = null;
   state.pendingLinkPointId = null;
   fillFormFromGeo(state.pendingGeo);
-  openPointRegistrationDialog();
 }
 
 function fillFormFromGeo(geo) {
