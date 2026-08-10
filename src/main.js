@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0914";
+const WEB_VERSION = "0.0915";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -6687,7 +6687,6 @@ function createCenterPendingPoint() {
   elements.pointPhoto.value = "";
   fillFormFromGeo(geo);
   setSelection([], { clearPending: false, render: false });
-  openPointRegistrationDialog();
   render();
 }
 
