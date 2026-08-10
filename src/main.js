@@ -41,7 +41,7 @@ const CLOUD_PRODUCTION_API_URL = "https://grid-atlas-cloud-staging.kazki1981.wor
 const CLOUD_AUTO_REFRESH_INTERVAL_MS = 30_000;
 const BUILTIN_KINKI_PENTAGRAM_PRESET = {
   id: "builtin-kinki-pentagram",
-  name: "⛩️レイライン検証:近畿五芒星",
+  name: "近畿五芒星",
   description: "近畿の五芒星として紹介される5地点の検証用リスト。",
   documentId: "kinki-pentagram",
   points: [
@@ -57,7 +57,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0928";
+const WEB_VERSION = "0.0929";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -1258,7 +1258,12 @@ function applyWorkspace(workspace) {
     state.pointLists = [createLocalPointList(points)];
   }
 
+  let presetNameChanged = false;
   for (const list of state.pointLists) {
+    if (list.id === BUILTIN_KINKI_PENTAGRAM_PRESET.id && list.name !== BUILTIN_KINKI_PENTAGRAM_PRESET.name) {
+      list.name = BUILTIN_KINKI_PENTAGRAM_PRESET.name;
+      presetNameChanged = true;
+    }
     if (list.id === DEFAULT_POINT_LIST_ID) {
       list.editable = true;
       list.source = "local";
@@ -1304,7 +1309,7 @@ function applyWorkspace(workspace) {
   state.editingPointId = null;
   state.lastDeleted = null;
   state.pendingGeo = null;
-  if (activeListVisibilityChanged) {
+  if (activeListVisibilityChanged || presetNameChanged) {
     persistWorkspace();
   }
 }
