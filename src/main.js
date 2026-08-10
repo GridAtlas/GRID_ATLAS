@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0883";
+const WEB_VERSION = "0.0893";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -3118,9 +3118,11 @@ function renderActionButtons() {
   elements.actionRegisterButton.classList.remove("is-active");
   elements.actionRegisterButton.title = hasPendingPoint ? "仮ポイントを登録" : canOpenRegisterPage ? "地点登録画面を開く" : "仮ポイントを作成すると登録できます";
   elements.actionLinkButton.classList.toggle("is-active", false);
-  elements.actionLinkButton.title = pointIds.length >= 2
-    ? `選択順に${pointIds.length}地点を接続`
-    : "2地点以上を選択すると接続できます";
+  elements.actionLinkButton.title = pointIds.length >= 3
+    ? `選択順に${pointIds.length}地点を接続（最後と最初も接続）`
+    : pointIds.length >= 2
+      ? `選択順に${pointIds.length}地点を接続`
+      : "2地点以上を選択すると接続できます";
   elements.actionRouteButton.classList.toggle("is-active", routeActive);
   elements.actionRouteButton.setAttribute("aria-pressed", String(routeActive));
   elements.actionRouteButton.title = routeActive ? "巡回表示を解除" : routePlan ? "選択点を起点から巡回計算" : "起点を指定するか3地点以上を選択";
@@ -6488,6 +6490,20 @@ function connectSelectedPoints() {
       createdAt: new Date().toISOString()
     });
     created = true;
+  }
+
+  if (pointIds.length >= 3) {
+    const a = pointIds.at(-1);
+    const b = pointIds[0];
+    if (!findLinkBetween(a, b)) {
+      state.links.push({
+        id: createId(),
+        a,
+        b,
+        createdAt: new Date().toISOString()
+      });
+      created = true;
+    }
   }
 
   if (created) {
