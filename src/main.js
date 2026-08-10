@@ -39,12 +39,25 @@ const GPS_ENABLED_KEY = "grid-atlas-gps-enabled";
 const CLOUD_ACCESS_TOKEN_KEY = "grid-atlas-cloud-access-token";
 const CLOUD_PRODUCTION_API_URL = "https://grid-atlas-cloud-staging.kazki1981.workers.dev";
 const CLOUD_AUTO_REFRESH_INTERVAL_MS = 30_000;
+const BUILTIN_KINKI_PENTAGRAM_PRESET = {
+  id: "builtin-kinki-pentagram",
+  name: "⛩️レイライン検証:近畿五芒星",
+  description: "近畿の五芒星として紹介される5地点の検証用リスト。",
+  documentId: "kinki-pentagram",
+  points: [
+    { id: "ise-jingu-naiku", title: "伊勢神宮（皇大神宮 内宮）", geo: { lat: 34.455, lng: 136.725175 } },
+    { id: "kumano-hongu-taisha", title: "熊野本宮大社", geo: { lat: 33.84056, lng: 135.77340000000004 } },
+    { id: "izanagi-jingu", title: "伊弉諾神宮", geo: { lat: 34.460133, lng: 134.85250599999995 } },
+    { id: "mt-ibuki", title: "伊吹山 山頂", geo: { lat: 35.41778, lng: 136.40639 } },
+    { id: "6fee750f-f995-460c-a7ef-3e5f1003f962", title: "元伊勢 皇大神社", geo: { lat: 35.430408, lng: 135.15432699999997 } }
+  ]
+};
 const PASTEL_THEME = "pastel";
 const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0918";
+const WEB_VERSION = "0.0928";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -1183,6 +1196,23 @@ function createId() {
 function loadWorkspace() {
   const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem("grid-atlas-workspace-v1");
   if (!raw) {
+    applyWorkspace({
+      pointLists: [
+        {
+          id: BUILTIN_KINKI_PENTAGRAM_PRESET.id,
+          name: BUILTIN_KINKI_PENTAGRAM_PRESET.name,
+          description: BUILTIN_KINKI_PENTAGRAM_PRESET.description,
+          visible: true,
+          editable: false,
+          source: "import",
+          importedAt: new Date().toISOString(),
+          gridAtlas: { documentId: BUILTIN_KINKI_PENTAGRAM_PRESET.documentId },
+          points: BUILTIN_KINKI_PENTAGRAM_PRESET.points
+        }
+      ],
+      activePointListId: DEFAULT_POINT_LIST_ID
+    });
+    persistWorkspace();
     return;
   }
 
@@ -5278,11 +5308,11 @@ function renderPointDestinationSelect() {
 }
 function renderStorageLists() {
   const entries = storageListEntries();
-  const sections = [
-    { key: "mineDevice", label: "list.section.mineDevice" },
-    { key: "mineCloud", label: "list.section.mineCloud" },
-    { key: "imported", label: "list.section.imported" }
-  ];
+  const sections = [{ key: "mineDevice", label: "list.section.mineDevice" }];
+  if (state.cloud.connected || state.cloud.authSession?.access_token) {
+    sections.push({ key: "mineCloud", label: "list.section.mineCloud" });
+  }
+  sections.push({ key: "imported", label: "list.section.imported" });
   for (const container of elements.storageListContainers) {
     container.replaceChildren();
     for (const section of sections) {
