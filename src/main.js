@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0909";
+const WEB_VERSION = "0.0910";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -6604,6 +6604,18 @@ function submitPendingPoint() {
       openPointRegistrationDialog();
       render();
     }
+    return;
+  }
+
+  if (state.selection.length === 0) {
+    state.mode = "add";
+    state.editingPointId = null;
+    state.pointDestinationListId = null;
+    state.pendingLinkPointId = null;
+    elements.pointTitle.value = "グリッド上の仮選択地点";
+    elements.shareImportStatus.value = "地点情報を入力できます";
+    openPointRegistrationDialog();
+    render();
     return;
   }
 
