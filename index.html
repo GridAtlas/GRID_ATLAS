@@ -12,7 +12,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=64">
-    <script src="src/main.js?v=214" type="module" defer></script>
+    <script src="src/main.js?v=216" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -479,8 +479,8 @@
           </dl>
         </section>
         <div class="point-info-actions">
-          <button id="pointInfoEditButton" type="button" data-i18n="action.edit"><svg class="ui-icon" aria-hidden="true"><use href="#icon-edit"></use></svg><span data-i18n="action.edit">編集</span></button>
-          <button id="pointInfoMapButton" type="button" data-i18n="action.map"><svg class="ui-icon" aria-hidden="true"><use href="#icon-map"></use></svg><span data-i18n="action.map">地図</span></button>
+          <button id="pointInfoEditButton" class="grid-point-quick-role-button point-info-action-button" type="button" data-i18n="action.edit"><svg class="ui-icon" aria-hidden="true"><use href="#icon-edit"></use></svg><span data-i18n="action.edit">編集</span></button>
+          <button id="pointInfoMapButton" class="grid-point-quick-role-button point-info-action-button" type="button" data-i18n="action.map"><svg class="ui-icon" aria-hidden="true"><use href="#icon-map"></use></svg><span data-i18n="action.map">地図</span></button>
         </div>
       </form>
     </dialog>

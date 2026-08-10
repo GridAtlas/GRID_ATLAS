@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0871";
+const WEB_VERSION = "0.0882";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -8133,6 +8133,7 @@ async function readClipboardShare() {
 }
 
 function applySharedTextToForm(text, successMessage, failureMessage) {
+  const titleWasEmpty = !elements.pointTitle.value.trim();
   const result = parseSharedLocationPayload({
     text,
     title: elements.pointTitle.value
@@ -8144,7 +8145,9 @@ function applySharedTextToForm(text, successMessage, failureMessage) {
   }
 
   applySharedLocationToForm(result, successMessage, { includeNote: false });
-  elements.pointTitle.value = "クリップボード取得";
+  if (titleWasEmpty) {
+    elements.pointTitle.value = "クリップボード取得";
+  }
   return true;
 }
 
