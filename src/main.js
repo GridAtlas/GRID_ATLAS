@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0867";
+const WEB_VERSION = "0.0871";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -969,7 +969,12 @@ function t(key) {
 function applyStaticTranslations() {
   document.documentElement.lang = activeLanguage();
   for (const element of document.querySelectorAll("[data-i18n]")) {
-    element.textContent = t(element.dataset.i18n);
+    const labelNode = element.querySelector("[data-i18n]");
+    if (labelNode) {
+      labelNode.textContent = t(element.dataset.i18n);
+    } else {
+      element.textContent = t(element.dataset.i18n);
+    }
   }
   for (const element of document.querySelectorAll("[data-i18n-title]")) {
     element.title = t(element.dataset.i18nTitle);
@@ -3161,6 +3166,7 @@ function renderPointInfoDialog() {
     return;
   }
 
+  elements.pointInfoDialog.dataset.pointId = point.id
   const geo = pointGeo(point);
   const accuracy = Number.isFinite(geo.accuracy) ? ` / +/-${formatDistance(geo.accuracy)}` : "";
   const current = currentLocationPoint();
@@ -3181,8 +3187,8 @@ function renderPointInfoDialog() {
   elements.pointInfoUpdated.textContent = formatOptionalDate(point.updatedAt);
   elements.pointInfoDistance.textContent = distance;
   elements.pointInfoEditButton.disabled = state.cloud.busy || !pointEditable(point.id);
-  elements.pointInfoEditButton.textContent = t("action.edit");
-  elements.pointInfoMapButton.textContent = t("action.map");
+  setPointInfoActionLabel(elements.pointInfoEditButton, t("action.edit"));
+  setPointInfoActionLabel(elements.pointInfoMapButton, t("action.map"));
 
   if (point.photoAssetId && (!point.photo || point.photo.startsWith("blob:"))) {
     void hydratePointPhotoForDisplay(point).then((changed) => {
@@ -9310,12 +9316,14 @@ function bindEvents() {
   elements.actionRestoreButton.addEventListener("click", restoreLastDeleted);
   elements.actionEditButton.addEventListener("click", startEditingSelectedPoint);
   elements.actionMapButton.addEventListener("click", openSelectedPointInPreferredMap);
-  bindPointerActionButton(elements.pointInfoEditButton, () => {
+  elements.pointInfoEditButton.addEventListener("click", () => {
     if (elements.pointInfoEditButton.disabled) return;
+    const point = findPointAny(elements.pointInfoDialog.dataset.pointId || state.pointInfoTargetId || state.pointInfoReturnContext?.pointId) || singleSelectedPoint();
+    if (!point) return;
     beginPointInfoEditingReturn();
+    startEditingPoint(point);
     elements.pointInfoDialog.close("edit");
     closePointListPreviewDialog("edit");
-    startEditingPointInfoTarget();
   });
 
   bindPointerActionButton(elements.gridPointQuickStartButton, () => {
@@ -9347,9 +9355,11 @@ function bindEvents() {
       : null;
     if (target) elements.gridPointQuickDialog.close("outside-control");
   }, true);
-  bindPointerActionButton(elements.pointInfoMapButton, () => {
+  elements.pointInfoMapButton.addEventListener("click", () => {
+    const point = findPointAny(elements.pointInfoDialog.dataset.pointId || state.pointInfoTargetId || state.pointInfoReturnContext?.pointId) || singleSelectedPoint();
+    if (!point) return;
     beginPointInfoMapReturn();
-    openPointInfoTargetInPreferredMap();
+    openPointInExternalMap(point, preferredMapProvider());
   });
 
   elements.pointForm.addEventListener("submit", submitPoint);
