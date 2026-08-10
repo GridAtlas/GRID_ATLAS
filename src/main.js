@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0910";
+const WEB_VERSION = "0.0911";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -648,8 +648,9 @@ const TRANSLATIONS = {
     "list.edit": "編集",
     "list.rename": "リスト名を変更",
     "list.renamePrompt": "新しいリスト名",
-    "list.setHome": "ホームに設定",
-    "list.unsetHome": "ホーム設定を解除",
+    "list.setHome": "地点登録先に設定",
+    "list.unsetHome": "地点登録先の設定を解除",
+    "list.destinationLocked": "地点登録先に設定されています",
     "list.favorite": "お気に入り",
     "list.addFavorite": "お気に入りに追加",
     "list.removeFavorite": "お気に入りから外す",
@@ -908,8 +909,9 @@ const TRANSLATIONS = {
     "list.edit": "Edit",
     "list.rename": "Rename list",
     "list.renamePrompt": "New list name",
-    "list.setHome": "Set as home",
-    "list.unsetHome": "Unset as home",
+    "list.setHome": "Set as point registration destination",
+    "list.unsetHome": "Unset point registration destination",
+    "list.destinationLocked": "This list is set as the point registration destination",
     "list.favorite": "Favorite",
     "list.addFavorite": "Add to favorites",
     "list.removeFavorite": "Remove from favorites",
@@ -1233,9 +1235,13 @@ function applyWorkspace(workspace) {
   state.activePointListId = workspace.activePointListId === null
     ? null
     : typeof workspace.activePointListId === "string"
-      && state.pointLists.some((list) => list.id === workspace.activePointListId && list.editable)
+      && (
+        state.pointLists.some((list) => list.id === workspace.activePointListId && list.editable)
+        || workspace.activePointListId.startsWith("cloud:")
+      )
       ? workspace.activePointListId
       : DEFAULT_POINT_LIST_ID;
+  const activeListVisibilityChanged = ensureActivePointListVisible();
   refreshVisiblePoints();
   state.links = Array.isArray(workspace.links)
     ? workspace.links.filter((link) => validStoredLinkEndpointId(link.a) && validStoredLinkEndpointId(link.b))
@@ -1254,6 +1260,9 @@ function applyWorkspace(workspace) {
   state.editingPointId = null;
   state.lastDeleted = null;
   state.pendingGeo = null;
+  if (activeListVisibilityChanged) {
+    persistWorkspace();
+  }
 }
 
 function normalizePoint(point, origin) {
@@ -1658,11 +1667,31 @@ function localPointList() {
   return list;
 }
 
+function ensureActivePointListVisible() {
+  const list = pointListByStorageKey(state.activePointListId);
+  if (!list) return false;
+
+  if (list.source === "cloud") {
+    const cloudId = list.cloudId || list.id;
+    const wasHidden = state.cloud.hiddenListIds.has(cloudId);
+    state.cloud.hiddenListIds.delete(cloudId);
+    return wasHidden;
+  }
+
+  if (list.visible === false) {
+    list.visible = true;
+    list.updatedAt = new Date().toISOString();
+    return true;
+  }
+  return false;
+}
+
 function setActivePointList(listId) {
   const list = pointListByStorageKey(listId);
   if (!list || state.activePointListId === pointListStorageKey(list)) return;
   state.activePointListId = pointListStorageKey(list);
-  if (list.source !== "cloud") persistWorkspace();
+  ensureActivePointListVisible();
+  persistWorkspace();
   render();
 }
 
@@ -1680,8 +1709,11 @@ function toggleActivePointList(listId) {
   const previousHomeKey = state.activePointListId;
   const key = pointListStorageKey(list);
   state.activePointListId = state.activePointListId === key ? null : key;
+  if (state.activePointListId === key) {
+    ensureActivePointListVisible();
+  }
   syncPointFormDestinationWithHome(previousHomeKey);
-  if (list.source !== "cloud") persistWorkspace();
+  persistWorkspace();
   render();
 }
 function createNewPointList() {
@@ -4405,6 +4437,11 @@ function setupStorageListVisibility(row, entry) {
 
   const toggleVisibility = () => {
     const currentEntry = findStorageListEntry(entry.storageId) ?? entry;
+    const destinationList = currentEntry.local ?? currentEntry.preview;
+    if (destinationList && pointListStorageKey(destinationList) === state.activePointListId) {
+      setCloudStatus(t("list.destinationLocked"), { error: true });
+      return;
+    }
     const nextVisible = !storageListIsVisible(currentEntry);
     setStorageListVisible(entry.storageId, nextVisible);
     setCloudStatus(t(nextVisible ? "list.visible" : "list.hidden"), { menu: false });
@@ -5518,6 +5555,7 @@ async function refreshCloudLists(options = {}) {
     }));
     applyCloudListOrder();
     repairLocalCloudPointIdCollisions();
+    ensureActivePointListVisible();
     persistWorkspace();
     state.cloud.pointRows = state.cloud.pointLists.flatMap((list) => (
       list.points.map((point) => ({ point, list, isCloud: true }))
