@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0906";
+const WEB_VERSION = "0.0907";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -9590,6 +9590,12 @@ function bindEvents() {
   }
 
   canvas.addEventListener("pointerdown", (event) => {
+    if (event.button === 2 && !mobilePageUiActive()) {
+      event.preventDefault();
+      clearSelection();
+      return;
+    }
+
     const point = getCanvasPoint(event);
     state.pointer.active.set(event.pointerId, point);
 
@@ -9664,6 +9670,11 @@ function bindEvents() {
   canvas.addEventListener("pointerup", removePointer);
   canvas.addEventListener("pointercancel", (event) => removePointer(event, { allowTap: false }));
   canvas.addEventListener("pointerleave", hideGridPointHover);
+  canvas.addEventListener("contextmenu", (event) => {
+    if (mobilePageUiActive()) return;
+    event.preventDefault();
+    clearSelection();
+  });
 
   canvas.addEventListener(
     "wheel",
