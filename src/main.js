@@ -44,7 +44,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0916";
+const WEB_VERSION = "0.0917";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -109,6 +109,13 @@ const elements = {
   confirmDialogMessage: document.querySelector("#confirmDialogMessage"),
   confirmDialogCancelButton: document.querySelector("#confirmDialogCancelButton"),
   confirmDialogConfirmButton: document.querySelector("#confirmDialogConfirmButton"),
+  textInputDialog: document.querySelector("#textInputDialog"),
+  textInputDialogTitle: document.querySelector("#textInputDialogTitle"),
+  textInputDialogMessage: document.querySelector("#textInputDialogMessage"),
+  textInputDialogLabel: document.querySelector("#textInputDialogLabel"),
+  textInputDialogValue: document.querySelector("#textInputDialogValue"),
+  textInputDialogCancelButton: document.querySelector("#textInputDialogCancelButton"),
+  textInputDialogSubmitButton: document.querySelector("#textInputDialogSubmitButton"),
   actionCopyToListButton: document.querySelector("#actionCopyToListButton"),
   actionMoveToListButton: document.querySelector("#actionMoveToListButton"),
   actionShareSelectedButton: document.querySelector("#actionShareSelectedButton"),
@@ -352,6 +359,7 @@ const state = {
 let pendingShareLink = null;
 let appToastTimerId = 0;
 let pendingConfirmResolve = null;
+let pendingTextInputResolve = null;
 let activeStorageListDrag = null;
 let activePointIndexDrag = null;
 
@@ -1036,7 +1044,7 @@ function setMapProvider(provider, options = {}) {
   syncSettingsControls();
 }
 
-function setGpsEnabled(value, options = {}) {
+async function setGpsEnabled(value, options = {}) {
   const enabled = Boolean(value);
   if (enabled === state.gpsEnabled && options.force !== true) {
     syncSettingsControls();
@@ -1045,7 +1053,7 @@ function setGpsEnabled(value, options = {}) {
 
   if (!enabled) {
     if (state.followCurrentLocation) {
-      toggleLocationFollow();
+      await toggleLocationFollow();
       if (state.followCurrentLocation) {
         syncSettingsControls();
         return false;
@@ -1645,9 +1653,14 @@ function createNamedLocalPointList(name) {
   return list;
 }
 
-function promptNewPointListForRegistration() {
+async function promptNewPointListForRegistration() {
   const suggestedName = cloudText("新しいリスト", "New list");
-  const input = window.prompt(t("list.newPrompt"), suggestedName);
+  const input = await requestTextInput({
+    title: t("list.newPrompt"),
+    label: t("field.name"),
+    defaultValue: suggestedName,
+    submitLabel: cloudText("作成", "Create")
+  });
   if (input === null) return null;
   const name = input.trim();
   if (!name) {
@@ -1722,9 +1735,14 @@ function toggleActivePointList(listId) {
   persistWorkspace();
   render();
 }
-function createNewPointList() {
+async function createNewPointList() {
   const suggestedName = cloudText("新しいリスト", "New list");
-  const input = window.prompt(t("list.newPrompt"), suggestedName);
+  const input = await requestTextInput({
+    title: t("list.newPrompt"),
+    label: t("field.name"),
+    defaultValue: suggestedName,
+    submitLabel: cloudText("作成", "Create")
+  });
   if (input === null) return;
   const name = input.trim() || suggestedName;
   const list = createPointList({
@@ -1823,10 +1841,15 @@ function cancelPointTransfer() {
   render();
 }
 
-function createPointTransferDestinationList() {
+async function createPointTransferDestinationList() {
   if (!state.pendingPointTransferMode) return;
   const suggestedName = cloudText("新しいリスト", "New list");
-  const input = window.prompt(t("list.newPrompt"), suggestedName);
+  const input = await requestTextInput({
+    title: t("list.newPrompt"),
+    label: t("field.name"),
+    defaultValue: suggestedName,
+    submitLabel: cloudText("作成", "Create")
+  });
   if (input === null) return;
   const name = input.trim() || suggestedName;
   const list = createPointList({
@@ -3764,16 +3787,20 @@ function observationResetNeedsConfirmation() {
   return observationModeActive() || state.observationTrail.length > 0;
 }
 
-function confirmObservationReset(actionLabel) {
+async function confirmObservationReset(actionLabel) {
   if (!observationResetNeedsConfirmation()) {
     return true;
   }
 
-  const confirmed = window.confirm(`${actionLabel}しますか。記録中の実軌道はリセットされます。`);
-  if (confirmed) {
-  }
-
-  return confirmed;
+  return requestConfirm({
+    title: cloudText("観察記録の確認", "Confirm observation record"),
+    message: cloudText(
+      `${actionLabel}しますか。\n記録中の実軌道はリセットされます。`,
+      `${actionLabel}?\nThe recorded track will be reset.`
+    ),
+    confirmLabel: cloudText("実行", "Continue"),
+    danger: true
+  });
 }
 
 function cloneObservationPoint(point) {
@@ -4037,14 +4064,14 @@ function loadedObservationInfoText(observation = selectedObservation()) {
   return parts.join(" | ");
 }
 
-function toggleTargetForPoint(point, options = {}) {
+async function toggleTargetForPoint(point, options = {}) {
   if (!point) {
     return;
   }
   const preserveSelection = options.preserveSelection === true;
 
   if (state.targetPointId === point.id) {
-    if (!confirmObservationReset("対象を解除")) {
+    if (!await confirmObservationReset("対象を解除")) {
       return;
     }
     clearTarget({ render: false });
@@ -4056,7 +4083,7 @@ function toggleTargetForPoint(point, options = {}) {
   const start = routeStartPoint();
   const switchesFromRouteStart = Boolean(start && !observationEndpointsDistinct(start, point));
   const changesTarget = Boolean(state.targetPointId && state.targetPointId !== point.id);
-  if ((switchesFromRouteStart || changesTarget) && !confirmObservationReset(switchesFromRouteStart ? "起点から対象へ切り替え" : "対象を変更")) {
+  if ((switchesFromRouteStart || changesTarget) && !await confirmObservationReset(switchesFromRouteStart ? "起点から対象へ切り替え" : "対象を変更")) {
     return;
   }
 
@@ -4088,7 +4115,7 @@ function toggleTargetForPoint(point, options = {}) {
 }
 
 function toggleTargetForSelection() {
-  toggleTargetForPoint(singleTargetableSelectedPoint());
+  return toggleTargetForPoint(singleTargetableSelectedPoint());
 }
 
 function clearTarget(options = {}) {
@@ -5613,7 +5640,12 @@ async function renameStorageList(storageId) {
     return;
   }
   const currentName = source?.name || entry.cloud?.name || cloudText("地点リスト", "Point list");
-  const input = window.prompt(t("list.renamePrompt"), currentName);
+  const input = await requestTextInput({
+    title: t("list.renamePrompt"),
+    label: t("field.name"),
+    defaultValue: currentName,
+    submitLabel: t("list.rename")
+  });
   if (input === null) return;
   const nextName = input.trim();
   if (!nextName || nextName === currentName) return;
@@ -6401,14 +6433,14 @@ function setRouteFromSelectedPoints() {
   render();
 }
 
-function setRouteStartForPoint(point, options = {}) {
+async function setRouteStartForPoint(point, options = {}) {
   if (!point) {
     return;
   }
   const preserveSelection = options.preserveSelection === true;
 
   if (state.routeStartPointId === point.id) {
-    if (!confirmObservationReset("起点を解除")) {
+    if (!await confirmObservationReset("起点を解除")) {
       return;
     }
     clearRouteStartState();
@@ -6420,7 +6452,7 @@ function setRouteStartForPoint(point, options = {}) {
   const target = targetPoint();
   const switchesFromTarget = Boolean(target && !observationEndpointsDistinct(point, target));
   const changesRouteStart = Boolean(state.routeStartPointId && state.routeStartPointId !== point.id);
-  if ((switchesFromTarget || changesRouteStart) && !confirmObservationReset(switchesFromTarget ? "対象から起点へ切り替え" : "起点を変更")) {
+  if ((switchesFromTarget || changesRouteStart) && !await confirmObservationReset(switchesFromTarget ? "対象から起点へ切り替え" : "起点を変更")) {
     return;
   }
 
@@ -6435,7 +6467,7 @@ function setRouteStartForPoint(point, options = {}) {
   render();
 }
 function setRouteStartFromSelection() {
-  setRouteStartForPoint(singleSelectedPoint());
+  return setRouteStartForPoint(singleSelectedPoint());
 }
 function hideGridPointHover() {
   state.gridPointHoverPointId = null;
@@ -6894,13 +6926,13 @@ function handleCanvasClick(screenPoint) {
   fillFormFromWorld(screenToWorld(screenPoint));
   render();
 }
-function setRouteStart(pointId) {
+async function setRouteStart(pointId) {
   if (!state.routeSelectionIds.includes(pointId)) {
     return;
   }
 
   if (state.routeStartPointId !== pointId) {
-    if (!confirmObservationReset("起点を変更")) {
+    if (!await confirmObservationReset("起点を変更")) {
       render();
       return;
     }
@@ -7712,7 +7744,7 @@ async function submitPoint(event) {
     return;
   }
   if (destinationKey === NEW_POINT_LIST_ID) {
-    destinationList = promptNewPointListForRegistration();
+    destinationList = await promptNewPointListForRegistration();
     if (!destinationList) return;
     state.pointDestinationListId = pointListStorageKey(destinationList);
   }
@@ -7945,10 +7977,10 @@ function requestCurrentLocation(options = {}) {
   );
 }
 
-function toggleLocationFollow(options = {}) {
+async function toggleLocationFollow(options = {}) {
   if (state.followCurrentLocation) {
     if (observationModeActive()) {
-      const action = chooseObservationStopAction();
+      const action = await chooseObservationStopAction();
       if (action === "continue") {
         return;
       }
@@ -7968,8 +8000,13 @@ function toggleLocationFollow(options = {}) {
   startLocationFollow(options);
 }
 
-function chooseObservationStopAction() {
-  const shouldStop = window.confirm("観察を終了しますか？");
+async function chooseObservationStopAction() {
+  const shouldStop = await requestConfirm({
+    title: cloudText("観察終了の確認", "Confirm observation end"),
+    message: cloudText("観察を終了しますか？", "End the observation?"),
+    confirmLabel: cloudText("終了", "End"),
+    danger: false
+  });
   if (!shouldStop) {
     return "continue";
   }
@@ -7978,7 +8015,18 @@ function chooseObservationStopAction() {
     return "finish";
   }
 
-  return window.confirm("対象に到着しましたか？\nOK: はい（対象へ接続）\nキャンセル: いいえ（現在地まで）")
+  const arrived = await requestConfirm({
+    title: cloudText("到着の確認", "Confirm arrival"),
+    message: cloudText(
+      "対象に到着しましたか？\nはい：対象へ接続\nいいえ：現在地まで",
+      "Have you arrived at the target?\nYes: connect to target\nNo: finish at current location"
+    ),
+    cancelLabel: cloudText("いいえ", "No"),
+    confirmLabel: cloudText("はい", "Yes"),
+    danger: false
+  });
+
+  return arrived
     ? "arrived"
     : "abort";
 }
@@ -8835,6 +8883,38 @@ function requestConfirm(options = {}) {
   return result;
 }
 
+function requestTextInput(options = {}) {
+  const dialog = elements.textInputDialog;
+  if (!dialog?.showModal) {
+    return Promise.resolve(null);
+  }
+
+  if (pendingTextInputResolve) {
+    const resolve = pendingTextInputResolve;
+    pendingTextInputResolve = null;
+    resolve(null);
+  }
+  if (dialog.open) {
+    dialog.close("cancel");
+  }
+
+  elements.textInputDialogTitle.textContent = options.title || cloudText("入力", "Input");
+  elements.textInputDialogMessage.textContent = options.message || "";
+  elements.textInputDialogMessage.hidden = !options.message;
+  elements.textInputDialogLabel.textContent = options.label || cloudText("名前", "Name");
+  elements.textInputDialogValue.value = options.defaultValue ?? "";
+  elements.textInputDialogValue.maxLength = options.maxLength ?? 80;
+  elements.textInputDialogSubmitButton.textContent = options.submitLabel || cloudText("決定", "Done");
+
+  const result = new Promise((resolve) => {
+    pendingTextInputResolve = resolve;
+  });
+  dialog.showModal();
+  elements.textInputDialogValue.focus();
+  elements.textInputDialogValue.select();
+  return result;
+}
+
 function showAppToast(message, options = {}) {
   if (!elements.appToast || !message) return;
   window.clearTimeout(appToastTimerId);
@@ -8929,7 +9009,12 @@ async function sharePointListLink(list, options = {}) {
     if (options.persist === true) persistWorkspace();
 
     if (!elements.shareLinkDialog?.showModal) {
-      const confirmed = window.confirm(`${summary}\n${t("list.sharePrivacy")}\n\n${t("list.shareCopy")}?`);
+      const confirmed = await requestConfirm({
+        title: t("list.shareDialogTitle"),
+        message: `${summary}\n${t("list.sharePrivacy")}\n\n${t("list.shareCopy")}?`,
+        confirmLabel: t("list.shareCopy"),
+        danger: false
+      });
       if (!confirmed) return;
       await copyPendingShareLink();
       return;
@@ -8966,7 +9051,12 @@ async function shareSelectedPointsLink() {
   }
 
   const defaultName = t("list.shareSelectedDefaultName");
-  const input = window.prompt(t("list.shareSelectedNamePrompt"), defaultName);
+  const input = await requestTextInput({
+    title: t("list.shareSelectedNamePrompt"),
+    label: t("field.name"),
+    defaultValue: defaultName,
+    submitLabel: t("list.share")
+  });
   if (input === null) return;
   const name = input.trim() || defaultName;
   const now = new Date().toISOString();
@@ -9495,7 +9585,7 @@ function bindEvents() {
     setMapProvider(elements.settingsMapProviderSelect.value);
     render();
   });
-  elements.createPointTransferListButton.addEventListener("click", createPointTransferDestinationList);
+  elements.createPointTransferListButton.addEventListener("click", () => void createPointTransferDestinationList());
   elements.cancelPointTransferButton.addEventListener("click", cancelPointTransfer);
   elements.pointTransferDialog.addEventListener("close", () => {
     if (!state.pendingPointTransferMode) return;
@@ -9514,8 +9604,9 @@ function bindEvents() {
   });
   elements.storageTransferDialog.addEventListener("close", () => {
     state.pendingStorageTransfer = null;
-  });  elements.settingsGpsEnabled.addEventListener("change", () => {
-    setGpsEnabled(elements.settingsGpsEnabled.checked);
+  });
+  elements.settingsGpsEnabled.addEventListener("change", () => {
+    void setGpsEnabled(elements.settingsGpsEnabled.checked);
   });
   elements.systemUpdateButton.addEventListener("click", () => void requestSystemUpdate());
   elements.cloudSignUpButton?.addEventListener("click", () => void signUpCloud());
@@ -9544,9 +9635,9 @@ function bindEvents() {
   elements.closePointRegistrationButton.addEventListener("click", closePointRegistration);
   elements.actionRouteButton.addEventListener("click", setRouteFromSelectedPoints);
   elements.clearSelectionButton.addEventListener("click", () => clearSelection());
-  elements.actionTargetButton.addEventListener("click", toggleTargetForSelection);
-  elements.actionRouteStartButton.addEventListener("click", setRouteStartFromSelection);
-  elements.actionFollowButton.addEventListener("click", () => toggleLocationFollow({ fillForm: false }));
+  elements.actionTargetButton.addEventListener("click", () => void toggleTargetForSelection());
+  elements.actionRouteStartButton.addEventListener("click", () => void setRouteStartFromSelection());
+  elements.actionFollowButton.addEventListener("click", () => void toggleLocationFollow({ fillForm: false }));
   elements.actionCenterButton.addEventListener("click", createCenterPendingPoint);
   elements.actionCopyToListButton.addEventListener("click", () => beginPointTransfer("copy"));
   elements.actionMoveToListButton.addEventListener("click", () => beginPointTransfer("move"));
@@ -9568,12 +9659,12 @@ function bindEvents() {
   bindPointerActionButton(elements.gridPointQuickStartButton, () => {
     const point = state.gridPointQuickPointId ? findPoint(state.gridPointQuickPointId) : null;
     if (elements.gridPointQuickDialog.open) elements.gridPointQuickDialog.close("role-selected");
-    setRouteStartForPoint(point, { preserveSelection: true });
+    void setRouteStartForPoint(point, { preserveSelection: true });
   });
   bindPointerActionButton(elements.gridPointQuickTargetButton, () => {
     const point = state.gridPointQuickPointId ? findPoint(state.gridPointQuickPointId) : null;
     if (elements.gridPointQuickDialog.open) elements.gridPointQuickDialog.close("role-selected");
-    toggleTargetForPoint(point, { preserveSelection: true });
+    void toggleTargetForPoint(point, { preserveSelection: true });
   });
   elements.gridPointQuickDialog.addEventListener("close", () => {
     state.gridPointQuickPointId = null;
@@ -9609,6 +9700,16 @@ function bindEvents() {
   });
   elements.confirmDialog.addEventListener("click", (event) => {
     if (event.target === elements.confirmDialog) elements.confirmDialog.close("cancel");
+  });
+  elements.textInputDialog.addEventListener("close", () => {
+    const resolve = pendingTextInputResolve;
+    pendingTextInputResolve = null;
+    resolve?.(elements.textInputDialog.returnValue === "submit"
+      ? elements.textInputDialogValue.value
+      : null);
+  });
+  elements.textInputDialog.addEventListener("click", (event) => {
+    if (event.target === elements.textInputDialog) elements.textInputDialog.close("cancel");
   });
   elements.pointRegistrationDialog.addEventListener("cancel", (event) => {
     event.preventDefault();
@@ -9680,7 +9781,7 @@ function bindEvents() {
   elements.zoomOutButton.addEventListener("click", () => zoomAtStage({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, -1));
   elements.fitButton.addEventListener("click", fitToPoints);
   elements.originButton.addEventListener("click", centerAndFollowCurrentLocation);
-  elements.routeStartSelect.addEventListener("change", () => setRouteStart(elements.routeStartSelect.value));
+  elements.routeStartSelect.addEventListener("change", () => void setRouteStart(elements.routeStartSelect.value));
   elements.routeReturnToStart.addEventListener("change", () => {
     setRouteReturnToStart(elements.routeReturnToStart.checked);
     render();
@@ -9689,10 +9790,10 @@ function bindEvents() {
   elements.clearRouteSelectionButton.addEventListener("click", clearRouteSelection);
   elements.openAppleMapsButton.addEventListener("click", () => openSelectedPointInExternalMap("apple"));
   elements.openGoogleMapsButton.addEventListener("click", () => openSelectedPointInExternalMap("google"));
-  elements.targetPointButton.addEventListener("click", toggleTargetForSelection);
+  elements.targetPointButton.addEventListener("click", () => void toggleTargetForSelection());
   elements.deletePointButton.addEventListener("click", deleteSelectedPoint);
   for (const button of elements.newPointListButtons) {
-    button.addEventListener("click", createNewPointList);
+    button.addEventListener("click", () => void createNewPointList());
   }
 
   elements.pointImportFile.addEventListener("change", async () => {
