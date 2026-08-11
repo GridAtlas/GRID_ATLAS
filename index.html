@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=70">
-    <script src="src/main.js?v=280" type="module" defer></script>
+    <script src="src/main.js?v=281" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -256,10 +256,6 @@
               <svg class="ui-icon" aria-hidden="true"><use href="#icon-clear"></use></svg>
               <span data-i18n="action.clear">解除</span>
             </button>
-            <button id="actionFollowButton" class="action-button" type="button" aria-pressed="false" title="現在地追跡を切り替え">
-              <svg class="ui-icon" aria-hidden="true"><use href="#icon-locate"></use></svg>
-              <span data-i18n="action.track">追跡</span>
-            </button>
             <button id="actionRouteButton" class="action-button" type="button" title="選択点を巡回対象にする" disabled>
               <svg class="ui-icon" aria-hidden="true"><use href="#icon-route"></use></svg>
               <span id="actionRouteLabel" data-i18n="action.route">巡回</span>
@@ -267,10 +263,6 @@
             <button id="deletePointButton" class="action-button danger-button" type="button" title="選択対象を削除" disabled>
               <svg class="ui-icon" aria-hidden="true"><use href="#icon-trash"></use></svg>
               <span data-i18n="action.delete">削除</span>
-            </button>
-            <button id="actionEditButton" class="action-button" type="button" title="選択地点を編集" disabled>
-              <svg class="ui-icon" aria-hidden="true"><use href="#icon-edit"></use></svg>
-              <span data-i18n="action.edit">編集</span>
             </button>
             <button id="actionMapButton" class="action-button" type="button" title="選択地点を地図で開く" disabled>
               <svg class="ui-icon" aria-hidden="true"><use href="#icon-map"></use></svg>
@@ -519,6 +511,8 @@
         <div class="grid-point-quick-actions" aria-label="地点のクイック操作">
           <button id="gridPointQuickStartButton" class="grid-point-quick-role-button" type="button" aria-label="起点にする" title="起点にする"><span class="grid-point-quick-role-mark" aria-hidden="true">▷</span><span id="gridPointQuickStartLabel">起点</span></button>
           <button id="gridPointQuickTargetButton" class="grid-point-quick-role-button" type="button" aria-label="ターゲットにする" title="ターゲットにする"><span class="grid-point-quick-role-mark" aria-hidden="true">◎</span><span id="gridPointQuickTargetLabel">対象</span></button>
+          <button id="gridPointQuickEditButton" class="grid-point-quick-role-button" type="button" aria-label="編集" title="編集"><svg class="ui-icon" aria-hidden="true"><use href="#icon-edit"></use></svg><span id="gridPointQuickEditLabel">編集</span></button>
+          <button id="gridPointQuickTrackButton" class="grid-point-quick-role-button" type="button" aria-label="追跡" title="追跡" hidden><svg class="ui-icon" aria-hidden="true"><use href="#icon-current"></use></svg><span id="gridPointQuickTrackLabel">追跡</span></button>
           <button id="gridPointQuickInfoButton" class="grid-point-quick-role-button" type="button" aria-label="情報を表示" title="情報を表示"><svg class="ui-icon" aria-hidden="true"><use href="#icon-info"></use></svg><span id="gridPointQuickInfoLabel">情報</span></button>
         </div>
       </form>
