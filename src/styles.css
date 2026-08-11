@@ -593,7 +593,7 @@ textarea:focus-visible {
 .mobile-grid-summary-field-grid {
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1.1fr) minmax(76px, 0.75fr);
   grid-template-rows: repeat(2, minmax(28px, auto));
   gap: 4px 8px;
 }
@@ -609,9 +609,9 @@ textarea:focus-visible {
 .mobile-grid-summary-field {
   min-width: 0;
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-columns: 37px minmax(0, 1fr);
   align-items: center;
-  gap: 4px;
+  column-gap: 1px;
 }
 
 .mobile-grid-summary-field > span {
