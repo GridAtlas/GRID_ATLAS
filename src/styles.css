@@ -2006,7 +2006,6 @@ textarea {
   }
 }
 
-.share-link-dialog,
 .point-registration-dialog,
 .point-info-dialog,
 .point-list-preview-dialog,
@@ -2024,7 +2023,6 @@ textarea {
   box-shadow: var(--shadow), var(--brand-glow);
 }
 
-.share-link-dialog::backdrop,
 .point-registration-dialog::backdrop,
 .point-info-dialog::backdrop,
 .point-list-preview-dialog::backdrop,
@@ -2036,7 +2034,6 @@ textarea {
   backdrop-filter: blur(3px);
 }
 
-.share-link-dialog-form,
 .point-registration-dialog-form,
 .point-info-dialog-form,
 .point-list-preview-dialog-form,
@@ -2049,7 +2046,6 @@ textarea {
   padding: 18px;
 }
 
-.share-link-dialog-heading,
 .point-registration-dialog-heading,
 .point-info-dialog-heading,
 .point-list-preview-dialog-heading,
@@ -2063,7 +2059,6 @@ textarea {
   gap: 12px;
 }
 
-.share-link-dialog-heading h2,
 .point-registration-dialog-heading h2,
 .point-info-dialog-heading h2,
 .point-list-preview-dialog-heading h2,
@@ -2233,62 +2228,6 @@ textarea {
   width: 16px;
   height: 16px;
 }
-.share-link-summary {
-  font-size: 15px;
-}
-
-.share-link-privacy {
-  margin: 0;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--active-bg);
-  color: var(--text);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.share-link-field {
-  display: grid;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.share-link-field textarea {
-  width: 100%;
-  min-height: 112px;
-  resize: vertical;
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.share-link-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.qr-code-dialog {
-  width: min(420px, calc(100vw - 24px));
-}
-
-.qr-code-canvas {
-  display: block;
-  width: min(100%, 320px);
-  height: auto;
-  aspect-ratio: 1;
-  margin: 0 auto;
-  padding: 12px;
-  image-rendering: pixelated;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
-}
-
 .point-info-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2338,7 +2277,7 @@ textarea {
 
 .text-input-dialog-share-actions {
   display: grid;
-  grid-template-columns: minmax(0, 0.8fr) repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
 }
 
 .text-input-dialog-share-actions button {
@@ -2454,12 +2393,6 @@ textarea {
   margin-right: 3px;
   font-size: 12px;
   line-height: 1;
-}
-
-.share-link-primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--on-accent);
 }
 
 .point-info-photo {
@@ -2591,7 +2524,6 @@ textarea {
   .storage-transfer-dialog .point-transfer-dialog-actions {
     grid-template-columns: 1fr;
   }
-  .share-link-dialog-form,
   .point-registration-dialog-form,
   .point-info-dialog-form,
   .point-list-preview-dialog-form,
@@ -2603,10 +2535,6 @@ textarea {
 
   .point-info-fields {
     grid-template-columns: 1fr;
-  }
-
-  .share-link-actions > button {
-    flex: 1 1 auto;
   }
 
   .app-toast {

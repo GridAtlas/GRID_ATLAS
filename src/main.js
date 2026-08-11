@@ -11,7 +11,6 @@ import {
   GridAtlasImportError,
   buildGridAtlasArchive,
   decodeGridAtlasUrlPayload,
-  encodeGridAtlasUrlPayload,
   gridAtlasDocumentDigest,
   readGridAtlasFile
 } from "./gridatlas-import.js?v=2";
@@ -29,7 +28,6 @@ import {
   readGridAtlasLineLayer,
   withoutGridAtlasLineLayer
 } from "./gridatlas-analysis.js?v=1";
-import { generateQrCodeMatrix, QrCodeError } from "./qr-code.js?v=1";
 
 const STORAGE_KEY = "grid-atlas-workspace-v2";
 const ANALYSIS_LAYER_VERSION = 1;
@@ -43,7 +41,6 @@ const MAP_PROVIDER_KEY = "grid-atlas-map-provider";
 const POINT_INFO_MAP_RETURN_KEY = "grid-atlas-point-info-map-return";
 const MAP_PROVIDER_GOOGLE = "google";
 const MAP_PROVIDER_APPLE = "apple";
-const GRIDATLAS_RECOMMENDED_SHARE_URL_BYTES = 8192;
 const GRIDATLAS_PRESET_PARAMETER = "preset";
 const PUBLIC_PRESET_DIRECTORY = "presets";
 const PUBLIC_PRESET_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -57,7 +54,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1168";
+const WEB_VERSION = "0.1178";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -139,7 +136,6 @@ const elements = {
   textInputDialogSubmitButton: document.querySelector("#textInputDialogSubmitButton"),
   textInputDialogDefaultActions: document.querySelector("#textInputDialogDefaultActions"),
   textInputDialogShareActions: document.querySelector("#textInputDialogShareActions"),
-  textInputShareQrButton: document.querySelector("#textInputShareQrButton"),
   textInputShareFileButton: document.querySelector("#textInputShareFileButton"),
   actionCopyToListButton: document.querySelector("#actionCopyToListButton"),
   actionMoveToListButton: document.querySelector("#actionMoveToListButton"),
@@ -191,17 +187,6 @@ const elements = {
   readClipboardButton: document.querySelector("#readClipboardButton"),
   shareImportStatus: document.querySelector("#shareImportStatus"),
   gridAtlasDropOverlay: document.querySelector("#gridAtlasDropOverlay"),
-  shareLinkDialog: document.querySelector("#shareLinkDialog"),
-  shareLinkSummary: document.querySelector("#shareLinkSummary"),
-  shareLinkValue: document.querySelector("#shareLinkValue"),
-  shareLinkDialogStatus: document.querySelector("#shareLinkDialogStatus"),
-  shareLinkCopyButton: document.querySelector("#shareLinkCopyButton"),
-  shareLinkNativeButton: document.querySelector("#shareLinkNativeButton"),
-  qrCodeDialog: document.querySelector("#qrCodeDialog"),
-  qrCodeSummary: document.querySelector("#qrCodeSummary"),
-  qrCodeCanvas: document.querySelector("#qrCodeCanvas"),
-  qrCodeDialogStatus: document.querySelector("#qrCodeDialogStatus"),
-  qrCodeCopyButton: document.querySelector("#qrCodeCopyButton"),
   pointInfoDialog: document.querySelector("#pointInfoDialog"),
   pointListPreviewDialog: document.querySelector("#pointListPreviewDialog"),
   pointListPreviewDialogTitle: document.querySelector("#pointListPreviewDialogTitle"),
@@ -403,8 +388,6 @@ const state = {
   pointer: createPointerGestureState()
 };
 
-let pendingShareLink = null;
-let pendingPointShare = null;
 let appToastTimerId = 0;
 let pendingConfirmResolve = null;
 let pendingTextInputResolve = null;
@@ -568,7 +551,7 @@ const TRANSLATIONS = {
     "action.copyToList": "コピー",
     "action.moveToList": "移動",
     "action.shareSelected": "共有",
-    "action.shareSelectedTitle": "選択地点をQRコードまたは.gridatlasで共有",
+    "action.shareSelectedTitle": "選択地点を.gridatlasで共有",
     "action.info": "情報",
     "action.delete": "削除",
     "delete.linksOnly": "線のみ",
@@ -724,36 +707,14 @@ const TRANSLATIONS = {
     "list.exportDialogTitle": ".gridatlasを共有",
     "list.exportPrivacy": "地点名・緯度経度・コメント・保存済み画像を含みます。",
     "list.exportConfirm": ".gridatlasファイルを作成しますか？",
+    "list.exportSummary": "「{name}」の{count}点",
     "list.exported": ".gridatlasをダウンロードしました",
     "list.exportCompleted": ".gridatlasを共有しました",
     "list.exportFailed": ".gridatlasを書き出せませんでした。リスト内容を確認してください",
-    "list.share": "共有リンク",
-    "list.shareDialogTitle": "共有リンク",
-    "list.shareSummary": "「{name}」の{count}点",
     "list.shareSelectedNamePrompt": "共有するリスト名",
     "list.shareSelectedDefaultName": "選択地点",
     "list.shareSelectedUnavailable": "共有する地点を選択してください",
-    "list.shareMethodPrivacy": "QRコードは画像を含まないURL、ファイル共有は地点・メモ・画像を含みます。",
-    "list.sharePrivacy": "地点名・緯度経度・コメントを含みます。画像は含みません。",
-    "list.shareValue": "共有リンク",
-    "list.shareCancel": "キャンセル",
-    "list.shareCopy": "リンクをコピー",
-    "list.shareNative": "共有する",
-    "list.shareCopied": "共有リンクをコピーしました",
-    "list.shareCompleted": "共有しました",
-    "list.shareTooLong": "このリストはリンク共有の推奨サイズを超えています。.gridatlasで共有してください",
     "list.shareUnavailable": "共有できるリストデータがありません",
-    "list.shareCopyFailed": "共有リンクをコピーできませんでした。表示されたリンクを長押ししてコピーできます",
-    "list.shareGenerateFailed": "共有リンクを作れませんでした。リスト内容を確認してください",
-    "list.shareNativeFailed": "共有画面を開けませんでした",
-    "list.shareChoiceQr": "QRコード",
-    "list.shareChoiceFile": "ファイル共有",
-    "list.qrTitle": "QRコードで共有",
-    "list.qrHint": "相手のカメラで読み取ると、GRID ATLASで地点リストを開けます。",
-    "list.qrCopy": "URLをコピー",
-    "list.qrCopied": "共有URLをコピーしました",
-    "list.qrTooLong": "URLが長すぎてQRコードにできません。.gridatlasファイルを選択してください",
-    "list.qrGenerateFailed": "QRコードを作成できませんでした",
     "list.edit": "編集",
     "list.rename": "リスト名を変更",
     "list.renamePrompt": "新しいリスト名",
@@ -865,7 +826,7 @@ const TRANSLATIONS = {
     "action.copyToList": "Copy",
     "action.moveToList": "Move",
     "action.shareSelected": "Share",
-    "action.shareSelectedTitle": "Share selected points by QR code or .gridatlas",
+    "action.shareSelectedTitle": "Share selected points as a .gridatlas file",
     "action.info": "Info",
     "action.delete": "Delete",
     "delete.linksOnly": "Lines only",
@@ -1021,36 +982,14 @@ const TRANSLATIONS = {
     "list.exportDialogTitle": "Share .gridatlas",
     "list.exportPrivacy": "Includes names, coordinates, notes, and saved images.",
     "list.exportConfirm": "Create a .gridatlas file?",
+    "list.exportSummary": "{count} point(s) in “{name}”",
     "list.exported": "Downloaded the .gridatlas file",
     "list.exportCompleted": "Shared the .gridatlas file",
     "list.exportFailed": "Could not export the .gridatlas file. Check the list contents",
-    "list.share": "Share link",
-    "list.shareDialogTitle": "Share link",
-    "list.shareSummary": "{count} point(s) in “{name}”",
     "list.shareSelectedNamePrompt": "Name for the shared list",
     "list.shareSelectedDefaultName": "Selected points",
     "list.shareSelectedUnavailable": "Select points to share",
-    "list.shareMethodPrivacy": "The QR code contains a URL without images; file sharing includes points, notes, and images.",
-    "list.sharePrivacy": "Includes names, coordinates, and notes. Images are not included.",
-    "list.shareValue": "Share link",
-    "list.shareCancel": "Cancel",
-    "list.shareCopy": "Copy link",
-    "list.shareNative": "Share",
-    "list.shareCopied": "Copied the share link",
-    "list.shareCompleted": "Shared",
-    "list.shareTooLong": "This list exceeds the recommended link size. Share it as a .gridatlas file instead",
     "list.shareUnavailable": "No list data is available to share",
-    "list.shareCopyFailed": "Could not copy the link. You can press and hold the displayed link to copy it",
-    "list.shareGenerateFailed": "Could not create the share link. Check the list contents",
-    "list.shareNativeFailed": "Could not open the share sheet",
-    "list.shareChoiceQr": "QR code",
-    "list.shareChoiceFile": "File share",
-    "list.qrTitle": "Share by QR code",
-    "list.qrHint": "Scan this with the other device’s camera to open the point list in GRID ATLAS.",
-    "list.qrCopy": "Copy URL",
-    "list.qrCopied": "Copied the share URL",
-    "list.qrTooLong": "The URL is too long for a QR code. Choose the .gridatlas file instead",
-    "list.qrGenerateFailed": "Could not create the QR code",
     "list.edit": "Edit",
     "list.rename": "Rename list",
     "list.renamePrompt": "New list name",
@@ -3505,7 +3444,7 @@ function renderActionButtons() {
     ? cloudText("移動先を選択", "Choose a move destination")
     : t("list.transferNoSelection");
   elements.actionShareSelectedButton.title = shareableSelectedPointCount > 0
-    ? cloudText(`選択した${shareableSelectedPointCount}地点をURLで共有`, `Share ${shareableSelectedPointCount} selected point(s) by URL`)
+    ? cloudText(`選択した${shareableSelectedPointCount}地点を.gridatlasで共有`, `Share ${shareableSelectedPointCount} selected point(s) as a .gridatlas file`)
     : t("list.shareSelectedUnavailable");
   elements.actionMapButton.classList.toggle("is-active", false);
   elements.pointSubmitButton.textContent = state.editingPointId ? t("button.update") : t("button.submitRegister");
@@ -9314,7 +9253,7 @@ function readJsonFile(file) {
   });
 }
 
-function pointListGridAtlasUrlDocument(list) {
+function pointListGridAtlasDocument(list) {
   list.gridAtlas = list.gridAtlas && typeof list.gridAtlas === "object" ? list.gridAtlas : {};
   list.gridAtlas.documentId = list.gridAtlas.documentId || list.cloudId || list.id || createId();
 
@@ -9369,7 +9308,7 @@ function pointListGridAtlasUrlDocument(list) {
 }
 
 async function buildPointListGridAtlasPackage(list) {
-  const document = pointListGridAtlasUrlDocument(list);
+  const document = pointListGridAtlasDocument(list);
   const resources = [];
   const supportedMediaTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 
@@ -9407,15 +9346,6 @@ function downloadGridAtlasFile(file) {
   anchor.click();
   anchor.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
-function gridAtlasShareUrl(document) {
-  const url = new URL(window.location.href);
-  url.search = "";
-  url.hash = new URLSearchParams({
-    [GRIDATLAS_URL_PARAMETER]: encodeGridAtlasUrlPayload(document)
-  }).toString();
-  return url.href;
 }
 
 function requestConfirm(options = {}) {
@@ -9517,109 +9447,7 @@ function showAppToast(message, options = {}) {
 
 function setShareFeedback(message, options = {}) {
   setCloudStatus(message, { menu: false, error: options.error === true });
-  if (elements.shareLinkDialog?.open) {
-    elements.shareLinkDialogStatus.value = message;
-    elements.shareLinkDialogStatus.classList.toggle("is-error", options.error === true);
-  }
   showAppToast(message, options);
-}
-
-async function copyShareLink(text) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-
-  const input = document.createElement("textarea");
-  input.value = text;
-  input.setAttribute("readonly", "");
-  input.style.position = "fixed";
-  input.style.opacity = "0";
-  document.body.append(input);
-  input.select();
-  const copied = document.execCommand("copy");
-  input.remove();
-  if (!copied) throw new Error("Clipboard unavailable");
-}
-
-async function copyPendingShareLink() {
-  const share = pendingShareLink;
-  if (!share) return;
-  try {
-    await copyShareLink(share.url);
-    if (elements.shareLinkDialog?.open) elements.shareLinkDialog.close("copied");
-    setShareFeedback(t("list.shareCopied"));
-  } catch (error) {
-    console.warn("GRID ATLAS share link copy failed", error);
-    elements.shareLinkValue.focus();
-    elements.shareLinkValue.select();
-    setShareFeedback(t("list.shareCopyFailed"), { error: true });
-  }
-}
-
-async function sharePendingLinkNatively() {
-  const share = pendingShareLink;
-  if (!share || typeof navigator.share !== "function") return;
-  try {
-    await navigator.share({
-      title: `GRID ATLAS — ${share.title}`,
-      text: cloudText(`GRID ATLAS「${share.title}」`, `GRID ATLAS “${share.title}”`),
-      url: share.url
-    });
-    if (elements.shareLinkDialog?.open) elements.shareLinkDialog.close("shared");
-    setShareFeedback(t("list.shareCompleted"));
-  } catch (error) {
-    if (error?.name === "AbortError") return;
-    console.warn("GRID ATLAS native share failed", error);
-    setShareFeedback(t("list.shareNativeFailed"), { error: true });
-  }
-}
-
-async function sharePointListLink(list, options = {}) {
-  if (!list) {
-    setShareFeedback(t("list.shareUnavailable"), { error: true });
-    return;
-  }
-
-  try {
-    const document = pointListGridAtlasUrlDocument(list);
-    const url = gridAtlasShareUrl(document);
-    if (new TextEncoder().encode(url).byteLength > GRIDATLAS_RECOMMENDED_SHARE_URL_BYTES) {
-      setShareFeedback(t("list.shareTooLong"), { error: true, duration: 6500 });
-      return;
-    }
-
-    const title = list.name || "地点リスト";
-    const summary = t("list.shareSummary")
-      .replace("{name}", title)
-      .replace("{count}", String(list.points.length));
-    pendingShareLink = { url, title };
-    if (options.persist === true) persistWorkspace();
-
-    if (!elements.shareLinkDialog?.showModal) {
-      const confirmed = await requestConfirm({
-        title: t("list.shareDialogTitle"),
-        message: `${summary}\n${t("list.sharePrivacy")}\n\n${t("list.shareCopy")}?`,
-        confirmLabel: t("list.shareCopy"),
-        danger: false
-      });
-      if (!confirmed) return;
-      await copyPendingShareLink();
-      return;
-    }
-
-    elements.shareLinkSummary.textContent = summary;
-    elements.shareLinkValue.value = url;
-    elements.shareLinkDialogStatus.value = "";
-    elements.shareLinkDialogStatus.classList.remove("is-error");
-    elements.shareLinkNativeButton.hidden = typeof navigator.share !== "function";
-    if (elements.shareLinkDialog.open) elements.shareLinkDialog.close();
-    elements.shareLinkDialog.showModal();
-  } catch (error) {
-    console.warn("GRID ATLAS share link generation failed", error);
-    pendingShareLink = null;
-    setShareFeedback(t("list.shareGenerateFailed"), { error: true });
-  }
 }
 
 async function sharePointListFile(list, options = {}) {
@@ -9629,7 +9457,7 @@ async function sharePointListFile(list, options = {}) {
   }
 
   const title = list.name || "地点リスト";
-  const summary = t("list.shareSummary")
+  const summary = t("list.exportSummary")
     .replace("{name}", title)
     .replace("{count}", String(list.points.length));
   if (options.confirm !== false) {
@@ -9675,67 +9503,7 @@ async function shareStorageListFile(storageId) {
   await sharePointListFile(entry?.local || entry?.preview);
 }
 
-function pointListShareUrl(list) {
-  const document = pointListGridAtlasUrlDocument(list);
-  const url = gridAtlasShareUrl(document);
-  persistWorkspace();
-  if (new TextEncoder().encode(url).byteLength > GRIDATLAS_RECOMMENDED_SHARE_URL_BYTES) {
-    throw new QrCodeError("共有URLが大きすぎます");
-  }
-  return url;
-}
-
-function drawQrCode(canvasElement, matrix) {
-  if (!canvasElement || !Array.isArray(matrix) || matrix.length === 0) return;
-  const quietZone = 4;
-  const moduleCount = matrix.length;
-  const moduleSize = Math.max(4, Math.floor(320 / (moduleCount + quietZone * 2)));
-  const size = (moduleCount + quietZone * 2) * moduleSize;
-  canvasElement.width = size;
-  canvasElement.height = size;
-  const drawingContext = canvasElement.getContext("2d");
-  drawingContext.fillStyle = "#ffffff";
-  drawingContext.fillRect(0, 0, size, size);
-  drawingContext.fillStyle = "#000000";
-  for (let y = 0; y < moduleCount; y += 1) {
-    for (let x = 0; x < moduleCount; x += 1) {
-      if (matrix[y][x]) {
-        drawingContext.fillRect((x + quietZone) * moduleSize, (y + quietZone) * moduleSize, moduleSize, moduleSize);
-      }
-    }
-  }
-}
-
-async function openQrCodeForList(list) {
-  if (!list) {
-    setShareFeedback(t("list.shareUnavailable"), { error: true });
-    return;
-  }
-  const title = list.name || "地点リスト";
-  const summary = t("list.shareSummary")
-    .replace("{name}", title)
-    .replace("{count}", String(list.points.length));
-  const share = { list, title, summary, url: "" };
-  pendingPointShare = share;
-  try {
-    const url = pointListShareUrl(share.list);
-    const matrix = generateQrCodeMatrix(url);
-    share.url = url;
-    drawQrCode(elements.qrCodeCanvas, matrix);
-    elements.qrCodeSummary.textContent = share.summary;
-    elements.qrCodeDialogStatus.value = "";
-    elements.qrCodeDialog.showModal();
-  } catch (error) {
-    pendingPointShare = null;
-    console.warn("GRID ATLAS QR code generation failed", error);
-    setShareFeedback(error instanceof QrCodeError ? t("list.qrTooLong") : t("list.qrGenerateFailed"), {
-      error: true,
-      duration: 6500
-    });
-  }
-}
-
-async function shareSelectedPointsLink() {
+async function shareSelectedPointsFile() {
   normalizeSelection();
   const points = selectedPointIds()
     .filter((pointId) => pointId !== CURRENT_LOCATION_ID)
@@ -9749,7 +9517,7 @@ async function shareSelectedPointsLink() {
   const defaultName = t("list.shareSelectedDefaultName");
   const input = await requestTextInput({
     title: t("list.shareSelectedNamePrompt"),
-    message: t("list.shareMethodPrivacy"),
+    message: t("list.exportPrivacy"),
     label: t("field.name"),
     defaultValue: defaultName,
     submitLabel: t("action.shareSelected"),
@@ -9768,11 +9536,7 @@ async function shareSelectedPointsLink() {
     gridAtlas: { documentId: createId() },
     points: points.map(clonePlain)
   };
-  if (input.action === "qr") {
-    await openQrCodeForList(list);
-  } else if (input.action === "file") {
-    await sharePointListFile(list, { confirm: false });
-  }
+  if (input.action === "file") await sharePointListFile(list, { confirm: false });
 }
 function gridAtlasFileLikely(file) {
   return Boolean(file) && (
@@ -10547,7 +10311,7 @@ function bindEvents() {
   elements.actionCenterButton.addEventListener("click", createCenterPendingPoint);
   elements.actionCopyToListButton.addEventListener("click", () => beginPointTransfer("copy"));
   elements.actionMoveToListButton.addEventListener("click", () => beginPointTransfer("move"));
-  elements.actionShareSelectedButton.addEventListener("click", () => void shareSelectedPointsLink());
+  elements.actionShareSelectedButton.addEventListener("click", () => void shareSelectedPointsFile());
   elements.actionMapButton.addEventListener("click", openSelectedPointInPreferredMap);
   elements.pointInfoEditButton.addEventListener("click", () => {
     if (elements.pointInfoEditButton.disabled) return;
@@ -10648,7 +10412,7 @@ function bindEvents() {
         : elements.textInputDialogValue.value);
       return;
     }
-    if (options.shareMode === true && (returnValue === "share-qr" || returnValue === "share-file")) {
+    if (options.shareMode === true && returnValue === "share-file") {
       resolve({ value: elements.textInputDialogValue.value, action: returnValue.slice("share-".length) });
       return;
     }
@@ -10682,43 +10446,8 @@ function bindEvents() {
     state.pointDestinationListId = elements.pointDestinationListSelect.value || NEW_POINT_LIST_ID;
   });
   elements.readClipboardButton.addEventListener("click", readClipboardShare);
-  elements.shareLinkCopyButton.addEventListener("click", () => void copyPendingShareLink());
-  elements.shareLinkNativeButton.addEventListener("click", () => void sharePendingLinkNatively());
-  elements.shareLinkDialog.addEventListener("close", () => {
-    pendingShareLink = null;
-    elements.shareLinkSummary.textContent = "";
-    elements.shareLinkValue.value = "";
-    elements.shareLinkDialogStatus.value = "";
-    elements.shareLinkDialogStatus.classList.remove("is-error");
-  });
-  elements.shareLinkDialog.addEventListener("click", (event) => {
-    if (event.target === elements.shareLinkDialog) elements.shareLinkDialog.close("cancel");
-  });
-  elements.textInputShareQrButton.addEventListener("click", () => elements.textInputDialog.close("share-qr"));
   elements.textInputShareFileButton.addEventListener("click", () => elements.textInputDialog.close("share-file"));
   document.querySelector("[data-share-action-cancel]")?.addEventListener("click", () => elements.textInputDialog.close("cancel"));
-  elements.qrCodeCopyButton.addEventListener("click", async () => {
-    const url = pendingPointShare?.url;
-    if (!url) return;
-    try {
-      await copyShareLink(url);
-      elements.qrCodeDialogStatus.value = t("list.qrCopied");
-      setShareFeedback(t("list.qrCopied"));
-    } catch (error) {
-      console.warn("GRID ATLAS QR URL copy failed", error);
-      elements.qrCodeDialogStatus.value = t("list.shareCopyFailed");
-      elements.qrCodeDialogStatus.classList.add("is-error");
-    }
-  });
-  elements.qrCodeDialog.addEventListener("close", () => {
-    pendingPointShare = null;
-    elements.qrCodeSummary.textContent = "";
-    elements.qrCodeDialogStatus.value = "";
-    elements.qrCodeDialogStatus.classList.remove("is-error");
-  });
-  elements.qrCodeDialog.addEventListener("click", (event) => {
-    if (event.target === elements.qrCodeDialog) elements.qrCodeDialog.close("cancel");
-  });
   window.addEventListener("pointerup", handlePointInfoRelease, true);
   window.addEventListener("pointercancel", () => {
     state.pointInfoBackdropClickPending = false;

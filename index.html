@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=70">
-    <script src="src/main.js?v=286" type="module" defer></script>
+    <script src="src/main.js?v=287" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -439,42 +439,6 @@
         <button id="pointSubmitButton" class="primary-button" type="submit" data-i18n="button.submitRegister">登録</button>
       </form>
     </dialog>
-    <dialog id="shareLinkDialog" class="share-link-dialog" aria-labelledby="shareLinkDialogTitle" tabindex="-1">
-      <form class="share-link-dialog-form" method="dialog">
-        <div class="share-link-dialog-heading">
-          <h2 id="shareLinkDialogTitle" data-i18n="list.shareDialogTitle" tabindex="-1">共有リンク</h2>
-          <button class="share-link-close" type="submit" value="cancel" aria-label="閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
-        </div>
-        <strong id="shareLinkSummary" class="share-link-summary"></strong>
-        <p class="share-link-privacy" data-i18n="list.sharePrivacy">地点名・緯度経度・コメントを含みます。画像は含みません。</p>
-        <label class="share-link-field">
-          <span data-i18n="list.shareValue">共有リンク</span>
-          <textarea id="shareLinkValue" rows="5" readonly spellcheck="false"></textarea>
-        </label>
-        <output id="shareLinkDialogStatus" class="form-status" aria-live="polite"></output>
-        <div class="share-link-actions">
-          <button type="submit" value="cancel" data-i18n="list.shareCancel">キャンセル</button>
-          <button id="shareLinkCopyButton" type="button" data-i18n="list.shareCopy">リンクをコピー</button>
-          <button id="shareLinkNativeButton" class="share-link-primary" type="button" data-i18n="list.shareNative" hidden>共有する</button>
-        </div>
-      </form>
-    </dialog>
-    <dialog id="qrCodeDialog" class="share-link-dialog qr-code-dialog" aria-labelledby="qrCodeDialogTitle" tabindex="-1">
-      <form class="share-link-dialog-form" method="dialog">
-        <div class="share-link-dialog-heading">
-          <h2 id="qrCodeDialogTitle" data-i18n="list.qrTitle" tabindex="-1">QRコードで共有</h2>
-          <button class="share-link-close" type="submit" value="cancel" aria-label="閉じる" title="閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
-        </div>
-        <strong id="qrCodeSummary" class="share-link-summary"></strong>
-        <p class="share-link-privacy" data-i18n="list.qrHint">相手のカメラで読み取ると、GRID ATLASで地点リストを開けます。</p>
-        <canvas id="qrCodeCanvas" class="qr-code-canvas" width="256" height="256" aria-label="QRコード"></canvas>
-        <output id="qrCodeDialogStatus" class="form-status" aria-live="polite"></output>
-        <div class="share-link-actions">
-          <button id="qrCodeCopyButton" type="button" data-i18n="list.qrCopy">URLをコピー</button>
-          <button type="submit" value="cancel" class="share-link-primary" data-i18n="list.shareCancel">閉じる</button>
-        </div>
-      </form>
-    </dialog>
     <dialog id="pointInfoDialog" class="point-info-dialog" aria-labelledby="pointInfoDialogTitle" tabindex="-1">
       <form class="point-info-dialog-form" method="dialog">
         <div class="point-info-dialog-heading">
@@ -621,8 +585,7 @@
         </div>
         <div id="textInputDialogShareActions" class="text-input-dialog-actions text-input-dialog-share-actions" hidden>
           <button class="compact-button" type="button" data-share-action-cancel data-i18n="action.cancel">キャンセル</button>
-          <button id="textInputShareQrButton" class="primary-button" type="button" data-i18n="list.shareChoiceQr">QRコード</button>
-          <button id="textInputShareFileButton" class="primary-button" type="button" data-i18n="list.shareChoiceFile">ファイル共有</button>
+          <button id="textInputShareFileButton" class="primary-button" type="button" data-i18n="list.export">.gridatlasを書き出し</button>
         </div>
       </form>
     </dialog>
