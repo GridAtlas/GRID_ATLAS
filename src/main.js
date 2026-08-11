@@ -56,7 +56,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1026";
+const WEB_VERSION = "0.1047";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -160,6 +160,11 @@ const elements = {
   statusLine: document.querySelector("#statusLine"),
   selectionInfoText: document.querySelector("#selectionInfoText"),
   mobileSelectedTitle: document.querySelector("#mobileSelectedTitle"),
+  mobileSelectionInfoText: document.querySelector("#mobileSelectionInfoText"),
+  mobileDisplayedPointCount: document.querySelector("#mobileDisplayedPointCount"),
+  mobileSelectedPointCount: document.querySelector("#mobileSelectedPointCount"),
+  mobilePointDistance: document.querySelector("#mobilePointDistance"),
+  mobileSelectedLinkCount: document.querySelector("#mobileSelectedLinkCount"),
   sidebarSelectedTitle: document.querySelector("#sidebarSelectedTitle"),
   mapColumn: document.querySelector(".map-column"),
   sidebar: document.querySelector(".sidebar"),
@@ -517,6 +522,11 @@ const TRANSLATIONS = {
     "page.lists": "リスト",
     "summary.selected": "選択中",
     "summary.info": "情報",
+    "mobileOverview.selection": "選択地点",
+    "mobileOverview.displayed": "表示地点",
+    "mobileOverview.selected": "選択地点",
+    "mobileOverview.distance": "地点間距離",
+    "mobileOverview.lines": "選択線",
     "state.unselected": "未選択",
     "state.noPoints": "地点なし",
     "action.register": "登録",
@@ -783,6 +793,11 @@ const TRANSLATIONS = {
     "page.lists": "Lists",
     "summary.selected": "Selected",
     "summary.info": "Info",
+    "mobileOverview.selection": "Selected point",
+    "mobileOverview.displayed": "Shown",
+    "mobileOverview.selected": "Selected",
+    "mobileOverview.distance": "Between",
+    "mobileOverview.lines": "Lines",
     "state.unselected": "None",
     "state.noPoints": "No points",
     "action.register": "Add",
@@ -3002,6 +3017,7 @@ function render() {
   renderPointListPreview();
   renderMobileGridTabs();
   renderSelectedSummary();
+  renderMobileOverview();
   renderSelectionInfo();
   renderStatus();
   renderWebVersion();
@@ -3013,11 +3029,36 @@ function render() {
 }
 
 function renderSelectedSummary() {
-  const title = state.selection.length > 0
-    ? state.selection.map(selectionTitle).join(", ")
-    : t("state.unselected");
+  const pointTitles = selectedPointIds().map(findPoint).filter(Boolean).map((point) => point.title);
+  let title = t("state.unselected");
+  if (pointTitles.length === 1) {
+    title = pointTitles[0];
+  } else if (pointTitles.length > 1) {
+    title = activeLanguage() === EN_LANGUAGE
+      ? `${pointTitles[0]} +${pointTitles.length - 1}`
+      : `${pointTitles[0]}・他${pointTitles.length - 1}点`;
+  } else if (state.selection.length > 0) {
+    title = state.selection.map(selectionTitle).join(", ");
+  }
   elements.mobileSelectedTitle.textContent = title;
   elements.sidebarSelectedTitle.textContent = title;
+}
+
+function renderMobileOverview() {
+  const visiblePointCount = visibleSelectablePoints().length;
+  const selectedPoints = selectedPointIds().map(findPoint).filter(Boolean);
+  const selectedLinks = selectedLinkIds().map(findLink).filter(Boolean);
+  const distance = selectedPoints.length === 2
+    ? distanceBetween(selectedPoints[0], selectedPoints[1])
+    : selectedPoints.length > 2
+      ? pointSequenceDistance(selectedPoints)
+      : NaN;
+
+  elements.mobileSelectionInfoText.textContent = mobileSelectionInfoText();
+  elements.mobileDisplayedPointCount.textContent = String(visiblePointCount);
+  elements.mobileSelectedPointCount.textContent = String(selectedPoints.length);
+  elements.mobilePointDistance.textContent = Number.isFinite(distance) ? formatDistance(distance) : "—";
+  elements.mobileSelectedLinkCount.textContent = String(selectedLinks.length);
 }
 
 function validMobilePageName(value) {
@@ -3097,6 +3138,45 @@ function mobilePageUiActive() {
 
 function renderSelectionInfo() {
   elements.selectionInfoText.textContent = selectionInfoText();
+}
+
+function mobileSelectionInfoText() {
+  const observationText = observationInfoText();
+  if (observationText) {
+    return observationText;
+  }
+
+  const followText = followStateInfoText();
+  const points = selectedPointIds().map(findPoint).filter(Boolean);
+  const links = selectedLinkIds().map(findLink).filter(Boolean);
+
+  if (state.selection.length === 0) {
+    return followText || t("state.unselected");
+  }
+
+  if (points.length === 1 && links.length === 0 && selectedObservationIds().length === 0) {
+    const current = currentLocationPoint();
+    if (current) {
+      return `${t("label.fromCurrent")} ${formatDistance(distanceBetween(current, points[0]))}`;
+    }
+    const geo = pointGeo(points[0]);
+    return `${formatCoordinate(geo.lat)}, ${formatCoordinate(geo.lng)}`;
+  }
+
+  if (points.length === 2 && links.length === 0) {
+    return `${t("label.betweenTwo")} ${formatDistance(distanceBetween(points[0], points[1]))}`;
+  }
+
+  if (points.length > 2 && links.length === 0) {
+    return `${t("label.sequence")} ${formatDistance(pointSequenceDistance(points))}`;
+  }
+
+  const linkTotal = selectedLinksDistance(links);
+  if (links.length > 0 && Number.isFinite(linkTotal)) {
+    return `${links.length}${t("label.links")} · ${t("label.linkTotal")} ${formatDistance(linkTotal)}`;
+  }
+
+  return selectionInfoText();
 }
 
 function selectionInfoText() {

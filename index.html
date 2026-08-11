@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=64">
-    <script src="src/main.js?v=252" type="module" defer></script>
+    <script src="src/main.js?v=255" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -169,14 +169,40 @@
         </div>
 
 
-        <div class="selected-summary selected-summary-mobile" aria-live="polite">
-          <span data-i18n="summary.selected">選択中</span>
-          <strong id="mobileSelectedTitle">未選択</strong>
-        </div>
       </header>
 
       <main class="workspace">
         <div class="map-column is-mobile-page-active">
+          <section class="mobile-overview-panel" aria-label="グリッド概要" aria-live="polite">
+            <div class="mobile-overview-top">
+              <div class="mobile-overview-block mobile-overview-selection">
+                <span data-i18n="mobileOverview.selection">選択地点</span>
+                <strong id="mobileSelectedTitle">未選択</strong>
+              </div>
+              <div class="mobile-overview-block mobile-overview-info">
+                <span data-i18n="summary.info">情報</span>
+                <strong id="mobileSelectionInfoText">未選択</strong>
+              </div>
+            </div>
+            <div class="mobile-overview-metrics">
+              <div class="mobile-overview-metric">
+                <span data-i18n="mobileOverview.displayed">表示地点</span>
+                <strong id="mobileDisplayedPointCount">0</strong>
+              </div>
+              <div class="mobile-overview-metric">
+                <span data-i18n="mobileOverview.selected">選択地点</span>
+                <strong id="mobileSelectedPointCount">0</strong>
+              </div>
+              <div class="mobile-overview-metric">
+                <span data-i18n="mobileOverview.distance">地点間距離</span>
+                <strong id="mobilePointDistance">—</strong>
+              </div>
+              <div class="mobile-overview-metric">
+                <span data-i18n="mobileOverview.lines">選択線</span>
+                <strong id="mobileSelectedLinkCount">0</strong>
+              </div>
+            </div>
+          </section>
           <div class="selection-info" aria-live="polite">
             <span data-i18n="summary.info">情報</span>
             <strong id="selectionInfoText">未選択</strong>
