@@ -2011,6 +2011,7 @@ textarea {
 .point-info-dialog,
 .point-list-preview-dialog,
 .point-transfer-dialog,
+.grid-link-quick-dialog,
 .confirm-dialog,
 .text-input-dialog {
   width: min(560px, calc(100vw - 24px));
@@ -2028,6 +2029,7 @@ textarea {
 .point-info-dialog::backdrop,
 .point-list-preview-dialog::backdrop,
 .point-transfer-dialog::backdrop,
+.grid-link-quick-dialog::backdrop,
 .confirm-dialog::backdrop,
 .text-input-dialog::backdrop {
   background: rgb(0 0 0 / 0.58);
@@ -2039,6 +2041,7 @@ textarea {
 .point-info-dialog-form,
 .point-list-preview-dialog-form,
 .point-transfer-dialog-form,
+.grid-link-quick-dialog-form,
 .confirm-dialog-form,
 .text-input-dialog-form {
   display: grid;
@@ -2051,6 +2054,7 @@ textarea {
 .point-info-dialog-heading,
 .point-list-preview-dialog-heading,
 .point-transfer-dialog-heading,
+.grid-link-quick-heading,
 .confirm-dialog-heading,
 .text-input-dialog-heading {
   display: flex;
@@ -2064,6 +2068,7 @@ textarea {
 .point-info-dialog-heading h2,
 .point-list-preview-dialog-heading h2,
 .point-transfer-dialog-heading h2,
+.grid-link-quick-heading h2,
 .confirm-dialog-heading h2,
 .text-input-dialog-heading h2 {
   margin: 0;
@@ -2312,6 +2317,57 @@ textarea {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.grid-link-quick-dialog {
+  position: fixed;
+  z-index: 20;
+  width: min(300px, calc(100vw - 20px));
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow), var(--brand-glow);
+}
+
+.grid-link-quick-dialog::backdrop {
+  background: transparent;
+}
+
+.grid-link-quick-dialog-form {
+  display: grid;
+  gap: 7px;
+  padding: 10px 11px 11px;
+}
+
+.grid-link-quick-heading {
+  align-items: flex-start;
+}
+
+.grid-link-quick-name {
+  min-width: 0;
+  overflow: hidden;
+  padding-top: 4px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.grid-link-quick-fields {
+  display: grid;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.grid-link-quick-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .grid-point-quick-dialog {
@@ -2611,6 +2667,10 @@ textarea {
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+}
+
+canvas.is-line-dragging {
+  cursor: grabbing;
 }
 
 .point-index-row.is-dragging {

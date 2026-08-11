@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=70">
-    <script src="src/main.js?v=273" type="module" defer></script>
+    <script src="src/main.js?v=274" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -521,6 +521,19 @@
           <button id="gridPointQuickTargetButton" class="grid-point-quick-role-button" type="button" aria-label="ターゲットにする" title="ターゲットにする"><span class="grid-point-quick-role-mark" aria-hidden="true">◎</span><span id="gridPointQuickTargetLabel">対象</span></button>
           <button id="gridPointQuickInfoButton" class="grid-point-quick-role-button" type="button" aria-label="情報を表示" title="情報を表示"><svg class="ui-icon" aria-hidden="true"><use href="#icon-info"></use></svg><span id="gridPointQuickInfoLabel">情報</span></button>
         </div>
+      </form>
+    </dialog>
+    <dialog id="gridLinkQuickDialog" class="grid-link-quick-dialog" aria-labelledby="gridLinkQuickName" tabindex="-1">
+      <form class="grid-link-quick-dialog-form" method="dialog">
+        <div class="grid-link-quick-heading">
+          <strong id="gridLinkQuickName" class="grid-link-quick-name" tabindex="-1"></strong>
+          <button class="share-link-close" type="submit" value="cancel" aria-label="閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
+        </div>
+        <div class="grid-link-quick-fields">
+          <span id="gridLinkQuickDistance"></span>
+          <span id="gridLinkQuickEndpoints"></span>
+        </div>
+        <p id="gridLinkQuickHint" class="grid-link-quick-hint"></p>
       </form>
     </dialog>
     <dialog id="pointListPreviewDialog" class="point-list-preview-dialog" aria-labelledby="pointListPreviewDialogTitle" tabindex="-1">

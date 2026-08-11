@@ -56,12 +56,13 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1101";
+const WEB_VERSION = "0.1111";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
 const POINT_SELECTION_RING_RADIUS = POINT_RADIUS + 2;
+const LINE_SELECTION_HIT_RADIUS = 16;
 const POINT_SELECTION_RING_WIDTH = 4;
 const POINTER_MOVE_THRESHOLD = 3;
 const RANGE_SELECTION_LONG_PRESS_MS = 450;
@@ -218,6 +219,11 @@ const elements = {
   gridPointQuickInfoButton: document.querySelector("#gridPointQuickInfoButton"),
   gridPointQuickInfoLabel: document.querySelector("#gridPointQuickInfoLabel"),
   gridPointHoverLabel: document.querySelector("#gridPointHoverLabel"),
+  gridLinkQuickDialog: document.querySelector("#gridLinkQuickDialog"),
+  gridLinkQuickName: document.querySelector("#gridLinkQuickName"),
+  gridLinkQuickDistance: document.querySelector("#gridLinkQuickDistance"),
+  gridLinkQuickEndpoints: document.querySelector("#gridLinkQuickEndpoints"),
+  gridLinkQuickHint: document.querySelector("#gridLinkQuickHint"),
   appToast: document.querySelector("#appToast"),
   cloudProgress: document.querySelector("#cloudProgress"),
   cloudProgressTitle: document.querySelector("#cloudProgressTitle"),
@@ -336,6 +342,7 @@ const state = {
   pointInfoTargetId: null,
   pointInfoReturnPhase: null,
   gridPointQuickPointId: null,
+  gridLinkQuickLinkId: null,
   gridPointHoverPointId: null,
   pointInfoBackdropClickPending: false,
   pointInfoBackdropClickSuppressed: false,
@@ -613,6 +620,12 @@ const TRANSLATIONS = {
     "info.noPhoto": "写真なし",
     "info.noComment": "コメントなし",
     "info.unavailable": "選択地点の情報を表示できません",
+    "line.infoTitle": "線の情報",
+    "line.dragHint": "線の途中を長押しして、そのまま別の地点へドラッグすると接続先を変更できます。",
+    "line.dragStatus": "接続先を変更中：{name} にドロップ",
+    "line.reconnected": "「{old}」を「{new}」へ接続変更しました",
+    "line.invalidTarget": "別の地点へドロップしてください",
+    "line.duplicateTarget": "その2地点を結ぶ線はすでにあります",
     "metric.points": "地点",
     "metric.links": "線",
     "metric.total": "合計",
@@ -885,6 +898,12 @@ const TRANSLATIONS = {
     "info.noPhoto": "No photo",
     "info.noComment": "No comment",
     "info.unavailable": "Selected point info is unavailable",
+    "line.infoTitle": "Line Info",
+    "line.dragHint": "Long-press the line, then drag it to another point to change the connection.",
+    "line.dragStatus": "Changing connection: drop on {name}",
+    "line.reconnected": "Changed the connection from “{old}” to “{new}”",
+    "line.invalidTarget": "Drop on a different point",
+    "line.duplicateTarget": "A line between those points already exists",
     "metric.points": "Points",
     "metric.links": "Lines",
     "metric.total": "Total",
@@ -2376,6 +2395,39 @@ function drawLinks() {
   }
 }
 
+function drawLineDragPreview() {
+  const drag = state.pointer.drag?.lineDrag;
+  if (!drag) return;
+
+  const link = findLink(drag.linkId);
+  const fixed = link ? linkEndpoint(link, drag.fixedSide) : null;
+  if (!fixed) return;
+
+  const start = worldToScreen(fixed);
+  const target = drag.targetPointId ? findPoint(drag.targetPointId) : null;
+  const end = target ? worldToScreen(target) : drag.current;
+  const colors = canvasPalette();
+
+  context.save();
+  context.beginPath();
+  context.moveTo(start.x, start.y);
+  context.lineTo(end.x, end.y);
+  context.strokeStyle = colors.linkSelected;
+  context.lineWidth = 4;
+  context.setLineDash([9, 6]);
+  context.stroke();
+  context.setLineDash([]);
+
+  if (target) {
+    context.beginPath();
+    context.arc(end.x, end.y, POINT_RADIUS + 9, 0, Math.PI * 2);
+    context.strokeStyle = colors.selected;
+    context.lineWidth = 2.5;
+    context.stroke();
+  }
+  context.restore();
+}
+
 function drawTargetLine() {
   const anchor = routeStartPoint();
   const target = targetPoint();
@@ -2976,6 +3028,7 @@ function draw() {
   context.clearRect(0, 0, size.width, size.height);
   drawGrid(size.width, size.height);
   drawLinks();
+  drawLineDragPreview();
   drawRouteResult();
   drawObservationPath();
   drawTargetLine();
@@ -3036,6 +3089,7 @@ function render() {
   renderActionButtons();
   renderPointInfoDialog();
   renderGridPointQuickDialog();
+  renderGridLinkQuickDialog();
   syncSettingsControls();
   syncLocationGlowAnimation();
 }
@@ -3324,6 +3378,13 @@ function selectedLinksDistance(links) {
 function renderStatus() {
   if (state.pointer.range) {
     elements.statusLine.value = t("status.rangeSelect");
+    return;
+  }
+
+  const lineDrag = state.pointer.drag?.lineDrag;
+  if (lineDrag) {
+    const target = lineDrag.targetPointId ? findPoint(lineDrag.targetPointId) : null;
+    elements.statusLine.value = t("line.dragStatus").replace("{name}", target?.title || "…");
     return;
   }
 
@@ -3666,6 +3727,21 @@ function renderGridPointQuickDialog() {
   elements.gridPointQuickTargetButton.title = isTarget ? t("button.clearTarget") : t("button.setTarget");
 }
 
+function renderGridLinkQuickDialog() {
+  if (!elements.gridLinkQuickDialog?.open) return;
+  const link = state.gridLinkQuickLinkId ? findLink(state.gridLinkQuickLinkId) : null;
+  const endpoints = link ? linkEndpoints(link) : null;
+  if (!link || !endpoints) {
+    elements.gridLinkQuickDialog.close("selection-changed");
+    return;
+  }
+
+  elements.gridLinkQuickName.textContent = linkTitle(link);
+  elements.gridLinkQuickDistance.textContent = `${t("field.distance")}: ${formatDistance(distanceBetween(endpoints.a, endpoints.b))}`;
+  elements.gridLinkQuickEndpoints.textContent = `${endpoints.a.title} / ${endpoints.b.title}`;
+  elements.gridLinkQuickHint.textContent = t("line.dragHint");
+}
+
 function setPointInfoActionLabel(button, label) {
   const labelNode = button.querySelector("[data-i18n]");
   if (labelNode) {
@@ -3719,6 +3795,36 @@ function openGridPointQuickDialog(point, screenPoint = null) {
   if (!elements.gridPointQuickDialog.open) elements.gridPointQuickDialog.show();
   renderGridPointQuickDialog();
   positionGridPointQuickDialog(screenPoint);
+}
+
+function positionGridLinkQuickDialog(screenPoint) {
+  if (!screenPoint || !elements.gridLinkQuickDialog?.open) return;
+  const canvasRect = canvas.getBoundingClientRect();
+  const dialogRect = elements.gridLinkQuickDialog.getBoundingClientRect();
+  const viewportWidth = document.documentElement.clientWidth;
+  const viewportHeight = document.documentElement.clientHeight;
+  const pointX = canvasRect.left + screenPoint.x;
+  const pointY = canvasRect.top + screenPoint.y;
+  const margin = 8;
+  const gap = 10;
+  const maxLeft = Math.max(margin, viewportWidth - dialogRect.width - margin);
+  const left = Math.min(Math.max(margin, pointX - dialogRect.width / 2), maxLeft);
+  const aboveTop = pointY - dialogRect.height - gap;
+  const belowTop = pointY + gap;
+  const top = aboveTop >= margin
+    ? aboveTop
+    : Math.min(Math.max(margin, belowTop), Math.max(margin, viewportHeight - dialogRect.height - margin));
+  elements.gridLinkQuickDialog.style.left = `${left}px`;
+  elements.gridLinkQuickDialog.style.top = `${top}px`;
+}
+
+function openGridLinkQuickDialog(link, screenPoint = null) {
+  if (!link || !elements.gridLinkQuickDialog?.show) return;
+  hideGridPointHover();
+  state.gridLinkQuickLinkId = link.id;
+  if (!elements.gridLinkQuickDialog.open) elements.gridLinkQuickDialog.show();
+  renderGridLinkQuickDialog();
+  positionGridLinkQuickDialog(screenPoint);
 }
 
 function showSelectedPointInfoDialog(pointOrId = null) {
@@ -6799,7 +6905,90 @@ function findNearestLink(screenPoint) {
     }
   }
 
-  return nearestDistance <= 12 ? nearest : null;
+  return nearestDistance <= LINE_SELECTION_HIT_RADIUS ? nearest : null;
+}
+
+function lineDragSideAtPoint(link, screenPoint) {
+  const endpoints = linkEndpoints(link);
+  if (!endpoints) return null;
+  const a = worldToScreen(endpoints.a);
+  const b = worldToScreen(endpoints.b);
+  return Math.hypot(a.x - screenPoint.x, a.y - screenPoint.y)
+    <= Math.hypot(b.x - screenPoint.x, b.y - screenPoint.y)
+    ? "a"
+    : "b";
+}
+
+function updateLineDragTarget(drag, screenPoint) {
+  if (!drag?.lineDrag) return;
+  const lineDrag = drag.lineDrag;
+  lineDrag.current = { ...screenPoint };
+  const candidate = findNearestPoint(screenPoint);
+  const fixedId = findLink(lineDrag.linkId)?.[lineDrag.fixedSide];
+  lineDrag.targetPointId = candidate && candidate.id !== fixedId ? candidate.id : null;
+}
+
+function beginLineDrag(drag, screenPoint) {
+  if (!drag?.longPressLink || drag.lineDrag) return;
+  const link = findLink(drag.longPressLink.id);
+  const touchedSide = link ? lineDragSideAtPoint(link, drag.start) : null;
+  const fixedSide = touchedSide === "a" ? "b" : touchedSide === "b" ? "a" : null;
+  if (!link || !fixedSide) return;
+
+  drag.lineDrag = {
+    linkId: link.id,
+    fixedSide,
+    current: { ...screenPoint },
+    targetPointId: null
+  };
+  canvas.classList.add("is-line-dragging");
+  if (elements.gridLinkQuickDialog?.open) elements.gridLinkQuickDialog.close("drag");
+  updateLineDragTarget(drag, screenPoint);
+  draw();
+  renderStatus();
+}
+
+function finishLineDrag(lineDrag, screenPoint) {
+  canvas.classList.remove("is-line-dragging");
+  const link = findLink(lineDrag?.linkId);
+  const target = findNearestPoint(screenPoint);
+  if (!link || !target) {
+    showAppToast(t("line.invalidTarget"), { error: true });
+    render();
+    return;
+  }
+
+  const fixedId = link[lineDrag.fixedSide];
+  const replaceSide = lineDrag.fixedSide === "a" ? "b" : "a";
+  if (target.id === fixedId || target.id === link[replaceSide]) {
+    showAppToast(t("line.invalidTarget"), { error: true });
+    render();
+    return;
+  }
+
+  const duplicate = state.links.find((candidate) => (
+    candidate.id !== link.id
+    && ((candidate.a === fixedId && candidate.b === target.id) || (candidate.a === target.id && candidate.b === fixedId))
+  ));
+  if (duplicate) {
+    showAppToast(t("line.duplicateTarget"), { error: true });
+    render();
+    return;
+  }
+
+  const previous = linkEndpoint(link, replaceSide);
+  const next = {
+    ...link,
+    [replaceSide]: target.id,
+    [`${replaceSide}Endpoint`]: captureLineEndpoint(target),
+    updatedAt: new Date().toISOString()
+  };
+  state.links = state.links.map((candidate) => candidate.id === link.id ? normalizeStoredLink(next) : candidate);
+  persistWorkspace();
+  selectLink(link.id);
+  showAppToast(t("line.reconnected")
+    .replace("{old}", previous?.title || "線")
+    .replace("{new}", target.title));
 }
 
 function distanceToSegment(point, start, end) {
@@ -7603,6 +7792,7 @@ function pointerMidpoint(a, b) {
 
 function startDragGesture(pointerId, point, options = {}) {
   const longPressPoint = options.moved ? null : findNearestPoint(point);
+  const longPressLink = options.moved || longPressPoint ? null : findNearestLink(point);
   const drag = {
     id: pointerId,
     start: point,
@@ -7612,6 +7802,8 @@ function startDragGesture(pointerId, point, options = {}) {
     moved: Boolean(options.moved),
     longPressed: false,
     longPressPoint,
+    longPressLink,
+    lineDrag: null,
     cancelled: false,
     longPressTimerId: null
   };
@@ -7631,6 +7823,10 @@ function startDragGesture(pointerId, point, options = {}) {
       drag.longPressed = true;
       if (drag.longPressPoint) {
         openGridPointQuickDialog(drag.longPressPoint, drag.start);
+        return;
+      }
+      if (drag.longPressLink) {
+        openGridLinkQuickDialog(drag.longPressLink, drag.start);
         return;
       }
       state.pointer.range = {
@@ -7843,10 +8039,21 @@ function removePointer(event, options = {}) {
     return;
   }
 
+  const lineDrag = drag?.lineDrag;
   state.pointer.drag = null;
 
+  if (lineDrag) {
+    if (allowTap) {
+      finishLineDrag(lineDrag, point);
+    } else {
+      canvas.classList.remove("is-line-dragging");
+      render();
+    }
+    return;
+  }
+
   if (drag?.longPressed) {
-    if (drag.longPressPoint) {
+    if (drag.longPressPoint || drag.longPressLink) {
       return;
     }
     if (allowTap) {
@@ -10126,10 +10333,21 @@ function bindEvents() {
   elements.gridPointQuickDialog.addEventListener("click", (event) => {
     if (event.target === elements.gridPointQuickDialog) elements.gridPointQuickDialog.close("cancel");
   });
+  elements.gridLinkQuickDialog.addEventListener("close", () => {
+    state.gridLinkQuickLinkId = null;
+  });
+  elements.gridLinkQuickDialog.addEventListener("click", (event) => {
+    if (event.target === elements.gridLinkQuickDialog) elements.gridLinkQuickDialog.close("cancel");
+  });
   document.addEventListener("pointerdown", (event) => {
     if (!elements.gridPointQuickDialog.open) return;
     if (event.target instanceof Node && elements.gridPointQuickDialog.contains(event.target)) return;
     elements.gridPointQuickDialog.close("outside");
+  }, true);
+  document.addEventListener("pointerdown", (event) => {
+    if (!elements.gridLinkQuickDialog.open) return;
+    if (event.target instanceof Node && elements.gridLinkQuickDialog.contains(event.target)) return;
+    elements.gridLinkQuickDialog.close("outside");
   }, true);
   document.addEventListener("click", (event) => {
     if (!elements.gridPointQuickDialog.open) return;
@@ -10327,6 +10545,14 @@ function bindEvents() {
       clearDragLongPressTimer(drag);
       if (drag.longPressed) {
         if (drag.longPressPoint) {
+          drag.last = point;
+          return;
+        }
+        if (drag.longPressLink) {
+          beginLineDrag(drag, point);
+          updateLineDragTarget(drag, point);
+          draw();
+          renderStatus();
           drag.last = point;
           return;
         }
