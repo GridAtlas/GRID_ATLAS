@@ -10,7 +10,7 @@
 https://gridatlas.github.io/GRID_ATLAS/?preset=kinki-pentagram
 ```
 
-アプリ起動時に同一オリジンの `presets/kinki-pentagram.gridatlas` を取得し、インポートリストへ追加して地点全体を自動表示します。
+アプリ起動時に同一オリジンの `presets/kinki-pentagram.gridatlas` を取得し、インポートリストへ追加します。表示はプリセット対象と登録先のリストに絞られ、他のリストは自動的にオフになります。
 `kinki-pentagram.gridatlas` には、5つの固定アンカーを結ぶ考察線も任意レイヤーとして含めています。
 
 ## 公開範囲

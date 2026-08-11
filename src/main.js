@@ -56,7 +56,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1015";
+const WEB_VERSION = "0.1025";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -9479,7 +9479,40 @@ function mergeAnalysisLinks(links) {
   state.links = next;
 }
 
-function applyImportedPointLists(importedLists, importedAnalysisLayers, successMessage) {
+function focusPresetVisibility(targetLists) {
+  const targetStorageIds = new Set(
+    (Array.isArray(targetLists) ? targetLists : [])
+      .map((list) => pointListStorageKey(list))
+      .filter(Boolean)
+  );
+  if (typeof state.activePointListId === "string" && state.activePointListId) {
+    targetStorageIds.add(state.activePointListId);
+  }
+
+  const targetLocalIds = new Set(
+    Array.from(targetStorageIds).filter((storageId) => !storageId.startsWith("cloud:"))
+  );
+  const targetCloudIds = new Set(
+    Array.from(targetStorageIds)
+      .filter((storageId) => storageId.startsWith("cloud:"))
+      .map((storageId) => storageId.slice("cloud:".length))
+  );
+
+  for (const list of state.pointLists) {
+    list.visible = targetLocalIds.has(list.id);
+  }
+  for (const list of state.cloud.pointLists) {
+    const cloudId = list.cloudId || list.id;
+    if (targetCloudIds.has(cloudId)) state.cloud.hiddenListIds.delete(cloudId);
+    else state.cloud.hiddenListIds.add(cloudId);
+  }
+  for (const list of state.cloud.lists) {
+    if (targetCloudIds.has(list.id)) state.cloud.hiddenListIds.delete(list.id);
+    else state.cloud.hiddenListIds.add(list.id);
+  }
+}
+
+function applyImportedPointLists(importedLists, importedAnalysisLayers, successMessage, options = {}) {
   const previousLists = state.pointLists;
   const previousLinks = state.links;
   const previousSelection = state.selection;
@@ -9487,6 +9520,9 @@ function applyImportedPointLists(importedLists, importedAnalysisLayers, successM
     state.pointLists = [...state.pointLists, ...importedLists];
     const importedLinks = importedAnalysisLayers.flatMap((layer) => layer.links || []);
     mergeAnalysisLinks(importedLinks);
+    if (options.source === "preset") {
+      focusPresetVisibility(options.focusLists || importedLists);
+    }
     refreshVisiblePoints();
     state.selection = importedLists.flatMap((list) => list.points.map((point) => ({ type: "point", id: point.id })));
     normalizeSelection();
@@ -9543,6 +9579,9 @@ async function importGridAtlasPackages(packages, options = {}) {
     if (importedLists.length === 0 && duplicates.length > 0) {
       const duplicate = duplicates[0];
       mergeAnalysisLinks(importedAnalysisLayers.flatMap((layer) => layer.links || []));
+      if (options.source === "preset") {
+        focusPresetVisibility(duplicates);
+      }
       state.selection = duplicate.points.map((point) => ({ type: "point", id: point.id }));
       normalizeSelection();
       persistWorkspace();
@@ -9556,7 +9595,10 @@ async function importGridAtlasPackages(packages, options = {}) {
       ? t("import.gridatlas.urlSuccess")
       : options.successMessage
         || t("import.gridatlas.success").replace("{count}", String(importedLists.length));
-    applyImportedPointLists(importedLists, importedAnalysisLayers, successMessage);
+    applyImportedPointLists(importedLists, importedAnalysisLayers, successMessage, {
+      ...options,
+      focusLists: [...importedLists, ...duplicates]
+    });
     return true;
   } catch (error) {
     console.warn("GRID ATLAS import failed", error);
@@ -9828,19 +9870,43 @@ async function deleteSelectedPoint() {
     parts.push(String(selectedObservationIdSet.size) + "観察（保存ファイルには影響しません）");
   }
 
-  const deletionMode = await requestConfirm({
-    title: cloudText("削除の確認", "Confirm deletion"),
-    message: cloudText(
-      "選択中の" + parts.join(" / ") + "を削除しますか。",
-      `Delete the selected ${parts.join(" / ")}?`
-    ),
-    choices: [
-      { value: "links", label: t("delete.linksOnly") },
-      { value: "points", label: t("delete.pointsOnly") },
-      { value: "all", label: t("delete.all") }
-    ],
-    danger: true
-  });
+  const selectedPointCount = candidatePointIdSet.size + candidateCloudPointIdSet.size;
+  const linksOnly = candidateLinkIdSet.size > 0
+    && selectedPointCount === 0
+    && selectedObservationIdSet.size === 0;
+  const pointsOnly = selectedPointCount > 0
+    && candidateLinkIdSet.size === 0
+    && selectedObservationIdSet.size === 0;
+  let deletionMode;
+  if (linksOnly || pointsOnly) {
+    const count = linksOnly ? candidateLinkIdSet.size : selectedPointCount;
+    const noun = linksOnly ? "本の線" : "地点";
+    const nounEn = linksOnly ? "line(s)" : "point(s)";
+    const confirmed = await requestConfirm({
+      title: cloudText("削除の確認", "Confirm deletion"),
+      message: cloudText(
+        `${count}${noun}を選択しています。削除しますか？`,
+        `You have selected ${count} ${nounEn}. Delete them?`
+      ),
+      confirmLabel: t("action.delete"),
+      danger: true
+    });
+    deletionMode = confirmed ? "all" : "cancel";
+  } else {
+    deletionMode = await requestConfirm({
+      title: cloudText("削除の確認", "Confirm deletion"),
+      message: cloudText(
+        "選択中の" + parts.join(" / ") + "を削除しますか。",
+        `Delete the selected ${parts.join(" / ")}?`
+      ),
+      choices: [
+        { value: "links", label: t("delete.linksOnly") },
+        { value: "points", label: t("delete.pointsOnly") },
+        { value: "all", label: t("delete.all") }
+      ],
+      danger: true
+    });
+  }
   if (deletionMode === "cancel") {
     return;
   }
