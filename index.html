@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=64">
-    <script src="src/main.js?v=255" type="module" defer></script>
+    <script src="src/main.js?v=257" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -258,14 +258,6 @@
               <svg class="ui-icon" aria-hidden="true"><use href="#icon-clear"></use></svg>
               <span data-i18n="action.clear">解除</span>
             </button>
-            <button id="actionRouteStartButton" class="action-button" type="button" title="選択地点を起点にする" disabled>
-              <svg class="ui-icon" aria-hidden="true"><use href="#icon-start"></use></svg>
-              <span data-i18n="action.start">起点</span>
-            </button>
-            <button id="actionTargetButton" class="action-button" type="button" title="選択地点を対象にする" disabled>
-              <svg class="ui-icon" aria-hidden="true"><use href="#icon-target"></use></svg>
-              <span data-i18n="action.target">対象</span>
-            </button>
             <button id="actionFollowButton" class="action-button" type="button" aria-pressed="false" title="現在地追跡を切り替え">
               <svg class="ui-icon" aria-hidden="true"><use href="#icon-locate"></use></svg>
               <span data-i18n="action.track">追跡</span>
@@ -277,10 +269,6 @@
             <button id="deletePointButton" class="action-button danger-button" type="button" title="選択対象を削除" disabled>
               <svg class="ui-icon" aria-hidden="true"><use href="#icon-trash"></use></svg>
               <span data-i18n="action.delete">削除</span>
-            </button>
-            <button id="actionRestoreButton" class="action-button" type="button" title="直前の削除を復旧" disabled>
-              <svg class="ui-icon" aria-hidden="true"><use href="#icon-restore"></use></svg>
-              <span data-i18n="action.restore">復旧</span>
             </button>
             <button id="actionEditButton" class="action-button" type="button" title="選択地点を編集" disabled>
               <svg class="ui-icon" aria-hidden="true"><use href="#icon-edit"></use></svg>
@@ -349,7 +337,8 @@
                 <button id="openAppleMapsButton" type="button" data-i18n="button.appleMaps">Appleマップ</button>
                 <button id="openGoogleMapsButton" type="button" data-i18n="button.googleMaps">Googleマップ</button>
               </div>
-              <div id="targetActions" class="target-actions">
+              <div id="targetActions" class="target-actions" aria-label="観察操作">
+                <button id="routeStartPointButton" type="button" data-i18n="button.setStart">起点にする</button>
                 <button id="targetPointButton" type="button" data-i18n="button.setTarget">ターゲットにする</button>
               </div>
             </div>
@@ -523,20 +512,8 @@
           </dl>
         </section>
         <div class="point-info-actions">
-          <button id="pointInfoEditButton" class="grid-point-quick-role-button point-info-action-button" type="button" data-i18n="action.edit"><svg class="ui-icon" aria-hidden="true"><use href="#icon-edit"></use></svg><span data-i18n="action.edit">編集</span></button>
-          <button id="pointInfoMapButton" class="grid-point-quick-role-button point-info-action-button" type="button" data-i18n="action.map"><svg class="ui-icon" aria-hidden="true"><use href="#icon-map"></use></svg><span data-i18n="action.map">地図</span></button>
-        </div>
-      </form>
-    </dialog>
-    <dialog id="gridPointQuickDialog" class="grid-point-quick-dialog" aria-labelledby="gridPointQuickName">
-      <form class="grid-point-quick-dialog-form" method="dialog">
-        <div class="grid-point-quick-heading">
-          <strong id="gridPointQuickName" class="grid-point-quick-name"></strong>
-          <span id="gridPointQuickList" class="grid-point-quick-list"></span>
-        </div>
-        <div class="grid-point-quick-actions" aria-label="地点の役割">
-          <button id="gridPointQuickStartButton" class="grid-point-quick-role-button" type="button" aria-label="起点にする" title="起点にする"><span class="grid-point-quick-role-mark" aria-hidden="true">▷</span><span id="gridPointQuickStartLabel">起点</span></button>
-          <button id="gridPointQuickTargetButton" class="grid-point-quick-role-button" type="button" aria-label="ターゲットにする" title="ターゲットにする"><span class="grid-point-quick-role-mark" aria-hidden="true">◎</span><span id="gridPointQuickTargetLabel">対象</span></button>
+          <button id="pointInfoEditButton" class="point-info-action-button" type="button" data-i18n="action.edit"><svg class="ui-icon" aria-hidden="true"><use href="#icon-edit"></use></svg><span data-i18n="action.edit">編集</span></button>
+          <button id="pointInfoMapButton" class="point-info-action-button" type="button" data-i18n="action.map"><svg class="ui-icon" aria-hidden="true"><use href="#icon-map"></use></svg><span data-i18n="action.map">地図</span></button>
         </div>
       </form>
     </dialog>

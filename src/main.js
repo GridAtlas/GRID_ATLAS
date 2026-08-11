@@ -56,7 +56,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1047";
+const WEB_VERSION = "0.1058";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -136,11 +136,8 @@ const elements = {
   actionShareSelectedButton: document.querySelector("#actionShareSelectedButton"),
   actionInfoButton: document.querySelector("#actionInfoButton"),
   clearSelectionButton: document.querySelector("#clearSelectionButton"),
-  actionTargetButton: document.querySelector("#actionTargetButton"),
-  actionRouteStartButton: document.querySelector("#actionRouteStartButton"),
   actionFollowButton: document.querySelector("#actionFollowButton"),
   actionCenterButton: document.querySelector("#actionCenterButton"),
-  actionRestoreButton: document.querySelector("#actionRestoreButton"),
   actionEditButton: document.querySelector("#actionEditButton"),
   actionMapButton: document.querySelector("#actionMapButton"),
   editionBadge: document.querySelector("#editionBadge"),
@@ -209,13 +206,6 @@ const elements = {
   pointInfoDistance: document.querySelector("#pointInfoDistance"),
   pointInfoEditButton: document.querySelector("#pointInfoEditButton"),
   pointInfoMapButton: document.querySelector("#pointInfoMapButton"),
-  gridPointQuickDialog: document.querySelector("#gridPointQuickDialog"),
-  gridPointQuickName: document.querySelector("#gridPointQuickName"),
-  gridPointQuickList: document.querySelector("#gridPointQuickList"),
-  gridPointQuickStartButton: document.querySelector("#gridPointQuickStartButton"),
-  gridPointQuickStartLabel: document.querySelector("#gridPointQuickStartLabel"),
-  gridPointQuickTargetButton: document.querySelector("#gridPointQuickTargetButton"),
-  gridPointQuickTargetLabel: document.querySelector("#gridPointQuickTargetLabel"),
   gridPointHoverLabel: document.querySelector("#gridPointHoverLabel"),
   appToast: document.querySelector("#appToast"),
   cloudProgress: document.querySelector("#cloudProgress"),
@@ -240,6 +230,7 @@ const elements = {
   detailNote: document.querySelector("#detailNote"),
   mapOpenActions: document.querySelector("#mapOpenActions"),
   targetActions: document.querySelector("#targetActions"),
+  routeStartPointButton: document.querySelector("#routeStartPointButton"),
   targetPointButton: document.querySelector("#targetPointButton"),
   openAppleMapsButton: document.querySelector("#openAppleMapsButton"),
   openGoogleMapsButton: document.querySelector("#openGoogleMapsButton"),
@@ -333,7 +324,6 @@ const state = {
   pointInfoReturnContext: null,
   pointInfoTargetId: null,
   pointInfoReturnPhase: null,
-  gridPointQuickPointId: null,
   gridPointHoverPointId: null,
   pointInfoBackdropClickPending: false,
   pointInfoBackdropClickSuppressed: false,
@@ -353,7 +343,6 @@ const state = {
   observationTrail: [],
   loadedObservations: [],
   editingPointId: null,
-  lastDeleted: null,
   pendingGeo: null,
   gpsEnabled: false,
   deviceHeading: null,
@@ -548,7 +537,6 @@ const TRANSLATIONS = {
     "delete.pointsOnly": "地点のみ",
     "delete.all": "すべて",
     "delete.uneditablePoints": "選択した地点のうち{count}点は編集できないリストに含まれるため削除できません。",
-    "action.restore": "復旧",
     "action.edit": "編集",
     "action.map": "地図",
     "section.pointSource": "地点取得",
@@ -819,7 +807,6 @@ const TRANSLATIONS = {
     "delete.pointsOnly": "Points only",
     "delete.all": "All",
     "delete.uneditablePoints": "{count} selected point(s) cannot be deleted because they belong to a non-editable list.",
-    "action.restore": "Restore",
     "action.edit": "Edit",
     "action.map": "Map",
     "section.pointSource": "Get location",
@@ -1330,7 +1317,6 @@ function applyWorkspace(workspace) {
   state.targetPointId = null;
   resetObservationTrail();
   state.editingPointId = null;
-  state.lastDeleted = null;
   state.pendingGeo = null;
   if (activeListVisibilityChanged) {
     persistWorkspace();
@@ -1619,7 +1605,6 @@ function repairLocalCloudPointIdCollisions() {
     if (state.targetPointId === previousId) state.targetPointId = nextId;
     if (state.editingPointId === previousId) state.editingPointId = nextId;
     if (state.gridPointHoverPointId === previousId) state.gridPointHoverPointId = nextId;
-    if (state.gridPointQuickPointId === previousId) state.gridPointQuickPointId = nextId;
     if (state.pointInfoTargetId === previousId) state.pointInfoTargetId = nextId;
     if (state.pointInfoReturnContext?.pointId === previousId) state.pointInfoReturnContext.pointId = nextId;
     if (Array.isArray(state.pointInfoReturnContext?.selection)) {
@@ -3023,7 +3008,6 @@ function render() {
   renderWebVersion();
   renderActionButtons();
   renderPointInfoDialog();
-  renderGridPointQuickDialog();
   syncSettingsControls();
   syncLocationGlowAnimation();
 }
@@ -3314,21 +3298,9 @@ function renderActionButtons() {
   const hasPendingPoint = validGeo(state.pendingGeo);
   const pointIds = selectedPointIds();
   const linkIds = selectedLinkIds();
-  const singlePointCandidate = singleSelectedPoint();
-  const targetCandidate = singleTargetableSelectedPoint();
-  const routeStartCandidate = singlePointCandidate;
   const routePlan = routePlanFromCurrentSelection();
   const routeActive = Boolean(state.routeResult);
-  const routeStart = routeStartPoint();
-  const target = targetPoint();
-  const targetSwitchesFromRouteStart = Boolean(
-    targetCandidate && targetCandidate.id !== state.targetPointId && routeStart && !observationEndpointsDistinct(routeStart, targetCandidate)
-  );
-  const routeStartSwitchesFromTarget = Boolean(
-    routeStartCandidate && routeStartCandidate.id !== state.routeStartPointId && target && !observationEndpointsDistinct(routeStartCandidate, target)
-  );
   const centerCandidateCount = pointIds.length;
-  const restoreCandidateCount = deletedSnapshotItemCount();
   const editCandidate = editableSelectedPoint();
   const mapCandidate = mapPointForSelection();
   const infoCandidate = singleSelectedPoint();
@@ -3346,8 +3318,6 @@ function renderActionButtons() {
   elements.actionRouteButton.disabled = !routeActive && !routePlan;
   elements.deletePointButton.disabled = !canDelete;
   elements.clearSelectionButton.disabled = state.selection.length === 0 && !hasPendingPoint;
-  elements.actionTargetButton.disabled = !targetCandidate;
-  elements.actionRouteStartButton.disabled = !routeStartCandidate;
   elements.actionCenterButton.disabled = centerCandidateCount < 2;
   const shareableSelectedPointCount = selectedPointIds()
     .map(findPoint)
@@ -3356,7 +3326,6 @@ function renderActionButtons() {
   elements.actionCopyToListButton.disabled = transferablePointCount === 0;
   elements.actionMoveToListButton.disabled = transferablePointCount === 0;
   elements.actionShareSelectedButton.disabled = shareableSelectedPointCount === 0;
-  elements.actionRestoreButton.disabled = restoreCandidateCount === 0;
   elements.actionEditButton.disabled = !editCandidate;
   elements.actionMapButton.disabled = !mapCandidate;
   elements.actionMapButton.title = mapCandidate?.isPending
@@ -3377,12 +3346,8 @@ function renderActionButtons() {
   elements.actionRouteButton.classList.toggle("is-active", routeActive);
   elements.actionRouteButton.setAttribute("aria-pressed", String(routeActive));
   elements.actionRouteButton.title = routeActive ? "巡回表示を解除" : routePlan ? "選択点を起点から巡回計算" : "起点を指定するか3地点以上を選択";
-  elements.actionTargetButton.title = targetSwitchesFromRouteStart ? "起点から対象に切り替え" : "選択地点を対象にする";
-  elements.actionRouteStartButton.title = routeStartSwitchesFromTarget ? "対象から起点に切り替え" : "選択地点を起点にする";
   elements.deletePointButton.classList.toggle("is-active", false);
   elements.clearSelectionButton.classList.toggle("is-active", false);
-  elements.actionTargetButton.classList.toggle("is-active", Boolean(targetCandidate && targetCandidate.id === state.targetPointId));
-  elements.actionRouteStartButton.classList.toggle("is-active", Boolean(routeStartCandidate && routeStartCandidate.id === state.routeStartPointId));
   elements.actionCenterButton.classList.toggle("is-active", false);
   elements.actionCopyToListButton.classList.toggle("is-active", false);
   elements.actionMoveToListButton.classList.toggle("is-active", false);
@@ -3395,12 +3360,10 @@ function renderActionButtons() {
   elements.actionShareSelectedButton.title = shareableSelectedPointCount > 0
     ? cloudText(`選択した${shareableSelectedPointCount}地点をURLで共有`, `Share ${shareableSelectedPointCount} selected point(s) by URL`)
     : t("list.shareSelectedUnavailable");
-  elements.actionRestoreButton.classList.toggle("is-active", false);
   elements.actionEditButton.classList.toggle("is-active", Boolean(state.editingPointId));
   elements.actionMapButton.classList.toggle("is-active", false);
   elements.actionInfoButton.classList.toggle("is-active", Boolean(elements.pointInfoDialog?.open && infoCandidate));
   elements.actionInfoButton.title = infoCandidate ? "選択地点の情報を表示" : "1地点を選択すると情報を表示できます";
-  elements.actionRestoreButton.title = restoreCandidateCount > 0 ? `直前の削除を復旧 (${restoreCandidateCount}件)` : "直前の削除を復旧";
   elements.pointSubmitButton.textContent = state.editingPointId ? t("button.update") : t("button.submitRegister");
   elements.actionRouteLabel.textContent = t("action.route");
   renderLocationFollowButton();
@@ -3643,33 +3606,6 @@ function openPointInfoForPoint(point, { fromLongPress = false } = {}) {
   showSelectedPointInfoDialog(resolved.id);
 }
 
-function renderGridPointQuickDialog() {
-  if (!elements.gridPointQuickDialog?.open) return;
-  const point = state.gridPointQuickPointId ? findPoint(state.gridPointQuickPointId) : null;
-  if (!point) {
-    elements.gridPointQuickDialog.close("selection-changed");
-    return;
-  }
-
-  const canSetObservationRole = !point.isVirtual;
-  const isStart = canSetObservationRole && point.id === state.routeStartPointId;
-  const isTarget = canSetObservationRole && point.id === state.targetPointId;
-  elements.gridPointQuickName.textContent = point.title;
-  elements.gridPointQuickList.textContent = pointListNameForPoint(point) || t("label.none");
-  elements.gridPointQuickStartLabel.textContent = t("action.start");
-  elements.gridPointQuickTargetLabel.textContent = t("action.target");
-  elements.gridPointQuickStartButton.disabled = !canSetObservationRole;
-  elements.gridPointQuickStartButton.classList.toggle("is-active", isStart);
-  elements.gridPointQuickStartButton.setAttribute("aria-pressed", String(isStart));
-  elements.gridPointQuickStartButton.setAttribute("aria-label", isStart ? t("button.clearStart") : t("button.setStart"));
-  elements.gridPointQuickStartButton.title = isStart ? t("button.clearStart") : t("button.setStart");
-  elements.gridPointQuickTargetButton.disabled = !canSetObservationRole;
-  elements.gridPointQuickTargetButton.classList.toggle("is-active", isTarget);
-  elements.gridPointQuickTargetButton.setAttribute("aria-pressed", String(isTarget));
-  elements.gridPointQuickTargetButton.setAttribute("aria-label", isTarget ? t("button.clearTarget") : t("button.setTarget"));
-  elements.gridPointQuickTargetButton.title = isTarget ? t("button.clearTarget") : t("button.setTarget");
-}
-
 function setPointInfoActionLabel(button, label) {
   const labelNode = button.querySelector("[data-i18n]");
   if (labelNode) {
@@ -3693,36 +3629,6 @@ function bindPointerActionButton(button, action) {
     if (event.detail > 0 && performance.now() - lastPointerActivationAt < 500) return;
     action();
   });
-}
-
-function positionGridPointQuickDialog(screenPoint) {
-  if (!screenPoint || !elements.gridPointQuickDialog?.open) return;
-  const canvasRect = canvas.getBoundingClientRect();
-  const dialogRect = elements.gridPointQuickDialog.getBoundingClientRect();
-  const viewportWidth = document.documentElement.clientWidth;
-  const viewportHeight = document.documentElement.clientHeight;
-  const pointX = canvasRect.left + screenPoint.x;
-  const pointY = canvasRect.top + screenPoint.y;
-  const margin = 8;
-  const gap = 10;
-  const maxLeft = Math.max(margin, viewportWidth - dialogRect.width - margin);
-  const left = Math.min(Math.max(margin, pointX - dialogRect.width / 2), maxLeft);
-  const aboveTop = pointY - dialogRect.height - gap;
-  const belowTop = pointY + gap;
-  const top = aboveTop >= margin
-    ? aboveTop
-    : Math.min(Math.max(margin, belowTop), Math.max(margin, viewportHeight - dialogRect.height - margin));
-  elements.gridPointQuickDialog.style.left = left + "px";
-  elements.gridPointQuickDialog.style.top = top + "px";
-}
-
-function openGridPointQuickDialog(point, screenPoint = null) {
-  if (!point || !elements.gridPointQuickDialog?.show) return;
-  hideGridPointHover();
-  state.gridPointQuickPointId = point.id;
-  if (!elements.gridPointQuickDialog.open) elements.gridPointQuickDialog.show();
-  renderGridPointQuickDialog();
-  positionGridPointQuickDialog(screenPoint);
 }
 
 function showSelectedPointInfoDialog(pointOrId = null) {
@@ -3865,9 +3771,17 @@ function renderTargetActions(point) {
     return;
   }
 
-  const isTarget = point.id === state.targetPointId;
   const start = routeStartPoint();
+  const target = targetPoint();
+  const isStart = point.id === state.routeStartPointId;
+  const isTarget = point.id === state.targetPointId;
   const switchesFromRouteStart = !isTarget && start && !observationEndpointsDistinct(start, point);
+  const switchesFromTarget = !isStart && target && !observationEndpointsDistinct(point, target);
+  elements.routeStartPointButton.disabled = false;
+  elements.routeStartPointButton.textContent = isStart ? t("button.clearStart") : t("button.setStart");
+  elements.routeStartPointButton.title = switchesFromTarget ? "対象から起点に切り替え" : "起点にする";
+  elements.routeStartPointButton.classList.toggle("is-active", isStart);
+  elements.routeStartPointButton.setAttribute("aria-pressed", String(isStart));
   elements.targetPointButton.disabled = false;
   elements.targetPointButton.textContent = isTarget ? t("button.clearTarget") : t("button.setTarget");
   elements.targetPointButton.title = switchesFromRouteStart ? "起点からターゲットに切り替え" : "ターゲットにする";
@@ -6452,17 +6366,6 @@ function mapPointForSelection() {
   };
 }
 
-function deletedSnapshotItemCount() {
-  if (!state.lastDeleted) {
-    return 0;
-  }
-
-  const points = Array.isArray(state.lastDeleted.points) ? state.lastDeleted.points.length : 0;
-  const links = Array.isArray(state.lastDeleted.links) ? state.lastDeleted.links.length : 0;
-  const observations = Array.isArray(state.lastDeleted.observations) ? state.lastDeleted.observations.length : 0;
-  return points + links + observations;
-}
-
 function clonePlain(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -6725,9 +6628,6 @@ async function setRouteStartForPoint(point, options = {}) {
   if (!preserveSelection) setSelection([], { render: false });
   render();
 }
-function setRouteStartFromSelection() {
-  return setRouteStartForPoint(singleSelectedPoint());
-}
 function hideGridPointHover() {
   state.gridPointHoverPointId = null;
   if (!elements.gridPointHoverLabel) return;
@@ -6739,7 +6639,6 @@ function updateGridPointHover(screenPoint, pointerType = "mouse") {
   if (
     pointerType !== "mouse"
     || state.pointer.active.size > 0
-    || state.gridPointQuickPointId
     || !elements.gridPointHoverLabel
   ) {
     hideGridPointHover();
@@ -7032,85 +6931,6 @@ function startEditingPointInfoTarget() {
 function startEditingSelectedPoint() {
   return startEditingPoint(editableSelectedPoint());
 }
-async function restoreLastDeleted() {
-  const snapshot = state.lastDeleted;
-  if (!snapshot || deletedSnapshotItemCount() === 0) {
-    return;
-  }
-
-  const snapshotPoints = Array.isArray(snapshot.points) ? snapshot.points : [];
-  const snapshotLinks = Array.isArray(snapshot.links) ? snapshot.links : [];
-  const snapshotObservations = Array.isArray(snapshot.observations) ? snapshot.observations : [];
-  const parts = [];
-  if (snapshotPoints.length > 0) {
-    parts.push(`${snapshotPoints.length}点`);
-  }
-  if (snapshotLinks.length > 0) {
-    parts.push(`${snapshotLinks.length}線`);
-  }
-  if (snapshotObservations.length > 0) {
-    parts.push(`${snapshotObservations.length}観察`);
-  }
-
-  const confirmed = await requestConfirm({
-    title: cloudText("復旧の確認", "Confirm restore"),
-    message: cloudText(
-      `直前に削除した${parts.join(" / ")}を復旧しますか。`,
-      `Restore the last deleted ${parts.join(" / ")}?`
-    ),
-    confirmLabel: t("action.restore"),
-    danger: false
-  });
-  if (!confirmed) {
-    return;
-  }
-
-  const restoredSelection = [];
-  const localList = localPointList();
-  if (snapshotPoints.length > 0) {
-    localList.visible = true;
-  }
-
-  const existingPointIds = new Set(allPointListPoints().map((point) => point.id));
-  for (const point of snapshotPoints) {
-    if (existingPointIds.has(point.id)) {
-      continue;
-    }
-
-    localList.points.push(clonePlain(point));
-    existingPointIds.add(point.id);
-    restoredSelection.push({ type: "point", id: point.id });
-  }
-
-  const existingLinkIds = new Set(state.links.map((link) => link.id));
-  for (const link of snapshotLinks) {
-    if (existingLinkIds.has(link.id) || !validLinkEndpointId(link.a) || !validLinkEndpointId(link.b)) {
-      continue;
-    }
-
-    state.links.push(normalizeStoredLink(clonePlain(link)) ?? clonePlain(link));
-    existingLinkIds.add(link.id);
-    restoredSelection.push({ type: "link", id: link.id });
-  }
-
-  const existingObservationIds = new Set(state.loadedObservations.map((observation) => observation.id));
-  for (const observation of snapshotObservations) {
-    const restoredObservation = withObservationId(observation, existingObservationIds);
-    state.loadedObservations.push(restoredObservation);
-    restoredSelection.push({ type: "observation", id: restoredObservation.id });
-  }
-
-  state.lastDeleted = null;
-  refreshVisiblePoints();
-  state.selection = restoredSelection;
-  normalizeSelection();
-  state.routeResult = null;
-  if (snapshotPoints.length + snapshotLinks.length > 0) {
-    persistWorkspace();
-  }
-  render();
-}
-
 function fillFormFromWorld(point) {
   state.mode = "add";
   state.pendingGeo = unprojectWorld(point.x, point.y);
@@ -7718,7 +7538,7 @@ function startDragGesture(pointerId, point, options = {}) {
 
       drag.longPressed = true;
       if (drag.longPressPoint) {
-        openGridPointQuickDialog(drag.longPressPoint, drag.start);
+        openPointInfoForPoint(drag.longPressPoint, { fromLongPress: true });
         return;
       }
       state.pointer.range = {
@@ -10012,7 +9832,7 @@ async function deleteSelectedPoint() {
     return;
   }
 
-  const linksWithSnapshots = state.links.map((link) => (
+  const linksAfterPointDeletion = state.links.map((link) => (
     deletionPointIdSet.size > 0
       ? linkWithDeletedEndpointPositions(link, deletionPointIdSet)
       : link
@@ -10038,15 +9858,6 @@ async function deleteSelectedPoint() {
     }
   }
 
-  state.lastDeleted = {
-    points: state.points.filter((item) => pointIdSet.has(item.id)).map(clonePlain),
-    links: state.links.filter((item) => (
-      linkIdSet.has(item.id)
-      && !cloudPointIdSet.has(item.a)
-      && !cloudPointIdSet.has(item.b)
-    )).map(clonePlain),
-    observations: selectedObservations.filter((observation) => observationIdSet.has(observation.id)).map(clonePlain)
-  };
   if (observationIdSet.size > 0) {
     state.loadedObservations = state.loadedObservations.filter((observation) => !observationIdSet.has(observation.id));
   }
@@ -10056,7 +9867,7 @@ async function deleteSelectedPoint() {
     }
   }
   refreshVisiblePoints();
-  state.links = linksWithSnapshots.filter((item) => !linkIdSet.has(item.id));
+  state.links = linksAfterPointDeletion.filter((item) => !linkIdSet.has(item.id));
   state.selection = state.selection.filter((entry) => (
     !(entry.type === "point" && deletionPointIdSet.has(entry.id))
     && !(entry.type === "link" && linkIdSet.has(entry.id))
@@ -10188,15 +9999,12 @@ function bindEvents() {
   elements.closePointRegistrationButton.addEventListener("click", closePointRegistration);
   elements.actionRouteButton.addEventListener("click", setRouteFromSelectedPoints);
   elements.clearSelectionButton.addEventListener("click", () => clearSelection());
-  elements.actionTargetButton.addEventListener("click", () => void toggleTargetForSelection());
-  elements.actionRouteStartButton.addEventListener("click", () => void setRouteStartFromSelection());
   elements.actionFollowButton.addEventListener("click", () => void toggleLocationFollow({ fillForm: false }));
   elements.actionCenterButton.addEventListener("click", createCenterPendingPoint);
   elements.actionCopyToListButton.addEventListener("click", () => beginPointTransfer("copy"));
   elements.actionMoveToListButton.addEventListener("click", () => beginPointTransfer("move"));
   elements.actionShareSelectedButton.addEventListener("click", () => void shareSelectedPointsLink());
   elements.actionInfoButton.addEventListener("click", showSelectedPointInfoDialog);
-  elements.actionRestoreButton.addEventListener("click", () => void restoreLastDeleted());
   elements.actionEditButton.addEventListener("click", startEditingSelectedPoint);
   elements.actionMapButton.addEventListener("click", openSelectedPointInPreferredMap);
   elements.pointInfoEditButton.addEventListener("click", () => {
@@ -10209,35 +10017,6 @@ function bindEvents() {
     startEditingPoint(point);
   });
 
-  bindPointerActionButton(elements.gridPointQuickStartButton, () => {
-    const point = state.gridPointQuickPointId ? findPoint(state.gridPointQuickPointId) : null;
-    if (elements.gridPointQuickDialog.open) elements.gridPointQuickDialog.close("role-selected");
-    void setRouteStartForPoint(point, { preserveSelection: true });
-  });
-  bindPointerActionButton(elements.gridPointQuickTargetButton, () => {
-    const point = state.gridPointQuickPointId ? findPoint(state.gridPointQuickPointId) : null;
-    if (elements.gridPointQuickDialog.open) elements.gridPointQuickDialog.close("role-selected");
-    void toggleTargetForPoint(point, { preserveSelection: true });
-  });
-  elements.gridPointQuickDialog.addEventListener("close", () => {
-    state.gridPointQuickPointId = null;
-  });
-  elements.gridPointQuickDialog.addEventListener("click", (event) => {
-    if (event.target === elements.gridPointQuickDialog) elements.gridPointQuickDialog.close("cancel");
-  });
-  document.addEventListener("pointerdown", (event) => {
-    if (!elements.gridPointQuickDialog.open) return;
-    if (event.target instanceof Node && elements.gridPointQuickDialog.contains(event.target)) return;
-    elements.gridPointQuickDialog.close("outside");
-  }, true);
-  document.addEventListener("click", (event) => {
-    if (!elements.gridPointQuickDialog.open) return;
-    if (event.target instanceof Node && elements.gridPointQuickDialog.contains(event.target)) return;
-    const target = event.target instanceof Element
-      ? event.target.closest("button, a, input, select, textarea, summary")
-      : null;
-    if (target) elements.gridPointQuickDialog.close("outside-control");
-  }, true);
   elements.pointInfoMapButton.addEventListener("click", () => {
     const point = findPointAny(elements.pointInfoDialog.dataset.pointId || state.pointInfoTargetId || state.pointInfoReturnContext?.pointId) || singleSelectedPoint();
     if (!point) return;
@@ -10343,6 +10122,7 @@ function bindEvents() {
   elements.clearRouteSelectionButton.addEventListener("click", clearRouteSelection);
   elements.openAppleMapsButton.addEventListener("click", () => openSelectedPointInExternalMap("apple"));
   elements.openGoogleMapsButton.addEventListener("click", () => openSelectedPointInExternalMap("google"));
+  elements.routeStartPointButton.addEventListener("click", () => void setRouteStartForPoint(singleSelectedPoint()));
   elements.targetPointButton.addEventListener("click", () => void toggleTargetForSelection());
   elements.deletePointButton.addEventListener("click", deleteSelectedPoint);
   for (const button of elements.newPointListButtons) {
