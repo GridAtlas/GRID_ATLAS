@@ -56,7 +56,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1099";
+const WEB_VERSION = "0.1100";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -6044,7 +6044,8 @@ async function deleteStoredList(storageId, options = {}) {
     danger: true
   })) return;
 
-  setCloudBusy(true);
+  const usesCloudStorage = Boolean(entry.cloud);
+  if (usesCloudStorage) setCloudBusy(true);
   let deleted = false;
   try {
     if (entry.cloud) {
@@ -6059,11 +6060,11 @@ async function deleteStoredList(storageId, options = {}) {
   } catch (error) {
     setCloudStatus(cloudErrorMessage(error), { error: true });
   } finally {
-    setCloudBusy(false);
+    if (usesCloudStorage) setCloudBusy(false);
   }
 
   if (deleted) {
-    if (state.cloud.connected) await refreshCloudLists({ quiet: true });
+    if (usesCloudStorage && state.cloud.connected) await refreshCloudLists({ quiet: true });
     setCloudStatus(cloudText("リストを削除しました", "List deleted"));
   }
 }
