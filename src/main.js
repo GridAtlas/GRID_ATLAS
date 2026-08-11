@@ -31,6 +31,9 @@ import {
 } from "./gridatlas-analysis.js?v=1";
 
 const STORAGE_KEY = "grid-atlas-workspace-v2";
+const ANALYSIS_LAYER_VERSION = 1;
+const DEFAULT_ANALYSIS_LAYER_ID = "analysis-layer-default";
+const DEFAULT_ANALYSIS_LAYER_NAME = "考察レイヤー";
 const THEME_KEY = "grid-atlas-theme";
 const LANGUAGE_KEY = "grid-atlas-language";
 const DISTANCE_UNIT_KEY = "grid-atlas-distance-unit";
@@ -53,7 +56,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1005";
+const WEB_VERSION = "0.1015";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -312,7 +315,12 @@ const state = {
     hiddenListIds: new Set(),
     listOrder: [],
   },
-  links: [],
+  analysisLayer: {
+    version: ANALYSIS_LAYER_VERSION,
+    id: DEFAULT_ANALYSIS_LAYER_ID,
+    name: DEFAULT_ANALYSIS_LAYER_NAME,
+    links: []
+  },
   mode: "inspect",
   mobilePage: "map",
   mobileGridPage: "grid",
@@ -374,6 +382,16 @@ let pendingConfirmResolve = null;
 let pendingTextInputResolve = null;
 let activeStorageListDrag = null;
 let activePointIndexDrag = null;
+
+Object.defineProperty(state, "links", {
+  configurable: true,
+  get() {
+    return this.analysisLayer.links;
+  },
+  set(value) {
+    this.analysisLayer.links = Array.isArray(value) ? value : [];
+  }
+});
 
 const CANVAS_PALETTES = {
   pastel: {
@@ -1221,7 +1239,7 @@ function loadWorkspace() {
 function applyWorkspace(workspace) {
   const origin = validGeo(workspace.origin) ? workspace.origin : null;
   const existingPointIds = new Set();
-  state.version = 3;
+  state.version = 4;
   state.cloud.hiddenListIds = new Set(
     Array.isArray(workspace.cloudHiddenListIds)
       ? workspace.cloudHiddenListIds.filter((id) => typeof id === "string" && id)
@@ -1282,9 +1300,7 @@ function applyWorkspace(workspace) {
       : DEFAULT_POINT_LIST_ID;
   const activeListVisibilityChanged = ensureActivePointListVisible();
   refreshVisiblePoints();
-  state.links = Array.isArray(workspace.links)
-    ? workspace.links.map(normalizeStoredLink).filter(Boolean)
-    : [];
+  state.analysisLayer = normalizeAnalysisLayer(workspace.analysisLayer, workspace.links);
   state.selection = [];
   state.selectedPointId = null;
   state.selectedLinkId = null;
@@ -2160,12 +2176,12 @@ function workspaceSnapshot() {
     }))
   }));
   return {
-    version: 3,
+    version: 4,
     projection: { mode: "local", version: 1 },
     pointLists,
     activePointListId: state.activePointListId,
     favoriteListIds: [...state.favoriteListIds],
-    links: state.links,
+    analysisLayer: clonePlain(state.analysisLayer),
     cloudHiddenListIds: [...state.cloud.hiddenListIds],
     cloudListOrder: [...state.cloud.listOrder]
   };
@@ -5775,7 +5791,7 @@ function removeLocalListForStorageChange(listId) {
     state.pointLists = state.pointLists.filter((item) => item.id !== list.id);
     if (state.activePointListId === list.id) state.activePointListId = DEFAULT_POINT_LIST_ID;
   }
-  state.links = state.links.map((link) => linkWithDeletedEndpointSnapshots(link, pointIds));
+  state.links = state.links.map((link) => linkWithDeletedEndpointPositions(link, pointIds));
   ensurePointLists();
   refreshVisiblePoints();
   pruneHiddenPointReferences();
@@ -6008,7 +6024,7 @@ async function deletePointList(listId) {
 
   const pointIds = new Set(list.points.map((point) => point.id));
   state.pointLists = state.pointLists.filter((item) => item.id !== listId);
-  state.links = state.links.map((link) => linkWithDeletedEndpointSnapshots(link, pointIds));
+  state.links = state.links.map((link) => linkWithDeletedEndpointPositions(link, pointIds));
   ensurePointLists();
   refreshVisiblePoints();
   pruneHiddenPointReferences();
@@ -6130,13 +6146,27 @@ function findLink(id) {
   return state.links.find((link) => link.id === id) ?? null;
 }
 
+function normalizeAnalysisLayer(layer, legacyLinks = []) {
+  const rawLinks = Array.isArray(layer?.links)
+    ? layer.links
+    : Array.isArray(legacyLinks)
+      ? legacyLinks
+      : [];
+  return {
+    version: ANALYSIS_LAYER_VERSION,
+    id: typeof layer?.id === "string" && layer.id ? layer.id : DEFAULT_ANALYSIS_LAYER_ID,
+    name: typeof layer?.name === "string" && layer.name.trim() ? layer.name.trim() : DEFAULT_ANALYSIS_LAYER_NAME,
+    links: rawLinks.map(normalizeStoredLink).filter(Boolean)
+  };
+}
+
 function linkEndpoints(link) {
   const a = linkEndpoint(link, "a");
   const b = linkEndpoint(link, "b");
   return a && b ? { a, b } : null;
 }
 
-function captureLinkEndpointSnapshot(point) {
+function captureLineEndpoint(point) {
   if (!point || !validGeo(point.geo)) {
     return null;
   }
@@ -6148,7 +6178,7 @@ function captureLinkEndpointSnapshot(point) {
   };
 }
 
-function normalizeLinkEndpointSnapshot(snapshot) {
+function normalizeLineEndpoint(snapshot) {
   if (!snapshot || typeof snapshot !== "object" || !validGeo(snapshot.geo)) {
     return null;
   }
@@ -6166,13 +6196,15 @@ function linkEndpoint(link, side) {
     return point;
   }
 
-  const snapshot = normalizeLinkEndpointSnapshot(link?.[`${side}Snapshot`]);
-  if (!snapshot) {
+  const endpoint = normalizeLineEndpoint(
+    link?.[`${side}Endpoint`] ?? link?.[`${side}Snapshot`]
+  );
+  if (!endpoint) {
     return null;
   }
 
-  const projected = projectLatLng(snapshot.geo.lat, snapshot.geo.lng);
-  return { ...snapshot, x: projected.x, y: projected.y };
+  const projected = projectLatLng(endpoint.geo.lat, endpoint.geo.lng);
+  return { ...endpoint, x: projected.x, y: projected.y };
 }
 
 function normalizeStoredLink(link) {
@@ -6182,30 +6214,32 @@ function normalizeStoredLink(link) {
 
   const next = { ...link };
   for (const side of ["a", "b"]) {
-    const snapshotKey = `${side}Snapshot`;
-    const currentSnapshot = normalizeLinkEndpointSnapshot(next[snapshotKey]);
-    if (currentSnapshot) {
-      next[snapshotKey] = currentSnapshot;
+    const endpointKey = `${side}Endpoint`;
+    const legacySnapshotKey = `${side}Snapshot`;
+    const currentEndpoint = normalizeLineEndpoint(next[endpointKey] ?? next[legacySnapshotKey]);
+    if (currentEndpoint) {
+      next[endpointKey] = currentEndpoint;
+      delete next[legacySnapshotKey];
       continue;
     }
 
     const point = findPoint(next[side]);
-    const snapshot = captureLinkEndpointSnapshot(point);
-    if (snapshot) {
-      next[snapshotKey] = snapshot;
+    const endpoint = captureLineEndpoint(point);
+    if (endpoint) {
+      next[endpointKey] = endpoint;
     }
   }
 
   return next;
 }
 
-function linkWithDeletedEndpointSnapshots(link, pointIds) {
+function linkWithDeletedEndpointPositions(link, pointIds) {
   const next = normalizeStoredLink(link) ?? { ...link };
   for (const side of ["a", "b"]) {
     if (!pointIds.has(next[side])) continue;
-    const snapshot = captureLinkEndpointSnapshot(findPoint(next[side]));
+    const snapshot = captureLineEndpoint(findPoint(next[side]));
     if (snapshot) {
-      next[`${side}Snapshot`] = snapshot;
+      next[`${side}Endpoint`] = snapshot;
     }
   }
   return next;
@@ -9312,6 +9346,24 @@ function readBlobAsDataUrl(blob) {
   });
 }
 
+function analysisLayerFromGridAtlasDocument(document, pointList) {
+  const localPointIdBySharedId = new Map(pointList.points.map((point) => [
+    point.gridAtlas?.placeId || point.id,
+    point.id
+  ]));
+  return {
+    version: ANALYSIS_LAYER_VERSION,
+    id: createId(),
+    name: `${document.name || DEFAULT_ANALYSIS_LAYER_NAME} - ${DEFAULT_ANALYSIS_LAYER_NAME}`,
+    sourceDocumentId: document.id,
+    links: readGridAtlasLineLayer(
+      document,
+      (sharedPointId) => localPointIdBySharedId.get(sharedPointId) || "",
+      createId
+    )
+  };
+}
+
 async function gridAtlasPackageToPointList(gridAtlasPackage, existingPointIds, existingListIds, options = {}) {
   const { document, manifest, resources } = gridAtlasPackage;
   const documentDigest = gridAtlasPackage.documentDigest || await gridAtlasDocumentDigest(document);
@@ -9403,26 +9455,38 @@ async function gridAtlasPackageToPointList(gridAtlasPackage, existingPointIds, e
     }
   }, existingPointIds, displayName);
 
-  const localPointIdBySharedId = new Map(pointList.points.map((point) => [
-    point.gridAtlas?.placeId || point.id,
-    point.id
-  ]));
-  const links = readGridAtlasLineLayer(
-    document,
-    (sharedPointId) => localPointIdBySharedId.get(sharedPointId) || "",
-    createId
-  );
-
-  return { list: pointList, links };
+  return {
+    list: pointList,
+    analysisLayer: analysisLayerFromGridAtlasDocument(document, pointList)
+  };
 }
 
-function applyImportedPointLists(importedLists, importedLinks, successMessage) {
+function analysisLinkPairKey(link) {
+  return [link?.a, link?.b].sort().join("\u0000");
+}
+
+function mergeAnalysisLinks(links) {
+  const next = state.links.slice();
+  const seenPairs = new Set(next.map(analysisLinkPairKey));
+  const seenIds = new Set(next.map((link) => link.id));
+  for (const rawLink of Array.isArray(links) ? links : []) {
+    const link = normalizeStoredLink(rawLink);
+    if (!link || seenIds.has(link.id) || seenPairs.has(analysisLinkPairKey(link))) continue;
+    next.push(link);
+    seenIds.add(link.id);
+    seenPairs.add(analysisLinkPairKey(link));
+  }
+  state.links = next;
+}
+
+function applyImportedPointLists(importedLists, importedAnalysisLayers, successMessage) {
   const previousLists = state.pointLists;
   const previousLinks = state.links;
   const previousSelection = state.selection;
   try {
     state.pointLists = [...state.pointLists, ...importedLists];
-    state.links = [...state.links, ...importedLinks.map((link) => normalizeStoredLink(link) ?? link)];
+    const importedLinks = importedAnalysisLayers.flatMap((layer) => layer.links || []);
+    mergeAnalysisLinks(importedLinks);
     refreshVisiblePoints();
     state.selection = importedLists.flatMap((list) => list.points.map((point) => ({ type: "point", id: point.id })));
     normalizeSelection();
@@ -9446,7 +9510,7 @@ async function importGridAtlasPackages(packages, options = {}) {
     const existingPointIds = new Set(allPointListPoints().map((point) => point.id));
     const existingListIds = new Set(state.pointLists.map((list) => list.id));
     const importedLists = [];
-    const importedLinks = [];
+    const importedAnalysisLayers = [];
     const duplicates = [];
     for (const gridAtlasPackage of packages) {
       const documentDigest = gridAtlasPackage.documentDigest
@@ -9458,6 +9522,7 @@ async function importGridAtlasPackages(packages, options = {}) {
         && list.gridAtlas?.documentDigest === documentDigest
       ));
       if (duplicate) {
+        importedAnalysisLayers.push(analysisLayerFromGridAtlasDocument(gridAtlasPackage.document, duplicate));
         if (options.source === "preset" && duplicate.name !== gridAtlasPackage.document.name) {
           duplicate.name = gridAtlasPackage.document.name;
         }
@@ -9472,11 +9537,12 @@ async function importGridAtlasPackages(packages, options = {}) {
         { conflict, preserveName: options.source === "preset" }
       );
       importedLists.push(imported.list);
-      importedLinks.push(...imported.links);
+      importedAnalysisLayers.push(imported.analysisLayer);
     }
 
     if (importedLists.length === 0 && duplicates.length > 0) {
       const duplicate = duplicates[0];
+      mergeAnalysisLinks(importedAnalysisLayers.flatMap((layer) => layer.links || []));
       state.selection = duplicate.points.map((point) => ({ type: "point", id: point.id }));
       normalizeSelection();
       persistWorkspace();
@@ -9490,7 +9556,7 @@ async function importGridAtlasPackages(packages, options = {}) {
       ? t("import.gridatlas.urlSuccess")
       : options.successMessage
         || t("import.gridatlas.success").replace("{count}", String(importedLists.length));
-    applyImportedPointLists(importedLists, importedLinks, successMessage);
+    applyImportedPointLists(importedLists, importedAnalysisLayers, successMessage);
     return true;
   } catch (error) {
     console.warn("GRID ATLAS import failed", error);
@@ -9792,7 +9858,7 @@ async function deleteSelectedPoint() {
 
   const linksWithSnapshots = state.links.map((link) => (
     deletionPointIdSet.size > 0
-      ? linkWithDeletedEndpointSnapshots(link, deletionPointIdSet)
+      ? linkWithDeletedEndpointPositions(link, deletionPointIdSet)
       : link
   ));
 
