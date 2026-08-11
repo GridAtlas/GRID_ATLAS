@@ -2385,11 +2385,14 @@ textarea {
 }
 
 .grid-point-quick-actions {
-  display: flex;
+  display: grid;
   width: 100%;
-  justify-content: center;
-  flex-wrap: nowrap;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 5px;
+}
+
+.grid-link-quick-actions {
+  grid-template-columns: 1fr;
 }
 
 .grid-point-quick-role-button,
@@ -2409,7 +2412,7 @@ textarea {
 }
 
 .grid-point-quick-role-button {
-  flex: 1 1 0;
+  width: 100%;
   white-space: nowrap;
 }
 
