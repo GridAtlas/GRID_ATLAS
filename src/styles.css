@@ -162,12 +162,10 @@ button {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible {
-  outline: 3px solid var(--focus-ring);
-  outline-offset: 2px;
+*:focus,
+*:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
 }
 
 .app-shell {
@@ -1300,11 +1298,6 @@ textarea {
   background: var(--active-bg);
 }
 
-.storage-list-row:focus-visible {
-  outline: 2px solid var(--accent-strong);
-  outline-offset: 2px;
-}
-
 .storage-destination-button {
   color: var(--muted);
 }
@@ -2077,14 +2070,6 @@ textarea {
   font-size: 18px;
 }
 
-dialog h2:focus {
-  outline: none;
-}
-
-.grid-point-quick-name:focus {
-  outline: none;
-}
-
 .share-link-close {
   width: 36px;
   min-width: 36px;
@@ -2193,8 +2178,7 @@ dialog h2:focus {
   text-align: left;
 }
 
-.point-transfer-destination-button:hover,
-.point-transfer-destination-button:focus-visible {
+.point-transfer-destination-button:hover {
   border-color: var(--accent);
   background: var(--active-bg);
 }
