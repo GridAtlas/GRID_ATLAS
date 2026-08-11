@@ -604,8 +604,8 @@ textarea:focus-visible {
 }
 
 .mobile-overview-field-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 6px;
 }
 
 .mobile-overview-field {
@@ -613,7 +613,7 @@ textarea:focus-visible {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .mobile-overview-field > span {
@@ -626,16 +626,16 @@ textarea:focus-visible {
 }
 
 .mobile-overview-field > strong {
-  min-height: 30px;
+  min-height: 28px;
   display: flex;
   align-items: center;
-  padding: 0 7px;
+  padding: 0 5px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 7px;
   background: var(--field-bg);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
   color: var(--accent-strong);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 900;
   line-height: 1.1;
 }
