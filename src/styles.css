@@ -660,6 +660,15 @@ textarea:focus-visible {
   display: none;
 }
 
+.mobile-grid-summary-field > strong.is-empty-value {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+:root[data-theme="retro"] .mobile-grid-summary-field > strong.is-empty-value {
+  text-shadow: none;
+}
+
 :root[data-theme="retro"] .mobile-grid-summary-field > strong {
   text-shadow: 0 0 8px rgb(44 255 100 / 0.24);
 }

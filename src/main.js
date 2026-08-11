@@ -56,7 +56,8 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1095";
+const WEB_VERSION = "0.1096";
+const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -3048,16 +3049,30 @@ function renderMobileOverview() {
   const selectedLinks = selectedLinkIds().map(findLink).filter(Boolean);
   const distanceState = mobileDistanceState(selectedPoints, selectedLinks);
   const firstSelection = state.selection.at(0);
-  const lastSelection = state.selection.at(-1);
+  const lastSelection = selectedPoints.length === 1 ? null : state.selection.at(-1);
+  const setSummaryValue = (element, value, isPlaceholder = false) => {
+    element.textContent = value;
+    element.classList.toggle("is-empty-value", isPlaceholder);
+  };
 
   elements.mobileDisplayedPointCount.textContent = String(visiblePointCount);
   elements.mobileSelectedPointCount.textContent = String(selectedPoints.length);
-  elements.mobilePointDistance.textContent = Number.isFinite(distanceState.distance)
-    ? formatDistance(distanceState.distance)
-    : "—";
-  elements.mobileFirstSelection.textContent = firstSelection ? selectionTitle(firstSelection) : "—";
-  elements.mobileLastSelection.textContent = lastSelection ? selectionTitle(lastSelection) : "—";
-  elements.mobileDistanceType.textContent = distanceState.type;
+  setSummaryValue(
+    elements.mobilePointDistance,
+    Number.isFinite(distanceState.distance) ? formatDistance(distanceState.distance) : MOBILE_EMPTY_VALUE,
+    !Number.isFinite(distanceState.distance)
+  );
+  setSummaryValue(
+    elements.mobileFirstSelection,
+    firstSelection ? selectionTitle(firstSelection) : MOBILE_EMPTY_VALUE,
+    !firstSelection
+  );
+  setSummaryValue(
+    elements.mobileLastSelection,
+    selectedPoints.length === 1 ? "" : lastSelection ? selectionTitle(lastSelection) : MOBILE_EMPTY_VALUE,
+    selectedPoints.length !== 1 && !lastSelection
+  );
+  setSummaryValue(elements.mobileDistanceType, distanceState.type, distanceState.type === MOBILE_EMPTY_VALUE);
 }
 
 function mobileDistanceState(selectedPoints, selectedLinks) {
@@ -3090,7 +3105,7 @@ function mobileDistanceState(selectedPoints, selectedLinks) {
     return { distance: linkDistance, type: t("label.linkTotal") };
   }
 
-  return { distance: NaN, type: "—" };
+  return { distance: NaN, type: MOBILE_EMPTY_VALUE };
 }
 
 function validMobilePageName(value) {
