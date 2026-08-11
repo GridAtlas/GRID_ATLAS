@@ -66,7 +66,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0991";
+const WEB_VERSION = "0.0992";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -9419,6 +9419,9 @@ async function importGridAtlasPackages(packages, options = {}) {
         && list.gridAtlas?.documentDigest === documentDigest
       ));
       if (duplicate) {
+        if (options.source === "preset" && duplicate.name !== gridAtlasPackage.document.name) {
+          duplicate.name = gridAtlasPackage.document.name;
+        }
         duplicates.push(duplicate);
         continue;
       }
@@ -9437,6 +9440,7 @@ async function importGridAtlasPackages(packages, options = {}) {
       const duplicate = duplicates[0];
       state.selection = duplicate.points.map((point) => ({ type: "point", id: point.id }));
       normalizeSelection();
+      persistWorkspace();
       elements.shareImportStatus.value = cloudText("このリストは読み込み済みです", "This list is already imported");
       render();
       fitToPoints();
