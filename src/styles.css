@@ -640,6 +640,26 @@ textarea:focus-visible {
   line-height: 1.1;
 }
 
+#mobileDisplayedPointCount,
+#mobileSelectedPointCount {
+  justify-content: center;
+  text-align: center;
+}
+
+#mobileFirstSelection,
+#mobileLastSelection {
+  overflow-x: auto;
+  overflow-y: hidden;
+  text-overflow: clip;
+  scrollbar-width: none;
+  overscroll-behavior-inline: contain;
+}
+
+#mobileFirstSelection::-webkit-scrollbar,
+#mobileLastSelection::-webkit-scrollbar {
+  display: none;
+}
+
 :root[data-theme="retro"] .mobile-grid-summary-field > strong {
   text-shadow: 0 0 8px rgb(44 255 100 / 0.24);
 }
