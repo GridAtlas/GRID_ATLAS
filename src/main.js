@@ -66,7 +66,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0992";
+const WEB_VERSION = "0.0993";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -2351,12 +2351,7 @@ function drawGridLines(topLeft, bottomRight, step, color, lineWidth) {
 }
 
 function drawLinks() {
-  const visiblePointIds = visiblePointIdSet();
-  if (currentLocationPoint()) visiblePointIds.add(CURRENT_LOCATION_ID);
   for (const link of state.links) {
-    if (!visiblePointIds.has(link.a) || !visiblePointIds.has(link.b)) {
-      continue;
-    }
     const a = findPoint(link.a);
     const b = findPoint(link.b);
     if (!a || !b) {
