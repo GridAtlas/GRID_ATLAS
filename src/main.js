@@ -23,6 +23,12 @@ import {
   putGridAtlasAsset,
   storeGridAtlasDataUrl
 } from "./gridatlas-assets.js?v=1";
+import {
+  GRIDATLAS_LINE_LAYER_EXTENSION,
+  buildGridAtlasLineLayer,
+  readGridAtlasLineLayer,
+  withoutGridAtlasLineLayer
+} from "./gridatlas-analysis.js?v=1";
 
 const STORAGE_KEY = "grid-atlas-workspace-v2";
 const THEME_KEY = "grid-atlas-theme";
@@ -60,7 +66,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0980";
+const WEB_VERSION = "0.0990";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -2345,7 +2351,12 @@ function drawGridLines(topLeft, bottomRight, step, color, lineWidth) {
 }
 
 function drawLinks() {
+  const visiblePointIds = visiblePointIdSet();
+  if (currentLocationPoint()) visiblePointIds.add(CURRENT_LOCATION_ID);
   for (const link of state.links) {
+    if (!visiblePointIds.has(link.a) || !visiblePointIds.has(link.b)) {
+      continue;
+    }
     const a = findPoint(link.a);
     const b = findPoint(link.b);
     if (!a || !b) {
@@ -8946,6 +8957,11 @@ function pointListGridAtlasUrlDocument(list) {
   list.gridAtlas = list.gridAtlas && typeof list.gridAtlas === "object" ? list.gridAtlas : {};
   list.gridAtlas.documentId = list.gridAtlas.documentId || list.cloudId || list.id || createId();
 
+  const localPointIds = new Set(list.points.map((point) => point.id));
+  const sharedPointIdByLocalId = new Map(list.points.map((point) => [
+    point.id,
+    point.gridAtlas?.placeId || point.id
+  ]));
   const places = list.points.map((point) => {
     const geo = pointGeo(point);
     const place = {
@@ -8973,8 +8989,20 @@ function pointListGridAtlasUrlDocument(list) {
   if (list.author) document.attribution = { name: list.author };
   if (list.createdAt) document.createdAt = list.createdAt;
   if (list.updatedAt) document.updatedAt = list.updatedAt;
-  if (list.gridAtlas.documentExtensions && Object.keys(list.gridAtlas.documentExtensions).length > 0) {
-    document.extensions = clonePlain(list.gridAtlas.documentExtensions);
+  const documentExtensions = withoutGridAtlasLineLayer(list.gridAtlas.documentExtensions);
+  if (Object.keys(documentExtensions).length > 0) {
+    document.extensions = documentExtensions;
+  }
+
+  const lineLayer = buildGridAtlasLineLayer(
+    state.links.filter((link) => localPointIds.has(link.a) && localPointIds.has(link.b)),
+    (pointId) => sharedPointIdByLocalId.get(pointId) || ""
+  );
+  if (lineLayer) {
+    document.extensions = {
+      ...(document.extensions || {}),
+      [GRIDATLAS_LINE_LAYER_EXTENSION]: lineLayer
+    };
   }
   return document;
 }
@@ -9310,7 +9338,7 @@ async function gridAtlasPackageToPointList(gridAtlasPackage, existingPointIds, e
     ? `${document.name}${cloudText("（更新版）", " (updated)")}`
     : document.name;
   const createdAt = document.createdAt || new Date().toISOString();
-  return normalizePointList({
+  const pointList = normalizePointList({
     id: listId,
     name: displayName,
     description: document.description || "",
@@ -9335,19 +9363,34 @@ async function gridAtlasPackageToPointList(gridAtlasPackage, existingPointIds, e
       }))
     }
   }, existingPointIds, displayName);
+
+  const localPointIdBySharedId = new Map(pointList.points.map((point) => [
+    point.gridAtlas?.placeId || point.id,
+    point.id
+  ]));
+  const links = readGridAtlasLineLayer(
+    document,
+    (sharedPointId) => localPointIdBySharedId.get(sharedPointId) || "",
+    createId
+  );
+
+  return { list: pointList, links };
 }
 
-function applyImportedPointLists(importedLists, successMessage) {
+function applyImportedPointLists(importedLists, importedLinks, successMessage) {
   const previousLists = state.pointLists;
+  const previousLinks = state.links;
   const previousSelection = state.selection;
   try {
     state.pointLists = [...state.pointLists, ...importedLists];
+    state.links = [...state.links, ...importedLinks];
     refreshVisiblePoints();
     state.selection = importedLists.flatMap((list) => list.points.map((point) => ({ type: "point", id: point.id })));
     normalizeSelection();
     persistWorkspace();
   } catch (error) {
     state.pointLists = previousLists;
+    state.links = previousLinks;
     state.selection = previousSelection;
     refreshVisiblePoints();
     throw error;
@@ -9364,6 +9407,7 @@ async function importGridAtlasPackages(packages, options = {}) {
     const existingPointIds = new Set(allPointListPoints().map((point) => point.id));
     const existingListIds = new Set(state.pointLists.map((list) => list.id));
     const importedLists = [];
+    const importedLinks = [];
     const duplicates = [];
     for (const gridAtlasPackage of packages) {
       const documentDigest = gridAtlasPackage.documentDigest
@@ -9379,12 +9423,14 @@ async function importGridAtlasPackages(packages, options = {}) {
         continue;
       }
       const conflict = knownLists.some((list) => list.gridAtlas?.documentId === gridAtlasPackage.document.id);
-      importedLists.push(await gridAtlasPackageToPointList(
+      const imported = await gridAtlasPackageToPointList(
         gridAtlasPackage,
         existingPointIds,
         existingListIds,
         { conflict }
-      ));
+      );
+      importedLists.push(imported.list);
+      importedLinks.push(...imported.links);
     }
 
     if (importedLists.length === 0 && duplicates.length > 0) {
@@ -9401,7 +9447,7 @@ async function importGridAtlasPackages(packages, options = {}) {
       ? t("import.gridatlas.urlSuccess")
       : options.successMessage
         || t("import.gridatlas.success").replace("{count}", String(importedLists.length));
-    applyImportedPointLists(importedLists, successMessage);
+    applyImportedPointLists(importedLists, importedLinks, successMessage);
     return true;
   } catch (error) {
     console.warn("GRID ATLAS import failed", error);

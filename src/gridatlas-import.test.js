@@ -112,6 +112,27 @@ describe("GRID ATLAS import format", () => {
     expect(decodeGridAtlasUrlPayload(encoded)).toEqual(document);
   });
 
+  it("round-trips an optional analysis line layer without changing the core document", async () => {
+    const document = sampleDocument({
+      places: [
+        samplePlace({ id: "place-a", name: "地点A" }),
+        samplePlace({ id: "place-b", name: "地点B" })
+      ],
+      extensions: {
+        "io.gridatlas.lines": {
+          version: 1,
+          items: [{ id: "line-1", a: "place-a", b: "place-b" }]
+        }
+      }
+    });
+
+    const urlDocument = decodeGridAtlasUrlPayload(encodeGridAtlasUrlPayload(document));
+    const parsed = await parseGridAtlasArchive((await buildGridAtlasArchive(document)).bytes);
+
+    expect(urlDocument.extensions["io.gridatlas.lines"].items).toHaveLength(1);
+    expect(parsed.document.extensions["io.gridatlas.lines"]).toEqual(document.extensions["io.gridatlas.lines"]);
+  });
+
   it("rejects URL documents that reference unavailable images", () => {
     const document = sampleDocument({
       places: [samplePlace({ media: [{ resourceId: "missing", role: "photo" }] })]
