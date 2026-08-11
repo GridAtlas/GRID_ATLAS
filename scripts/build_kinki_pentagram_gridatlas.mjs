@@ -47,13 +47,13 @@ if (rows.length !== 200) {
   throw new Error(`最新版CSVは200地点ではありません: ${rows.length}件`);
 }
 
-const requiredColumns = ["no", "name", "category", "designation", "prefecture", "latitude", "longitude", "selection_role"];
+const requiredColumns = ["no", "id", "name", "category", "designation", "prefecture", "latitude", "longitude", "selection_role"];
 for (const column of requiredColumns) {
   if (!Object.hasOwn(rows[0], column)) throw new Error(`CSV列がありません: ${column}`);
 }
 
 const places = rows.map((row) => ({
-  id: `kinki-v3-${String(row.no).padStart(3, "0")}`,
+  id: row.id,
   name: row.name,
   position: {
     latitude: Number(row.latitude),
@@ -83,11 +83,11 @@ const document = {
     "io.gridatlas.lines": {
       version: 1,
       items: [
-        ["kinki-v3-001", "kinki-v3-003"],
-        ["kinki-v3-003", "kinki-v3-005"],
-        ["kinki-v3-005", "kinki-v3-002"],
-        ["kinki-v3-002", "kinki-v3-004"],
-        ["kinki-v3-004", "kinki-v3-001"]
+        ["kinki-shrine-temple-sites-v5-nested-001", "kinki-shrine-temple-sites-v5-nested-003"],
+        ["kinki-shrine-temple-sites-v5-nested-003", "kinki-shrine-temple-sites-v5-nested-005"],
+        ["kinki-shrine-temple-sites-v5-nested-005", "kinki-shrine-temple-sites-v5-nested-002"],
+        ["kinki-shrine-temple-sites-v5-nested-002", "kinki-shrine-temple-sites-v5-nested-004"],
+        ["kinki-shrine-temple-sites-v5-nested-004", "kinki-shrine-temple-sites-v5-nested-001"]
       ].map(([a, b], index) => ({ id: `pentagram-line-${index + 1}`, a, b }))
     }
   }
