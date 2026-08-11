@@ -53,7 +53,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1004";
+const WEB_VERSION = "0.1005";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -3234,7 +3234,10 @@ function renderActionButtons() {
   const editCandidate = editableSelectedPoint();
   const mapCandidate = mapPointForSelection();
   const infoCandidate = singleSelectedPoint();
-  const deletablePointCount = pointIds.filter((id) => id !== CURRENT_LOCATION_ID && pointEditable(id)).length;
+  const deletablePointCount = pointIds.filter((id) => (
+    id !== CURRENT_LOCATION_ID
+    && (pointEditable(id) || (state.cloud.connected && cloudPointListForPoint(id)?.editable))
+  )).length;
   const observationSelected = isLoadedObservationSelected();
   const canDelete = deletablePointCount + linkIds.length > 0 || observationSelected;
   const transferablePointCount = transferableSelectedPoints().length;
@@ -6227,7 +6230,7 @@ function isValidSelectionEntry(entry) {
 
   if (entry.type === "link") {
     const link = findLink(entry.id);
-    return Boolean(link && linkEndpoints(link));
+    return Boolean(link);
   }
 
   if (entry.type === "observation") {
@@ -6288,7 +6291,7 @@ function selectedLinkIds() {
       return false;
     }
     const link = findLink(entry.id);
-    return Boolean(link && linkEndpoints(link));
+    return Boolean(link);
   }).map((entry) => entry.id);
 }
 
