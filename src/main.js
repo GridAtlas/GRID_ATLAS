@@ -56,7 +56,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1025";
+const WEB_VERSION = "0.1026";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -537,6 +537,7 @@ const TRANSLATIONS = {
     "delete.linksOnly": "線のみ",
     "delete.pointsOnly": "地点のみ",
     "delete.all": "すべて",
+    "delete.uneditablePoints": "選択した地点のうち{count}点は編集できないリストに含まれるため削除できません。",
     "action.restore": "復旧",
     "action.edit": "編集",
     "action.map": "地図",
@@ -802,6 +803,7 @@ const TRANSLATIONS = {
     "delete.linksOnly": "Lines only",
     "delete.pointsOnly": "Points only",
     "delete.all": "All",
+    "delete.uneditablePoints": "{count} selected point(s) cannot be deleted because they belong to a non-editable list.",
     "action.restore": "Restore",
     "action.edit": "Edit",
     "action.map": "Map",
@@ -9846,6 +9848,9 @@ async function deleteSelectedPoint() {
   ));
   const candidateCloudPointIdSet = new Set(candidateCloudPointIds);
   const candidatePointIds = selectedIds.filter((id) => !candidateCloudPointIdSet.has(id) && pointEditable(id));
+  const uneditablePointIds = selectedIds.filter((id) => (
+    !candidateCloudPointIdSet.has(id) && !candidatePointIds.includes(id)
+  ));
   const explicitLinkIds = selectedLinkIds();
   const selectedObservations = selectedLoadedObservations();
   const selectedObservationIdSet = new Set(selectedObservations.map((observation) => observation.id));
@@ -9870,7 +9875,7 @@ async function deleteSelectedPoint() {
     parts.push(String(selectedObservationIdSet.size) + "観察（保存ファイルには影響しません）");
   }
 
-  const selectedPointCount = candidatePointIdSet.size + candidateCloudPointIdSet.size;
+  const selectedPointCount = selectedIds.length;
   const linksOnly = candidateLinkIdSet.size > 0
     && selectedPointCount === 0
     && selectedObservationIdSet.size === 0;
@@ -9912,6 +9917,11 @@ async function deleteSelectedPoint() {
   }
 
   const pointDeletionSelected = deletionMode !== "links";
+  if (pointDeletionSelected && uneditablePointIds.length > 0) {
+    const message = t("delete.uneditablePoints").replace("{count}", String(uneditablePointIds.length));
+    showAppToast(message, { error: true });
+    return;
+  }
   const pointIdSet = pointDeletionSelected ? new Set(candidatePointIds) : new Set();
   const cloudPointIdSet = pointDeletionSelected ? new Set(candidateCloudPointIds) : new Set();
   const deletionPointIdSet = new Set([...pointIdSet, ...cloudPointIdSet]);
