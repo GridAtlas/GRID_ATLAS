@@ -2319,57 +2319,6 @@ textarea {
   gap: 8px;
 }
 
-.grid-link-quick-dialog {
-  position: fixed;
-  z-index: 20;
-  width: min(300px, calc(100vw - 20px));
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--line-strong);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: var(--shadow), var(--brand-glow);
-}
-
-.grid-link-quick-dialog::backdrop {
-  background: transparent;
-}
-
-.grid-link-quick-dialog-form {
-  display: grid;
-  gap: 7px;
-  padding: 10px 11px 11px;
-}
-
-.grid-link-quick-heading {
-  align-items: flex-start;
-}
-
-.grid-link-quick-name {
-  min-width: 0;
-  overflow: hidden;
-  padding-top: 4px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-}
-
-.grid-link-quick-fields {
-  display: grid;
-  gap: 3px;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.grid-link-quick-hint {
-  margin: 0;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
 .grid-point-quick-dialog {
   position: fixed;
   z-index: 20;
@@ -2425,6 +2374,14 @@ textarea {
   white-space: nowrap;
   font-size: 10px;
   line-height: 1.2;
+}
+
+.grid-link-quick-distance {
+  width: 100%;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.2;
+  text-align: center;
 }
 
 .grid-point-quick-actions {
