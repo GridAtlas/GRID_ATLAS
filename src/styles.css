@@ -2322,7 +2322,7 @@ textarea {
 .grid-point-quick-dialog {
   position: fixed;
   z-index: 20;
-  width: min(220px, calc(100vw - 20px));
+  width: min(330px, calc(100vw - 20px));
   margin: 0;
   padding: 0;
   border: 1px solid var(--line-strong);
@@ -2388,6 +2388,7 @@ textarea {
   display: flex;
   width: 100%;
   justify-content: center;
+  flex-wrap: nowrap;
   gap: 5px;
 }
 
@@ -2405,6 +2406,11 @@ textarea {
   font-weight: 800;
   line-height: 1;
   text-align: center;
+}
+
+.grid-point-quick-role-button {
+  flex: 1 1 0;
+  white-space: nowrap;
 }
 
 .grid-point-quick-role-button.is-active {
