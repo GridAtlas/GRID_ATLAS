@@ -586,29 +586,27 @@ textarea:focus-visible {
   line-height: 1.35;
 }
 
-.mobile-overview-panel {
+.mobile-grid-summary {
   display: none;
 }
 
-.mobile-overview-field-grid {
+.mobile-grid-summary-field-grid {
   min-width: 0;
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(28px, auto));
+  gap: 4px 8px;
 }
 
-.mobile-overview-field > span,
-.mobile-overview-field > strong {
+.mobile-grid-summary-field > span,
+.mobile-grid-summary-field > strong {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.mobile-overview-field-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px 6px;
-}
-
-.mobile-overview-field {
+.mobile-grid-summary-field {
   min-width: 0;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -616,31 +614,31 @@ textarea:focus-visible {
   gap: 4px;
 }
 
-.mobile-overview-field > span {
+.mobile-grid-summary-field > span {
   color: var(--muted);
   font-size: 9px;
-  font-weight: 800;
+  font-weight: 850;
   line-height: 1;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
 
-.mobile-overview-field > strong {
+.mobile-grid-summary-field > strong {
   min-height: 28px;
   display: flex;
   align-items: center;
   padding: 0 5px;
-  border: 1px solid var(--line);
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--line));
   border-radius: 7px;
-  background: var(--field-bg);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
+  background: linear-gradient(180deg, var(--field-bg), var(--surface));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 1px 0 rgb(0 0 0 / 0.18);
   color: var(--accent-strong);
   font-size: 12px;
   font-weight: 900;
   line-height: 1.1;
 }
 
-:root[data-theme="retro"] .mobile-overview-field > strong {
+:root[data-theme="retro"] .mobile-grid-summary-field > strong {
   text-shadow: 0 0 8px rgb(44 255 100 / 0.24);
 }
 
@@ -1874,7 +1872,7 @@ textarea {
     -webkit-box-orient: vertical;
   }
 
-  .mobile-overview-panel {
+  .mobile-grid-summary {
     display: grid;
     min-width: 0;
     padding: 7px 12px 8px;
@@ -1973,7 +1971,7 @@ textarea {
 
 @media (max-width: 860px) {
   :root.is-mobile-list-page .selected-summary-mobile,
-  :root.is-mobile-list-page .map-column .mobile-overview-panel,
+  :root.is-mobile-list-page .map-column .mobile-grid-summary,
   :root.is-mobile-list-page .map-column .selection-info,
   :root.is-mobile-list-page .map-column .actionbar {
     display: none;

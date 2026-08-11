@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=64">
-    <script src="src/main.js?v=263" type="module" defer></script>
+    <script src="src/main.js?v=264" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -173,29 +173,29 @@
 
       <main class="workspace">
         <div class="map-column is-mobile-page-active">
-          <section class="mobile-overview-panel" aria-label="グリッド概要" aria-live="polite">
-            <div class="mobile-overview-field-grid">
-              <div class="mobile-overview-field">
+          <section class="mobile-grid-summary" aria-label="選択・距離情報" aria-live="polite">
+            <div class="mobile-grid-summary-field-grid">
+              <div class="mobile-grid-summary-field">
                 <span data-i18n="mobileOverview.displayed">表示地点</span>
                 <strong id="mobileDisplayedPointCount">0</strong>
               </div>
-              <div class="mobile-overview-field">
+              <div class="mobile-grid-summary-field">
                 <span data-i18n="mobileOverview.selected">選択地点</span>
                 <strong id="mobileSelectedPointCount">0</strong>
               </div>
-              <div class="mobile-overview-field">
+              <div class="mobile-grid-summary-field">
                 <span data-i18n="mobileOverview.firstSelection">第1選択</span>
                 <strong id="mobileFirstSelection">—</strong>
               </div>
-              <div class="mobile-overview-field">
+              <div class="mobile-grid-summary-field">
                 <span data-i18n="mobileOverview.lastSelection">最終選択</span>
                 <strong id="mobileLastSelection">—</strong>
               </div>
-              <div class="mobile-overview-field">
+              <div class="mobile-grid-summary-field">
                 <span data-i18n="mobileOverview.distance">距離</span>
                 <strong id="mobilePointDistance">—</strong>
               </div>
-              <div class="mobile-overview-field">
+              <div class="mobile-grid-summary-field">
                 <span data-i18n="mobileOverview.distanceType">距離種別</span>
                 <strong id="mobileDistanceType">—</strong>
               </div>
