@@ -29,8 +29,8 @@
     <link rel="icon" href="assets/icon-grid.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=68">
-    <script src="src/main.js?v=268" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=69">
+    <script src="src/main.js?v=269" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -400,10 +400,10 @@
         </aside>
       </main>
     </div>
-    <dialog id="pointRegistrationDialog" class="point-registration-dialog" aria-labelledby="pointRegistrationDialogTitle">
+    <dialog id="pointRegistrationDialog" class="point-registration-dialog" aria-labelledby="pointRegistrationDialogTitle" tabindex="-1">
       <form id="pointForm" class="point-registration-dialog-form">
         <div class="point-registration-dialog-heading">
-          <h2 id="pointRegistrationDialogTitle" data-i18n="panel.register">地点登録</h2>
+          <h2 id="pointRegistrationDialogTitle" data-i18n="panel.register" tabindex="-1">地点登録</h2>
           <button id="closePointRegistrationButton" class="share-link-close" type="button" aria-label="閉じる" title="地点登録を閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
         </div>
         <label>
@@ -447,10 +447,10 @@
         <button id="pointSubmitButton" class="primary-button" type="submit" data-i18n="button.submitRegister">登録</button>
       </form>
     </dialog>
-    <dialog id="shareLinkDialog" class="share-link-dialog" aria-labelledby="shareLinkDialogTitle">
+    <dialog id="shareLinkDialog" class="share-link-dialog" aria-labelledby="shareLinkDialogTitle" tabindex="-1">
       <form class="share-link-dialog-form" method="dialog">
         <div class="share-link-dialog-heading">
-          <h2 id="shareLinkDialogTitle" data-i18n="list.shareDialogTitle">共有リンク</h2>
+          <h2 id="shareLinkDialogTitle" data-i18n="list.shareDialogTitle" tabindex="-1">共有リンク</h2>
           <button class="share-link-close" type="submit" value="cancel" aria-label="閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
         </div>
         <strong id="shareLinkSummary" class="share-link-summary"></strong>
@@ -467,10 +467,10 @@
         </div>
       </form>
     </dialog>
-    <dialog id="pointInfoDialog" class="point-info-dialog" aria-labelledby="pointInfoDialogTitle">
+    <dialog id="pointInfoDialog" class="point-info-dialog" aria-labelledby="pointInfoDialogTitle" tabindex="-1">
       <form class="point-info-dialog-form" method="dialog">
         <div class="point-info-dialog-heading">
-          <h2 id="pointInfoDialogTitle" data-i18n="info.dialogTitle">地点情報</h2>
+          <h2 id="pointInfoDialogTitle" data-i18n="info.dialogTitle" tabindex="-1">地点情報</h2>
           <button class="share-link-close" type="submit" value="cancel" aria-label="閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
         </div>
         <img id="pointInfoPhoto" class="point-info-photo" alt="" hidden>
@@ -510,10 +510,10 @@
         </div>
       </form>
     </dialog>
-    <dialog id="gridPointQuickDialog" class="grid-point-quick-dialog" aria-labelledby="gridPointQuickName">
+    <dialog id="gridPointQuickDialog" class="grid-point-quick-dialog" aria-labelledby="gridPointQuickName" tabindex="-1">
       <form class="grid-point-quick-dialog-form" method="dialog">
         <div class="grid-point-quick-heading">
-          <strong id="gridPointQuickName" class="grid-point-quick-name"></strong>
+          <strong id="gridPointQuickName" class="grid-point-quick-name" tabindex="-1"></strong>
           <span id="gridPointQuickList" class="grid-point-quick-list"></span>
         </div>
         <div class="grid-point-quick-actions" aria-label="地点の役割">
@@ -523,11 +523,11 @@
         </div>
       </form>
     </dialog>
-    <dialog id="pointListPreviewDialog" class="point-list-preview-dialog" aria-labelledby="pointListPreviewDialogTitle">
+    <dialog id="pointListPreviewDialog" class="point-list-preview-dialog" aria-labelledby="pointListPreviewDialogTitle" tabindex="-1">
       <form class="point-list-preview-dialog-form" method="dialog">
         <div class="point-list-preview-dialog-heading">
           <div>
-            <h2 id="pointListPreviewDialogTitle"></h2>
+            <h2 id="pointListPreviewDialogTitle" tabindex="-1"></h2>
             <span id="pointListPreviewCount" class="panel-count">0点</span>
           </div>
           <button class="share-link-close" type="submit" value="cancel" aria-label="閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
@@ -535,11 +535,11 @@
         <div id="pointListPreviewItems" class="mobile-point-items point-list-preview-items"></div>
       </form>
     </dialog>
-    <dialog id="storageTransferDialog" class="point-transfer-dialog storage-transfer-dialog" aria-labelledby="storageTransferDialogTitle">
+    <dialog id="storageTransferDialog" class="point-transfer-dialog storage-transfer-dialog" aria-labelledby="storageTransferDialogTitle" tabindex="-1">
       <form class="point-transfer-dialog-form" method="dialog">
         <div class="point-transfer-dialog-heading">
           <div>
-            <h2 id="storageTransferDialogTitle">リストの登録方法</h2>
+            <h2 id="storageTransferDialogTitle" tabindex="-1">リストの登録方法</h2>
             <p id="storageTransferDialogHint" class="point-transfer-dialog-hint">このリストを移動またはコピーします。</p>
           </div>
         </div>
@@ -550,11 +550,11 @@
         </div>
       </form>
     </dialog>
-    <dialog id="pointTransferDialog" class="point-transfer-dialog" aria-labelledby="pointTransferDialogTitle">
+    <dialog id="pointTransferDialog" class="point-transfer-dialog" aria-labelledby="pointTransferDialogTitle" tabindex="-1">
       <form class="point-transfer-dialog-form" method="dialog">
         <div class="point-transfer-dialog-heading">
           <div>
-            <h2 id="pointTransferDialogTitle"></h2>
+            <h2 id="pointTransferDialogTitle" tabindex="-1"></h2>
             <p id="pointTransferDialogHint" class="point-transfer-dialog-hint"></p>
           </div>
         </div>
@@ -568,10 +568,10 @@
         </div>
       </form>
     </dialog>
-    <dialog id="confirmDialog" class="confirm-dialog" aria-labelledby="confirmDialogTitle" aria-describedby="confirmDialogMessage">
+    <dialog id="confirmDialog" class="confirm-dialog" aria-labelledby="confirmDialogTitle" aria-describedby="confirmDialogMessage" tabindex="-1">
       <form class="confirm-dialog-form" method="dialog">
         <div class="confirm-dialog-heading">
-          <h2 id="confirmDialogTitle">確認</h2>
+          <h2 id="confirmDialogTitle" tabindex="-1">確認</h2>
         </div>
         <p id="confirmDialogMessage" class="confirm-dialog-message"></p>
         <div class="confirm-dialog-actions">
@@ -583,10 +583,10 @@
         </div>
       </form>
     </dialog>
-    <dialog id="textInputDialog" class="text-input-dialog" aria-labelledby="textInputDialogTitle">
+    <dialog id="textInputDialog" class="text-input-dialog" aria-labelledby="textInputDialogTitle" tabindex="-1">
       <form class="text-input-dialog-form" method="dialog">
         <div class="text-input-dialog-heading">
-          <h2 id="textInputDialogTitle">入力</h2>
+          <h2 id="textInputDialogTitle" tabindex="-1">入力</h2>
         </div>
         <p id="textInputDialogMessage" class="text-input-dialog-message" hidden></p>
         <label>

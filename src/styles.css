@@ -2077,6 +2077,14 @@ textarea {
   font-size: 18px;
 }
 
+dialog h2:focus {
+  outline: none;
+}
+
+.grid-point-quick-name:focus {
+  outline: none;
+}
+
 .share-link-close {
   width: 36px;
   min-width: 36px;
