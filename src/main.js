@@ -34,6 +34,9 @@ const POINT_INFO_MAP_RETURN_KEY = "grid-atlas-point-info-map-return";
 const MAP_PROVIDER_GOOGLE = "google";
 const MAP_PROVIDER_APPLE = "apple";
 const GRIDATLAS_RECOMMENDED_SHARE_URL_BYTES = 8192;
+const GRIDATLAS_PRESET_PARAMETER = "preset";
+const PUBLIC_PRESET_DIRECTORY = "presets";
+const PUBLIC_PRESET_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const GPS_ENABLED_KEY = "grid-atlas-gps-enabled";
 
 const CLOUD_ACCESS_TOKEN_KEY = "grid-atlas-cloud-access-token";
@@ -57,7 +60,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0940";
+const WEB_VERSION = "0.0980";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -121,6 +124,9 @@ const elements = {
   confirmDialogTitle: document.querySelector("#confirmDialogTitle"),
   confirmDialogMessage: document.querySelector("#confirmDialogMessage"),
   confirmDialogCancelButton: document.querySelector("#confirmDialogCancelButton"),
+  confirmDialogDeleteLinksButton: document.querySelector("#confirmDialogDeleteLinksButton"),
+  confirmDialogDeletePointsButton: document.querySelector("#confirmDialogDeletePointsButton"),
+  confirmDialogDeleteAllButton: document.querySelector("#confirmDialogDeleteAllButton"),
   confirmDialogConfirmButton: document.querySelector("#confirmDialogConfirmButton"),
   textInputDialog: document.querySelector("#textInputDialog"),
   textInputDialogTitle: document.querySelector("#textInputDialogTitle"),
@@ -518,6 +524,9 @@ const TRANSLATIONS = {
     "action.shareSelected": "共有",
     "action.info": "情報",
     "action.delete": "削除",
+    "delete.linksOnly": "線のみ",
+    "delete.pointsOnly": "地点のみ",
+    "delete.all": "すべて",
     "action.restore": "復旧",
     "action.edit": "編集",
     "action.map": "地図",
@@ -528,6 +537,7 @@ const TRANSLATIONS = {
     "import.drop.description": "この画面にドロップしてください",
     "import.gridatlas.success": "{count}件のスポットリストを読み込みました",
     "import.gridatlas.urlSuccess": "リンクからスポットリストを読み込みました",
+    "import.gridatlas.presetSuccess": "紹介用プリセット「{name}」を読み込みました",
     "import.gridatlas.error": "スポットリストを読み込めませんでした",
     "button.submitRegister": "登録",
     "button.update": "更新",
@@ -779,6 +789,9 @@ const TRANSLATIONS = {
     "action.shareSelected": "Share",
     "action.info": "Info",
     "action.delete": "Delete",
+    "delete.linksOnly": "Lines only",
+    "delete.pointsOnly": "Points only",
+    "delete.all": "All",
     "action.restore": "Restore",
     "action.edit": "Edit",
     "action.map": "Map",
@@ -789,6 +802,7 @@ const TRANSLATIONS = {
     "import.drop.description": "Drop it anywhere on this screen",
     "import.gridatlas.success": "Imported {count} spot list(s)",
     "import.gridatlas.urlSuccess": "Imported a spot list from the link",
+    "import.gridatlas.presetSuccess": "Imported the introduction preset “{name}”",
     "import.gridatlas.error": "Could not import the spot list",
     "button.submitRegister": "Add",
     "button.update": "Update",
@@ -5124,6 +5138,40 @@ function setupPointIndexGesture(row, { point, list }) {
     }, 1000);
   });
 }
+
+function closeStorageListEditMenus(except = null) {
+  for (const menu of document.querySelectorAll(".storage-list-edit-menu[open]")) {
+    if (menu !== except) menu.open = false;
+  }
+}
+
+function updateStorageListEditMenuPlacement(menu) {
+  if (!menu?.open) {
+    menu?.classList.remove("is-open-upward");
+    return;
+  }
+
+  const panel = menu.querySelector(".storage-list-edit-panel");
+  if (!panel) return;
+  menu.classList.remove("is-open-upward");
+  const menuRect = menu.getBoundingClientRect();
+  const panelRect = panel.getBoundingClientRect();
+  const viewportBottom = window.visualViewport?.height ?? window.innerHeight;
+  const gap = 8;
+  const spaceBelow = viewportBottom - menuRect.bottom;
+  const spaceAbove = menuRect.top;
+  menu.classList.toggle(
+    "is-open-upward",
+    spaceBelow < panelRect.height + gap && spaceAbove >= panelRect.height + gap
+  );
+}
+
+function updateOpenStorageListEditMenuPlacements() {
+  for (const menu of document.querySelectorAll(".storage-list-edit-menu[open]")) {
+    updateStorageListEditMenuPlacement(menu);
+  }
+}
+
 function createStorageListRow(entry) {
   const row = document.createElement("div");
   row.className = "storage-list-row";
@@ -5191,6 +5239,14 @@ function createStorageListRow(entry) {
   const editPanel = document.createElement("div");
   editPanel.className = "storage-list-edit-panel";
   editMenu.append(editPanel);
+  editMenu.addEventListener("toggle", () => {
+    if (!editMenu.open) {
+      editMenu.classList.remove("is-open-upward");
+      return;
+    }
+    closeStorageListEditMenus(editMenu);
+    window.requestAnimationFrame(() => updateStorageListEditMenuPlacement(editMenu));
+  });
   editMenu.addEventListener("pointerdown", (event) => event.stopPropagation());
   editMenu.addEventListener("click", (event) => event.stopPropagation());
 
@@ -7524,6 +7580,37 @@ function clearRangeSelectionPreview() {
   canvas.classList.remove("is-range-selecting");
 }
 
+function segmentIntersectsRange(start, end, left, right, top, bottom) {
+  let rangeStart = 0;
+  let rangeEnd = 1;
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const boundaries = [
+    [-dx, start.x - left],
+    [dx, right - start.x],
+    [-dy, start.y - top],
+    [dy, bottom - start.y]
+  ];
+
+  for (const [p, q] of boundaries) {
+    if (p === 0) {
+      if (q < 0) return false;
+      continue;
+    }
+
+    const ratio = q / p;
+    if (p < 0) {
+      if (ratio > rangeEnd) return false;
+      if (ratio > rangeStart) rangeStart = ratio;
+    } else {
+      if (ratio < rangeStart) return false;
+      if (ratio < rangeEnd) rangeEnd = ratio;
+    }
+  }
+
+  return true;
+}
+
 function selectPointsInRange(range) {
   const left = Math.min(range.start.x, range.current.x);
   const right = Math.max(range.start.x, range.current.x);
@@ -7542,10 +7629,20 @@ function selectPointsInRange(range) {
     && point.y >= minY
     && point.y <= maxY
   ));
+  const selectedLinks = state.links.filter((link) => {
+    const endpoints = linkEndpoints(link);
+    if (!endpoints) return false;
+    const start = worldToScreen(endpoints.a);
+    const end = worldToScreen(endpoints.b);
+    return segmentIntersectsRange(start, end, left, right, top, bottom);
+  });
 
-  state.selection = selectedPoints.map((point) => ({ type: "point", id: point.id }));
+  state.selection = [
+    ...selectedPoints.map((point) => ({ type: "point", id: point.id })),
+    ...selectedLinks.map((link) => ({ type: "link", id: link.id }))
+  ];
   state.selectedPointId = selectedPoints[0]?.id ?? null;
-  state.selectedLinkId = null;
+  state.selectedLinkId = selectedLinks[0]?.id ?? null;
   normalizeSelection();
   return selectedPoints;
 }
@@ -8909,15 +9006,35 @@ function requestConfirm(options = {}) {
   elements.confirmDialogTitle.textContent = options.title || cloudText("確認", "Confirm");
   elements.confirmDialogMessage.textContent = options.message || "";
   elements.confirmDialogCancelButton.textContent = options.cancelLabel || t("action.cancel");
+  const choiceButtons = [
+    elements.confirmDialogDeleteLinksButton,
+    elements.confirmDialogDeletePointsButton,
+    elements.confirmDialogDeleteAllButton
+  ];
+  const choices = Array.isArray(options.choices) ? options.choices : null;
+  const choiceMode = choices !== null;
+  for (const button of choiceButtons) {
+    button.hidden = !choiceMode;
+  }
+  elements.confirmDialogConfirmButton.hidden = choiceMode;
   elements.confirmDialogConfirmButton.textContent = options.confirmLabel || t("action.delete");
   elements.confirmDialogConfirmButton.classList.toggle("danger-button", options.danger !== false);
+  if (choiceMode) {
+    for (const [index, choice] of choices.entries()) {
+      const button = choiceButtons[index];
+      if (!button) continue;
+      button.value = choice.value;
+      button.textContent = choice.label;
+      button.classList.toggle("danger-button", options.danger !== false);
+    }
+  }
 
   const result = new Promise((resolve) => {
     pendingConfirmResolve = resolve;
   });
   dialog.showModal();
-  elements.confirmDialogConfirmButton.focus();
-  return result;
+  (choiceMode ? choiceButtons.find((button) => !button.hidden) : elements.confirmDialogConfirmButton)?.focus();
+  return result.then((value) => choiceMode ? value : value === "confirm");
 }
 
 function requestTextInput(options = {}) {
@@ -9282,7 +9399,8 @@ async function importGridAtlasPackages(packages, options = {}) {
 
     const successMessage = options.source === "url" && importedLists.length === 1
       ? t("import.gridatlas.urlSuccess")
-      : t("import.gridatlas.success").replace("{count}", String(importedLists.length));
+      : options.successMessage
+        || t("import.gridatlas.success").replace("{count}", String(importedLists.length));
     applyImportedPointLists(importedLists, successMessage);
     return true;
   } catch (error) {
@@ -9358,9 +9476,41 @@ function incomingGridAtlasUrlValue() {
   return new URLSearchParams(window.location.search).get(GRIDATLAS_URL_PARAMETER) || "";
 }
 
+function incomingGridAtlasPresetName() {
+  return new URLSearchParams(window.location.search).get(GRIDATLAS_PRESET_PARAMETER) || "";
+}
+
+function publicGridAtlasPresetUrl(name) {
+  if (!PUBLIC_PRESET_NAME_PATTERN.test(name)) {
+    throw new GridAtlasImportError("紹介用プリセット名が不正です");
+  }
+  return new URL(
+    `${PUBLIC_PRESET_DIRECTORY}/${encodeURIComponent(name)}.gridatlas`,
+    document.baseURI
+  );
+}
+
+async function readPublicGridAtlasPreset(name) {
+  const url = publicGridAtlasPresetUrl(name);
+  let response;
+  try {
+    response = await fetch(url, { cache: "no-cache", credentials: "same-origin" });
+  } catch (error) {
+    throw new GridAtlasImportError("紹介用プリセットに接続できません", { cause: error });
+  }
+  if (!response.ok) {
+    throw new GridAtlasImportError("紹介用プリセットが見つかりません");
+  }
+
+  const blob = await response.blob();
+  const file = new File([blob], `${name}.gridatlas`, { type: GRIDATLAS_MIME_TYPE });
+  return readGridAtlasFile(file);
+}
+
 function clearIncomingGridAtlasUrlValue() {
   const url = new URL(window.location.href);
   url.searchParams.delete(GRIDATLAS_URL_PARAMETER);
+  url.searchParams.delete(GRIDATLAS_PRESET_PARAMETER);
   const hash = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
   const hashParams = new URLSearchParams(hash);
   hashParams.delete(GRIDATLAS_URL_PARAMETER);
@@ -9388,6 +9538,32 @@ async function handleIncomingGridAtlasUrl() {
   } finally {
     clearIncomingGridAtlasUrlValue();
   }
+}
+
+async function handleIncomingGridAtlasPreset() {
+  const name = incomingGridAtlasPresetName();
+  if (!name) return false;
+  try {
+    const gridAtlasPackage = await readPublicGridAtlasPreset(name);
+    const displayName = gridAtlasPackage.document.name || name;
+    return await importGridAtlasPackages([gridAtlasPackage], {
+      source: "preset",
+      successMessage: t("import.gridatlas.presetSuccess").replace("{name}", displayName)
+    });
+  } catch (error) {
+    console.warn("GRID ATLAS public preset import failed", error);
+    elements.shareImportStatus.value = error instanceof GridAtlasImportError
+      ? `${t("import.gridatlas.error")}: ${error.message}`
+      : t("import.gridatlas.error");
+    return false;
+  } finally {
+    clearIncomingGridAtlasUrlValue();
+  }
+}
+
+async function handleIncomingGridAtlasLink() {
+  if (incomingGridAtlasUrlValue()) return handleIncomingGridAtlasUrl();
+  return handleIncomingGridAtlasPreset();
 }
 
 function registerGridAtlasFileLaunchHandler() {
@@ -9468,52 +9644,60 @@ async function importPointListFiles(files) {
 async function deleteSelectedPoint() {
   normalizeSelection();
   const selectedIds = selectedPointIds().filter((id) => id !== CURRENT_LOCATION_ID);
-  const cloudPointIds = selectedIds.filter((id) => (
+  const candidateCloudPointIds = selectedIds.filter((id) => (
     state.cloud.connected && cloudPointListForPoint(id)?.editable
   ));
-  const cloudPointIdSet = new Set(cloudPointIds);
-  const pointIds = selectedIds.filter((id) => !cloudPointIdSet.has(id) && pointEditable(id));
+  const candidateCloudPointIdSet = new Set(candidateCloudPointIds);
+  const candidatePointIds = selectedIds.filter((id) => !candidateCloudPointIdSet.has(id) && pointEditable(id));
   const explicitLinkIds = selectedLinkIds();
   const selectedObservations = selectedLoadedObservations();
   const selectedObservationIdSet = new Set(selectedObservations.map((observation) => observation.id));
-  const pointIdSet = new Set(pointIds);
-  const deletionPointIdSet = new Set([...pointIdSet, ...cloudPointIdSet]);
-  const linkIdSet = new Set(explicitLinkIds);
+  const candidatePointIdSet = new Set(candidatePointIds);
+  const candidateLinkIdSet = new Set(explicitLinkIds);
 
-  for (const link of state.links) {
-    if (deletionPointIdSet.has(link.a) || deletionPointIdSet.has(link.b)) {
-      linkIdSet.add(link.id);
-    }
-  }
-
-  if (deletionPointIdSet.size + linkIdSet.size + selectedObservationIdSet.size === 0) {
+  if (candidatePointIdSet.size + candidateCloudPointIdSet.size + candidateLinkIdSet.size + selectedObservationIdSet.size === 0) {
     return;
   }
 
   const parts = [];
-  if (pointIdSet.size > 0) {
-    parts.push(String(pointIdSet.size) + "点");
+  if (candidatePointIdSet.size > 0) {
+    parts.push(String(candidatePointIdSet.size) + "点");
   }
-if (cloudPointIdSet.size > 0) {
-    parts.push(String(cloudPointIdSet.size) + "クラウド地点");
+  if (candidateCloudPointIdSet.size > 0) {
+    parts.push(String(candidateCloudPointIdSet.size) + "クラウド地点");
   }
-  if (linkIdSet.size > 0) {
-    parts.push(String(linkIdSet.size) + "線");
+  if (candidateLinkIdSet.size > 0) {
+    parts.push(String(candidateLinkIdSet.size) + "線");
   }
   if (selectedObservationIdSet.size > 0) {
     parts.push(String(selectedObservationIdSet.size) + "観察（保存ファイルには影響しません）");
   }
 
-  const confirmed = await requestConfirm({
+  const deletionMode = await requestConfirm({
     title: cloudText("削除の確認", "Confirm deletion"),
     message: cloudText(
       "選択中の" + parts.join(" / ") + "を削除しますか。",
       `Delete the selected ${parts.join(" / ")}?`
     ),
-    confirmLabel: t("action.delete"),
+    choices: [
+      { value: "links", label: t("delete.linksOnly") },
+      { value: "points", label: t("delete.pointsOnly") },
+      { value: "all", label: t("delete.all") }
+    ],
     danger: true
   });
-  if (!confirmed) {
+  if (deletionMode === "cancel") {
+    return;
+  }
+
+  const pointDeletionSelected = deletionMode !== "links";
+  const pointIdSet = pointDeletionSelected ? new Set(candidatePointIds) : new Set();
+  const cloudPointIdSet = pointDeletionSelected ? new Set(candidateCloudPointIds) : new Set();
+  const deletionPointIdSet = new Set([...pointIdSet, ...cloudPointIdSet]);
+  const linkIdSet = deletionMode === "points" ? new Set() : new Set(candidateLinkIdSet);
+  const observationIdSet = deletionMode === "all" ? selectedObservationIdSet : new Set();
+
+  if (deletionPointIdSet.size + linkIdSet.size + observationIdSet.size === 0) {
     return;
   }
 
@@ -9544,10 +9728,10 @@ if (cloudPointIdSet.size > 0) {
       && !cloudPointIdSet.has(item.a)
       && !cloudPointIdSet.has(item.b)
     )).map(clonePlain),
-    observations: selectedObservations.map(clonePlain)
+    observations: selectedObservations.filter((observation) => observationIdSet.has(observation.id)).map(clonePlain)
   };
-  if (selectedObservationIdSet.size > 0) {
-    state.loadedObservations = state.loadedObservations.filter((observation) => !selectedObservationIdSet.has(observation.id));
+  if (observationIdSet.size > 0) {
+    state.loadedObservations = state.loadedObservations.filter((observation) => !observationIdSet.has(observation.id));
   }
   for (const list of state.pointLists) {
     if (list.editable) {
@@ -9556,10 +9740,15 @@ if (cloudPointIdSet.size > 0) {
   }
   refreshVisiblePoints();
   state.links = state.links.filter((item) => !linkIdSet.has(item.id));
-  state.selection = [];
+  state.selection = state.selection.filter((entry) => (
+    !(entry.type === "point" && deletionPointIdSet.has(entry.id))
+    && !(entry.type === "link" && linkIdSet.has(entry.id))
+    && !(entry.type === "observation" && observationIdSet.has(entry.id))
+  ));
   state.selectedPointId = null;
   state.selectedLinkId = null;
   state.pendingLinkPointId = null;
+  normalizeSelection();
   if (deletionPointIdSet.has(state.editingPointId)) {
     state.editingPointId = null;
   }
@@ -9656,6 +9845,16 @@ function bindEvents() {
   document.addEventListener("visibilitychange", maybeAutoRefreshCloudLists);
   window.addEventListener("focus", maybeAutoRefreshCloudLists);
   document.addEventListener("click", () => setSettingsMenuOpen(false));
+  const closeEditMenusOutside = (event) => {
+    const menu = event.target instanceof Element
+      ? event.target.closest(".storage-list-edit-menu")
+      : null;
+    if (!menu) closeStorageListEditMenus();
+  };
+  document.addEventListener("pointerdown", closeEditMenusOutside, true);
+  document.addEventListener("click", closeEditMenusOutside, true);
+  window.addEventListener("resize", updateOpenStorageListEditMenuPlacements);
+  document.addEventListener("scroll", updateOpenStorageListEditMenuPlacements, true);
   document.addEventListener("dblclick", (event) => {
     if (event.target instanceof Element && event.target.closest("input, textarea, [contenteditable=\"true\"]")) {
       return;
@@ -9733,7 +9932,7 @@ function bindEvents() {
   elements.confirmDialog.addEventListener("close", () => {
     const resolve = pendingConfirmResolve;
     pendingConfirmResolve = null;
-    resolve?.(elements.confirmDialog.returnValue === "confirm");
+    resolve?.(elements.confirmDialog.returnValue || "cancel");
   });
   elements.confirmDialog.addEventListener("click", (event) => {
     if (event.target === elements.confirmDialog) elements.confirmDialog.close("cancel");
@@ -9966,7 +10165,7 @@ initMobilePages();
 resizeCanvas();
 void hydrateWorkspaceAssetPhotos()
   .catch((error) => console.warn("GRID ATLAS asset hydration failed", error))
-  .finally(() => void handleIncomingGridAtlasUrl());
+  .finally(() => void handleIncomingGridAtlasLink());
 handleIncomingShare();
 locateOnStartup();
 registerServiceWorker();

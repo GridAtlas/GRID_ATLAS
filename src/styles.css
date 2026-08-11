@@ -1328,6 +1328,13 @@ textarea {
   border-radius: 7px;
   background: var(--surface);
   box-shadow: var(--shadow);
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+}
+
+.storage-list-edit-menu.is-open-upward > .storage-list-edit-panel {
+  top: auto;
+  bottom: calc(100% + 4px);
 }
 
 .storage-list-edit-panel button.storage-list-edit-action {
@@ -2197,6 +2204,7 @@ textarea {
 .confirm-dialog-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
