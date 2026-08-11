@@ -66,7 +66,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0993";
+const WEB_VERSION = "0.0994";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -1315,7 +1315,7 @@ function applyWorkspace(workspace) {
   const activeListVisibilityChanged = ensureActivePointListVisible();
   refreshVisiblePoints();
   state.links = Array.isArray(workspace.links)
-    ? workspace.links.filter((link) => validStoredLinkEndpointId(link.a) && validStoredLinkEndpointId(link.b))
+    ? workspace.links.map(normalizeStoredLink).filter(Boolean)
     : [];
   state.selection = [];
   state.selectedPointId = null;
@@ -2352,14 +2352,13 @@ function drawGridLines(topLeft, bottomRight, step, color, lineWidth) {
 
 function drawLinks() {
   for (const link of state.links) {
-    const a = findPoint(link.a);
-    const b = findPoint(link.b);
-    if (!a || !b) {
+    const endpoints = linkEndpoints(link);
+    if (!endpoints) {
       continue;
     }
 
-    const start = worldToScreen(a);
-    const end = worldToScreen(b);
+    const start = worldToScreen(endpoints.a);
+    const end = worldToScreen(endpoints.b);
     const isSelected = isLinkSelected(link.id);
     context.beginPath();
     context.moveTo(start.x, start.y);
@@ -4235,9 +4234,8 @@ function renderAnalysis() {
 
   const linkDistances = state.links
     .map((link) => {
-      const a = findPoint(link.a);
-      const b = findPoint(link.b);
-      return a && b ? { link, a, b, distance: distanceBetween(a, b) } : null;
+      const endpoints = linkEndpoints(link);
+      return endpoints ? { link, ...endpoints, distance: distanceBetween(endpoints.a, endpoints.b) } : null;
     })
     .filter(Boolean);
 
@@ -5806,7 +5804,7 @@ function removeLocalListForStorageChange(listId) {
     state.pointLists = state.pointLists.filter((item) => item.id !== list.id);
     if (state.activePointListId === list.id) state.activePointListId = DEFAULT_POINT_LIST_ID;
   }
-  state.links = state.links.filter((link) => !pointIds.has(link.a) && !pointIds.has(link.b));
+  state.links = state.links.map((link) => linkWithDeletedEndpointSnapshots(link, pointIds));
   ensurePointLists();
   refreshVisiblePoints();
   pruneHiddenPointReferences();
@@ -6039,7 +6037,7 @@ async function deletePointList(listId) {
 
   const pointIds = new Set(list.points.map((point) => point.id));
   state.pointLists = state.pointLists.filter((item) => item.id !== listId);
-  state.links = state.links.filter((link) => !pointIds.has(link.a) && !pointIds.has(link.b));
+  state.links = state.links.map((link) => linkWithDeletedEndpointSnapshots(link, pointIds));
   ensurePointLists();
   refreshVisiblePoints();
   pruneHiddenPointReferences();
@@ -6162,9 +6160,84 @@ function findLink(id) {
 }
 
 function linkEndpoints(link) {
-  const a = findPoint(link?.a);
-  const b = findPoint(link?.b);
+  const a = linkEndpoint(link, "a");
+  const b = linkEndpoint(link, "b");
   return a && b ? { a, b } : null;
+}
+
+function captureLinkEndpointSnapshot(point) {
+  if (!point || !validGeo(point.geo)) {
+    return null;
+  }
+
+  return {
+    id: typeof point.id === "string" ? point.id : "",
+    title: typeof point.title === "string" && point.title.trim() ? point.title.trim() : "Point",
+    geo: normalizeGeo(point.geo)
+  };
+}
+
+function normalizeLinkEndpointSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== "object" || !validGeo(snapshot.geo)) {
+    return null;
+  }
+
+  return {
+    id: typeof snapshot.id === "string" ? snapshot.id : "",
+    title: typeof snapshot.title === "string" && snapshot.title.trim() ? snapshot.title.trim() : "Point",
+    geo: normalizeGeo(snapshot.geo)
+  };
+}
+
+function linkEndpoint(link, side) {
+  const point = findPoint(link?.[side]);
+  if (point) {
+    return point;
+  }
+
+  const snapshot = normalizeLinkEndpointSnapshot(link?.[`${side}Snapshot`]);
+  if (!snapshot) {
+    return null;
+  }
+
+  const projected = projectLatLng(snapshot.geo.lat, snapshot.geo.lng);
+  return { ...snapshot, x: projected.x, y: projected.y };
+}
+
+function normalizeStoredLink(link) {
+  if (!link || !validStoredLinkEndpointId(link.a) || !validStoredLinkEndpointId(link.b)) {
+    return null;
+  }
+
+  const next = { ...link };
+  for (const side of ["a", "b"]) {
+    const snapshotKey = `${side}Snapshot`;
+    const currentSnapshot = normalizeLinkEndpointSnapshot(next[snapshotKey]);
+    if (currentSnapshot) {
+      next[snapshotKey] = currentSnapshot;
+      continue;
+    }
+
+    const point = findPoint(next[side]);
+    const snapshot = captureLinkEndpointSnapshot(point);
+    if (snapshot) {
+      next[snapshotKey] = snapshot;
+    }
+  }
+
+  return next;
+}
+
+function linkWithDeletedEndpointSnapshots(link, pointIds) {
+  const next = normalizeStoredLink(link) ?? { ...link };
+  for (const side of ["a", "b"]) {
+    if (!pointIds.has(next[side])) continue;
+    const snapshot = captureLinkEndpointSnapshot(findPoint(next[side]));
+    if (snapshot) {
+      next[`${side}Snapshot`] = snapshot;
+    }
+  }
+  return next;
 }
 
 function linkTitle(link) {
@@ -6741,12 +6814,12 @@ function connectSelectedPoints() {
       continue;
     }
 
-    state.links.push({
+    state.links.push(normalizeStoredLink({
       id: createId(),
       a,
       b,
       createdAt: new Date().toISOString()
-    });
+    }));
     created = true;
   }
 
@@ -6754,12 +6827,12 @@ function connectSelectedPoints() {
     const a = pointIds.at(-1);
     const b = pointIds[0];
     if (!findLinkBetween(a, b)) {
-      state.links.push({
+      state.links.push(normalizeStoredLink({
         id: createId(),
         a,
         b,
         createdAt: new Date().toISOString()
-      });
+      }));
       created = true;
     }
   }
@@ -6928,7 +7001,7 @@ async function restoreLastDeleted() {
       continue;
     }
 
-    state.links.push(clonePlain(link));
+    state.links.push(normalizeStoredLink(clonePlain(link)) ?? clonePlain(link));
     existingLinkIds.add(link.id);
     restoredSelection.push({ type: "link", id: link.id });
   }
@@ -9378,7 +9451,7 @@ function applyImportedPointLists(importedLists, importedLinks, successMessage) {
   const previousSelection = state.selection;
   try {
     state.pointLists = [...state.pointLists, ...importedLists];
-    state.links = [...state.links, ...importedLinks];
+    state.links = [...state.links, ...importedLinks.map((link) => normalizeStoredLink(link) ?? link)];
     refreshVisiblePoints();
     state.selection = importedLists.flatMap((list) => list.points.map((point) => ({ type: "point", id: point.id })));
     normalizeSelection();
@@ -9766,6 +9839,11 @@ async function deleteSelectedPoint() {
     }
   }
 
+  const linksWithSnapshots = state.links.map((link) => (
+    deletionPointIdSet.size > 0
+      ? linkWithDeletedEndpointSnapshots(link, deletionPointIdSet)
+      : link
+  ));
   state.lastDeleted = {
     points: state.points.filter((item) => pointIdSet.has(item.id)).map(clonePlain),
     links: state.links.filter((item) => (
@@ -9784,7 +9862,7 @@ async function deleteSelectedPoint() {
     }
   }
   refreshVisiblePoints();
-  state.links = state.links.filter((item) => !linkIdSet.has(item.id));
+  state.links = linksWithSnapshots.filter((item) => !linkIdSet.has(item.id));
   state.selection = state.selection.filter((entry) => (
     !(entry.type === "point" && deletionPointIdSet.has(entry.id))
     && !(entry.type === "link" && linkIdSet.has(entry.id))
