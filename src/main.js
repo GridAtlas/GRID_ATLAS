@@ -56,7 +56,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1059";
+const WEB_VERSION = "0.1069";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -134,7 +134,6 @@ const elements = {
   actionCopyToListButton: document.querySelector("#actionCopyToListButton"),
   actionMoveToListButton: document.querySelector("#actionMoveToListButton"),
   actionShareSelectedButton: document.querySelector("#actionShareSelectedButton"),
-  actionInfoButton: document.querySelector("#actionInfoButton"),
   clearSelectionButton: document.querySelector("#clearSelectionButton"),
   actionFollowButton: document.querySelector("#actionFollowButton"),
   actionCenterButton: document.querySelector("#actionCenterButton"),
@@ -213,6 +212,8 @@ const elements = {
   gridPointQuickStartLabel: document.querySelector("#gridPointQuickStartLabel"),
   gridPointQuickTargetButton: document.querySelector("#gridPointQuickTargetButton"),
   gridPointQuickTargetLabel: document.querySelector("#gridPointQuickTargetLabel"),
+  gridPointQuickInfoButton: document.querySelector("#gridPointQuickInfoButton"),
+  gridPointQuickInfoLabel: document.querySelector("#gridPointQuickInfoLabel"),
   gridPointHoverLabel: document.querySelector("#gridPointHoverLabel"),
   appToast: document.querySelector("#appToast"),
   cloudProgress: document.querySelector("#cloudProgress"),
@@ -3313,7 +3314,6 @@ function renderActionButtons() {
   const centerCandidateCount = pointIds.length;
   const editCandidate = editableSelectedPoint();
   const mapCandidate = mapPointForSelection();
-  const infoCandidate = singleSelectedPoint();
   const deletablePointCount = pointIds.filter((id) => (
     id !== CURRENT_LOCATION_ID
     && (pointEditable(id) || (state.cloud.connected && cloudPointListForPoint(id)?.editable))
@@ -3343,7 +3343,6 @@ function renderActionButtons() {
     : mapCandidate
       ? "選択地点を地図で開く"
       : "地点を選択または仮ポイントを作成すると地図で開けます";
-  elements.actionInfoButton.disabled = !infoCandidate;
 
   elements.actionRegisterButton.classList.remove("is-active");
   elements.actionRegisterButton.title = hasPendingPoint ? "仮ポイントを登録" : canOpenRegistration ? "地点登録画面を開く" : "仮ポイントを作成すると登録できます";
@@ -3372,8 +3371,6 @@ function renderActionButtons() {
     : t("list.shareSelectedUnavailable");
   elements.actionEditButton.classList.toggle("is-active", Boolean(state.editingPointId));
   elements.actionMapButton.classList.toggle("is-active", false);
-  elements.actionInfoButton.classList.toggle("is-active", Boolean(elements.pointInfoDialog?.open && infoCandidate));
-  elements.actionInfoButton.title = infoCandidate ? "選択地点の情報を表示" : "1地点を選択すると情報を表示できます";
   elements.pointSubmitButton.textContent = state.editingPointId ? t("button.update") : t("button.submitRegister");
   elements.actionRouteLabel.textContent = t("action.route");
   renderLocationFollowButton();
@@ -3631,6 +3628,7 @@ function renderGridPointQuickDialog() {
   elements.gridPointQuickList.textContent = pointListNameForPoint(point) || t("label.none");
   elements.gridPointQuickStartLabel.textContent = t("action.start");
   elements.gridPointQuickTargetLabel.textContent = t("action.target");
+  elements.gridPointQuickInfoLabel.textContent = t("action.info");
   elements.gridPointQuickStartButton.disabled = !canSetObservationRole;
   elements.gridPointQuickStartButton.classList.toggle("is-active", isStart);
   elements.gridPointQuickStartButton.setAttribute("aria-pressed", String(isStart));
@@ -10072,7 +10070,6 @@ function bindEvents() {
   elements.actionCopyToListButton.addEventListener("click", () => beginPointTransfer("copy"));
   elements.actionMoveToListButton.addEventListener("click", () => beginPointTransfer("move"));
   elements.actionShareSelectedButton.addEventListener("click", () => void shareSelectedPointsLink());
-  elements.actionInfoButton.addEventListener("click", showSelectedPointInfoDialog);
   elements.actionEditButton.addEventListener("click", startEditingSelectedPoint);
   elements.actionMapButton.addEventListener("click", openSelectedPointInPreferredMap);
   elements.pointInfoEditButton.addEventListener("click", () => {
@@ -10094,6 +10091,11 @@ function bindEvents() {
     const point = state.gridPointQuickPointId ? findPoint(state.gridPointQuickPointId) : null;
     if (elements.gridPointQuickDialog.open) elements.gridPointQuickDialog.close("role-selected");
     void toggleTargetForPoint(point, { preserveSelection: true });
+  });
+  bindPointerActionButton(elements.gridPointQuickInfoButton, () => {
+    const point = state.gridPointQuickPointId ? findPoint(state.gridPointQuickPointId) : null;
+    if (elements.gridPointQuickDialog.open) elements.gridPointQuickDialog.close("info");
+    showSelectedPointInfoDialog(point);
   });
   elements.gridPointQuickDialog.addEventListener("close", () => {
     state.gridPointQuickPointId = null;
