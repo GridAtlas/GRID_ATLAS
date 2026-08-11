@@ -56,7 +56,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1098";
+const WEB_VERSION = "0.1099";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -1514,11 +1514,14 @@ async function cloudPhotoAssetsForList(list, cloudId, client, options = {}) {
 
 async function cloudPayloadWithPhotos(list, cloudId, client) {
   const photoAssets = await cloudPhotoAssetsForList(list, cloudId, client, {
-    onProgress: (completed, total) => setCloudProgress(
-      completed,
-      total,
-      cloudText("画像をアップロード中", "Uploading images")
-    )
+    onProgress: (completed, total) => {
+      if (total <= 0) return;
+      setCloudProgress(
+        completed,
+        total,
+        cloudText("画像をアップロード中", "Uploading images")
+      );
+    }
   });
   return pointListToCloudPayload({ ...list, cloudId }, pointGeo, { photoAssets });
 }
@@ -1563,7 +1566,7 @@ async function updateCloudPointList(list, nextList, options = {}) {
 
   setCloudBusy(true);
   const progressMessage = options.progressMessage || cloudText("クラウドを更新中", "Updating cloud");
-  setCloudProgress(0, 2, progressMessage);
+  setCloudProgress(0, 3, progressMessage);
   let payload;
   let client;
   try {
@@ -1575,22 +1578,22 @@ async function updateCloudPointList(list, nextList, options = {}) {
     return false;
   }
 
-  setCloudProgress(1, 2, cloudText("クラウドへ保存中", "Saving to cloud"));
   let updated = false;
   try {
+    setCloudProgress(1, 3, cloudText("クラウドへ保存中", "Saving to cloud"));
     await client.updateList(cloudId, meta.revision, payload);
     updated = true;
-    setCloudProgress(2, 2, cloudText("クラウドを更新しました", "Cloud updated"));
+    setCloudProgress(2, 3, cloudText("クラウドの一覧を確認中", "Refreshing cloud lists"));
   } catch (error) {
     setCloudStatus(cloudErrorMessage(error), { error: true });
-  } finally {
-    setCloudBusy(false);
   }
 
   if (updated) {
-    await refreshCloudLists({ quiet: true });
+    await refreshCloudLists({ quiet: true, keepBusy: true });
+    setCloudProgress(3, 3, cloudText("クラウドへ登録しました", "Registered to cloud"));
     setCloudStatus(options.message || cloudText("マイリスト（クラウド）を更新しました", "My List (Cloud) updated"));
   }
+  setCloudBusy(false);
   return updated;
 }
 function findCloudPointAny(pointId) {
@@ -5776,7 +5779,7 @@ async function refreshCloudLists(options = {}) {
     state.cloud.pointRows = [];
     setCloudStatus(cloudErrorMessage(error), { error: true });
   } finally {
-    setCloudBusy(false);
+    if (options.keepBusy !== true) setCloudBusy(false);
     render();
   }
 }
@@ -8015,7 +8018,10 @@ async function submitPoint(event) {
   list.updatedAt = createdAt;
   list.points.push(point);
   if (list.source === "cloud") {
-    const updated = await updateCloudPointList(list, list);
+    const updated = await updateCloudPointList(list, list, {
+      progressMessage: cloudText("クラウドへ登録中", "Registering to cloud"),
+      message: cloudText("地点をクラウドへ登録しました", "Point registered to cloud")
+    });
     if (!updated) { list.points.pop(); render(); return; }
   } else {
     refreshVisiblePoints();
