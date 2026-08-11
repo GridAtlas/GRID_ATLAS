@@ -2272,6 +2272,38 @@ textarea {
   gap: 8px;
 }
 
+.share-choice-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.share-choice-actions button {
+  min-height: 52px;
+  font-weight: 800;
+}
+
+.share-choice-cancel {
+  justify-self: end;
+}
+
+.qr-code-dialog {
+  width: min(420px, calc(100vw - 24px));
+}
+
+.qr-code-canvas {
+  display: block;
+  width: min(100%, 320px);
+  height: auto;
+  aspect-ratio: 1;
+  margin: 0 auto;
+  padding: 12px;
+  image-rendering: pixelated;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
 .point-info-actions {
   display: flex;
   flex-wrap: wrap;

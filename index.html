@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=70">
-    <script src="src/main.js?v=282" type="module" defer></script>
+    <script src="src/main.js?v=284" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -276,7 +276,7 @@
               <svg class="ui-icon" aria-hidden="true"><use href="#icon-move"></use></svg>
               <span data-i18n="action.moveToList">移動</span>
             </button>
-            <button id="actionShareSelectedButton" class="action-button" type="button" title="選択地点をURLで共有" disabled>
+            <button id="actionShareSelectedButton" class="action-button" type="button" data-i18n-title="action.shareSelectedTitle" disabled>
               <svg class="ui-icon" aria-hidden="true"><use href="#icon-share"></use></svg>
               <span data-i18n="action.shareSelected">共有</span>
             </button>
@@ -456,6 +456,37 @@
           <button type="submit" value="cancel" data-i18n="list.shareCancel">キャンセル</button>
           <button id="shareLinkCopyButton" type="button" data-i18n="list.shareCopy">リンクをコピー</button>
           <button id="shareLinkNativeButton" class="share-link-primary" type="button" data-i18n="list.shareNative" hidden>共有する</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="shareChoiceDialog" class="share-link-dialog" aria-labelledby="shareChoiceDialogTitle" tabindex="-1">
+      <form class="share-link-dialog-form" method="dialog">
+        <div class="share-link-dialog-heading">
+          <h2 id="shareChoiceDialogTitle" data-i18n="list.shareChoiceTitle" tabindex="-1">共有方法を選択</h2>
+          <button class="share-link-close" type="submit" value="cancel" aria-label="閉じる" title="閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
+        </div>
+        <strong id="shareChoiceSummary" class="share-link-summary"></strong>
+        <p class="share-link-privacy" data-i18n="list.shareChoicePrivacy">QRコードは画像を含まないURL、.gridatlasは地点情報・メモ・画像を含みます。</p>
+        <div class="share-choice-actions">
+          <button id="shareChoiceQrButton" class="share-link-primary" type="button" data-i18n="list.shareChoiceQr">QRコード</button>
+          <button id="shareChoiceFileButton" type="button" data-i18n="list.shareChoiceFile">.gridatlasファイル</button>
+        </div>
+        <button class="share-choice-cancel" type="submit" value="cancel" data-i18n="list.shareCancel">キャンセル</button>
+      </form>
+    </dialog>
+    <dialog id="qrCodeDialog" class="share-link-dialog qr-code-dialog" aria-labelledby="qrCodeDialogTitle" tabindex="-1">
+      <form class="share-link-dialog-form" method="dialog">
+        <div class="share-link-dialog-heading">
+          <h2 id="qrCodeDialogTitle" data-i18n="list.qrTitle" tabindex="-1">QRコードで共有</h2>
+          <button class="share-link-close" type="submit" value="cancel" aria-label="閉じる" title="閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
+        </div>
+        <strong id="qrCodeSummary" class="share-link-summary"></strong>
+        <p class="share-link-privacy" data-i18n="list.qrHint">相手のカメラで読み取ると、GRID ATLASで地点リストを開けます。</p>
+        <canvas id="qrCodeCanvas" class="qr-code-canvas" width="256" height="256" aria-label="QRコード"></canvas>
+        <output id="qrCodeDialogStatus" class="form-status" aria-live="polite"></output>
+        <div class="share-link-actions">
+          <button id="qrCodeCopyButton" type="button" data-i18n="list.qrCopy">URLをコピー</button>
+          <button type="submit" value="cancel" class="share-link-primary" data-i18n="list.shareCancel">閉じる</button>
         </div>
       </form>
     </dialog>
