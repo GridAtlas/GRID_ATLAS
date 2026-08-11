@@ -56,7 +56,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1092";
+const WEB_VERSION = "0.1093";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -525,7 +525,7 @@ const TRANSLATIONS = {
     "mobileOverview.selected": "選択地点",
     "mobileOverview.distance": "距離",
     "mobileOverview.distanceType": "距離種別",
-    "mobileOverview.firstSelection": "第1選択",
+    "mobileOverview.firstSelection": "初回選択",
     "mobileOverview.lastSelection": "最終選択",
     "state.unselected": "未選択",
     "state.noPoints": "地点なし",
@@ -797,7 +797,7 @@ const TRANSLATIONS = {
     "mobileOverview.selected": "Selected",
     "mobileOverview.distance": "Distance",
     "mobileOverview.distanceType": "Distance type",
-    "mobileOverview.firstSelection": "First",
+    "mobileOverview.firstSelection": "Initial",
     "mobileOverview.lastSelection": "Last",
     "state.unselected": "None",
     "state.noPoints": "No points",
