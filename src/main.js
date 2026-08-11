@@ -56,11 +56,13 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1097";
+const WEB_VERSION = "0.1098";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
+const POINT_SELECTION_RING_RADIUS = POINT_RADIUS + 2;
+const POINT_SELECTION_RING_WIDTH = 4;
 const POINTER_MOVE_THRESHOLD = 3;
 const RANGE_SELECTION_LONG_PRESS_MS = 450;
 const RANGE_SELECTION_MIN_SIZE = 8;
@@ -2395,11 +2397,13 @@ function drawTargetLine() {
   context.setLineDash([]);
   drawArrowHead(start, lineEnd, guideColor);
 
-  context.beginPath();
-  context.arc(end.x, end.y, POINT_RADIUS + 8, 0, Math.PI * 2);
-  context.strokeStyle = colors.targetSoft;
-  context.lineWidth = 6;
-  context.stroke();
+  if (!isPointSelected(target.id)) {
+    context.beginPath();
+    context.arc(end.x, end.y, POINT_RADIUS + 8, 0, Math.PI * 2);
+    context.strokeStyle = colors.targetSoft;
+    context.lineWidth = POINT_SELECTION_RING_WIDTH;
+    context.stroke();
+  }
   context.restore();
 }
 
@@ -2808,6 +2812,15 @@ function drawCurrentLocationHeading(screen, colors, isStale) {
   context.globalAlpha = 1;
   context.restore();
 }
+
+function drawPointSelectionRing(screen, colors) {
+  context.beginPath();
+  context.arc(screen.x, screen.y, POINT_SELECTION_RING_RADIUS, 0, Math.PI * 2);
+  context.lineWidth = POINT_SELECTION_RING_WIDTH;
+  context.strokeStyle = colors.selected;
+  context.stroke();
+}
+
 function drawCurrentLocation() {
   const location = currentLocationPoint();
   if (!location) {
@@ -2829,12 +2842,14 @@ function drawCurrentLocation() {
     context.fillStyle = colors.currentStale;
     context.globalAlpha = 0.18;
     context.fill();
-    context.globalAlpha = 0.92;
-    context.lineWidth = 2;
-    context.strokeStyle = colors.currentStale;
-    context.setLineDash([3, 3]);
-    context.stroke();
-    context.setLineDash([]);
+    if (!isSelected) {
+      context.globalAlpha = 0.92;
+      context.lineWidth = 2;
+      context.strokeStyle = colors.currentStale;
+      context.setLineDash([3, 3]);
+      context.stroke();
+      context.setLineDash([]);
+    }
     context.beginPath();
     context.moveTo(screen.x - POINT_RADIUS - 5, screen.y);
     context.lineTo(screen.x + POINT_RADIUS + 5, screen.y);
@@ -2847,11 +2862,7 @@ function drawCurrentLocation() {
   }
 
   if (isSelected) {
-    context.beginPath();
-    context.arc(screen.x, screen.y, POINT_RADIUS + 2, 0, Math.PI * 2);
-    context.lineWidth = 4;
-    context.strokeStyle = colors.selected;
-    context.stroke();
+    drawPointSelectionRing(screen, colors);
   }
   context.restore();
 }
@@ -2904,9 +2915,7 @@ function drawPointMarker(point, colors) {
   context.fill();
 
   if (isSelected) {
-    context.lineWidth = 4;
-    context.strokeStyle = colors.selected;
-    context.stroke();
+    drawPointSelectionRing(screen, colors);
   }
 }
 
