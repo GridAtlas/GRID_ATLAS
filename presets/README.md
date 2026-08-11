@@ -13,6 +13,12 @@ https://gridatlas.github.io/GRID_ATLAS/?preset=kinki-pentagram
 アプリ起動時に同一オリジンの `presets/kinki-pentagram.gridatlas` を取得し、インポートリストへ追加します。表示はプリセット対象と登録先のリストに絞られ、他のリストは自動的にオフになります。
 `kinki-pentagram.gridatlas` には、5つの固定アンカーを結ぶ考察線も任意レイヤーとして含めています。
 
+## 現在のプリセット
+
+- `kinki-pentagram`：近畿五芒星の5地点と五角形の線
+- `kinki-pentagram-sites-v3-200`：v3の200地点と五芒星の線
+- `kinki-shrine-temple-sites-v5-nested-500`：v5の包含型500地点
+
 ## 公開範囲
 
 - このフォルダに置いて commit・push したファイルは公開されます。
