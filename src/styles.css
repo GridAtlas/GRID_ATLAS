@@ -2272,21 +2272,6 @@ textarea {
   gap: 8px;
 }
 
-.share-choice-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.share-choice-actions button {
-  min-height: 52px;
-  font-weight: 800;
-}
-
-.share-choice-cancel {
-  justify-self: end;
-}
-
 .qr-code-dialog {
   width: min(420px, calc(100vw - 24px));
 }
@@ -2349,6 +2334,16 @@ textarea {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.text-input-dialog-share-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) repeat(2, minmax(0, 1fr));
+}
+
+.text-input-dialog-share-actions button {
+  min-height: 44px;
+  font-weight: 800;
 }
 
 .grid-point-quick-dialog {

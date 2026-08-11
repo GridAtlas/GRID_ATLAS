@@ -12,7 +12,17 @@ describe("QR code generation", () => {
     expect(matrix[6][6]).toBe(true);
   });
 
+  it("fits a typical one-point share URL", () => {
+    const matrix = generateQrCodeMatrix(`https://gridatlas.example/#gridatlas=v1.${"x".repeat(420)}`);
+    expect(matrix.length).toBeGreaterThan(21);
+  });
+
+  it("fits a ten-point-sized share URL", () => {
+    const matrix = generateQrCodeMatrix(`https://gridatlas.example/#gridatlas=v1.${"x".repeat(1800)}`);
+    expect(matrix.length).toBeGreaterThan(65);
+  });
+
   it("rejects data that does not fit the local QR capacity", () => {
-    expect(() => generateQrCodeMatrix("x".repeat(3000))).toThrow(QrCodeError);
+    expect(() => generateQrCodeMatrix("x".repeat(4000))).toThrow(QrCodeError);
   });
 });

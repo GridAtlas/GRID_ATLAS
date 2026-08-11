@@ -1,16 +1,11 @@
-const VERSION_DATA = [
-  null,
-  { totalCodewords: 26, ecCodewords: 10, groups: [{ count: 1, dataCodewords: 16 }] },
-  { totalCodewords: 44, ecCodewords: 16, groups: [{ count: 1, dataCodewords: 28 }] },
-  { totalCodewords: 70, ecCodewords: 26, groups: [{ count: 1, dataCodewords: 44 }] },
-  { totalCodewords: 100, ecCodewords: 18, groups: [{ count: 2, dataCodewords: 32 }] },
-  { totalCodewords: 134, ecCodewords: 24, groups: [{ count: 2, dataCodewords: 43 }] },
-  { totalCodewords: 172, ecCodewords: 16, groups: [{ count: 4, dataCodewords: 27 }] },
-  { totalCodewords: 196, ecCodewords: 18, groups: [{ count: 4, dataCodewords: 31 }] },
-  { totalCodewords: 242, ecCodewords: 22, groups: [{ count: 2, dataCodewords: 38 }, { count: 2, dataCodewords: 39 }] },
-  { totalCodewords: 292, ecCodewords: 22, groups: [{ count: 3, dataCodewords: 36 }, { count: 2, dataCodewords: 37 }] },
-  { totalCodewords: 346, ecCodewords: 26, groups: [{ count: 4, dataCodewords: 43 }, { count: 1, dataCodewords: 44 }] }
-];
+const TOTAL_CODEWORDS = [0, 26, 44, 70, 100, 134, 172, 196, 242, 292, 346, 404, 466, 532, 581, 655, 733, 815, 901, 991, 1085, 1156, 1258, 1364, 1474, 1588, 1706, 1828, 1921, 2051, 2185, 2323, 2465, 2611, 2761, 2876, 3034, 3196, 3362, 3532, 3706];
+const EC_CODEWORDS_PER_BLOCK = [0, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26, 30, 22, 22, 24, 24, 28, 28, 26, 26, 26, 26, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28];
+const ERROR_CORRECTION_BLOCKS = [0, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 6, 6, 7, 8, 8, 8, 9, 9, 10, 12, 12, 12, 13, 14, 15, 16, 17, 18, 19, 19, 20, 21, 22, 24, 25];
+const VERSION_DATA = TOTAL_CODEWORDS.map((totalCodewords, version) => version === 0 ? null : ({
+  totalCodewords,
+  ecCodewords: EC_CODEWORDS_PER_BLOCK[version],
+  blockCount: ERROR_CORRECTION_BLOCKS[version]
+}));
 
 const ALIGNMENT_POSITIONS = [
   [],
@@ -22,7 +17,37 @@ const ALIGNMENT_POSITIONS = [
   [6, 22, 38],
   [6, 24, 42],
   [6, 26, 46],
-  [6, 28, 50]
+  [6, 28, 50],
+  [6, 30, 54],
+  [6, 32, 58],
+  [6, 34, 62],
+  [6, 26, 46, 66],
+  [6, 26, 48, 70],
+  [6, 26, 50, 74],
+  [6, 30, 54, 78],
+  [6, 30, 56, 82],
+  [6, 30, 58, 86],
+  [6, 34, 62, 90],
+  [6, 28, 50, 72, 94],
+  [6, 26, 50, 74, 98],
+  [6, 30, 54, 78, 102],
+  [6, 28, 54, 80, 106],
+  [6, 32, 58, 84, 110],
+  [6, 30, 58, 86, 114],
+  [6, 34, 62, 90, 118],
+  [6, 26, 50, 74, 98, 122],
+  [6, 30, 54, 78, 102, 126],
+  [6, 26, 52, 78, 104, 130],
+  [6, 30, 56, 82, 108, 134],
+  [6, 34, 60, 86, 112, 138],
+  [6, 30, 58, 86, 114, 142],
+  [6, 34, 62, 90, 118, 146],
+  [6, 30, 54, 78, 102, 126, 150],
+  [6, 24, 50, 76, 102, 128, 154],
+  [6, 28, 54, 80, 106, 132, 158],
+  [6, 32, 58, 84, 110, 136, 162],
+  [6, 26, 54, 82, 110, 138, 166],
+  [6, 30, 58, 86, 114, 142, 170]
 ];
 
 export class QrCodeError extends Error {
@@ -55,10 +80,8 @@ export function generateQrCodeMatrix(text) {
 function chooseVersion(byteLength) {
   for (let version = 1; version < VERSION_DATA.length; version += 1) {
     const lengthBits = version < 10 ? 8 : 16;
-    const capacityBits = VERSION_DATA[version].groups.reduce(
-      (total, group) => total + group.count * group.dataCodewords * 8,
-      0
-    );
+    const versionData = VERSION_DATA[version];
+    const capacityBits = (versionData.totalCodewords - versionData.blockCount * versionData.ecCodewords) * 8;
     if (4 + lengthBits + byteLength * 8 <= capacityBits) return version;
   }
   throw new QrCodeError("QRコードに収まらない長さです");
@@ -66,10 +89,7 @@ function chooseVersion(byteLength) {
 
 function createCodewords(bytes, version) {
   const versionData = VERSION_DATA[version];
-  const dataCodewordCount = versionData.groups.reduce(
-    (total, group) => total + group.count * group.dataCodewords,
-    0
-  );
+  const dataCodewordCount = versionData.totalCodewords - versionData.blockCount * versionData.ecCodewords;
   const bitBuffer = [];
   appendBits(bitBuffer, 0b0100, 4);
   appendBits(bitBuffer, bytes.length, version < 10 ? 8 : 16);
@@ -88,12 +108,13 @@ function createCodewords(bytes, version) {
 
   const blocks = [];
   let offset = 0;
-  for (const group of versionData.groups) {
-    for (let blockIndex = 0; blockIndex < group.count; blockIndex += 1) {
-      const data = dataCodewords.slice(offset, offset + group.dataCodewords);
-      offset += group.dataCodewords;
-      blocks.push({ data, ecc: reedSolomonRemainder(data, versionData.ecCodewords) });
-    }
+  const shortBlockDataCodewords = Math.floor(versionData.totalCodewords / versionData.blockCount) - versionData.ecCodewords;
+  const longBlockCount = versionData.totalCodewords % versionData.blockCount;
+  for (let blockIndex = 0; blockIndex < versionData.blockCount; blockIndex += 1) {
+    const dataLength = shortBlockDataCodewords + (blockIndex >= versionData.blockCount - longBlockCount ? 1 : 0);
+    const data = dataCodewords.slice(offset, offset + dataLength);
+    offset += dataLength;
+    blocks.push({ data, ecc: reedSolomonRemainder(data, versionData.ecCodewords) });
   }
 
   const result = [];

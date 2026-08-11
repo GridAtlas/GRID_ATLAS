@@ -57,7 +57,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1157";
+const WEB_VERSION = "0.1168";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -137,6 +137,10 @@ const elements = {
   textInputDialogValue: document.querySelector("#textInputDialogValue"),
   textInputDialogCancelButton: document.querySelector("#textInputDialogCancelButton"),
   textInputDialogSubmitButton: document.querySelector("#textInputDialogSubmitButton"),
+  textInputDialogDefaultActions: document.querySelector("#textInputDialogDefaultActions"),
+  textInputDialogShareActions: document.querySelector("#textInputDialogShareActions"),
+  textInputShareQrButton: document.querySelector("#textInputShareQrButton"),
+  textInputShareFileButton: document.querySelector("#textInputShareFileButton"),
   actionCopyToListButton: document.querySelector("#actionCopyToListButton"),
   actionMoveToListButton: document.querySelector("#actionMoveToListButton"),
   actionShareSelectedButton: document.querySelector("#actionShareSelectedButton"),
@@ -193,10 +197,6 @@ const elements = {
   shareLinkDialogStatus: document.querySelector("#shareLinkDialogStatus"),
   shareLinkCopyButton: document.querySelector("#shareLinkCopyButton"),
   shareLinkNativeButton: document.querySelector("#shareLinkNativeButton"),
-  shareChoiceDialog: document.querySelector("#shareChoiceDialog"),
-  shareChoiceSummary: document.querySelector("#shareChoiceSummary"),
-  shareChoiceQrButton: document.querySelector("#shareChoiceQrButton"),
-  shareChoiceFileButton: document.querySelector("#shareChoiceFileButton"),
   qrCodeDialog: document.querySelector("#qrCodeDialog"),
   qrCodeSummary: document.querySelector("#qrCodeSummary"),
   qrCodeCanvas: document.querySelector("#qrCodeCanvas"),
@@ -408,6 +408,7 @@ let pendingPointShare = null;
 let appToastTimerId = 0;
 let pendingConfirmResolve = null;
 let pendingTextInputResolve = null;
+let pendingTextInputOptions = null;
 let activeStorageListDrag = null;
 let activePointIndexDrag = null;
 
@@ -732,6 +733,7 @@ const TRANSLATIONS = {
     "list.shareSelectedNamePrompt": "共有するリスト名",
     "list.shareSelectedDefaultName": "選択地点",
     "list.shareSelectedUnavailable": "共有する地点を選択してください",
+    "list.shareMethodPrivacy": "QRコードは画像を含まないURL、ファイル共有は地点・メモ・画像を含みます。",
     "list.sharePrivacy": "地点名・緯度経度・コメントを含みます。画像は含みません。",
     "list.shareValue": "共有リンク",
     "list.shareCancel": "キャンセル",
@@ -744,10 +746,8 @@ const TRANSLATIONS = {
     "list.shareCopyFailed": "共有リンクをコピーできませんでした。表示されたリンクを長押ししてコピーできます",
     "list.shareGenerateFailed": "共有リンクを作れませんでした。リスト内容を確認してください",
     "list.shareNativeFailed": "共有画面を開けませんでした",
-    "list.shareChoiceTitle": "共有方法を選択",
-    "list.shareChoicePrivacy": "QRコードは画像を含まないURL、.gridatlasは地点情報・メモ・画像を含みます。",
     "list.shareChoiceQr": "QRコード",
-    "list.shareChoiceFile": ".gridatlasファイル",
+    "list.shareChoiceFile": "ファイル共有",
     "list.qrTitle": "QRコードで共有",
     "list.qrHint": "相手のカメラで読み取ると、GRID ATLASで地点リストを開けます。",
     "list.qrCopy": "URLをコピー",
@@ -1030,6 +1030,7 @@ const TRANSLATIONS = {
     "list.shareSelectedNamePrompt": "Name for the shared list",
     "list.shareSelectedDefaultName": "Selected points",
     "list.shareSelectedUnavailable": "Select points to share",
+    "list.shareMethodPrivacy": "The QR code contains a URL without images; file sharing includes points, notes, and images.",
     "list.sharePrivacy": "Includes names, coordinates, and notes. Images are not included.",
     "list.shareValue": "Share link",
     "list.shareCancel": "Cancel",
@@ -1042,10 +1043,8 @@ const TRANSLATIONS = {
     "list.shareCopyFailed": "Could not copy the link. You can press and hold the displayed link to copy it",
     "list.shareGenerateFailed": "Could not create the share link. Check the list contents",
     "list.shareNativeFailed": "Could not open the share sheet",
-    "list.shareChoiceTitle": "Choose a sharing method",
-    "list.shareChoicePrivacy": "The QR code contains a URL without images; the .gridatlas file contains points, notes, and images.",
     "list.shareChoiceQr": "QR code",
-    "list.shareChoiceFile": ".gridatlas file",
+    "list.shareChoiceFile": "File share",
     "list.qrTitle": "Share by QR code",
     "list.qrHint": "Scan this with the other device’s camera to open the point list in GRID ATLAS.",
     "list.qrCopy": "Copy URL",
@@ -9477,6 +9476,7 @@ function requestTextInput(options = {}) {
   if (pendingTextInputResolve) {
     const resolve = pendingTextInputResolve;
     pendingTextInputResolve = null;
+    pendingTextInputOptions = null;
     resolve(null);
   }
   if (dialog.open) {
@@ -9490,9 +9490,12 @@ function requestTextInput(options = {}) {
   elements.textInputDialogValue.value = options.defaultValue ?? "";
   elements.textInputDialogValue.maxLength = options.maxLength ?? 80;
   elements.textInputDialogSubmitButton.textContent = options.submitLabel || cloudText("決定", "Done");
+  elements.textInputDialogDefaultActions.hidden = options.shareMode === true;
+  elements.textInputDialogShareActions.hidden = options.shareMode !== true;
 
   const result = new Promise((resolve) => {
     pendingTextInputResolve = resolve;
+    pendingTextInputOptions = options;
   });
   dialog.showModal();
   elements.textInputDialogValue.focus();
@@ -9619,7 +9622,7 @@ async function sharePointListLink(list, options = {}) {
   }
 }
 
-async function sharePointListFile(list) {
+async function sharePointListFile(list, options = {}) {
   if (!list) {
     setShareFeedback(t("list.shareUnavailable"), { error: true });
     return;
@@ -9629,13 +9632,15 @@ async function sharePointListFile(list) {
   const summary = t("list.shareSummary")
     .replace("{name}", title)
     .replace("{count}", String(list.points.length));
-  const confirmed = await requestConfirm({
-    title: t("list.exportDialogTitle"),
-    message: `${summary}\n${t("list.exportPrivacy")}\n\n${t("list.exportConfirm")}`,
-    confirmLabel: t("list.export"),
-    danger: false
-  });
-  if (!confirmed) return;
+  if (options.confirm !== false) {
+    const confirmed = await requestConfirm({
+      title: t("list.exportDialogTitle"),
+      message: `${summary}\n${t("list.exportPrivacy")}\n\n${t("list.exportConfirm")}`,
+      confirmLabel: t("list.export"),
+      danger: false
+    });
+    if (!confirmed) return;
+  }
 
   try {
     const archive = await buildPointListGridAtlasPackage(list);
@@ -9670,27 +9675,6 @@ async function shareStorageListFile(storageId) {
   await sharePointListFile(entry?.local || entry?.preview);
 }
 
-function openPointShareChoice(list) {
-  if (!list) {
-    setShareFeedback(t("list.shareUnavailable"), { error: true });
-    return;
-  }
-  if (!elements.shareChoiceDialog?.showModal) {
-    void sharePointListFile(list);
-    return;
-  }
-
-  const title = list.name || "地点リスト";
-  const summary = t("list.shareSummary")
-    .replace("{name}", title)
-    .replace("{count}", String(list.points.length));
-  pendingPointShare = { list, title, summary, url: "" };
-  elements.shareChoiceSummary.textContent = summary;
-  if (elements.shareChoiceDialog.open) elements.shareChoiceDialog.close("replace");
-  elements.shareChoiceDialog.showModal();
-  elements.shareChoiceQrButton.focus();
-}
-
 function pointListShareUrl(list) {
   const document = pointListGridAtlasUrlDocument(list);
   const url = gridAtlasShareUrl(document);
@@ -9722,9 +9706,17 @@ function drawQrCode(canvasElement, matrix) {
   }
 }
 
-async function openPendingQrCode() {
-  const share = pendingPointShare;
-  if (!share) return;
+async function openQrCodeForList(list) {
+  if (!list) {
+    setShareFeedback(t("list.shareUnavailable"), { error: true });
+    return;
+  }
+  const title = list.name || "地点リスト";
+  const summary = t("list.shareSummary")
+    .replace("{name}", title)
+    .replace("{count}", String(list.points.length));
+  const share = { list, title, summary, url: "" };
+  pendingPointShare = share;
   try {
     const url = pointListShareUrl(share.list);
     const matrix = generateQrCodeMatrix(url);
@@ -9732,9 +9724,9 @@ async function openPendingQrCode() {
     drawQrCode(elements.qrCodeCanvas, matrix);
     elements.qrCodeSummary.textContent = share.summary;
     elements.qrCodeDialogStatus.value = "";
-    if (elements.shareChoiceDialog.open) elements.shareChoiceDialog.close("qr");
     elements.qrCodeDialog.showModal();
   } catch (error) {
+    pendingPointShare = null;
     console.warn("GRID ATLAS QR code generation failed", error);
     setShareFeedback(error instanceof QrCodeError ? t("list.qrTooLong") : t("list.qrGenerateFailed"), {
       error: true,
@@ -9757,12 +9749,14 @@ async function shareSelectedPointsLink() {
   const defaultName = t("list.shareSelectedDefaultName");
   const input = await requestTextInput({
     title: t("list.shareSelectedNamePrompt"),
+    message: t("list.shareMethodPrivacy"),
     label: t("field.name"),
     defaultValue: defaultName,
-    submitLabel: t("action.shareSelected")
+    submitLabel: t("action.shareSelected"),
+    shareMode: true
   });
   if (input === null) return;
-  const name = input.trim() || defaultName;
+  const name = input.value.trim() || defaultName;
   const now = new Date().toISOString();
   const list = {
     id: createId(),
@@ -9774,7 +9768,11 @@ async function shareSelectedPointsLink() {
     gridAtlas: { documentId: createId() },
     points: points.map(clonePlain)
   };
-  openPointShareChoice(list);
+  if (input.action === "qr") {
+    await openQrCodeForList(list);
+  } else if (input.action === "file") {
+    await sharePointListFile(list, { confirm: false });
+  }
 }
 function gridAtlasFileLikely(file) {
   return Boolean(file) && (
@@ -10639,10 +10637,22 @@ function bindEvents() {
   });
   elements.textInputDialog.addEventListener("close", () => {
     const resolve = pendingTextInputResolve;
+    const options = pendingTextInputOptions || {};
+    const returnValue = elements.textInputDialog.returnValue || "cancel";
     pendingTextInputResolve = null;
-    resolve?.(elements.textInputDialog.returnValue === "submit"
-      ? elements.textInputDialogValue.value
-      : null);
+    pendingTextInputOptions = null;
+    if (!resolve) return;
+    if (returnValue === "submit") {
+      resolve(options.shareMode === true
+        ? { value: elements.textInputDialogValue.value, action: "submit" }
+        : elements.textInputDialogValue.value);
+      return;
+    }
+    if (options.shareMode === true && (returnValue === "share-qr" || returnValue === "share-file")) {
+      resolve({ value: elements.textInputDialogValue.value, action: returnValue.slice("share-".length) });
+      return;
+    }
+    resolve(null);
   });
   elements.textInputDialog.addEventListener("click", (event) => {
     if (event.target === elements.textInputDialog) elements.textInputDialog.close("cancel");
@@ -10684,20 +10694,9 @@ function bindEvents() {
   elements.shareLinkDialog.addEventListener("click", (event) => {
     if (event.target === elements.shareLinkDialog) elements.shareLinkDialog.close("cancel");
   });
-  elements.shareChoiceQrButton.addEventListener("click", () => void openPendingQrCode());
-  elements.shareChoiceFileButton.addEventListener("click", () => {
-    const list = pendingPointShare?.list;
-    pendingPointShare = null;
-    if (elements.shareChoiceDialog.open) elements.shareChoiceDialog.close("file");
-    void sharePointListFile(list);
-  });
-  elements.shareChoiceDialog.addEventListener("close", () => {
-    if (elements.shareChoiceDialog.returnValue !== "qr") pendingPointShare = null;
-    elements.shareChoiceSummary.textContent = "";
-  });
-  elements.shareChoiceDialog.addEventListener("click", (event) => {
-    if (event.target === elements.shareChoiceDialog) elements.shareChoiceDialog.close("cancel");
-  });
+  elements.textInputShareQrButton.addEventListener("click", () => elements.textInputDialog.close("share-qr"));
+  elements.textInputShareFileButton.addEventListener("click", () => elements.textInputDialog.close("share-file"));
+  document.querySelector("[data-share-action-cancel]")?.addEventListener("click", () => elements.textInputDialog.close("cancel"));
   elements.qrCodeCopyButton.addEventListener("click", async () => {
     const url = pendingPointShare?.url;
     if (!url) return;
