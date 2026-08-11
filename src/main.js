@@ -48,25 +48,12 @@ const GPS_ENABLED_KEY = "grid-atlas-gps-enabled";
 const CLOUD_ACCESS_TOKEN_KEY = "grid-atlas-cloud-access-token";
 const CLOUD_PRODUCTION_API_URL = "https://grid-atlas-cloud-staging.kazki1981.workers.dev";
 const CLOUD_AUTO_REFRESH_INTERVAL_MS = 30_000;
-const BUILTIN_KINKI_PENTAGRAM_PRESET = {
-  id: "builtin-kinki-pentagram",
-  name: "近畿五芒星",
-  description: "近畿の五芒星として紹介される5地点の検証用リスト。",
-  documentId: "kinki-pentagram",
-  points: [
-    { id: "ise-jingu-naiku", title: "伊勢神宮（皇大神宮 内宮）", geo: { lat: 34.455, lng: 136.725175 } },
-    { id: "kumano-hongu-taisha", title: "熊野本宮大社", geo: { lat: 33.84056, lng: 135.77340000000004 } },
-    { id: "izanagi-jingu", title: "伊弉諾神宮", geo: { lat: 34.460133, lng: 134.85250599999995 } },
-    { id: "mt-ibuki", title: "伊吹山 山頂", geo: { lat: 35.41778, lng: 136.40639 } },
-    { id: "6fee750f-f995-460c-a7ef-3e5f1003f962", title: "元伊勢 皇大神社", geo: { lat: 35.430408, lng: 135.15432699999997 } }
-  ]
-};
 const PASTEL_THEME = "pastel";
 const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0994";
+const WEB_VERSION = "0.1004";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -387,7 +374,6 @@ let pendingConfirmResolve = null;
 let pendingTextInputResolve = null;
 let activeStorageListDrag = null;
 let activePointIndexDrag = null;
-let initialPresetFitPending = false;
 
 const CANVAS_PALETTES = {
   pastel: {
@@ -1218,23 +1204,10 @@ function loadWorkspace() {
   const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem("grid-atlas-workspace-v1");
   if (!raw) {
     applyWorkspace({
-      pointLists: [
-        {
-          id: BUILTIN_KINKI_PENTAGRAM_PRESET.id,
-          name: BUILTIN_KINKI_PENTAGRAM_PRESET.name,
-          description: BUILTIN_KINKI_PENTAGRAM_PRESET.description,
-          visible: true,
-          editable: false,
-          source: "import",
-          importedAt: new Date().toISOString(),
-          gridAtlas: { documentId: BUILTIN_KINKI_PENTAGRAM_PRESET.documentId },
-          points: BUILTIN_KINKI_PENTAGRAM_PRESET.points
-        }
-      ],
+      pointLists: [createLocalPointList()],
       activePointListId: DEFAULT_POINT_LIST_ID
     });
     persistWorkspace();
-    initialPresetFitPending = true;
     return;
   }
 
@@ -1280,12 +1253,7 @@ function applyWorkspace(workspace) {
     state.pointLists = [createLocalPointList(points)];
   }
 
-  let presetNameChanged = false;
   for (const list of state.pointLists) {
-    if (list.id === BUILTIN_KINKI_PENTAGRAM_PRESET.id && list.name !== BUILTIN_KINKI_PENTAGRAM_PRESET.name) {
-      list.name = BUILTIN_KINKI_PENTAGRAM_PRESET.name;
-      presetNameChanged = true;
-    }
     if (list.id === DEFAULT_POINT_LIST_ID) {
       list.editable = true;
       list.source = "local";
@@ -1331,7 +1299,7 @@ function applyWorkspace(workspace) {
   state.editingPointId = null;
   state.lastDeleted = null;
   state.pendingGeo = null;
-  if (activeListVisibilityChanged || presetNameChanged) {
+  if (activeListVisibilityChanged) {
     persistWorkspace();
   }
 }
@@ -9819,6 +9787,12 @@ async function deleteSelectedPoint() {
     return;
   }
 
+  const linksWithSnapshots = state.links.map((link) => (
+    deletionPointIdSet.size > 0
+      ? linkWithDeletedEndpointSnapshots(link, deletionPointIdSet)
+      : link
+  ));
+
   if (cloudPointIdSet.size > 0) {
     const cloudLists = state.cloud.pointLists.filter((list) => (
       list.points.some((point) => cloudPointIdSet.has(point.id))
@@ -9839,11 +9813,6 @@ async function deleteSelectedPoint() {
     }
   }
 
-  const linksWithSnapshots = state.links.map((link) => (
-    deletionPointIdSet.size > 0
-      ? linkWithDeletedEndpointSnapshots(link, deletionPointIdSet)
-      : link
-  ));
   state.lastDeleted = {
     points: state.points.filter((item) => pointIdSet.has(item.id)).map(clonePlain),
     links: state.links.filter((item) => (
@@ -10293,9 +10262,5 @@ handleIncomingShare();
 locateOnStartup();
 registerServiceWorker();
 render();
-if (initialPresetFitPending) {
-  initialPresetFitPending = false;
-  fitToPoints();
-}
 restorePointInfoMapReturn();
 if (state.cloud.connected && !state.cloud.authConfigured) void refreshCloudLists();
