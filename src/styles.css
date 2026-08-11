@@ -2322,7 +2322,7 @@ textarea {
 .grid-point-quick-dialog {
   position: fixed;
   z-index: 20;
-  width: min(330px, calc(100vw - 20px));
+  width: min(250px, calc(100vw - 20px));
   margin: 0;
   padding: 0;
   border: 1px solid var(--line-strong);
