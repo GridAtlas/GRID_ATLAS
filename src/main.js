@@ -66,7 +66,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.0990";
+const WEB_VERSION = "0.0991";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -9334,7 +9334,7 @@ async function gridAtlasPackageToPointList(gridAtlasPackage, existingPointIds, e
     };
   });
 
-  const displayName = options.conflict
+  const displayName = options.conflict && !options.preserveName
     ? `${document.name}${cloudText("（更新版）", " (updated)")}`
     : document.name;
   const createdAt = document.createdAt || new Date().toISOString();
@@ -9427,7 +9427,7 @@ async function importGridAtlasPackages(packages, options = {}) {
         gridAtlasPackage,
         existingPointIds,
         existingListIds,
-        { conflict }
+        { conflict, preserveName: options.source === "preset" }
       );
       importedLists.push(imported.list);
       importedLinks.push(...imported.links);
