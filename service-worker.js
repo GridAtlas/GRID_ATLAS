@@ -1,9 +1,9 @@
-const CACHE_NAME = "grid-atlas-static-v267";
+const CACHE_NAME = "grid-atlas-static-v269";
 const STATIC_ASSETS = [
   "./",
   "./index.html",
   "./src/styles.css?v=64",
-  "./src/main.js?v=259",
+  "./src/main.js?v=261",
   "./src/cloud-client.js?v=2",
   "./src/gridatlas-import.js?v=2",
   "./src/gridatlas-assets.js?v=1",
@@ -30,26 +30,8 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    const oldStaticCacheKeys = keys.filter((key) => key.startsWith("grid-atlas-static-") && key !== CACHE_NAME);
     await Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)));
     await self.clients.claim();
-
-    if (oldStaticCacheKeys.length === 0) {
-      return;
-    }
-
-    const windowClients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    for (const client of windowClients) {
-      const url = new URL(client.url);
-      if (url.origin !== self.location.origin) {
-        continue;
-      }
-
-      client.postMessage({ type: "GRID_ATLAS_UPDATE_ACTIVATED" });
-      if ("navigate" in client) {
-        client.navigate(client.url).catch(() => null);
-      }
-    }
   })());
 });
 

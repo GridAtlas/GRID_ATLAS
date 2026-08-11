@@ -590,78 +590,85 @@ textarea:focus-visible {
   display: none;
 }
 
-.mobile-overview-top,
-.mobile-overview-metrics {
+.mobile-overview-context,
+.mobile-overview-field-grid {
   min-width: 0;
   display: grid;
 }
 
-.mobile-overview-top {
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-  gap: 10px;
+.mobile-overview-context {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: var(--field-bg);
 }
 
-.mobile-overview-block {
+.mobile-overview-context > span {
+  color: var(--accent-strong);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.mobile-overview-context > strong,
+.mobile-overview-field > span,
+.mobile-overview-field > strong {
   min-width: 0;
-  display: grid;
-  gap: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.mobile-overview-block > span,
-.mobile-overview-metric > span {
+.mobile-overview-context > strong {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.mobile-overview-field-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.mobile-overview-field {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  grid-column: span 2;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field-bg);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
+}
+
+.mobile-overview-field-wide {
+  grid-column: span 3;
+}
+
+.mobile-overview-field > span {
+  color: var(--muted);
+  font-size: 9px;
   font-weight: 800;
   line-height: 1;
   letter-spacing: 0.04em;
   white-space: nowrap;
 }
 
-.mobile-overview-block > strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 15px;
-  line-height: 1.2;
-}
-
-.mobile-overview-info > strong {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.mobile-overview-metrics {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  border-top: 1px solid var(--line);
-}
-
-.mobile-overview-metric {
-  min-width: 0;
-  display: grid;
-  gap: 4px;
-  padding: 7px 6px 0;
-  border-left: 1px solid var(--line);
-}
-
-.mobile-overview-metric:first-child {
-  padding-left: 0;
-  border-left: 0;
-}
-
-.mobile-overview-metric > strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.mobile-overview-field > strong {
   color: var(--accent-strong);
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 900;
-  line-height: 1;
+  line-height: 1.1;
 }
 
-:root[data-theme="retro"] .mobile-overview-metric > strong {
+:root[data-theme="retro"] .mobile-overview-field > strong {
   text-shadow: 0 0 8px rgb(44 255 100 / 0.24);
 }
 
@@ -1898,8 +1905,8 @@ textarea {
   .mobile-overview-panel {
     display: grid;
     min-width: 0;
-    gap: 8px;
-    padding: 8px 12px 7px;
+    gap: 4px;
+    padding: 6px 12px 7px;
     border-block: 1px solid var(--line);
     background: linear-gradient(90deg, var(--surface-strong), var(--surface));
   }

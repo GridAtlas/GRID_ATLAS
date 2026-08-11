@@ -56,7 +56,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1069";
+const WEB_VERSION = "0.1080";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
@@ -155,12 +155,14 @@ const elements = {
   systemUpdateVersion: document.querySelector("#systemUpdateVersion"),
   statusLine: document.querySelector("#statusLine"),
   selectionInfoText: document.querySelector("#selectionInfoText"),
-  mobileSelectedTitle: document.querySelector("#mobileSelectedTitle"),
   mobileSelectionInfoText: document.querySelector("#mobileSelectionInfoText"),
   mobileDisplayedPointCount: document.querySelector("#mobileDisplayedPointCount"),
   mobileSelectedPointCount: document.querySelector("#mobileSelectedPointCount"),
   mobilePointDistance: document.querySelector("#mobilePointDistance"),
   mobileSelectedLinkCount: document.querySelector("#mobileSelectedLinkCount"),
+  mobileFirstSelection: document.querySelector("#mobileFirstSelection"),
+  mobileLastSelection: document.querySelector("#mobileLastSelection"),
+  mobileDistanceType: document.querySelector("#mobileDistanceType"),
   sidebarSelectedTitle: document.querySelector("#sidebarSelectedTitle"),
   mapColumn: document.querySelector(".map-column"),
   sidebar: document.querySelector(".sidebar"),
@@ -523,7 +525,10 @@ const TRANSLATIONS = {
     "mobileOverview.selection": "選択地点",
     "mobileOverview.displayed": "表示地点",
     "mobileOverview.selected": "選択地点",
-    "mobileOverview.distance": "地点間距離",
+    "mobileOverview.distance": "距離",
+    "mobileOverview.distanceType": "距離種別",
+    "mobileOverview.firstSelection": "第1選択",
+    "mobileOverview.lastSelection": "最終選択",
     "mobileOverview.lines": "選択線",
     "state.unselected": "未選択",
     "state.noPoints": "地点なし",
@@ -793,7 +798,10 @@ const TRANSLATIONS = {
     "mobileOverview.selection": "Selected point",
     "mobileOverview.displayed": "Shown",
     "mobileOverview.selected": "Selected",
-    "mobileOverview.distance": "Between",
+    "mobileOverview.distance": "Distance",
+    "mobileOverview.distanceType": "Distance type",
+    "mobileOverview.firstSelection": "First",
+    "mobileOverview.lastSelection": "Last",
     "mobileOverview.lines": "Lines",
     "state.unselected": "None",
     "state.noPoints": "No points",
@@ -3035,7 +3043,6 @@ function renderSelectedSummary() {
   } else if (state.selection.length > 0) {
     title = state.selection.map(selectionTitle).join(", ");
   }
-  elements.mobileSelectedTitle.textContent = title;
   elements.sidebarSelectedTitle.textContent = title;
 }
 
@@ -3043,17 +3050,53 @@ function renderMobileOverview() {
   const visiblePointCount = visibleSelectablePoints().length;
   const selectedPoints = selectedPointIds().map(findPoint).filter(Boolean);
   const selectedLinks = selectedLinkIds().map(findLink).filter(Boolean);
-  const distance = selectedPoints.length === 2
-    ? distanceBetween(selectedPoints[0], selectedPoints[1])
-    : selectedPoints.length > 2
-      ? pointSequenceDistance(selectedPoints)
-      : NaN;
+  const distanceState = mobileDistanceState(selectedPoints, selectedLinks);
+  const firstSelection = state.selection.at(0);
+  const lastSelection = state.selection.at(-1);
 
   elements.mobileSelectionInfoText.textContent = mobileSelectionInfoText();
   elements.mobileDisplayedPointCount.textContent = String(visiblePointCount);
   elements.mobileSelectedPointCount.textContent = String(selectedPoints.length);
-  elements.mobilePointDistance.textContent = Number.isFinite(distance) ? formatDistance(distance) : "—";
+  elements.mobilePointDistance.textContent = Number.isFinite(distanceState.distance)
+    ? formatDistance(distanceState.distance)
+    : "—";
   elements.mobileSelectedLinkCount.textContent = String(selectedLinks.length);
+  elements.mobileFirstSelection.textContent = firstSelection ? selectionTitle(firstSelection) : "—";
+  elements.mobileLastSelection.textContent = lastSelection ? selectionTitle(lastSelection) : "—";
+  elements.mobileDistanceType.textContent = distanceState.type;
+}
+
+function mobileDistanceState(selectedPoints, selectedLinks) {
+  if (selectedPoints.length === 2) {
+    return {
+      distance: distanceBetween(selectedPoints[0], selectedPoints[1]),
+      type: t("label.betweenTwo")
+    };
+  }
+
+  if (selectedPoints.length > 2) {
+    return {
+      distance: pointSequenceDistance(selectedPoints),
+      type: t("label.sequence")
+    };
+  }
+
+  if (selectedPoints.length === 1) {
+    const current = currentLocationPoint();
+    if (current) {
+      return {
+        distance: distanceBetween(current, selectedPoints[0]),
+        type: t("label.fromCurrent")
+      };
+    }
+  }
+
+  const linkDistance = selectedLinksDistance(selectedLinks);
+  if (Number.isFinite(linkDistance)) {
+    return { distance: linkDistance, type: t("label.linkTotal") };
+  }
+
+  return { distance: NaN, type: "—" };
 }
 
 function validMobilePageName(value) {
@@ -3150,25 +3193,21 @@ function mobileSelectionInfoText() {
   }
 
   if (points.length === 1 && links.length === 0 && selectedObservationIds().length === 0) {
-    const current = currentLocationPoint();
-    if (current) {
-      return `${t("label.fromCurrent")} ${formatDistance(distanceBetween(current, points[0]))}`;
-    }
     const geo = pointGeo(points[0]);
     return `${formatCoordinate(geo.lat)}, ${formatCoordinate(geo.lng)}`;
   }
 
-  if (points.length === 2 && links.length === 0) {
-    return `${t("label.betweenTwo")} ${formatDistance(distanceBetween(points[0], points[1]))}`;
-  }
-
-  if (points.length > 2 && links.length === 0) {
-    return `${t("label.sequence")} ${formatDistance(pointSequenceDistance(points))}`;
+  if (points.length > 1 && links.length === 0) {
+    return activeLanguage() === EN_LANGUAGE
+      ? `${points.length} points selected`
+      : `${points.length}点を選択中`;
   }
 
   const linkTotal = selectedLinksDistance(links);
   if (links.length > 0 && Number.isFinite(linkTotal)) {
-    return `${links.length}${t("label.links")} · ${t("label.linkTotal")} ${formatDistance(linkTotal)}`;
+    return activeLanguage() === EN_LANGUAGE
+      ? `${links.length} lines selected`
+      : `${links.length}線を選択中`;
   }
 
   return selectionInfoText();
@@ -8954,16 +8993,10 @@ function registerServiceWorker() {
       reloadForServiceWorker();
     }
   });
-  navigator.serviceWorker.addEventListener("message", (event) => {
-    if (event.data?.type === "GRID_ATLAS_UPDATE_ACTIVATED") {
-      reloadForServiceWorker();
-    }
-  });
 
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("./service-worker.js", { updateViaCache: "none" }).then((registration) => {
       activateWaitingServiceWorker(registration);
-      registration.update().catch(() => {});
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
         worker?.addEventListener("statechange", () => {
