@@ -214,7 +214,7 @@ async function loadJwks(url) {
   try {
     response = await fetch(url, {
       headers: { Accept: "application/json" },
-      redirect: "error"
+      redirect: "follow"
     });
   } catch {
     throw new AuthError("認証鍵を取得できません", 503);
