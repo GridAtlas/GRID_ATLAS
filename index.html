@@ -31,6 +31,7 @@
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=70">
     <script src="src/main.js?v=293" type="module" defer></script>
+    <script src="src/cloud-password.js?v=1" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -147,6 +148,21 @@
                       <button id="cloudSignOutButton" type="button" data-i18n="cloud.signOut">ログアウト</button>
                     </div>
                     <output id="cloudAuthStatus" class="form-status cloud-status" aria-live="polite"></output>
+                    <section id="cloudPasswordPanel" class="cloud-password-panel" hidden>
+                      <span class="cloud-auth-title">招待ユーザーの初回設定</span>
+                      <label>
+                        <span>新しいパスワード</span>
+                        <input id="cloudNewPassword" type="password" autocomplete="new-password">
+                      </label>
+                      <label>
+                        <span>パスワード確認</span>
+                        <input id="cloudNewPasswordConfirm" type="password" autocomplete="new-password">
+                      </label>
+                      <div class="button-row">
+                        <button id="cloudSetPasswordButton" class="primary-button" type="button">パスワードを設定</button>
+                      </div>
+                      <output id="cloudPasswordStatus" class="form-status cloud-status" aria-live="polite"></output>
+                    </section>
                   </section>
                   <details class="cloud-access-code-section">
                     <summary data-i18n="cloud.accessCodeAdvanced">テスターアクセスコード</summary>
