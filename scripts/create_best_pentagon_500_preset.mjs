@@ -26,7 +26,7 @@ const manifest = {
     sha256: crypto.createHash("sha256").update(documentBytes).digest("hex"),
   },
   resources: [],
-  requiredExtensions: ["io.gridatlas.lines"],
+  requiredExtensions: [],
 };
 const manifestBytes = strToU8(`${JSON.stringify(manifest, null, 2)}\n`);
 fs.writeFileSync(outputPath, zipSync({ "manifest.json": manifestBytes, "document.json": documentBytes }));
