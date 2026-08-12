@@ -56,7 +56,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1235";
+const WEB_VERSION = "0.1236";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -663,8 +663,8 @@ const TRANSLATIONS = {
     "analysis.noSelection": "2本の線分、または閉じた線分群を選択してください",
     "analysis.lineHint": "選択した2本の有限線分が交差する点の角度を表示します。",
     "analysis.polygonHint": "選択した線分の接続順をそのまま閉路として測定します。",
-    "analysis.measurementDeclaration": "{shape} として測りました",
-    "analysis.measurementBasis": "基準 {shape}。頂点角 {angle}、基準 対角÷辺 {ratio}",
+    "analysis.measurementDeclaration": "対象: {shape}",
+    "analysis.measurementBasis": "比較: {shape}。頂点角 {angle}、基準 対角÷辺 {ratio}",
     "analysis.measurementCounts": "{points}地点 / 線{lines}本 / {selfIntersection}",
     "analysis.selfIntersection": "自己交差あり",
     "analysis.noSelfIntersection": "自己交差なし",
@@ -997,8 +997,8 @@ const TRANSLATIONS = {
     "analysis.noSelection": "Select two segments or a closed set of segments",
     "analysis.lineHint": "Shows the angle where the two selected finite segments cross.",
     "analysis.polygonHint": "Measures the selected segments as the closed walk they form, without reordering them.",
-    "analysis.measurementDeclaration": "Measured as {shape}",
-    "analysis.measurementBasis": "Reference {shape}. Vertex angle {angle}; reference diagonal/side {ratio}",
+    "analysis.measurementDeclaration": "Target: {shape}",
+    "analysis.measurementBasis": "Comparison: {shape}. Vertex angle {angle}; reference diagonal/side {ratio}",
     "analysis.measurementCounts": "{points} points / {lines} lines / {selfIntersection}",
     "analysis.selfIntersection": "self-intersecting",
     "analysis.noSelfIntersection": "not self-intersecting",
@@ -4019,7 +4019,7 @@ function selectionAnalysisText(target) {
   }
 
   const shape = polygonName(result.n, result.k, result.selfIntersections);
-  const referenceShape = polygonName(result.n, result.k);
+  const referenceShape = idealPolygonName(result.n, result.k);
   const selfIntersection = result.selfIntersections > 0 ? t("analysis.selfIntersection") : t("analysis.noSelfIntersection");
   return [
     `GRID ATLAS — ${t("analysis.polygonTitle")}`,
@@ -4079,7 +4079,7 @@ function renderPolygonAnalysisDialog(target) {
   }
 
   const shape = polygonName(result.n, result.k, result.selfIntersections);
-  const referenceShape = polygonName(result.n, result.k);
+  const referenceShape = idealPolygonName(result.n, result.k);
   const selfIntersection = result.selfIntersections > 0 ? t("analysis.selfIntersection") : t("analysis.noSelfIntersection");
   appendAnalysisText(elements.analysisDialogContent, "div", "analysis-measurement-declaration", t("analysis.measurementDeclaration").replace("{shape}", shape));
   appendAnalysisText(
@@ -4161,17 +4161,37 @@ function formatPercent(value) {
 }
 
 function polygonName(count, turn = 1, selfIntersections = 0) {
-  const symbol = `{${count}/${turn}}`;
+  const countLabel = activeLanguage() === EN_LANGUAGE ? String(count) : japanesePolygonCount(count);
   if (selfIntersections > 0 && turn === 1) {
-    return `${t("analysis.selfCrossingPolygon").replace("{n}", String(count))} ${symbol}`;
+    return activeLanguage() === EN_LANGUAGE ? t("analysis.selfCrossingPolygon").replace("{n}", countLabel) : `自己交差する${countLabel}角形`;
   }
   if (turn === 1) {
-    if (count === 3) return `${t("analysis.regularTriangle")} ${symbol}`;
-    if (count === 4) return `${t("analysis.square")} ${symbol}`;
-    if (count === 5) return `${t("analysis.regularPentagon")} ${symbol}`;
-    return `${t("analysis.regularPolygon").replace("{n}", String(count))} ${symbol}`;
+    return activeLanguage() === EN_LANGUAGE ? `${countLabel}-gon` : `${countLabel}角形`;
   }
-  return `${t("analysis.starPolygon").replace("{n}", String(count))} ${symbol}`;
+  return activeLanguage() === EN_LANGUAGE ? `${countLabel}-point star` : `${countLabel}芒星`;
+}
+
+function idealPolygonName(count, turn = 1) {
+  if (turn === 1) {
+    if (count === 3) return t("analysis.regularTriangle");
+    if (count === 4) return t("analysis.square");
+    if (count === 5) return t("analysis.regularPentagon");
+    return t("analysis.regularPolygon").replace("{n}", String(count));
+  }
+  return t("analysis.starPolygon").replace("{n}", String(count));
+}
+
+function japanesePolygonCount(count) {
+  return {
+    3: "三",
+    4: "四",
+    5: "五",
+    6: "六",
+    7: "七",
+    8: "八",
+    9: "九",
+    10: "十"
+  }[count] || String(count);
 }
 
 async function deleteGridLinkFromQuickDialog() {
