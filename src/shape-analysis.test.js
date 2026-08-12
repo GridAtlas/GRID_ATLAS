@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeLineIntersection, analyzeRegularPolygon, analyzeSegmentShape } from "./shape-analysis.js";
+import { analyzeLineIntersection, analyzeRegularPolygon, analyzeSegmentShape, vincentyDistanceMeters } from "./shape-analysis.js";
 
 describe("shape analysis", () => {
   it("finds the crossing angle of two finite segments", () => {
@@ -76,5 +76,12 @@ describe("shape analysis", () => {
 
     expect(result.valid).toBe(false);
     expect(result.reason).toBe("not-simple-cycle");
+  });
+
+  it("accepts both point objects and raw geographies for shared distance calculations", () => {
+    const first = { geo: { lat: 35.681236, lng: 139.767125 } };
+    const second = { lat: 35.689592, lng: 139.700413 };
+
+    expect(vincentyDistanceMeters(first, second)).toBeCloseTo(vincentyDistanceMeters(first.geo, second), 6);
   });
 });

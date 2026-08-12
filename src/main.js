@@ -28,7 +28,7 @@ import {
   readGridAtlasLineLayer,
   withoutGridAtlasLineLayer
 } from "./gridatlas-analysis.js?v=1";
-import { analyzeLineIntersection, analyzeSegmentShape } from "./shape-analysis.js?v=1";
+import { analyzeLineIntersection, analyzeSegmentShape, vincentyDistanceMeters } from "./shape-analysis.js?v=1";
 
 const STORAGE_KEY = "grid-atlas-workspace-v2";
 const ANALYSIS_LAYER_VERSION = 1;
@@ -56,7 +56,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1232";
+const WEB_VERSION = "0.1233";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -7818,14 +7818,7 @@ function distanceToSegment(point, start, end) {
   return Math.hypot(point.x - projection.x, point.y - projection.y);
 }
 function distanceBetween(a, b) {
-  const geoA = pointGeo(a);
-  const geoB = pointGeo(b);
-  const lat1 = toRadians(geoA.lat);
-  const lat2 = toRadians(geoB.lat);
-  const dLat = toRadians(geoB.lat - geoA.lat);
-  const dLng = toRadians(shortestLongitudeDelta(geoA.lng, geoB.lng));
-  const haversine = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-  return 2 * EARTH_RADIUS_METERS * Math.asin(Math.min(1, Math.sqrt(haversine)));
+  return vincentyDistanceMeters(pointGeo(a), pointGeo(b));
 }
 
 function formatDistance(distance) {

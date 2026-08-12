@@ -266,9 +266,9 @@ function orderAroundCenter(points) {
     .map(({ point }) => point);
 }
 
-function vincentyDistanceMeters(first, second) {
-  const firstGeo = first?.geo;
-  const secondGeo = second?.geo;
+export function vincentyDistanceMeters(first, second) {
+  const firstGeo = validGeo(first?.geo) ? first.geo : first;
+  const secondGeo = validGeo(second?.geo) ? second.geo : second;
   if (!validGeo(firstGeo) || !validGeo(secondGeo)) return haversineDistanceMeters(firstGeo, secondGeo);
 
   const phi1 = toRadians(firstGeo.lat);
