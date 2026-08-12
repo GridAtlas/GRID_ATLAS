@@ -2277,12 +2277,30 @@ textarea {
 
 .text-input-dialog-share-actions {
   display: grid;
-  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .text-input-dialog-share-actions button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
   min-height: 44px;
   font-weight: 800;
+  text-align: center;
+}
+
+.text-input-dialog-share-actions .share-action-button {
+  border-color: var(--accent);
+  background: var(--surface);
+  color: var(--accent-strong);
+}
+
+.text-input-dialog-share-actions button:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--active-bg);
+  color: var(--accent-strong);
 }
 
 .grid-point-quick-dialog {

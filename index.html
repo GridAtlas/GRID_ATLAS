@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=70">
-    <script src="src/main.js?v=287" type="module" defer></script>
+    <script src="src/main.js?v=289" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -585,7 +585,7 @@
         </div>
         <div id="textInputDialogShareActions" class="text-input-dialog-actions text-input-dialog-share-actions" hidden>
           <button class="compact-button" type="button" data-share-action-cancel data-i18n="action.cancel">キャンセル</button>
-          <button id="textInputShareFileButton" class="primary-button" type="button" data-i18n="list.export">.gridatlasを書き出し</button>
+          <button id="textInputShareFileButton" class="share-action-button" type="button" data-i18n="list.export">共有</button>
         </div>
       </form>
     </dialog>

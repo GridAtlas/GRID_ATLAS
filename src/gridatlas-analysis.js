@@ -21,6 +21,7 @@ export function buildGridAtlasLineLayer(links, toSharedPointId) {
 
     const item = { id, a, b };
     if (typeof link?.createdAt === "string" && link.createdAt) item.createdAt = link.createdAt;
+    if (typeof link?.strokeId === "string" && link.strokeId) item.strokeId = link.strokeId;
     items.push(item);
   }
 
@@ -55,7 +56,8 @@ export function readGridAtlasLineLayer(document, toLocalPointId, createLocalId) 
       id: createLocalId(),
       a,
       b,
-      ...(typeof item?.createdAt === "string" && item.createdAt ? { createdAt: item.createdAt } : {})
+      ...(typeof item?.createdAt === "string" && item.createdAt ? { createdAt: item.createdAt } : {}),
+      ...(typeof item?.strokeId === "string" && item.strokeId ? { strokeId: item.strokeId } : {})
     });
   }
   return links;

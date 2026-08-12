@@ -54,7 +54,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1178";
+const WEB_VERSION = "0.1189";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -64,6 +64,7 @@ const LINE_SELECTION_HIT_RADIUS = 16;
 const POINT_SELECTION_RING_WIDTH = 4;
 const POINTER_MOVE_THRESHOLD = 3;
 const RANGE_SELECTION_LONG_PRESS_MS = 450;
+const LINE_DRAG_LONG_PRESS_MS = 400;
 const LINE_INFO_LONG_PRESS_MS = 1000;
 const RANGE_SELECTION_MIN_SIZE = 8;
 const ZOOM_STAGE_NAMES = ["全体", "広域", "近景", "接近", "詳細", "超詳細", "精密", "最大"];
@@ -551,7 +552,7 @@ const TRANSLATIONS = {
     "action.copyToList": "コピー",
     "action.moveToList": "移動",
     "action.shareSelected": "共有",
-    "action.shareSelectedTitle": "選択地点を.gridatlasで共有",
+    "action.shareSelectedTitle": "選択地点を共有",
     "action.info": "情報",
     "action.delete": "削除",
     "delete.linksOnly": "線のみ",
@@ -624,6 +625,8 @@ const TRANSLATIONS = {
     "line.infoTitle": "線の情報",
     "line.deleteConfirm": "この線を削除しますか？",
     "line.deleted": "線を削除しました",
+    "line.closeShapeTitle": "図形を閉じますか？",
+    "line.closeShapeMessage": "3地点以上が選択されています。最後の地点から起点へ接続して図形を閉じますか？",
     "line.dragStatus": "接続先を変更中：{name} にドロップ",
     "line.reconnected": "「{old}」を「{new}」へ接続変更しました",
     "line.invalidTarget": "別の地点へドロップしてください",
@@ -703,14 +706,14 @@ const TRANSLATIONS = {
     "list.syncEnable": "クラウドへ移動",
     "list.syncDisable": "端末へ移動",
     "list.copy": "コピー",
-    "list.export": ".gridatlasを書き出し",
-    "list.exportDialogTitle": ".gridatlasを共有",
+    "list.export": "共有",
+    "list.exportDialogTitle": "共有の確認",
     "list.exportPrivacy": "地点名・緯度経度・コメント・保存済み画像を含みます。",
-    "list.exportConfirm": ".gridatlasファイルを作成しますか？",
+    "list.exportConfirm": "このリストを共有しますか？",
     "list.exportSummary": "「{name}」の{count}点",
-    "list.exported": ".gridatlasをダウンロードしました",
-    "list.exportCompleted": ".gridatlasを共有しました",
-    "list.exportFailed": ".gridatlasを書き出せませんでした。リスト内容を確認してください",
+    "list.exported": "共有ファイルを保存しました",
+    "list.exportCompleted": "共有しました",
+    "list.exportFailed": "共有ファイルを作成できませんでした。リスト内容を確認してください",
     "list.shareSelectedNamePrompt": "共有するリスト名",
     "list.shareSelectedDefaultName": "選択地点",
     "list.shareSelectedUnavailable": "共有する地点を選択してください",
@@ -826,7 +829,7 @@ const TRANSLATIONS = {
     "action.copyToList": "Copy",
     "action.moveToList": "Move",
     "action.shareSelected": "Share",
-    "action.shareSelectedTitle": "Share selected points as a .gridatlas file",
+    "action.shareSelectedTitle": "Share selected points",
     "action.info": "Info",
     "action.delete": "Delete",
     "delete.linksOnly": "Lines only",
@@ -899,6 +902,8 @@ const TRANSLATIONS = {
     "line.infoTitle": "Line Info",
     "line.deleteConfirm": "Delete this line?",
     "line.deleted": "Line deleted",
+    "line.closeShapeTitle": "Close the shape?",
+    "line.closeShapeMessage": "Three or more points are selected. Close the shape by connecting the last point back to the first?",
     "line.dragStatus": "Changing connection: drop on {name}",
     "line.reconnected": "Changed the connection from “{old}” to “{new}”",
     "line.invalidTarget": "Drop on a different point",
@@ -978,14 +983,14 @@ const TRANSLATIONS = {
     "list.syncEnable": "Move to cloud",
     "list.syncDisable": "Move to device",
     "list.copy": "Copy",
-    "list.export": "Export .gridatlas",
-    "list.exportDialogTitle": "Share .gridatlas",
+    "list.export": "Share",
+    "list.exportDialogTitle": "Confirm sharing",
     "list.exportPrivacy": "Includes names, coordinates, notes, and saved images.",
-    "list.exportConfirm": "Create a .gridatlas file?",
+    "list.exportConfirm": "Share this list?",
     "list.exportSummary": "{count} point(s) in “{name}”",
-    "list.exported": "Downloaded the .gridatlas file",
-    "list.exportCompleted": "Shared the .gridatlas file",
-    "list.exportFailed": "Could not export the .gridatlas file. Check the list contents",
+    "list.exported": "Saved the shared file",
+    "list.exportCompleted": "Shared",
+    "list.exportFailed": "Could not create the shared file. Check the list contents",
     "list.shareSelectedNamePrompt": "Name for the shared list",
     "list.shareSelectedDefaultName": "Selected points",
     "list.shareSelectedUnavailable": "Select points to share",
@@ -3444,7 +3449,7 @@ function renderActionButtons() {
     ? cloudText("移動先を選択", "Choose a move destination")
     : t("list.transferNoSelection");
   elements.actionShareSelectedButton.title = shareableSelectedPointCount > 0
-    ? cloudText(`選択した${shareableSelectedPointCount}地点を.gridatlasで共有`, `Share ${shareableSelectedPointCount} selected point(s) as a .gridatlas file`)
+    ? cloudText(`選択した${shareableSelectedPointCount}地点を共有`, `Share ${shareableSelectedPointCount} selected point(s)`)
     : t("list.shareSelectedUnavailable");
   elements.actionMapButton.classList.toggle("is-active", false);
   elements.pointSubmitButton.textContent = state.editingPointId ? t("button.update") : t("button.submitRegister");
@@ -3766,6 +3771,7 @@ async function deleteGridLinkFromQuickDialog() {
   if (!confirmed || !findLink(linkId)) return;
 
   state.links = state.links.filter((candidate) => candidate.id !== linkId);
+  splitDisconnectedStrokeGroups();
   removeSelectionEntry("link", linkId);
   if (state.selectedLinkId === linkId) state.selectedLinkId = null;
   persistWorkspace();
@@ -4485,6 +4491,7 @@ function renderAnalysis() {
     remove.append(createIcon("trash"));
     remove.addEventListener("click", () => {
       state.links = state.links.filter((link) => link.id !== item.link.id);
+      splitDisconnectedStrokeGroups();
       removeSelectionEntry("link", item.link.id);
       persistWorkspace();
       render();
@@ -5438,7 +5445,7 @@ function createStorageListRow(entry) {
   share.className = "storage-share-button";
   share.append(createIcon("share"));
   share.title = t("list.export");
-  share.setAttribute("aria-label", cloudText("「" + listName + "」を.gridatlasで共有", "Share “" + listName + "” as a .gridatlas file"));
+  share.setAttribute("aria-label", cloudText("「" + listName + "」を共有", "Share “" + listName + "”"));
   share.disabled = state.cloud.busy || (!entry.local && !entry.preview);
   share.addEventListener("click", () => void shareStorageListFile(entry.storageId));
 
@@ -6438,6 +6445,9 @@ function normalizeStoredLink(link) {
   }
 
   const next = { ...link };
+  if (typeof next.strokeId !== "string" || !next.strokeId) {
+    delete next.strokeId;
+  }
   for (const side of ["a", "b"]) {
     const endpointKey = `${side}Endpoint`;
     const legacySnapshotKey = `${side}Snapshot`;
@@ -6474,6 +6484,65 @@ function linkTitle(link) {
   const endpoints = linkEndpoints(link);
   return endpoints ? `${endpoints.a.title} - ${endpoints.b.title}` : "線";
 }
+
+function linkStrokeId(link) {
+  return typeof link?.strokeId === "string" && link.strokeId ? link.strokeId : null;
+}
+
+function linksInStroke(linkOrId) {
+  const link = typeof linkOrId === "string" ? findLink(linkOrId) : linkOrId;
+  if (!link) return [];
+  const strokeId = linkStrokeId(link);
+  return strokeId
+    ? state.links.filter((candidate) => linkStrokeId(candidate) === strokeId)
+    : [link];
+}
+
+function splitDisconnectedStrokeGroups() {
+  const groupedLinks = new Map();
+  for (const link of state.links) {
+    const strokeId = linkStrokeId(link);
+    if (!strokeId) continue;
+    const group = groupedLinks.get(strokeId) || [];
+    group.push(link);
+    groupedLinks.set(strokeId, group);
+  }
+
+  let changed = false;
+  for (const links of groupedLinks.values()) {
+    if (links.length < 2) continue;
+
+    const remaining = new Set(links);
+    const components = [];
+    while (remaining.size > 0) {
+      const component = [];
+      const queue = [remaining.values().next().value];
+      remaining.delete(queue[0]);
+      while (queue.length > 0) {
+        const current = queue.shift();
+        component.push(current);
+        const currentEndpoints = new Set([current.a, current.b]);
+        for (const candidate of [...remaining]) {
+          if (!currentEndpoints.has(candidate.a) && !currentEndpoints.has(candidate.b)) continue;
+          remaining.delete(candidate);
+          queue.push(candidate);
+        }
+      }
+      components.push(component);
+    }
+
+    if (components.length < 2) continue;
+    for (const component of components.slice(1)) {
+      const nextStrokeId = createId();
+      for (const link of component) {
+        link.strokeId = nextStrokeId;
+      }
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 function selectionKey(type, id) {
   return `${type}:${id}`;
 }
@@ -6499,7 +6568,7 @@ function isValidSelectionEntry(entry) {
   return false;
 }
 
-function normalizeSelection() {
+function normalizeSelection(options = {}) {
   const unique = [];
   const seen = new Set();
 
@@ -6517,7 +6586,21 @@ function normalizeSelection() {
     unique.push({ type: entry.type, id: entry.id });
   }
 
-  state.selection = unique;
+  const expanded = [...unique];
+  const expandedKeys = new Set(unique.map((entry) => selectionKey(entry.type, entry.id)));
+  if (options.expandLinkGroups !== false) {
+    for (const entry of unique) {
+      if (entry.type !== "link") continue;
+      for (const link of linksInStroke(entry.id)) {
+        const key = selectionKey("link", link.id);
+        if (expandedKeys.has(key)) continue;
+        expandedKeys.add(key);
+        expanded.push({ type: "link", id: link.id });
+      }
+    }
+  }
+
+  state.selection = expanded;
   const primary = primarySelection();
   state.selectedPointId = primary?.type === "point" ? primary.id : null;
   state.selectedLinkId = primary?.type === "link" ? primary.id : null;
@@ -6713,7 +6796,7 @@ function selectedLink() {
 
 function setSelection(entries, options = {}) {
   state.selection = entries;
-  normalizeSelection();
+  normalizeSelection({ expandLinkGroups: options.expandLinkGroups });
 
   if (options.clearPending !== false) {
     state.pendingGeo = null;
@@ -6728,6 +6811,20 @@ function setSelection(entries, options = {}) {
 }
 
 function toggleSelection(type, id) {
+  if (type === "link") {
+    const groupIds = new Set(linksInStroke(id).map((link) => link.id));
+    const groupIsSelected = state.selection.some((entry) => entry.type === "link" && groupIds.has(entry.id));
+    const next = groupIsSelected
+      ? state.selection.filter((entry) => entry.type !== "link" || !groupIds.has(entry.id))
+      : [
+        ...state.selection.filter((entry) => entry.type !== "link" || !groupIds.has(entry.id)),
+        ...[...groupIds].map((linkId) => ({ type: "link", id: linkId }))
+      ];
+    state.mode = "inspect";
+    setSelection(next);
+    return;
+  }
+
   const key = selectionKey(type, id);
   const exists = state.selection.some((entry) => selectionKey(entry.type, entry.id) === key);
   const next = exists
@@ -7016,8 +7113,9 @@ function finishLineDrag(lineDrag, screenPoint) {
     updatedAt: new Date().toISOString()
   };
   state.links = state.links.map((candidate) => candidate.id === link.id ? normalizeStoredLink(next) : candidate);
+  splitDisconnectedStrokeGroups();
   persistWorkspace();
-  selectLink(link.id);
+  selectLink(link.id, { expandLinkGroups: false });
   showAppToast(t("line.reconnected")
     .replace("{old}", previous?.title || "線")
     .replace("{new}", target.title));
@@ -7099,12 +7197,24 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
-function connectSelectedPoints() {
+async function connectSelectedPoints() {
   const pointIds = selectedPointIds();
   if (pointIds.length < 2) {
     return;
   }
 
+  let closeShape = false;
+  if (pointIds.length >= 3) {
+    closeShape = await requestConfirm({
+      title: t("line.closeShapeTitle"),
+      message: t("line.closeShapeMessage"),
+      cancelLabel: cloudText("いいえ", "No"),
+      confirmLabel: cloudText("はい", "Yes"),
+      danger: false
+    });
+  }
+
+  const strokeId = createId();
   let created = false;
   for (let index = 1; index < pointIds.length; index += 1) {
     const a = pointIds[index - 1];
@@ -7117,12 +7227,13 @@ function connectSelectedPoints() {
       id: createId(),
       a,
       b,
+      strokeId,
       createdAt: new Date().toISOString()
     }));
     created = true;
   }
 
-  if (pointIds.length >= 3) {
+  if (closeShape) {
     const a = pointIds.at(-1);
     const b = pointIds[0];
     if (!findLinkBetween(a, b)) {
@@ -7130,6 +7241,7 @@ function connectSelectedPoints() {
         id: createId(),
         a,
         b,
+        strokeId,
         createdAt: new Date().toISOString()
       }));
       created = true;
@@ -7263,8 +7375,8 @@ function selectPoint(pointId) {
   setSelection([{ type: "point", id: pointId }]);
 }
 
-function selectLink(linkId) {
-  setSelection([{ type: "link", id: linkId }]);
+function selectLink(linkId, options = {}) {
+  setSelection([{ type: "link", id: linkId }], options);
 }
 
 function findNearestLoadedObservation(screenPoint) {
@@ -7835,14 +7947,31 @@ function startDragGesture(pointerId, point, options = {}) {
     longPressed: false,
     longPressPoint,
     longPressLink,
+    lineDragReady: false,
     lineDrag: null,
     cancelled: false,
-    longPressTimerId: null
+    longPressTimerId: null,
+    lineDragReadyTimerId: null
   };
   state.pointer.drag = drag;
 
   if (!options.moved) {
     const longPressDelay = longPressLink ? LINE_INFO_LONG_PRESS_MS : RANGE_SELECTION_LONG_PRESS_MS;
+    if (longPressLink) {
+      drag.lineDragReadyTimerId = window.setTimeout(() => {
+        if (
+          state.pointer.drag !== drag
+          || state.pointer.active.size !== 1
+          || drag.moved
+          || drag.cancelled
+          || drag.longPressed
+        ) {
+          return;
+        }
+
+        drag.lineDragReady = true;
+      }, LINE_DRAG_LONG_PRESS_MS);
+    }
     drag.longPressTimerId = window.setTimeout(() => {
       if (
         state.pointer.drag !== drag
@@ -7853,6 +7982,7 @@ function startDragGesture(pointerId, point, options = {}) {
         return;
       }
 
+      drag.lineDragReady = false;
       drag.longPressed = true;
       if (drag.longPressPoint) {
         openGridPointQuickDialog(drag.longPressPoint, drag.start);
@@ -7874,12 +8004,15 @@ function startDragGesture(pointerId, point, options = {}) {
 }
 
 function clearDragLongPressTimer(drag) {
-  if (!drag?.longPressTimerId) {
+  if (!drag) {
     return;
   }
 
-  window.clearTimeout(drag.longPressTimerId);
+  if (drag.longPressTimerId) window.clearTimeout(drag.longPressTimerId);
+  if (drag.lineDragReadyTimerId) window.clearTimeout(drag.lineDragReadyTimerId);
   drag.longPressTimerId = null;
+  drag.lineDragReadyTimerId = null;
+  drag.lineDragReady = false;
 }
 
 function clearRangeSelectionPreview() {
@@ -10570,18 +10703,26 @@ function bindEvents() {
     const dy = point.y - drag.start.y;
 
     if (Math.hypot(dx, dy) > POINTER_MOVE_THRESHOLD) {
-      clearDragLongPressTimer(drag);
       if (drag.longPressLink) {
         if (drag.longPressed) {
           drag.last = point;
           return;
         }
-        beginLineDrag(drag, point);
-        updateLineDragTarget(drag, point);
-        draw();
-        renderStatus();
-        drag.last = point;
-        return;
+        if (drag.lineDragReady) {
+          clearDragLongPressTimer(drag);
+          beginLineDrag(drag, point);
+          updateLineDragTarget(drag, point);
+          draw();
+          renderStatus();
+          drag.last = point;
+          return;
+        }
+
+        clearDragLongPressTimer(drag);
+        drag.cancelled = true;
+        drag.longPressLink = null;
+      } else {
+        clearDragLongPressTimer(drag);
       }
       if (drag.longPressed) {
         if (drag.longPressPoint) {
