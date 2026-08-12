@@ -6,9 +6,9 @@
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
     "WEB_ORIGINS": "http://localhost:5177,http://127.0.0.1:5177,http://localhost:4173,http://127.0.0.1:4173",
-    "AUTH_JWKS_URL": "",
-    "AUTH_ISSUER": "",
-    "AUTH_AUDIENCE": ""
+    "AUTH_JWKS_URL": "https://pjzwlsffctqqegnwwgrt.supabase.co/auth/v1/.well-known/jwks.json",
+    "AUTH_ISSUER": "https://pjzwlsffctqqegnwwgrt.supabase.co/auth/v1",
+    "AUTH_AUDIENCE": "authenticated"
   },
   "r2_buckets": [
     {
@@ -36,9 +36,9 @@
       "preview_urls": false,
       "vars": {
         "WEB_ORIGINS": "https://gridatlas.github.io",
-        "AUTH_JWKS_URL": "",
-        "AUTH_ISSUER": "",
-        "AUTH_AUDIENCE": "",
+        "AUTH_JWKS_URL": "https://pjzwlsffctqqegnwwgrt.supabase.co/auth/v1/.well-known/jwks.json",
+        "AUTH_ISSUER": "https://pjzwlsffctqqegnwwgrt.supabase.co/auth/v1",
+        "AUTH_AUDIENCE": "authenticated",
         "PERSONAL_OWNER_ID": "personal-beta",
         "FRIEND_OWNER_ID": "friend-beta"
       },
