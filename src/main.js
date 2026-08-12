@@ -47,6 +47,7 @@ const PUBLIC_PRESET_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const GPS_ENABLED_KEY = "grid-atlas-gps-enabled";
 
 const CLOUD_ACCESS_TOKEN_KEY = "grid-atlas-cloud-access-token";
+const CLOUD_PASSWORD_SETUP_KEY_PREFIX = "grid-atlas-cloud-password-set:";
 const CLOUD_PRODUCTION_API_URL = "https://grid-atlas-cloud-staging.kazki1981.workers.dev";
 const CLOUD_AUTO_REFRESH_INTERVAL_MS = 30_000;
 const PASTEL_THEME = "pastel";
@@ -54,7 +55,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1205";
+const WEB_VERSION = "0.1206";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -5641,6 +5642,28 @@ function loadCloudSettings() {
   state.cloud.connected = Boolean(state.cloud.apiUrl && token);
 }
 
+function cloudPasswordSetupKey(userId) {
+  return userId ? `${CLOUD_PASSWORD_SETUP_KEY_PREFIX}${userId}` : "";
+}
+
+function hasCloudPasswordSetup(userId) {
+  const key = cloudPasswordSetupKey(userId);
+  if (!key) return false;
+  try {
+    return localStorage.getItem(key) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function markCloudPasswordSetup(userId) {
+  const key = cloudPasswordSetupKey(userId);
+  if (!key) return;
+  try {
+    localStorage.setItem(key, "true");
+  } catch {}
+}
+
 function cloudText(ja, en) {
   return activeLanguage() === EN_LANGUAGE ? en : ja;
 }
@@ -5655,11 +5678,12 @@ function renderCloudAuthControls() {
   if (!elements.cloudAuthPanel) return;
   elements.cloudAuthPanel.hidden = !state.cloud.authConfigured;
   const signedIn = Boolean(state.cloud.authSession?.access_token);
+  const passwordSetupComplete = hasCloudPasswordSetup(state.cloud.authUser?.id);
   const busy = state.cloud.busy || state.cloud.authBusy;
   if (elements.cloudSignUpButton) elements.cloudSignUpButton.disabled = busy || signedIn;
   if (elements.cloudSignInButton) elements.cloudSignInButton.disabled = busy || signedIn;
   if (elements.cloudSignOutButton) elements.cloudSignOutButton.disabled = busy || !signedIn;
-  if (elements.cloudPasswordPanel) elements.cloudPasswordPanel.hidden = !signedIn;
+  if (elements.cloudPasswordPanel) elements.cloudPasswordPanel.hidden = !signedIn || passwordSetupComplete;
   if (elements.cloudSetPasswordButton) elements.cloudSetPasswordButton.disabled = busy || !signedIn;
   if (signedIn && state.cloud.authUser?.email && elements.cloudAuthStatus && !elements.cloudAuthStatus.classList.contains("is-error")) {
     elements.cloudAuthStatus.textContent = cloudText(
@@ -5714,6 +5738,7 @@ async function setCloudPassword() {
   try {
     const { error } = await state.cloud.authClient.auth.updateUser({ password });
     if (error) throw error;
+    markCloudPasswordSetup(state.cloud.authUser?.id);
     elements.cloudNewPassword.value = "";
     elements.cloudNewPasswordConfirm.value = "";
     setCloudPasswordStatus("パスワードを設定しました。次回から通常ログインできます");
@@ -5804,6 +5829,7 @@ async function signInCloud() {
   try {
     const { data, error } = await state.cloud.authClient.auth.signInWithPassword({ email, password });
     if (error) throw error;
+    markCloudPasswordSetup(data.user?.id);
     applyCloudAuthSession(data.session, { forceRefresh: true });
     setCloudAuthStatus(cloudText("ログインしました", "Signed in"));
   } catch (error) {
