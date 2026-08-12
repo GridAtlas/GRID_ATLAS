@@ -55,7 +55,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1209";
+const WEB_VERSION = "0.1210";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -5802,6 +5802,9 @@ function applyCloudAuthSession(session, options = {}) {
     }
   } else if (!state.cloud.testerCode && !elements.cloudAccessToken?.value.trim()) {
     state.cloud.connected = false;
+    state.cloud.canUseMine = false;
+    state.cloud.testerActive = false;
+    state.cloud.testerError = "";
     state.cloud.lists = [];
     state.cloud.pointLists = [];
     state.cloud.pointRows = [];
