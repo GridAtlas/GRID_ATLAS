@@ -55,7 +55,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1207";
+const WEB_VERSION = "0.1208";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -337,6 +337,7 @@ const state = {
     lastFetchedAt: 0,
     lastAutoRefreshAt: 0,
     hiddenListIds: new Set(),
+    testerSharedListIds: new Set(),
     listOrder: [],
   },
   analysisLayer: {
@@ -740,6 +741,8 @@ const TRANSLATIONS = {
     "list.addFavorite": "お気に入りに追加",
     "list.removeFavorite": "お気に入りから外す",
     "list.favoriteStatus": "お気に入り",
+    "list.moveToTesterShared": "テスター共有へ移動",
+    "list.moveToMineCloud": "マイリスト（クラウド）へ戻す",
     "list.delete": "削除",
     "list.showOnGrid": "グリッドに表示",
     "list.selectOnGrid": "このリストを選択してグリッド表示",
@@ -759,6 +762,7 @@ const TRANSLATIONS = {
     "list.movedPoints": "「{name}」へ{count}地点を移動しました",
     "list.section.mineDevice": "マイリスト（端末内）",
     "list.section.mineCloud": "マイリスト（クラウド）",
+    "list.section.testerShared": "テスター共有リスト",
     "list.section.imported": "インポートリスト",
 
     "list.none": "リストなし",
@@ -1017,6 +1021,8 @@ const TRANSLATIONS = {
     "list.addFavorite": "Add to favorites",
     "list.removeFavorite": "Remove from favorites",
     "list.favoriteStatus": "Favorite",
+    "list.moveToTesterShared": "Move to Tester Shared",
+    "list.moveToMineCloud": "Return to My Lists (Cloud)",
     "list.delete": "Delete",
     "list.showOnGrid": "Show on grid",
     "list.selectOnGrid": "Select this list on the grid",
@@ -1036,6 +1042,7 @@ const TRANSLATIONS = {
     "list.movedPoints": "Moved {count} point(s) to “{name}”",
     "list.section.mineDevice": "My Lists (Device)",
     "list.section.mineCloud": "My Lists (Cloud)",
+    "list.section.testerShared": "Tester Shared Lists",
     "list.section.imported": "Imported Lists",
 
     "list.none": "No lists",
@@ -1292,6 +1299,11 @@ function applyWorkspace(workspace) {
   state.cloud.hiddenListIds = new Set(
     Array.isArray(workspace.cloudHiddenListIds)
       ? workspace.cloudHiddenListIds.filter((id) => typeof id === "string" && id)
+      : []
+  );
+  state.cloud.testerSharedListIds = new Set(
+    Array.isArray(workspace.testerSharedCloudListIds)
+      ? workspace.testerSharedCloudListIds.filter((id) => typeof id === "string" && id)
       : []
   );
   state.cloud.listOrder = Array.isArray(workspace.cloudListOrder)
@@ -2234,6 +2246,7 @@ function workspaceSnapshot() {
     favoriteListIds: [...state.favoriteListIds],
     analysisLayer: clonePlain(state.analysisLayer),
     cloudHiddenListIds: [...state.cloud.hiddenListIds],
+    testerSharedCloudListIds: [...state.cloud.testerSharedListIds],
     cloudListOrder: [...state.cloud.listOrder]
   };
 }
@@ -4826,7 +4839,7 @@ function storageListSectionEntryList(sectionKey) {
   if (sectionKey === "mineDevice" || sectionKey === "imported") {
     return state.pointLists.filter((list) => storageListSectionKey({ local: list }) === sectionKey);
   }
-  if (sectionKey === "mineCloud") {
+  if (sectionKey === "mineCloud" || sectionKey === "testerShared") {
     return state.cloud.pointLists;
   }
   return [];
@@ -4843,8 +4856,9 @@ async function reorderStorageLists(sourceEntry, targetEntry, before) {
   const targetIndex = lists.findIndex((list) => listKey(list) === targetKey);
   if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return false;
 
-  const previousCloudLists = sectionKey === "mineCloud" ? lists.slice() : null;
-  const previousCloudOrder = sectionKey === "mineCloud" ? state.cloud.listOrder.slice() : null;
+  const isCloudSection = sectionKey === "mineCloud" || sectionKey === "testerShared";
+  const previousCloudLists = isCloudSection ? lists.slice() : null;
+  const previousCloudOrder = isCloudSection ? state.cloud.listOrder.slice() : null;
   const [source] = lists.splice(sourceIndex, 1);
   let insertIndex = lists.findIndex((list) => listKey(list) === targetKey);
   if (!before) insertIndex += 1;
@@ -4852,16 +4866,16 @@ async function reorderStorageLists(sourceEntry, targetEntry, before) {
   if (sectionKey === "mineDevice" || sectionKey === "imported") {
     const other = state.pointLists.filter((list) => storageListSectionKey({ local: list }) !== sectionKey);
     state.pointLists = [...other, ...lists];
-  } else if (sectionKey === "mineCloud") {
+  } else if (isCloudSection) {
     state.cloud.pointLists = lists;
     state.cloud.listOrder = lists.map((list) => list.cloudId || list.id).filter(Boolean);
     applyCloudListOrder();
   }
   persistWorkspace();
-  setCloudStatus(sectionKey === "mineCloud" ? t("storage.dragReordering") : t("storage.dragReordered"), { menu: false });
+  setCloudStatus(isCloudSection ? t("storage.dragReordering") : t("storage.dragReordered"), { menu: false });
   render();
 
-  if (sectionKey !== "mineCloud") return true;
+  if (!isCloudSection) return true;
 
   setCloudBusy(true);
   setCloudProgress(0, 1, t("storage.dragReordering"));
@@ -5526,6 +5540,17 @@ function createStorageListRow(entry) {
     onClick: () => toggleStorageListFavorite(entry.storageId)
   });
 
+  if (entry.cloud) {
+    const testerShared = isTesterSharedCloudEntry(entry);
+    addEditAction("share", testerShared ? t("list.moveToMineCloud") : t("list.moveToTesterShared"), {
+      className: testerShared ? "is-active" : "",
+      disabled: state.cloud.busy,
+      pressed: testerShared,
+      title: testerShared ? t("list.moveToMineCloud") : t("list.moveToTesterShared"),
+      onClick: () => setTesterSharedCloudList(entry.storageId, !testerShared)
+    });
+  }
+
   addEditAction("trash", t("list.delete"), {
     className: "danger-button",
     disabled: state.cloud.busy || Boolean(entry.cloud && !state.cloud.connected),
@@ -5543,9 +5568,25 @@ function isMyCloudStorageEntry(entry) {
   return Boolean(entry?.cloud);
 }
 
+function isTesterSharedCloudEntry(entry) {
+  const cloudId = entry?.cloud?.id || entry?.preview?.cloudId || entry?.preview?.id;
+  return Boolean(cloudId && state.cloud.testerSharedListIds.has(cloudId));
+}
+
+function setTesterSharedCloudList(storageId, shared) {
+  const entry = findStorageListEntry(storageId);
+  if (!entry?.cloud?.id) return;
+  if (shared) state.cloud.testerSharedListIds.add(entry.cloud.id);
+  else state.cloud.testerSharedListIds.delete(entry.cloud.id);
+  persistWorkspace();
+  setCloudStatus(t(shared ? "list.moveToTesterShared" : "list.moveToMineCloud"), { menu: false });
+  renderStorageLists();
+}
+
 function storageListSectionKey(entry) {
   if (entry?.local?.importedAt) return "imported";
   if (entry?.local) return "mineDevice";
+  if (isMyCloudStorageEntry(entry) && isTesterSharedCloudEntry(entry)) return "testerShared";
   if (isMyCloudStorageEntry(entry)) return "mineCloud";
   return "";
 }
@@ -5608,6 +5649,7 @@ function renderStorageLists() {
   const sections = [{ key: "mineDevice", label: "list.section.mineDevice" }];
   if (state.cloud.connected || state.cloud.authSession?.access_token) {
     sections.push({ key: "mineCloud", label: "list.section.mineCloud" });
+    sections.push({ key: "testerShared", label: "list.section.testerShared" });
   }
   sections.push({ key: "imported", label: "list.section.imported" });
   for (const container of elements.storageListContainers) {
@@ -6294,6 +6336,7 @@ async function deleteStoredList(storageId, options = {}) {
     if (entry.cloud) {
       await cloudClientFromInputs().deleteList(entry.cloud.id, entry.cloud.revision);
       state.cloud.hiddenListIds.delete(entry.cloud.id);
+      state.cloud.testerSharedListIds.delete(entry.cloud.id);
     }
     if (entry.local) removeLocalListForStorageChange(entry.local.id);
     else persistWorkspace();
