@@ -4,7 +4,7 @@ import {
   createCloudClient,
   pointListToCloudPayload
 } from "./cloud-client.js?v=3";
-import { cloudAuthConfig, cloudAuthUrlState, createCloudAuthClient } from "./cloud-auth.js?v=1";
+import { cloudAuthConfig, cloudAuthUrlState, createCloudAuthClient } from "./cloud-auth.js?v=2";
 import {
   GRIDATLAS_MIME_TYPE,
   GRIDATLAS_URL_PARAMETER,
@@ -54,7 +54,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1204";
+const WEB_VERSION = "0.1205";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -5741,7 +5741,9 @@ async function initializeCloudAuth() {
   }
 
   state.cloud.authClient.auth.onAuthStateChange((_event, session) => {
-    applyCloudAuthSession(session, { forceRefresh: true });
+    // Supabase warns against calling other async auth methods directly from
+    // this callback. Defer the UI/cloud refresh until the auth lock is free.
+    queueMicrotask(() => applyCloudAuthSession(session, { forceRefresh: true }));
   });
   try {
     if (authUrlState.code) {
