@@ -54,7 +54,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1190";
+const WEB_VERSION = "0.1191";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -7947,7 +7947,6 @@ function startDragGesture(pointerId, point, options = {}) {
     longPressed: false,
     longPressPoint,
     longPressLink,
-    lineGesture: Boolean(longPressLink),
     lineDragReady: false,
     lineDrag: null,
     cancelled: false,
@@ -10729,7 +10728,6 @@ function bindEvents() {
         clearDragLongPressTimer(drag);
         drag.cancelled = true;
         drag.longPressLink = null;
-        drag.lineGesture = true;
       } else {
         clearDragLongPressTimer(drag);
       }
@@ -10741,10 +10739,6 @@ function bindEvents() {
         state.pointer.range.current = point;
         draw();
         renderStatus();
-        drag.last = point;
-        return;
-      }
-      if (drag.lineGesture) {
         drag.last = point;
         return;
       }
