@@ -18,6 +18,11 @@ https://gridatlas.github.io/GRID_ATLAS/?preset=kinki-pentagram
 - `kinki-pentagram`：近畿五芒星の5地点と五角形の線
 - `kinki-pentagram-sites-v3-200`：v3の200地点と五芒星の線
 - `kinki-shrine-temple-sites-v5-nested-500`：v5の包含型500地点
+- `kinki-pentagram-kurazoji`：庫蔵寺鎮守堂版（200地点版の総合1位）
+- `kinki-pentagram-rank1-of-500`：500地点版の総合1位
+- `kinki-pentagram-rank3-chubu`：中部の五角形（同3位）
+- `kinki-pentagram-rank5-nameless`：名もなき五角形（同5位）
+- `kinki-pentagram-overlay`：伊勢内宮＋庫蔵寺の6点・星の重ね合わせ
 
 ## 公開範囲
 
