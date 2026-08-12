@@ -91,6 +91,28 @@ describe("shape analysis", () => {
     expect(result.reason).toBe("not-simple-cycle");
   });
 
+  it("does not label a self-crossing five-edge cycle as a regular pentagon", () => {
+    const points = [
+      { id: "a", x: -1, y: -2 },
+      { id: "b", x: 1, y: -2 },
+      { id: "c", x: -2, y: 0 },
+      { id: "d", x: 0, y: 2 },
+      { id: "e", x: 2, y: 0 }
+    ];
+    const result = analyzeSegmentShape([
+      { a: points[0], b: points[1] },
+      { a: points[1], b: points[2] },
+      { a: points[2], b: points[3] },
+      { a: points[3], b: points[4] },
+      { a: points[4], b: points[0] }
+    ]);
+
+    expect(result.valid).toBe(true);
+    expect(result.k).toBe(1);
+    expect(result.selfIntersections).toBe(1);
+    expect(result.shapeKind).toBe("self-crossing");
+  });
+
   it("accepts both point objects and raw geographies for shared distance calculations", () => {
     const first = { geo: { lat: 35.681236, lng: 139.767125 } };
     const second = { lat: 35.689592, lng: 139.700413 };

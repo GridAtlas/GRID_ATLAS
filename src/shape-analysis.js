@@ -132,6 +132,7 @@ export function analyzeSegmentShape(segments) {
     k,
     turningNumber: Math.abs(Math.round(turning)),
     selfIntersections,
+    shapeKind: selfIntersections > 0 ? (k > 1 ? "star" : "self-crossing") : "polygon",
     sideLengths,
     angles,
     meanSide,

@@ -56,7 +56,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1234";
+const WEB_VERSION = "0.1235";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -706,6 +706,8 @@ const TRANSLATIONS = {
     "analysis.square": "正方形",
     "analysis.regularPentagon": "正五角形",
     "analysis.regularPolygon": "正{n}角形",
+    "analysis.selfCrossingPolygon": "自己交差する{n}角形",
+    "analysis.starPolygon": "正{n}芒星",
     "analysis.coordinates": "緯度経度",
     "metric.points": "地点",
     "metric.links": "線",
@@ -1038,6 +1040,8 @@ const TRANSLATIONS = {
     "analysis.square": "Square",
     "analysis.regularPentagon": "Regular pentagon",
     "analysis.regularPolygon": "Regular {n}-gon",
+    "analysis.selfCrossingPolygon": "Self-crossing {n}-gon",
+    "analysis.starPolygon": "Regular {n}-point star",
     "analysis.coordinates": "Coordinates",
     "metric.points": "Points",
     "metric.links": "Lines",
@@ -4014,7 +4018,8 @@ function selectionAnalysisText(target) {
     return [t("analysis.polygonTitle"), t("analysis.shapeOpen"), t("analysis.shapeOpenHint")].join("\n");
   }
 
-  const shape = polygonName(result.n, result.k);
+  const shape = polygonName(result.n, result.k, result.selfIntersections);
+  const referenceShape = polygonName(result.n, result.k);
   const selfIntersection = result.selfIntersections > 0 ? t("analysis.selfIntersection") : t("analysis.noSelfIntersection");
   return [
     `GRID ATLAS — ${t("analysis.polygonTitle")}`,
@@ -4024,7 +4029,7 @@ function selectionAnalysisText(target) {
       .replace("{lines}", String(target.links.length))
       .replace("{selfIntersection}", selfIntersection),
     t("analysis.measurementBasis")
-      .replace("{shape}", shape)
+      .replace("{shape}", referenceShape)
       .replace("{angle}", formatAngle(result.idealAngle))
       .replace("{ratio}", result.idealDiagonalToSide.toFixed(4)),
     `${t("analysis.sideVariation")}: ${formatPercent(result.sideRangePercent)}`,
@@ -4073,7 +4078,8 @@ function renderPolygonAnalysisDialog(target) {
     return;
   }
 
-  const shape = polygonName(result.n, result.k);
+  const shape = polygonName(result.n, result.k, result.selfIntersections);
+  const referenceShape = polygonName(result.n, result.k);
   const selfIntersection = result.selfIntersections > 0 ? t("analysis.selfIntersection") : t("analysis.noSelfIntersection");
   appendAnalysisText(elements.analysisDialogContent, "div", "analysis-measurement-declaration", t("analysis.measurementDeclaration").replace("{shape}", shape));
   appendAnalysisText(
@@ -4090,7 +4096,7 @@ function renderPolygonAnalysisDialog(target) {
     "div",
     "analysis-measurement-basis",
     t("analysis.measurementBasis")
-      .replace("{shape}", shape)
+      .replace("{shape}", referenceShape)
       .replace("{angle}", formatAngle(result.idealAngle))
       .replace("{ratio}", result.idealDiagonalToSide.toFixed(4))
   );
@@ -4154,15 +4160,18 @@ function formatPercent(value) {
   return Number.isFinite(value) ? `${value.toFixed(2)}%` : "-";
 }
 
-function polygonName(count, turn = 1) {
+function polygonName(count, turn = 1, selfIntersections = 0) {
   const symbol = `{${count}/${turn}}`;
+  if (selfIntersections > 0 && turn === 1) {
+    return `${t("analysis.selfCrossingPolygon").replace("{n}", String(count))} ${symbol}`;
+  }
   if (turn === 1) {
     if (count === 3) return `${t("analysis.regularTriangle")} ${symbol}`;
     if (count === 4) return `${t("analysis.square")} ${symbol}`;
     if (count === 5) return `${t("analysis.regularPentagon")} ${symbol}`;
     return `${t("analysis.regularPolygon").replace("{n}", String(count))} ${symbol}`;
   }
-  return `${count}${activeLanguage() === EN_LANGUAGE ? "-point star" : "芒星"} ${symbol}`;
+  return `${t("analysis.starPolygon").replace("{n}", String(count))} ${symbol}`;
 }
 
 async function deleteGridLinkFromQuickDialog() {
