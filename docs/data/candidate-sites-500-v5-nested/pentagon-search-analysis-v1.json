@@ -1,0 +1,778 @@
+{
+  "method": "deterministic seeded random sample plus three-round one-point local search; simple pentagon only; ranking uses the current analysis referenceScore formula",
+  "sampleCount": 2000000,
+  "population": 500,
+  "combinationCount": 255244687600,
+  "existingRank1": {
+    "approximateScore": 89.43695627136998,
+    "source": "existing-rank1",
+    "indices": [
+      117,
+      34,
+      168,
+      441,
+      495
+    ],
+    "places": [
+      {
+        "id": "kinki-shrine-temple-sites-v5-nested-118",
+        "name": "新長谷寺釈迦堂",
+        "prefecture": "岐阜県",
+        "latitude": 35.484791,
+        "longitude": 136.923094
+      },
+      {
+        "id": "kinki-shrine-temple-sites-v5-nested-035",
+        "name": "久能山東照宮",
+        "prefecture": "静岡県",
+        "latitude": 34.964821,
+        "longitude": 138.467591
+      },
+      {
+        "id": "kinki-shrine-temple-sites-v5-nested-169",
+        "name": "広徳寺大御堂",
+        "prefecture": "埼玉県",
+        "latitude": 35.977399,
+        "longitude": 139.504229
+      },
+      {
+        "id": "kinki-shrine-temple-sites-v5-nested-442",
+        "name": "松苧神社本殿",
+        "prefecture": "新潟県",
+        "latitude": 37.14768,
+        "longitude": 138.646386
+      },
+      {
+        "id": "kinki-shrine-temple-sites-v5-nested-496",
+        "name": "気多神社本殿",
+        "prefecture": "富山県",
+        "latitude": 36.80022,
+        "longitude": 137.044601
+      }
+    ],
+    "exact": {
+      "referenceScore": 88.80185079741591,
+      "sideRangePercent": 3.7712768735339646,
+      "maxAngleDeviation": 1.9740215459787294,
+      "maxAngleDeviationPercent": 1.8277977277580828,
+      "meanSide": 148700.31859030767,
+      "perimeter": 743501.5929515384,
+      "sideLengths": [
+        151979.13087643066,
+        146536.96538206624,
+        150869.67642515176,
+        147744.59011732673,
+        146371.23015056306
+      ],
+      "angles": [
+        107.70981636519748,
+        106.66786083247887,
+        109.63358405077581,
+        106.02597845402127,
+        109.96276029752657
+      ]
+    }
+  },
+  "best": [
+    {
+      "approximateScore": 89.43695627136998,
+      "source": "existing-rank1",
+      "indices": [
+        117,
+        34,
+        168,
+        441,
+        495
+      ],
+      "places": [
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-118",
+          "name": "新長谷寺釈迦堂",
+          "prefecture": "岐阜県",
+          "latitude": 35.484791,
+          "longitude": 136.923094
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-035",
+          "name": "久能山東照宮",
+          "prefecture": "静岡県",
+          "latitude": 34.964821,
+          "longitude": 138.467591
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-169",
+          "name": "広徳寺大御堂",
+          "prefecture": "埼玉県",
+          "latitude": 35.977399,
+          "longitude": 139.504229
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-442",
+          "name": "松苧神社本殿",
+          "prefecture": "新潟県",
+          "latitude": 37.14768,
+          "longitude": 138.646386
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-496",
+          "name": "気多神社本殿",
+          "prefecture": "富山県",
+          "latitude": 36.80022,
+          "longitude": 137.044601
+        }
+      ],
+      "exact": {
+        "referenceScore": 88.80185079741591,
+        "sideRangePercent": 3.7712768735339646,
+        "maxAngleDeviation": 1.9740215459787294,
+        "maxAngleDeviationPercent": 1.8277977277580828,
+        "meanSide": 148700.31859030767,
+        "perimeter": 743501.5929515384,
+        "sideLengths": [
+          151979.13087643066,
+          146536.96538206624,
+          150869.67642515176,
+          147744.59011732673,
+          146371.23015056306
+        ],
+        "angles": [
+          107.70981636519748,
+          106.66786083247887,
+          109.63358405077581,
+          106.02597845402127,
+          109.96276029752657
+        ]
+      }
+    },
+    {
+      "approximateScore": 47.39571717501471,
+      "source": "local-search",
+      "indices": [
+        186,
+        487,
+        454,
+        165,
+        365
+      ],
+      "places": [
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-187",
+          "name": "本願寺本堂",
+          "prefecture": "京都府",
+          "latitude": 35.601814,
+          "longitude": 134.90222
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-488",
+          "name": "島田神社本殿",
+          "prefecture": "京都府",
+          "latitude": 35.281597,
+          "longitude": 135.046828
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-455",
+          "name": "光明寺本堂内厨子",
+          "prefecture": "神奈川県",
+          "latitude": 35.358768,
+          "longitude": 139.288774
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-166",
+          "name": "立石寺三重小塔",
+          "prefecture": "山形県",
+          "latitude": 38.314993,
+          "longitude": 140.434131
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-366",
+          "name": "金峯神社本殿",
+          "prefecture": "山形県",
+          "latitude": 38.678886,
+          "longitude": 139.805579
+        }
+      ],
+      "exact": {
+        "referenceScore": 47.390276959880275,
+        "sideRangePercent": 185.60332535316792,
+        "maxAngleDeviation": 1.4092504416646534,
+        "maxAngleDeviationPercent": 1.3048615200598643,
+        "meanSide": 277752.646844595,
+        "perimeter": 1388763.2342229749,
+        "sideLengths": [
+          37876.13147593492,
+          385790.50531404157,
+          343597.43068216083,
+          68104.88647489353,
+          553394.280275944
+        ],
+        "angles": [
+          109.40925044166465,
+          107.63552730125346,
+          106.89198777498359,
+          109.09158016770085,
+          106.97165431439748
+        ]
+      }
+    },
+    {
+      "approximateScore": 47.39571717501471,
+      "source": "local-search",
+      "indices": [
+        186,
+        487,
+        454,
+        165,
+        365
+      ],
+      "places": [
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-187",
+          "name": "本願寺本堂",
+          "prefecture": "京都府",
+          "latitude": 35.601814,
+          "longitude": 134.90222
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-488",
+          "name": "島田神社本殿",
+          "prefecture": "京都府",
+          "latitude": 35.281597,
+          "longitude": 135.046828
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-455",
+          "name": "光明寺本堂内厨子",
+          "prefecture": "神奈川県",
+          "latitude": 35.358768,
+          "longitude": 139.288774
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-166",
+          "name": "立石寺三重小塔",
+          "prefecture": "山形県",
+          "latitude": 38.314993,
+          "longitude": 140.434131
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-366",
+          "name": "金峯神社本殿",
+          "prefecture": "山形県",
+          "latitude": 38.678886,
+          "longitude": 139.805579
+        }
+      ],
+      "exact": {
+        "referenceScore": 47.390276959880275,
+        "sideRangePercent": 185.60332535316792,
+        "maxAngleDeviation": 1.4092504416646534,
+        "maxAngleDeviationPercent": 1.3048615200598643,
+        "meanSide": 277752.646844595,
+        "perimeter": 1388763.2342229749,
+        "sideLengths": [
+          37876.13147593492,
+          385790.50531404157,
+          343597.43068216083,
+          68104.88647489353,
+          553394.280275944
+        ],
+        "angles": [
+          109.40925044166465,
+          107.63552730125346,
+          106.89198777498359,
+          109.09158016770085,
+          106.97165431439748
+        ]
+      }
+    },
+    {
+      "approximateScore": 46.35757430643954,
+      "source": "local-search",
+      "indices": [
+        190,
+        0,
+        465,
+        247,
+        397
+      ],
+      "places": [
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-191",
+          "name": "岡寺仁王門",
+          "prefecture": "奈良県",
+          "latitude": 34.471745,
+          "longitude": 135.827422
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-001",
+          "name": "伊勢神宮 内宮",
+          "prefecture": "三重県",
+          "latitude": 34.455,
+          "longitude": 136.7252
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-466",
+          "name": "建中寺徳川家御霊屋",
+          "prefecture": "愛知県",
+          "latitude": 35.179411,
+          "longitude": 136.927061
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-248",
+          "name": "御上神社拝殿",
+          "prefecture": "滋賀県",
+          "latitude": 35.049819,
+          "longitude": 136.027372
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-398",
+          "name": "住吉神社本殿",
+          "prefecture": "兵庫県",
+          "latitude": 34.94051,
+          "longitude": 135.116657
+        }
+      ],
+      "exact": {
+        "referenceScore": 46.23925627615538,
+        "sideRangePercent": 1.880371861922308,
+        "maxAngleDeviation": 69.83086452245718,
+        "maxAngleDeviationPercent": 64.65820789116405,
+        "meanSide": 83117.57708756554,
+        "perimeter": 415587.88543782773,
+        "sideLengths": [
+          82508.60011325916,
+          82458.88760040778,
+          83266.57598620492,
+          84021.80713227394,
+          83332.01460568192
+        ],
+        "angles": [
+          142.09830732279042,
+          101.27532128414518,
+          67.32651984592603,
+          177.83086452245718,
+          47.130716069595515
+        ]
+      }
+    },
+    {
+      "approximateScore": 46.35757430643954,
+      "source": "local-search",
+      "indices": [
+        190,
+        0,
+        465,
+        247,
+        397
+      ],
+      "places": [
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-191",
+          "name": "岡寺仁王門",
+          "prefecture": "奈良県",
+          "latitude": 34.471745,
+          "longitude": 135.827422
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-001",
+          "name": "伊勢神宮 内宮",
+          "prefecture": "三重県",
+          "latitude": 34.455,
+          "longitude": 136.7252
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-466",
+          "name": "建中寺徳川家御霊屋",
+          "prefecture": "愛知県",
+          "latitude": 35.179411,
+          "longitude": 136.927061
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-248",
+          "name": "御上神社拝殿",
+          "prefecture": "滋賀県",
+          "latitude": 35.049819,
+          "longitude": 136.027372
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-398",
+          "name": "住吉神社本殿",
+          "prefecture": "兵庫県",
+          "latitude": 34.94051,
+          "longitude": 135.116657
+        }
+      ],
+      "exact": {
+        "referenceScore": 46.23925627615538,
+        "sideRangePercent": 1.880371861922308,
+        "maxAngleDeviation": 69.83086452245718,
+        "maxAngleDeviationPercent": 64.65820789116405,
+        "meanSide": 83117.57708756554,
+        "perimeter": 415587.88543782773,
+        "sideLengths": [
+          82508.60011325916,
+          82458.88760040778,
+          83266.57598620492,
+          84021.80713227394,
+          83332.01460568192
+        ],
+        "angles": [
+          142.09830732279042,
+          101.27532128414518,
+          67.32651984592603,
+          177.83086452245718,
+          47.130716069595515
+        ]
+      }
+    },
+    {
+      "approximateScore": 46.01335920991061,
+      "source": "local-search",
+      "indices": [
+        69,
+        142,
+        141,
+        152,
+        204
+      ],
+      "places": [
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-070",
+          "name": "妙本寺番神堂",
+          "prefecture": "岡山県",
+          "latitude": 34.80976,
+          "longitude": 133.704363
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-143",
+          "name": "白峯寺",
+          "prefecture": "香川県",
+          "latitude": 34.343392,
+          "longitude": 133.910573
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-142",
+          "name": "金剛寺多宝塔",
+          "prefecture": "大阪府",
+          "latitude": 34.428285,
+          "longitude": 135.52939
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-153",
+          "name": "興臨院表門",
+          "prefecture": "京都府",
+          "latitude": 35.044208,
+          "longitude": 135.74296
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-205",
+          "name": "中島神社本殿",
+          "prefecture": "兵庫県",
+          "latitude": 35.525423,
+          "longitude": 134.862627
+        }
+      ],
+      "exact": {
+        "referenceScore": 46.01656515582854,
+        "sideRangePercent": 93.40526969061308,
+        "maxAngleDeviation": 2.1510548158525893,
+        "maxAngleDeviationPercent": 1.9917174220857308,
+        "meanSide": 100726.17156099349,
+        "perimeter": 503630.85780496744,
+        "sideLengths": [
+          55086.87566801195,
+          149170.42786358754,
+          71072.04798406,
+          96248.4164269385,
+          132053.0898623695
+        ],
+        "angles": [
+          107.34846431374207,
+          105.84894518414741,
+          109.01797057803162,
+          108.09198734383902,
+          109.69263258023992
+        ]
+      }
+    },
+    {
+      "approximateScore": 46.01335920991061,
+      "source": "local-search",
+      "indices": [
+        69,
+        142,
+        141,
+        152,
+        204
+      ],
+      "places": [
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-070",
+          "name": "妙本寺番神堂",
+          "prefecture": "岡山県",
+          "latitude": 34.80976,
+          "longitude": 133.704363
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-143",
+          "name": "白峯寺",
+          "prefecture": "香川県",
+          "latitude": 34.343392,
+          "longitude": 133.910573
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-142",
+          "name": "金剛寺多宝塔",
+          "prefecture": "大阪府",
+          "latitude": 34.428285,
+          "longitude": 135.52939
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-153",
+          "name": "興臨院表門",
+          "prefecture": "京都府",
+          "latitude": 35.044208,
+          "longitude": 135.74296
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-205",
+          "name": "中島神社本殿",
+          "prefecture": "兵庫県",
+          "latitude": 35.525423,
+          "longitude": 134.862627
+        }
+      ],
+      "exact": {
+        "referenceScore": 46.01656515582854,
+        "sideRangePercent": 93.40526969061308,
+        "maxAngleDeviation": 2.1510548158525893,
+        "maxAngleDeviationPercent": 1.9917174220857308,
+        "meanSide": 100726.17156099349,
+        "perimeter": 503630.85780496744,
+        "sideLengths": [
+          55086.87566801195,
+          149170.42786358754,
+          71072.04798406,
+          96248.4164269385,
+          132053.0898623695
+        ],
+        "angles": [
+          107.34846431374207,
+          105.84894518414741,
+          109.01797057803162,
+          108.09198734383902,
+          109.69263258023992
+        ]
+      }
+    },
+    {
+      "approximateScore": 45.699911603455604,
+      "source": "local-search",
+      "indices": [
+        238,
+        193,
+        187,
+        175,
+        305
+      ],
+      "places": [
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-239",
+          "name": "白山神社本殿",
+          "prefecture": "京都府",
+          "latitude": 34.720546,
+          "longitude": 135.885475
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-194",
+          "name": "室生寺本堂(灌頂堂)",
+          "prefecture": "奈良県",
+          "latitude": 34.537861,
+          "longitude": 136.04061
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-188",
+          "name": "旧燈明寺三重塔",
+          "prefecture": "神奈川県",
+          "latitude": 35.416363,
+          "longitude": 139.659229
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-176",
+          "name": "福生寺観音堂",
+          "prefecture": "福島県",
+          "latitude": 37.441126,
+          "longitude": 139.84526
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-306",
+          "name": "種月寺本堂",
+          "prefecture": "新潟県",
+          "latitude": 37.727291,
+          "longitude": 138.834767
+        }
+      ],
+      "exact": {
+        "referenceScore": 45.694324922723695,
+        "sideRangePercent": 179.91887985888698,
+        "maxAngleDeviation": 2.325064541729205,
+        "maxAngleDeviationPercent": 2.1528375386381526,
+        "meanSide": 223078.89998720307,
+        "perimeter": 1115394.4999360153,
+        "sideLengths": [
+          24760.35160328334,
+          344477.6167491519,
+          225300.15591711015,
+          94734.96600468432,
+          426121.4096617858
+        ],
+        "angles": [
+          107.50681038032049,
+          107.351937309786,
+          109.60650182233753,
+          105.6749354582708,
+          109.8598150292852
+        ]
+      }
+    },
+    {
+      "approximateScore": 45.699911603455604,
+      "source": "local-search",
+      "indices": [
+        238,
+        193,
+        187,
+        175,
+        305
+      ],
+      "places": [
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-239",
+          "name": "白山神社本殿",
+          "prefecture": "京都府",
+          "latitude": 34.720546,
+          "longitude": 135.885475
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-194",
+          "name": "室生寺本堂(灌頂堂)",
+          "prefecture": "奈良県",
+          "latitude": 34.537861,
+          "longitude": 136.04061
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-188",
+          "name": "旧燈明寺三重塔",
+          "prefecture": "神奈川県",
+          "latitude": 35.416363,
+          "longitude": 139.659229
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-176",
+          "name": "福生寺観音堂",
+          "prefecture": "福島県",
+          "latitude": 37.441126,
+          "longitude": 139.84526
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-306",
+          "name": "種月寺本堂",
+          "prefecture": "新潟県",
+          "latitude": 37.727291,
+          "longitude": 138.834767
+        }
+      ],
+      "exact": {
+        "referenceScore": 45.694324922723695,
+        "sideRangePercent": 179.91887985888698,
+        "maxAngleDeviation": 2.325064541729205,
+        "maxAngleDeviationPercent": 2.1528375386381526,
+        "meanSide": 223078.89998720307,
+        "perimeter": 1115394.4999360153,
+        "sideLengths": [
+          24760.35160328334,
+          344477.6167491519,
+          225300.15591711015,
+          94734.96600468432,
+          426121.4096617858
+        ],
+        "angles": [
+          107.50681038032049,
+          107.351937309786,
+          109.60650182233753,
+          105.6749354582708,
+          109.8598150292852
+        ]
+      }
+    },
+    {
+      "approximateScore": 45.50436531207975,
+      "source": "local-search",
+      "indices": [
+        215,
+        192,
+        18,
+        118,
+        495
+      ],
+      "places": [
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-216",
+          "name": "寶積寺三重塔",
+          "prefecture": "京都府",
+          "latitude": 34.895168,
+          "longitude": 135.679192
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-193",
+          "name": "圓成寺宇賀神本殿",
+          "prefecture": "奈良県",
+          "latitude": 34.695801,
+          "longitude": 135.915675
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-019",
+          "name": "日枝神社本殿",
+          "prefecture": "埼玉県",
+          "latitude": 35.916974,
+          "longitude": 139.489837
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-119",
+          "name": "鑁阿寺本堂",
+          "prefecture": "栃木県",
+          "latitude": 36.337549,
+          "longitude": 139.45227
+        },
+        {
+          "id": "kinki-shrine-temple-sites-v5-nested-496",
+          "name": "気多神社本殿",
+          "prefecture": "富山県",
+          "latitude": 36.80022,
+          "longitude": 137.044601
+        }
+      ],
+      "exact": {
+        "referenceScore": 45.50579436707093,
+        "sideRangePercent": 179.2083266992217,
+        "maxAngleDeviation": 2.4268710417816948,
+        "maxAngleDeviationPercent": 2.2471028164645324,
+        "meanSide": 179226.25201716498,
+        "perimeter": 896131.2600858249,
+        "sideLengths": [
+          30943.962648052973,
+          352132.3298937444,
+          46789.94057850288,
+          221538.80865229218,
+          244726.2183132325
+        ],
+        "angles": [
+          105.91936008856545,
+          110.4268710417817,
+          107.55169911030232,
+          108.30012675416292,
+          107.80194300518764
+        ]
+      }
+    }
+  ]
+}

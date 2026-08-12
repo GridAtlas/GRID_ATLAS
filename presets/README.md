@@ -20,6 +20,7 @@ https://gridatlas.github.io/GRID_ATLAS/?preset=kinki-pentagram
 - `kinki-shrine-temple-sites-v5-nested-500`：v5の包含型500地点
 - `kinki-pentagram-kurazoji`：庫蔵寺鎮守堂版（200地点版の総合1位）
 - `kinki-pentagram-rank1-of-500`：500地点版の総合1位
+- `kinki-pentagon-best-of-500`：500地点からの五角形・最高候補（現行分析基準）
 - `kinki-pentagram-rank3-chubu`：中部の五角形（同3位）
 - `kinki-pentagram-rank5-nameless`：名もなき五角形（同5位）
 - `kinki-pentagram-overlay`：伊勢内宮＋庫蔵寺の6点・星の重ね合わせ
