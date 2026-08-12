@@ -10,11 +10,15 @@ Cloudflare Workers + D1で動く、アクセスコード式の地点リストClo
 
 ## 認証
 
+- 個別ユーザーはSupabase JWTをBearer値として送る。
+- テスター権限は `X-Tester-Code` ヘッダーで追加付与する。テスターコードは通常の個別ログインとは独立して扱う。
+- 個別IDなしの旧テスターは、従来どおりテスターコードをBearer値として送れる。新しい画面ではテスター共有リストだけを表示する。
+- 個別ID＋テスターコードでは、自分のマイリスト（クラウド）とテスター共有リストの両方を返す。
 - アクセスコード式ベータでは、Bearer値をCloudflare Worker Secrets `PERSONAL_ACCESS_CODE` / `FRIEND_ACCESS_CODE`と照合する。
 - SecretはSHA-256へ揃えた後に定数時間比較し、ソース・`wrangler.jsonc`・Gitへ保存しない。
 - ローカル控えはGit管理外の `GRID_ATLAS_CLOUD_ACCESS_CODE_PRIVATE.txt`。値を変更する場合はSecretも同時に更新する。
 - 将来の複数ユーザー化に備え、Secret未設定環境では既存のJWT/JWKS検証へフォールバックする。
-- 個人ベータのownerは `PERSONAL_OWNER_ID=personal-beta`、友達テスト領域は `FRIEND_OWNER_ID=friend-beta` に分離する。
+- 個人ベータのownerは `PERSONAL_OWNER_ID=personal-beta`、友達テスト領域は `FRIEND_OWNER_ID=friend-beta` に分離する。旧テスターコードのデータは `testerShared` scopeとして返す。
 
 ## データ境界
 

@@ -50,12 +50,24 @@ describe("GRID ATLAS Cloud API", () => {
     const authorized = await authenticateRequest(new Request("https://api.test/v1/me/lists", {
       headers: { Authorization: "Bearer ga_personal_test" }
     }), personalEnv);
-    expect(authorized).toEqual({ id: "personal-test" });
+    expect(authorized).toMatchObject({
+      id: "personal-test",
+      canUseMine: false,
+      testerOwnerId: "personal-test",
+      isTester: true,
+      legacyTester: true
+    });
 
     const friend = await authenticateRequest(new Request("https://api.test/v1/me/lists", {
       headers: { Authorization: "Bearer ga_friend_test" }
     }), personalEnv);
-    expect(friend).toEqual({ id: "friend-test" });
+    expect(friend).toMatchObject({
+      id: "friend-test",
+      canUseMine: false,
+      testerOwnerId: "friend-test",
+      isTester: true,
+      legacyTester: true
+    });
 
     await expect(authenticateRequest(new Request("https://api.test/v1/me/lists", {
       headers: { Authorization: "Bearer wrong-code" }
@@ -73,7 +85,46 @@ describe("GRID ATLAS Cloud API", () => {
     const authorized = await authenticateRequest(new Request("https://api.test/v1/me/lists", {
       headers: { Authorization: "Bearer " + await issueToken("jwt-owner") }
     }), mixedEnv);
-    expect(authorized).toEqual({ id: "jwt-owner" });
+    expect(authorized).toMatchObject({
+      id: "jwt-owner",
+      canUseMine: true,
+      testerOwnerId: null,
+      isTester: false,
+      legacyTester: false
+    });
+  });
+
+  it("combines an individual JWT with the saved tester permission", async () => {
+    const mixedEnv = {
+      DB: env.DB,
+      WEB_ORIGINS: "https://gridatlas.github.io",
+      PERSONAL_ACCESS_CODE: "ga_personal_test",
+      PERSONAL_OWNER_ID: "tester-shared-owner",
+      AUTH_JWKS_URL: JWKS_URL,
+      AUTH_ISSUER: ISSUER,
+      AUTH_AUDIENCE: AUDIENCE
+    };
+    const jwt = await issueToken("individual-owner");
+    const testerList = await worker.fetch(new Request("https://api.test/v1/me/lists", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer ga_personal_test",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(samplePayload({ name: "テスター共有" }))
+    }), mixedEnv);
+    expect(testerList.status).toBe(201);
+
+    const combined = await worker.fetch(new Request("https://api.test/v1/me/lists", {
+      headers: {
+        Authorization: "Bearer " + jwt,
+        "X-Tester-Code": "ga_personal_test"
+      }
+    }), mixedEnv);
+    expect(combined.status).toBe(200);
+    expect((await combined.json()).lists).toEqual([
+      expect.objectContaining({ name: "テスター共有", scope: "testerShared" })
+    ]);
   });
   it("keeps personal and friend access-code data separate", async () => {
     const accessEnv = {

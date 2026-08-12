@@ -55,7 +55,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1208";
+const WEB_VERSION = "0.1209";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -288,6 +288,7 @@ const elements = {
   cloudSetPasswordButton: document.querySelector("#cloudSetPasswordButton"),
   cloudPasswordStatus: document.querySelector("#cloudPasswordStatus"),
   cloudAccessToken: document.querySelector("#cloudAccessToken"),
+  cloudTesterStatus: document.querySelector("#cloudTesterStatus"),
   cloudConnectButton: document.querySelector("#cloudConnectButton"),
   cloudRefreshButton: document.querySelector("#cloudRefreshButton"),
   cloudDisconnectButton: document.querySelector("#cloudDisconnectButton"),
@@ -328,6 +329,10 @@ const state = {
     authClient: null,
     authSession: null,
     authUser: null,
+    testerCode: "",
+    testerActive: false,
+    testerError: "",
+    canUseMine: false,
     authBusy: false,
     busy: false,
     apiUrl: "",
@@ -677,6 +682,7 @@ const TRANSLATIONS = {
     "cloud.pointSource": "マイリスト（クラウド）",
     "cloud.apiUrl": "Cloud API URL",
     "cloud.accessToken": "アクセスコード",
+    "cloud.testerCode": "テスター権限コード",
     "cloud.connect": "接続",
     "cloud.refresh": "更新",
     "cloud.disconnect": "切断",
@@ -957,6 +963,7 @@ const TRANSLATIONS = {
     "cloud.pointSource": "My List (Cloud)",
     "cloud.apiUrl": "Cloud API URL",
     "cloud.accessToken": "Access code",
+    "cloud.testerCode": "Tester permission code",
     "cloud.connect": "Connect",
     "cloud.refresh": "Refresh",
     "cloud.disconnect": "Disconnect",
@@ -5570,7 +5577,11 @@ function isMyCloudStorageEntry(entry) {
 
 function isTesterSharedCloudEntry(entry) {
   const cloudId = entry?.cloud?.id || entry?.preview?.cloudId || entry?.preview?.id;
-  return Boolean(cloudId && state.cloud.testerSharedListIds.has(cloudId));
+  return Boolean(
+    entry?.cloud?.scope === "testerShared"
+      || entry?.preview?.cloudScope === "testerShared"
+      || (state.cloud.testerActive && cloudId && state.cloud.testerSharedListIds.has(cloudId))
+  );
 }
 
 function setTesterSharedCloudList(storageId, shared) {
@@ -5647,8 +5658,13 @@ function renderPointDestinationSelect() {
 function renderStorageLists() {
   const entries = storageListEntries();
   const sections = [{ key: "mineDevice", label: "list.section.mineDevice" }];
-  if (state.cloud.connected || state.cloud.authSession?.access_token) {
+  const hasMineCloud = state.cloud.canUseMine || state.cloud.lists.some((list) => list.scope !== "testerShared");
+  const hasTesterShared = state.cloud.lists.some((list) => list.scope === "testerShared")
+    || entries.some((entry) => isTesterSharedCloudEntry(entry));
+  if (hasMineCloud) {
     sections.push({ key: "mineCloud", label: "list.section.mineCloud" });
+  }
+  if (hasTesterShared) {
     sections.push({ key: "testerShared", label: "list.section.testerShared" });
   }
   sections.push({ key: "imported", label: "list.section.imported" });
@@ -5686,6 +5702,7 @@ function loadCloudSettings() {
   } catch {}
 
   elements.cloudAccessToken.value = token;
+  state.cloud.testerCode = token;
   state.cloud.connected = Boolean(state.cloud.apiUrl && token);
 }
 
@@ -5748,6 +5765,32 @@ function renderCloudAuthControls() {
   }
 }
 
+function renderCloudTesterStatus() {
+  if (!elements.cloudTesterStatus) return;
+  if (state.cloud.testerError) {
+    elements.cloudTesterStatus.textContent = state.cloud.testerError;
+    elements.cloudTesterStatus.classList.add("is-error");
+  } else if (state.cloud.testerActive) {
+    elements.cloudTesterStatus.textContent = cloudText(
+      "テスター権限が有効です。テスター共有リストを利用できます。",
+      "Tester permission is active. Tester shared lists are available."
+    );
+    elements.cloudTesterStatus.classList.remove("is-error");
+  } else if (state.cloud.testerCode) {
+    elements.cloudTesterStatus.textContent = cloudText(
+      "テスター権限を確認しています…",
+      "Checking tester permission…"
+    );
+    elements.cloudTesterStatus.classList.remove("is-error");
+  } else {
+    elements.cloudTesterStatus.textContent = cloudText(
+      "テスターコードはこのブラウザに保存されます。",
+      "The tester code is saved in this browser."
+    );
+    elements.cloudTesterStatus.classList.remove("is-error");
+  }
+}
+
 function applyCloudAuthSession(session, options = {}) {
   const hadSession = Boolean(state.cloud.authSession?.access_token);
   state.cloud.authSession = session || null;
@@ -5757,13 +5800,14 @@ function applyCloudAuthSession(session, options = {}) {
     if (options.refresh !== false && (!hadSession || options.forceRefresh === true)) {
       void refreshCloudLists({ quiet: true });
     }
-  } else if (!elements.cloudAccessToken?.value.trim()) {
+  } else if (!state.cloud.testerCode && !elements.cloudAccessToken?.value.trim()) {
     state.cloud.connected = false;
     state.cloud.lists = [];
     state.cloud.pointLists = [];
     state.cloud.pointRows = [];
   }
   renderCloudAuthControls();
+  renderCloudTesterStatus();
   renderStorageLists();
   syncCloudControls();
 }
@@ -5903,7 +5947,18 @@ async function signOutCloud() {
     const { error } = await state.cloud.authClient.auth.signOut({ scope: "local" });
     if (error) throw error;
     applyCloudAuthSession(null, { refresh: false });
-    disconnectCloud();
+    state.cloud.connected = Boolean(state.cloud.testerCode);
+    if (state.cloud.testerCode) {
+      void refreshCloudLists({ quiet: true });
+    } else {
+      state.cloud.canUseMine = false;
+      state.cloud.testerActive = false;
+      state.cloud.testerError = "";
+      state.cloud.lists = [];
+      state.cloud.pointLists = [];
+      state.cloud.pointRows = [];
+      renderStorageLists();
+    }
     setCloudAuthStatus(cloudText("ログアウトしました", "Signed out"));
   } catch (error) {
     setCloudAuthStatus(error?.message || cloudText("ログアウトに失敗しました", "Sign-out failed"), { error: true });
@@ -5922,8 +5977,9 @@ function cloudClientFromInputs() {
         applyCloudAuthSession(data?.session, { refresh: false });
         if (data?.session?.access_token) return data.session.access_token;
       }
-      return elements.cloudAccessToken.value;
-    }
+      return state.cloud.testerCode || elements.cloudAccessToken.value.trim();
+    },
+    getTesterCode: () => state.cloud.testerCode || elements.cloudAccessToken.value.trim()
   });
 }
 function setCloudStatus(message, options = {}) {
@@ -5978,6 +6034,7 @@ function setCloudBusy(busy) {
 
 function syncCloudControls() {
   renderCloudAuthControls();
+  renderCloudTesterStatus();
   elements.cloudAccessToken.disabled = state.cloud.busy;
   elements.cloudConnectButton.disabled = state.cloud.busy;
   elements.cloudRefreshButton.disabled = state.cloud.busy || !state.cloud.connected;
@@ -5990,9 +6047,11 @@ async function connectCloud() {
   try {
     cloudClientFromInputs();
     const token = elements.cloudAccessToken.value.trim();
-    if (!token) throw new CloudApiError(cloudText("アクセスコードを入力してください", "Enter an access code"), { status: 401 });
+    if (!token) throw new CloudApiError(cloudText("テスター権限コードを入力してください", "Enter a tester permission code"), { status: 401 });
     localStorage.setItem(CLOUD_ACCESS_TOKEN_KEY, token);
     sessionStorage.removeItem(CLOUD_ACCESS_TOKEN_KEY);
+    state.cloud.testerCode = token;
+    state.cloud.testerError = "";
     state.cloud.connected = true;
     await refreshCloudLists();
   } catch (error) {
@@ -6010,13 +6069,18 @@ function disconnectCloud() {
     sessionStorage.removeItem(CLOUD_ACCESS_TOKEN_KEY);
   } catch {}
   elements.cloudAccessToken.value = "";
-  state.cloud.connected = false;
+  state.cloud.testerCode = "";
+  state.cloud.testerActive = false;
+  state.cloud.testerError = "";
+  state.cloud.canUseMine = Boolean(state.cloud.authSession?.access_token);
+  state.cloud.connected = Boolean(state.cloud.authSession?.access_token);
   state.cloud.lists = [];
   state.cloud.pointLists = [];
   state.cloud.pointRows = [];
   state.cloud.lastFetchedAt = 0;
   state.cloud.lastAutoRefreshAt = 0;
   setCloudStatus(cloudText("切断しました", "Disconnected"));
+  if (state.cloud.authSession?.access_token) void refreshCloudLists({ quiet: true });
   renderStorageLists();
   render();
 }
@@ -6029,6 +6093,12 @@ async function refreshCloudLists(options = {}) {
     state.cloud.lists = response.lists.filter((list) => (
       list && typeof list.id === "string" && Number.isInteger(list.revision)
     ));
+    state.cloud.canUseMine = response.permissions?.mine === true;
+    state.cloud.testerActive = response.permissions?.tester === true
+      || state.cloud.lists.some((list) => list.scope === "testerShared");
+    state.cloud.testerError = state.cloud.testerCode && !state.cloud.testerActive
+      ? cloudText("テスター権限を確認できませんでした。コードを確認してください。", "Tester permission could not be confirmed. Check the code.")
+      : "";
     state.cloud.listOrder = state.cloud.lists.map((list) => list.id);
     repairLocalCloudIdCollisions();
 
@@ -6037,7 +6107,8 @@ async function refreshCloudLists(options = {}) {
       const list = cloudPayloadToPointList(result.list, {
         localId: "cloud-preview:" + result.list.list.id,
         revision: result.revision,
-        editable: true
+        editable: true,
+        scope: state.cloud.lists.find((meta) => meta.id === result.list.list.id)?.scope || "mine"
       });
       return hydrateCloudPointListAssets(list, client);
     }));
@@ -6062,6 +6133,9 @@ async function refreshCloudLists(options = {}) {
     state.cloud.lists = [];
     state.cloud.pointLists = [];
     state.cloud.pointRows = [];
+    state.cloud.canUseMine = false;
+    state.cloud.testerActive = false;
+    state.cloud.testerError = state.cloud.testerCode ? cloudErrorMessage(error) : "";
     setCloudStatus(cloudErrorMessage(error), { error: true });
   } finally {
     if (options.keepBusy !== true) setCloudBusy(false);
@@ -6366,7 +6440,7 @@ function setStorageListVisible(storageId, visible, options = {}) {
     entry.local.visible = nextVisible;
     entry.local.updatedAt = new Date().toISOString();
   }
-  if (entry.cloud) {
+  if (entry.cloud && state.cloud.testerActive) {
     if (nextVisible) state.cloud.hiddenListIds.delete(entry.cloud.id);
     else state.cloud.hiddenListIds.add(entry.cloud.id);
   }
@@ -10580,7 +10654,13 @@ function bindEvents() {
   elements.cloudConnectButton.addEventListener("click", () => void connectCloud());
   elements.cloudRefreshButton.addEventListener("click", () => void requestCloudRefresh());
   elements.cloudDisconnectButton.addEventListener("click", disconnectCloud);
-  elements.cloudAccessToken.addEventListener("input", renderStorageLists);
+  elements.cloudAccessToken.addEventListener("input", () => {
+    state.cloud.testerCode = elements.cloudAccessToken.value.trim();
+    state.cloud.testerActive = false;
+    state.cloud.testerError = "";
+    state.cloud.connected = Boolean(state.cloud.authSession?.access_token || state.cloud.testerCode);
+    renderStorageLists();
+  });
   document.addEventListener("visibilitychange", maybeAutoRefreshCloudLists);
   window.addEventListener("focus", maybeAutoRefreshCloudLists);
   document.addEventListener("click", () => setSettingsMenuOpen(false));

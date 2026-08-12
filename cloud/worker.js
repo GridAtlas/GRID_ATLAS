@@ -29,14 +29,14 @@ export default {
       if (!env.DB) return jsonResponse({ error: "データベースが未設定です" }, 503, cors);
 
       if (route.assetId) {
-        return await handleAsset(request, env, cors, user.id, route.listId, route.assetId);
+        return await handleAsset(request, env, cors, user, route.listId, route.assetId);
       }
       if (route.listOrder) {
-        return await handleListOrder(request, env, cors, user.id);
+        return await handleListOrder(request, env, cors, user);
       }
       return route.listId
-        ? await handleListItem(request, env, cors, user.id, route.listId)
-        : await handleListCollection(request, env, cors, user.id);
+        ? await handleListItem(request, env, cors, user, route.listId)
+        : await handleListCollection(request, env, cors, user);
     } catch (error) {
       if (error instanceof AuthError || error instanceof HttpError) {
         return jsonResponse({ error: error.message }, error.status, cors);
@@ -95,7 +95,22 @@ async function orderedCloudListIds(db, ownerId) {
   return result.results.map((row) => row.id);
 }
 
-async function handleListOrder(request, env, cors, ownerId) {
+function authorizedOwnerIds(user) {
+  return [...new Set([
+    user.canUseMine ? user.id : null,
+    user.isTester ? user.testerOwnerId : null
+  ].filter(Boolean))];
+}
+
+function writeOwnerId(user) {
+  return user.canUseMine ? user.id : user.isTester ? user.testerOwnerId : null;
+}
+
+function scopeForOwner(user, ownerId) {
+  return user.canUseMine && ownerId === user.id ? "mine" : "testerShared";
+}
+
+async function handleListOrder(request, env, cors, user) {
   if (request.method !== "PUT") return methodNotAllowed(["PUT"], cors);
 
   const body = await readJsonObject(request);
@@ -112,7 +127,12 @@ async function handleListOrder(request, env, cors, ownerId) {
     requestedIds.push(id);
   }
 
-  const currentIds = await orderedCloudListIds(env.DB, ownerId);
+  const ownerIds = authorizedOwnerIds(user);
+  const ownerGroups = await Promise.all(ownerIds.map(async (ownerId) => ({
+    ownerId,
+    ids: await orderedCloudListIds(env.DB, ownerId)
+  })));
+  const currentIds = ownerGroups.flatMap((group) => group.ids);
   const sameSet = currentIds.length === requestedIds.length
     && currentIds.every((id) => seen.has(id));
   if (!sameSet) {
@@ -122,30 +142,48 @@ async function handleListOrder(request, env, cors, ownerId) {
     }, 409, cors);
   }
 
-  if (!currentIds.every((id, index) => id === requestedIds[index])) {
-    await env.DB.batch(requestedIds.map((id, index) => (
-      env.DB.prepare(
-        `UPDATE cloud_lists
-         SET sort_order = ?1
-         WHERE owner_id = ?2 AND id = ?3 AND deleted_at IS NULL`
-      ).bind(index, ownerId, id)
-    )));
+  const updates = [];
+  for (const group of ownerGroups) {
+    const groupIds = new Set(group.ids);
+    const requestedGroup = requestedIds.filter((id) => groupIds.has(id));
+    if (!group.ids.every((id, index) => id === requestedGroup[index])) {
+      updates.push(...requestedGroup.map((id, index) => (
+        env.DB.prepare(
+          `UPDATE cloud_lists
+           SET sort_order = ?1
+           WHERE owner_id = ?2 AND id = ?3 AND deleted_at IS NULL`
+        ).bind(index, group.ownerId, id)
+      )));
+    }
   }
+  if (updates.length > 0) await env.DB.batch(updates);
 
   return jsonResponse({ listIds: requestedIds }, 200, cors);
 }
-async function handleListCollection(request, env, cors, ownerId) {
+async function handleListCollection(request, env, cors, user) {
   if (request.method === "GET") {
-    const result = await env.DB.prepare(
-      `SELECT id, name, description, payload_json, revision, sort_order, created_at, updated_at
-       FROM cloud_lists
-       WHERE owner_id = ?1 AND deleted_at IS NULL
-       ORDER BY sort_order ASC, updated_at DESC, id ASC`
-    ).bind(ownerId).all();
-    return jsonResponse({ lists: result.results.map(toListMeta) }, 200, cors);
+    const lists = [];
+    for (const ownerId of authorizedOwnerIds(user)) {
+      const result = await env.DB.prepare(
+        `SELECT id, name, description, payload_json, revision, sort_order, created_at, updated_at
+         FROM cloud_lists
+         WHERE owner_id = ?1 AND deleted_at IS NULL
+         ORDER BY sort_order ASC, updated_at DESC, id ASC`
+      ).bind(ownerId).all();
+      lists.push(...result.results.map((row) => toListMeta(row, scopeForOwner(user, ownerId))));
+    }
+    return jsonResponse({
+      lists,
+      permissions: {
+        mine: user.canUseMine,
+        tester: user.isTester
+      }
+    }, 200, cors);
   }
 
   if (request.method === "POST") {
+    const ownerId = writeOwnerId(user);
+    if (!ownerId) throw new AuthError("個別ログインまたはテスター権限が必要です", 403);
     const payload = await readPayload(request);
     const now = new Date().toISOString();
     const normalized = normalizePayload(payload, now);
@@ -183,9 +221,9 @@ async function handleListCollection(request, env, cors, ownerId) {
   return methodNotAllowed(["GET", "POST"], cors);
 }
 
-async function handleListItem(request, env, cors, ownerId, listId) {
+async function handleListItem(request, env, cors, user, listId) {
   if (request.method === "GET") {
-    const row = await findList(env.DB, ownerId, listId);
+    const row = await findAuthorizedList(env.DB, user, listId);
     return row
       ? jsonResponse({ list: JSON.parse(row.payload_json), revision: row.revision }, 200, cors)
       : jsonResponse({ error: "リストが見つかりません" }, 404, cors);
@@ -196,8 +234,9 @@ async function handleListItem(request, env, cors, ownerId, listId) {
     if (!Number.isInteger(body.expectedRevision) || body.expectedRevision < 1) {
       throw new HttpError("expectedRevisionが必要です", 400);
     }
-    const existing = await findList(env.DB, ownerId, listId);
+    const existing = await findAuthorizedList(env.DB, user, listId);
     if (!existing) return jsonResponse({ error: "リストが見つかりません" }, 404, cors);
+    const ownerId = existing.owner_id;
 
     const existingPayload = parseStoredPayload(existing.payload_json);
     const now = new Date().toISOString();
@@ -239,6 +278,9 @@ async function handleListItem(request, env, cors, ownerId, listId) {
     if (!Number.isInteger(body.expectedRevision) || body.expectedRevision < 1) {
       throw new HttpError("expectedRevisionが必要です", 400);
     }
+    const existing = await findAuthorizedList(env.DB, user, listId);
+    if (!existing) return jsonResponse({ error: "リストが見つかりません" }, 404, cors);
+    const ownerId = existing.owner_id;
     const result = await env.DB.prepare(
       `UPDATE cloud_lists SET deleted_at = ?1, updated_at = ?1
        WHERE owner_id = ?2 AND id = ?3 AND deleted_at IS NULL AND revision = ?4`
@@ -256,13 +298,14 @@ async function handleListItem(request, env, cors, ownerId, listId) {
   return methodNotAllowed(["GET", "PUT", "DELETE"], cors);
 }
 
-async function handleAsset(request, env, cors, ownerId, listId, assetId) {
+async function handleAsset(request, env, cors, user, listId, assetId) {
   if (!env.ASSETS) {
     return jsonResponse({ error: "画像ストレージが未設定です" }, 503, cors);
   }
 
-  const list = await findList(env.DB, ownerId, listId);
+  const list = await findAuthorizedList(env.DB, user, listId);
   if (!list) return jsonResponse({ error: "リストが見つかりません" }, 404, cors);
+  const ownerId = list.owner_id;
   const key = assetKey(ownerId, listId, assetId);
 
   if (request.method === "PUT") {
@@ -338,6 +381,20 @@ async function findList(db, ownerId, listId) {
     `SELECT id, name, description, payload_json, revision, created_at, updated_at
      FROM cloud_lists WHERE owner_id = ?1 AND id = ?2 AND deleted_at IS NULL`
   ).bind(ownerId, listId).first();
+}
+
+async function findAuthorizedList(db, user, listId) {
+  const ownerIds = authorizedOwnerIds(user);
+  if (ownerIds.length === 0) return null;
+  const placeholders = ownerIds.map((_, index) => `?${index + 1}`).join(", ");
+  const result = await db.prepare(
+    `SELECT id, owner_id, name, description, payload_json, revision, created_at, updated_at
+     FROM cloud_lists
+     WHERE owner_id IN (${placeholders}) AND id = ?${ownerIds.length + 1} AND deleted_at IS NULL`
+  ).bind(...ownerIds, listId).all();
+  if (!result.results.length) return null;
+  return result.results.find((row) => user.canUseMine && row.owner_id === user.id)
+    || result.results[0];
 }
 
 async function readPayload(request) {
@@ -562,12 +619,12 @@ function daysInMonth(year, month) {
   return [4, 6, 9, 11].includes(month) ? 30 : 31;
 }
 
-function toListMeta(row) {
+function toListMeta(row, scope = "mine") {
   return {
     id: row.id,
     name: row.name,
     description: row.description,
-    scope: "mine",
+    scope,
     revision: row.revision,
     sortOrder: row.sort_order,
     createdAt: row.created_at,
@@ -587,13 +644,13 @@ function corsHeaders(origin, env) {
   if (!origin || !allowed.has(origin)) {
     return origin ? null : {
       "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-      "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Asset-Name"
+      "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Asset-Name, X-Tester-Code"
     };
   }
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Asset-Name",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Asset-Name, X-Tester-Code",
     "Access-Control-Max-Age": "600",
     Vary: "Origin"
   };

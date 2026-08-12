@@ -54,29 +54,67 @@ export class AuthError extends Error {
 export async function authenticateRequest(request, env) {
   const authorization = request.headers.get("Authorization") || "";
   const match = authorization.match(/^Bearer\s+(.+)$/i);
-  if (!match || match[1].length > MAX_TOKEN_CHARS) {
-    throw new AuthError("ログインが必要です", 401);
+  const bearer = match?.[1] || "";
+  if (bearer.length > MAX_TOKEN_CHARS) {
+    throw new AuthError("認証情報が大きすぎます", 401);
   }
 
   const accessCodeOwners = [
     { code: env.PERSONAL_ACCESS_CODE, ownerId: env.PERSONAL_OWNER_ID || "personal-beta" },
     { code: env.FRIEND_ACCESS_CODE, ownerId: env.FRIEND_OWNER_ID || "friend-beta" }
   ].filter((entry) => entry.code);
-  if (accessCodeOwners.length > 0) {
+
+  const testerCode = request.headers.get("X-Tester-Code")?.trim() || "";
+  if (testerCode.length > MAX_TOKEN_CHARS) {
+    throw new AuthError("テスターコードが大きすぎます", 401);
+  }
+  const testerEntry = testerCode
+    ? await findAccessCodeOwner(testerCode, accessCodeOwners)
+    : null;
+
+  let legacyEntry = null;
+  if (bearer && accessCodeOwners.length > 0) {
     const matches = await Promise.all(
-      accessCodeOwners.map((entry) => secretsMatch(match[1], entry.code))
+      accessCodeOwners.map((entry) => secretsMatch(bearer, entry.code))
     );
     const matchedIndex = matches.indexOf(true);
-    if (matchedIndex >= 0) return { id: accessCodeOwners[matchedIndex].ownerId };
+    if (matchedIndex >= 0) legacyEntry = accessCodeOwners[matchedIndex];
   }
 
-  const requiredConfig = ["AUTH_JWKS_URL", "AUTH_ISSUER", "AUTH_AUDIENCE"];
-  if (requiredConfig.some((key) => !env[key])) {
-    throw new AuthError(accessCodeOwners.length > 0 ? "アクセスコードが違います" : "認証基盤が未設定です", 401);
+  if (legacyEntry) {
+    return {
+      id: legacyEntry.ownerId,
+      canUseMine: false,
+      testerOwnerId: legacyEntry.ownerId,
+      isTester: true,
+      legacyTester: true
+    };
   }
 
-  const claims = await verifyJwt(match[1], env);
-  return { id: claims.sub };
+  let claims = null;
+  if (bearer) {
+    const requiredConfig = ["AUTH_JWKS_URL", "AUTH_ISSUER", "AUTH_AUDIENCE"];
+    if (requiredConfig.some((key) => !env[key])) {
+      throw new AuthError(accessCodeOwners.length > 0 ? "アクセスコードが違います" : "認証基盤が未設定です", 401);
+    }
+    claims = await verifyJwt(bearer, env);
+  } else if (!testerEntry) {
+    throw new AuthError("ログインまたはテスターコードが必要です", 401);
+  }
+
+  return {
+    id: claims?.sub || null,
+    canUseMine: Boolean(claims?.sub),
+    testerOwnerId: testerEntry?.ownerId || null,
+    isTester: Boolean(testerEntry),
+    legacyTester: false
+  };
+}
+
+async function findAccessCodeOwner(provided, entries) {
+  const matches = await Promise.all(entries.map((entry) => secretsMatch(provided, entry.code)));
+  const matchedIndex = matches.indexOf(true);
+  return matchedIndex >= 0 ? entries[matchedIndex] : null;
 }
 
 async function secretsMatch(provided, expected) {

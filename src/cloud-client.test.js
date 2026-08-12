@@ -63,6 +63,24 @@ describe("Cloud client", () => {
     expect(JSON.parse(init.body).payload.type).toBe("grid-atlas-share");
   });
 
+  it("adds the tester permission header alongside individual auth", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ lists: [] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    }));
+    const client = createCloudClient({
+      baseUrl: "https://api.example.com",
+      getAccessToken: () => "jwt-token",
+      getTesterCode: () => "ga-tester-code",
+      fetchImpl
+    });
+
+    await client.listLists();
+    const [, init] = fetchImpl.mock.calls[0];
+    expect(init.headers.Authorization).toBe("Bearer jwt-token");
+    expect(init.headers["X-Tester-Code"]).toBe("ga-tester-code");
+  });
+
   it("updates the authenticated cloud list order", async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ listIds: ["list-b", "list-a"] }), {
       status: 200,

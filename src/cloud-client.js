@@ -10,13 +10,14 @@ export class CloudApiError extends Error {
   }
 }
 
-export function createCloudClient({ baseUrl, getAccessToken, fetchImpl = globalThis.fetch, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+export function createCloudClient({ baseUrl, getAccessToken, getTesterCode, fetchImpl = globalThis.fetch, timeoutMs = DEFAULT_TIMEOUT_MS }) {
   const endpoint = normalizeCloudBaseUrl(baseUrl);
   if (typeof fetchImpl !== "function") throw new CloudApiError("通信機能を利用できません");
 
   async function request(path, options = {}) {
     const token = String(await getAccessToken?.() || "").trim();
-    if (!token) throw new CloudApiError("アクセスコードを入力してください", { status: 401 });
+    const testerCode = String(await getTesterCode?.() || "").trim();
+    if (!token && !testerCode) throw new CloudApiError("ログインまたはテスターコードが必要です", { status: 401 });
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -29,7 +30,8 @@ export function createCloudClient({ baseUrl, getAccessToken, fetchImpl = globalT
         method: options.method || "GET",
         headers: {
           Accept: options.accept || "application/json",
-          Authorization: "Bearer " + token,
+          ...(token ? { Authorization: "Bearer " + token } : {}),
+          ...(testerCode ? { "X-Tester-Code": testerCode } : {}),
           ...(options.body === undefined ? {} : {
             "Content-Type": options.contentType || (rawBody ? "application/octet-stream" : "application/json")
           }),
@@ -184,7 +186,7 @@ export function cloudPayloadToPointList(payload, options = {}) {
   return {
     id: options.localId || payload.list.id,
     cloudId: payload.list.id,
-    cloudScope: "mine",
+    cloudScope: options.scope || "mine",
     cloudRevision: Number.isInteger(options.revision) ? options.revision : null,
     cloudUpdatedAt: payload.list.updatedAt || now,
     name: payload.list.name,
