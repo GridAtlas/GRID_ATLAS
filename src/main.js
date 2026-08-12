@@ -56,7 +56,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1238";
+const WEB_VERSION = "0.1239";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -1478,6 +1478,7 @@ function applyWorkspace(workspace) {
       )
       ? workspace.activePointListId
       : DEFAULT_POINT_LIST_ID;
+  const duplicateListsCoalesced = coalesceDuplicateLocalLists();
   const activeListVisibilityChanged = ensureActivePointListVisible();
   refreshVisiblePoints();
   state.analysisLayer = normalizeAnalysisLayer(workspace.analysisLayer, workspace.links);
@@ -1494,7 +1495,7 @@ function applyWorkspace(workspace) {
   resetObservationTrail();
   state.editingPointId = null;
   state.pendingGeo = null;
-  if (activeListVisibilityChanged) {
+  if (activeListVisibilityChanged || duplicateListsCoalesced) {
     persistWorkspace();
   }
 }
@@ -1859,10 +1860,87 @@ function defaultPointDestinationListId() {
   return home && !isEmptyStoragePlaceholder(home) ? pointListStorageKey(home) : NEW_POINT_LIST_ID;
 }
 
+function comparableListName(name) {
+  return String(name || "")
+    .trim()
+    .normalize("NFKC")
+    .toLocaleLowerCase();
+}
+
+function remapLocalListReferences(previousId, nextId) {
+  if (state.activePointListId === previousId) state.activePointListId = nextId;
+  if (state.pointDestinationListId === previousId) state.pointDestinationListId = nextId;
+  if (state.pointTransferDestinationListId === previousId) state.pointTransferDestinationListId = nextId;
+  if (state.mobilePointPreviewStorageId === previousId) state.mobilePointPreviewStorageId = nextId;
+  if (state.favoriteListIds.has(previousId)) {
+    state.favoriteListIds.delete(previousId);
+    state.favoriteListIds.add(nextId);
+  }
+}
+
+function coalesceDuplicateLocalLists() {
+  const groups = new Map();
+  for (const list of state.pointLists) {
+    if (list.source !== "local" || !list.editable) continue;
+    const key = comparableListName(list.name);
+    if (!key) continue;
+    const group = groups.get(key) || [];
+    group.push(list);
+    groups.set(key, group);
+  }
+
+  const removedIds = new Set();
+  let changed = false;
+  for (const lists of groups.values()) {
+    if (lists.length < 2) continue;
+    const canonical = lists.find((list) => (
+      list.id === state.activePointListId
+      || list.id === state.pointDestinationListId
+      || list.id === state.pointTransferDestinationListId
+    )) || lists[0];
+    const canonicalPointIds = new Set(canonical.points.map((point) => point.id));
+    for (const duplicate of lists) {
+      if (duplicate === canonical) continue;
+      for (const point of duplicate.points) {
+        while (canonicalPointIds.has(point.id)) {
+          point.id = createId();
+        }
+        canonicalPointIds.add(point.id);
+        canonical.points.push(point);
+      }
+      canonical.updatedAt = [canonical.updatedAt, duplicate.updatedAt].filter(Boolean).sort().at(-1) || canonical.updatedAt;
+      remapLocalListReferences(duplicate.id, canonical.id);
+      removedIds.add(duplicate.id);
+      changed = true;
+    }
+  }
+
+  if (removedIds.size > 0) {
+    state.pointLists = state.pointLists.filter((list) => !removedIds.has(list.id));
+  }
+  return changed;
+}
+
 function createNamedLocalPointList(name) {
+  const normalizedName = String(name || "").trim();
+  const existing = state.pointLists.find((list) => (
+    list.source === "local"
+    && list.editable
+    && comparableListName(list.name) === comparableListName(normalizedName)
+  ));
+  if (existing) {
+    const repaired = coalesceDuplicateLocalLists();
+    if (repaired) persistWorkspace();
+    return state.pointLists.find((list) => (
+      list.source === "local"
+      && list.editable
+      && comparableListName(list.name) === comparableListName(normalizedName)
+    )) || existing;
+  }
+
   const now = new Date().toISOString();
   const list = createPointList({
-    name,
+    name: normalizedName,
     visible: true,
     editable: true,
     source: "local",
@@ -1968,15 +2046,7 @@ async function createNewPointList() {
   });
   if (input === null) return;
   const name = input.trim() || suggestedName;
-  const list = createPointList({
-    name,
-    visible: true,
-    editable: true,
-    source: "local",
-    importedAt: "",
-    points: []
-  });
-  state.pointLists.push(list);
+  const list = createNamedLocalPointList(name);
   state.activePointListId = list.id;
   persistWorkspace();
   setCloudStatus(t("list.created"));
@@ -2075,15 +2145,7 @@ async function createPointTransferDestinationList() {
   });
   if (input === null) return;
   const name = input.trim() || suggestedName;
-  const list = createPointList({
-    name,
-    visible: true,
-    editable: true,
-    source: "local",
-    importedAt: "",
-    points: []
-  });
-  state.pointLists.push(list);
+  const list = createNamedLocalPointList(name);
   state.pointTransferDestinationListId = list.id;
   persistWorkspace();
   choosePointTransferDestination();
