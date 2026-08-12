@@ -55,7 +55,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1210";
+const WEB_VERSION = "0.1211";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -5860,12 +5860,6 @@ async function initializeCloudAuth() {
   if (!state.cloud.authClient) return;
 
   const authUrlState = cloudAuthUrlState();
-  if (authUrlState.error) {
-    const detail = authUrlState.errorCode === "otp_expired"
-      ? "招待リンクの期限が切れているか、すでに使用済みです。Supabaseから新しいメールを送ってください"
-      : authUrlState.errorDescription || "認証リンクを確認できませんでした";
-    setCloudAuthStatus(detail, { error: true });
-  }
 
   state.cloud.authClient.auth.onAuthStateChange((_event, session) => {
     // Supabase warns against calling other async auth methods directly from
@@ -5881,6 +5875,14 @@ async function initializeCloudAuth() {
     const { data, error } = await state.cloud.authClient.auth.getSession();
     if (error) throw error;
     applyCloudAuthSession(data.session, { refresh: Boolean(data.session), forceRefresh: true });
+    if (data.session && (authUrlState.code || authUrlState.error)) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (!data.session && authUrlState.error) {
+      const detail = authUrlState.errorCode === "otp_expired"
+        ? "招待リンクの期限が切れているか、すでに使用済みです。Supabaseから新しいメールを送ってください"
+        : authUrlState.errorDescription || "認証リンクを確認できませんでした";
+      setCloudAuthStatus(detail, { error: true });
+    }
     if (!data.session && state.cloud.connected) void refreshCloudLists({ quiet: true });
   } catch (error) {
     setCloudAuthStatus(error?.message || cloudText("認証状態を確認できません", "Could not check authentication"), { error: true });
