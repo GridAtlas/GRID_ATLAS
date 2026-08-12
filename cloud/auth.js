@@ -111,6 +111,14 @@ export async function authenticateRequest(request, env) {
   };
 }
 
+export function requestedCloudScope(request) {
+  const scope = request.headers.get("X-Cloud-Scope")?.trim() || "mine";
+  if (scope !== "mine" && scope !== "testerShared") {
+    throw new AuthError("保存先が不正です", 400);
+  }
+  return scope;
+}
+
 async function findAccessCodeOwner(provided, entries) {
   const matches = await Promise.all(entries.map((entry) => secretsMatch(provided, entry.code)));
   const matchedIndex = matches.indexOf(true);

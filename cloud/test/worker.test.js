@@ -125,6 +125,29 @@ describe("GRID ATLAS Cloud API", () => {
     expect((await combined.json()).lists).toEqual([
       expect.objectContaining({ name: "テスター共有", scope: "testerShared" })
     ]);
+
+    const personal = await worker.fetch(new Request("https://api.test/v1/me/lists", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + jwt,
+        "X-Tester-Code": "ga_personal_test",
+        "X-Cloud-Scope": "mine",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(samplePayload({ name: "個人リスト" }))
+    }), mixedEnv);
+    expect(personal.status).toBe(201);
+
+    const both = await worker.fetch(new Request("https://api.test/v1/me/lists", {
+      headers: {
+        Authorization: "Bearer " + jwt,
+        "X-Tester-Code": "ga_personal_test"
+      }
+    }), mixedEnv);
+    expect((await both.json()).lists).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "テスター共有", scope: "testerShared" }),
+      expect.objectContaining({ name: "個人リスト", scope: "mine" })
+    ]));
   });
   it("keeps personal and friend access-code data separate", async () => {
     const accessEnv = {

@@ -68,7 +68,11 @@ export function createCloudClient({ baseUrl, getAccessToken, getTesterCode, fetc
       body: { listIds }
     }),
     getList: (listId) => request("v1/me/lists/" + encodeURIComponent(listId)),
-    createList: (payload) => request("v1/me/lists", { method: "POST", body: { payload } }),
+    createList: (payload, options = {}) => request("v1/me/lists", {
+      method: "POST",
+      body: { payload },
+      headers: options.scope ? { "X-Cloud-Scope": options.scope } : {}
+    }),
     updateList: (listId, expectedRevision, payload) => request("v1/me/lists/" + encodeURIComponent(listId), {
       method: "PUT",
       body: { expectedRevision, payload }

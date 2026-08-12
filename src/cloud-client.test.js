@@ -81,6 +81,23 @@ describe("Cloud client", () => {
     expect(init.headers["X-Tester-Code"]).toBe("ga-tester-code");
   });
 
+  it("sends the selected cloud destination when creating a list", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      list: samplePayload(),
+      revision: 1
+    }), { status: 201, headers: { "Content-Type": "application/json" } }));
+    const client = createCloudClient({
+      baseUrl: "https://api.example.com",
+      getAccessToken: () => "jwt-token",
+      getTesterCode: () => "ga-tester-code",
+      fetchImpl
+    });
+
+    await client.createList(samplePayload(), { scope: "testerShared" });
+    const [, init] = fetchImpl.mock.calls[0];
+    expect(init.headers["X-Cloud-Scope"]).toBe("testerShared");
+  });
+
   it("updates the authenticated cloud list order", async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ listIds: ["list-b", "list-a"] }), {
       status: 200,

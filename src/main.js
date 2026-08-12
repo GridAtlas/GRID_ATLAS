@@ -55,7 +55,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1211";
+const WEB_VERSION = "0.1212";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -693,7 +693,7 @@ const TRANSLATIONS = {
     "cloud.save": "マイリスト（クラウド）として保存",
     "cloud.delete": "マイリスト（クラウド）から削除",
     "cloud.empty": "マイリスト（クラウド）なし",
-    "storage.notice": "各リストは端末内またはクラウドへ個別に移動できます。インポートリストはマイリストへ移動またはコピーできます。",
+    "storage.notice": "テスターは、端末内・マイリスト（クラウド）・テスター共有リストの間でリストを移動またはコピーできます。",
     "storage.location": "保存場所",
     "storage.device": "端末",
     "storage.cloud": "クラウド",
@@ -703,7 +703,7 @@ const TRANSLATIONS = {
     "storage.moveDevice": "端末に移動",
     "storage.connectFirst": "先にクラウドへ接続してください",
     "storage.importMoveOnly": "インポートリストは、個別の転送操作でマイリストへ移動またはコピーできます。",
-    "storage.dragHint": "リストをタップするとグリッド表示をオン／オフできます。長押しすると地点一覧を表示します。少し長押ししてからドラッグすると、リストを移動できます。",
+    "storage.dragHint": "リストをタップするとグリッド表示をオン／オフできます。長押しすると地点一覧を表示します。少し長押ししてからドラッグすると、移動先を選んで移動またはコピーできます。",
     "storage.dragReordering": "クラウドに並び順を保存中",
     "storage.dragReordered": "リストの順番を変更しました",
     "storage.transferCloudProgress": "クラウドへ保存中",
@@ -718,6 +718,7 @@ const TRANSLATIONS = {
     "storage.dragImportedDestination": "インポートリストはコピー先・移動先にできません。",
     "storage.targetMineDevice": "マイリスト（端末内）",
     "storage.targetMineCloud": "マイリスト（クラウド）",
+    "storage.targetTesterShared": "テスター共有リスト",
     "list.new": "新規",
     "list.newPrompt": "新しいリストの名前",
     "list.created": "新しいリストを作成し、登録先にしました",
@@ -747,8 +748,6 @@ const TRANSLATIONS = {
     "list.addFavorite": "お気に入りに追加",
     "list.removeFavorite": "お気に入りから外す",
     "list.favoriteStatus": "お気に入り",
-    "list.moveToTesterShared": "テスター共有へ移動",
-    "list.moveToMineCloud": "マイリスト（クラウド）へ戻す",
     "list.delete": "削除",
     "list.showOnGrid": "グリッドに表示",
     "list.selectOnGrid": "このリストを選択してグリッド表示",
@@ -974,7 +973,7 @@ const TRANSLATIONS = {
     "cloud.save": "Save as My List (Cloud)",
     "cloud.delete": "Delete from My Lists (Cloud)",
     "cloud.empty": "No My Lists (Cloud)",
-    "storage.notice": "Move each list independently between device and cloud storage. Imported lists can be moved or copied to My Lists.",
+    "storage.notice": "Testers can move or copy lists between the device, My Lists (Cloud), and Tester Shared Lists.",
     "storage.location": "Storage",
     "storage.device": "Device",
     "storage.cloud": "Cloud",
@@ -984,7 +983,7 @@ const TRANSLATIONS = {
     "storage.moveDevice": "Move to device",
     "storage.connectFirst": "Connect to the cloud first",
     "storage.importMoveOnly": "Move or copy imported lists to My Lists from the individual transfer dialog.",
-    "storage.dragHint": "Tap a list to toggle its grid display. Long-press to show its places. Hold briefly, then drag to move the list.",
+    "storage.dragHint": "Tap a list to toggle its grid display. Long-press to show its places. Hold briefly, then drag to choose a destination and move or copy the list.",
     "storage.dragReordering": "Saving list order to the cloud",
     "storage.dragReordered": "List order updated",
     "storage.transferCloudProgress": "Saving to the cloud",
@@ -999,6 +998,7 @@ const TRANSLATIONS = {
     "storage.dragImportedDestination": "Imported Lists cannot be a copy or move destination.",
     "storage.targetMineDevice": "My Lists (Device)",
     "storage.targetMineCloud": "My Lists (Cloud)",
+    "storage.targetTesterShared": "Tester Shared Lists",
     "list.new": "New",
     "list.newPrompt": "Name the new list",
     "list.created": "Created a new list and set it as the destination",
@@ -1028,8 +1028,6 @@ const TRANSLATIONS = {
     "list.addFavorite": "Add to favorites",
     "list.removeFavorite": "Remove from favorites",
     "list.favoriteStatus": "Favorite",
-    "list.moveToTesterShared": "Move to Tester Shared",
-    "list.moveToMineCloud": "Return to My Lists (Cloud)",
     "list.delete": "Delete",
     "list.showOnGrid": "Show on grid",
     "list.selectOnGrid": "Select this list on the grid",
@@ -4847,7 +4845,11 @@ function storageListSectionEntryList(sectionKey) {
     return state.pointLists.filter((list) => storageListSectionKey({ local: list }) === sectionKey);
   }
   if (sectionKey === "mineCloud" || sectionKey === "testerShared") {
-    return state.cloud.pointLists;
+    return state.cloud.pointLists.filter((list) => (
+      sectionKey === "testerShared"
+        ? list.cloudScope === "testerShared"
+        : list.cloudScope !== "testerShared"
+    ));
   }
   return [];
 }
@@ -4874,8 +4876,23 @@ async function reorderStorageLists(sourceEntry, targetEntry, before) {
     const other = state.pointLists.filter((list) => storageListSectionKey({ local: list }) !== sectionKey);
     state.pointLists = [...other, ...lists];
   } else if (isCloudSection) {
-    state.cloud.pointLists = lists;
-    state.cloud.listOrder = lists.map((list) => list.cloudId || list.id).filter(Boolean);
+    const sectionIds = new Set(lists.map((list) => list.cloudId || list.id).filter(Boolean));
+    const reorderedAll = [];
+    let inserted = false;
+    for (const list of state.cloud.pointLists) {
+      const id = list.cloudId || list.id;
+      if (sectionIds.has(id)) {
+        if (!inserted) {
+          reorderedAll.push(...lists);
+          inserted = true;
+        }
+      } else {
+        reorderedAll.push(list);
+      }
+    }
+    if (!inserted) reorderedAll.push(...lists);
+    state.cloud.pointLists = reorderedAll;
+    state.cloud.listOrder = reorderedAll.map((list) => list.cloudId || list.id).filter(Boolean);
     applyCloudListOrder();
   }
   persistWorkspace();
@@ -4909,7 +4926,13 @@ function storageListTransferReason(sourceEntry, targetSection) {
   const sourceSection = storageListSectionKey(sourceEntry);
   if (sourceSection === targetSection) return "";
   if (targetSection === "imported") return t("storage.dragImportedDestination");
-  if (targetSection !== "mineDevice" && targetSection !== "mineCloud") {
+  if (targetSection === "testerShared" && !state.cloud.testerActive) {
+    return cloudText("テスター権限が必要です。", "Tester permission is required.");
+  }
+  if (targetSection === "mineCloud" && !state.cloud.canUseMine) {
+    return cloudText("個別ログインが必要です。", "Individual sign-in is required.");
+  }
+  if (targetSection !== "mineDevice" && targetSection !== "mineCloud" && targetSection !== "testerShared") {
     return cloudText("移動先を確認できません。", "The transfer destination is unavailable.");
   }
   return "";
@@ -4918,7 +4941,8 @@ function storageListTransferReason(sourceEntry, targetSection) {
 function openStorageTransferDialog(storageId, targetSection) {
   const targetKeys = {
     mineDevice: "storage.targetMineDevice",
-    mineCloud: "storage.targetMineCloud"
+    mineCloud: "storage.targetMineCloud",
+    testerShared: "storage.targetTesterShared"
   };
   if (!Object.hasOwn(targetKeys, targetSection)) {
     showAppToast(cloudText("移動先を確認できません。", "The transfer destination is unavailable."), { error: true });
@@ -4956,17 +4980,22 @@ async function executeStorageListTransfer(mode) {
   const sourceSection = storageListSectionKey(entry);
   const targetSection = pending.targetSection;
 
-  if (targetSection === "mineCloud") {
+  if (targetSection === "mineCloud" || targetSection === "testerShared") {
+    const targetScope = targetSection === "testerShared" ? "testerShared" : "mine";
     if ((sourceSection !== "mineDevice" && sourceSection !== "imported") || !entry.local) {
+      if (entry.cloud && (sourceSection === "mineCloud" || sourceSection === "testerShared")) {
+        await moveCloudListToCloud(pending.storageId, targetScope, { copy: mode === "copy" });
+        return;
+      }
       showAppToast(cloudText("このリストはクラウドへ移動またはコピーできません。", "This list cannot be moved or copied to cloud storage."), { error: true });
       return;
     }
-    await moveListToCloud(pending.storageId, { copy: mode === "copy" });
+    await moveListToCloud(pending.storageId, { copy: mode === "copy", targetScope });
     return;
   }
 
   if (targetSection === "mineDevice") {
-    if (sourceSection === "mineCloud" && entry.cloud) {
+    if ((sourceSection === "mineCloud" || sourceSection === "testerShared") && entry.cloud) {
       await moveListToDevice(pending.storageId, { copy: mode === "copy" });
       return;
     }
@@ -5547,17 +5576,6 @@ function createStorageListRow(entry) {
     onClick: () => toggleStorageListFavorite(entry.storageId)
   });
 
-  if (entry.cloud) {
-    const testerShared = isTesterSharedCloudEntry(entry);
-    addEditAction("share", testerShared ? t("list.moveToMineCloud") : t("list.moveToTesterShared"), {
-      className: testerShared ? "is-active" : "",
-      disabled: state.cloud.busy,
-      pressed: testerShared,
-      title: testerShared ? t("list.moveToMineCloud") : t("list.moveToTesterShared"),
-      onClick: () => setTesterSharedCloudList(entry.storageId, !testerShared)
-    });
-  }
-
   addEditAction("trash", t("list.delete"), {
     className: "danger-button",
     disabled: state.cloud.busy || Boolean(entry.cloud && !state.cloud.connected),
@@ -5582,16 +5600,6 @@ function isTesterSharedCloudEntry(entry) {
       || entry?.preview?.cloudScope === "testerShared"
       || (state.cloud.testerActive && cloudId && state.cloud.testerSharedListIds.has(cloudId))
   );
-}
-
-function setTesterSharedCloudList(storageId, shared) {
-  const entry = findStorageListEntry(storageId);
-  if (!entry?.cloud?.id) return;
-  if (shared) state.cloud.testerSharedListIds.add(entry.cloud.id);
-  else state.cloud.testerSharedListIds.delete(entry.cloud.id);
-  persistWorkspace();
-  setCloudStatus(t(shared ? "list.moveToTesterShared" : "list.moveToMineCloud"), { menu: false });
-  renderStorageLists();
 }
 
 function storageListSectionKey(entry) {
@@ -5659,7 +5667,8 @@ function renderStorageLists() {
   const entries = storageListEntries();
   const sections = [{ key: "mineDevice", label: "list.section.mineDevice" }];
   const hasMineCloud = state.cloud.canUseMine || state.cloud.lists.some((list) => list.scope !== "testerShared");
-  const hasTesterShared = state.cloud.lists.some((list) => list.scope === "testerShared")
+  const hasTesterShared = state.cloud.testerActive
+    || state.cloud.lists.some((list) => list.scope === "testerShared")
     || entries.some((entry) => isTesterSharedCloudEntry(entry));
   if (hasMineCloud) {
     sections.push({ key: "mineCloud", label: "list.section.mineCloud" });
@@ -6267,18 +6276,16 @@ async function moveListToCloud(storageId, options = {}) {
   }
   const source = entry.local;
   const targetCloudId = "cloud:" + createId();
-  const cloudList = { ...source, id: targetCloudId, cloudId: targetCloudId, cloudScope: "mine" };
+  const targetScope = options.targetScope === "testerShared" ? "testerShared" : "mine";
+  const cloudList = { ...source, id: targetCloudId, cloudId: targetCloudId, cloudScope: targetScope };
   const payload = pointListToCloudPayload(cloudList, pointGeo);
-  if (payload.list.scope !== "mine") {
-    setCloudStatus(cloudText("マイリスト（クラウド）として保存できません。", "Could not create a private cloud list."), { error: true });
-    return false;
-  }
   setCloudBusy(true);
   setCloudProgress(0, 1, t("storage.transferCloudProgress"));
   let completed = false;
+  let cloudDeleteFailed = false;
   try {
     const client = cloudClientFromInputs();
-    const created = await client.createList(payload);
+    await client.createList(payload, { scope: targetScope });
     if (cloudList.points.some((point) => point.photoAssetId || point.photo || point.cloudPhoto)) {
       const photoPayload = await cloudPayloadWithPhotos(cloudList, targetCloudId, client);
       await client.updateList(targetCloudId, created?.revision || 1, photoPayload);
@@ -6295,12 +6302,83 @@ async function moveListToCloud(storageId, options = {}) {
   }
   if (completed) {
     await refreshCloudLists({ quiet: true });
+    const targetLabel = targetScope === "testerShared" ? "テスター共有リスト" : "マイリスト（クラウド）";
+    const targetLabelEn = targetScope === "testerShared" ? "Tester Shared Lists" : "My Lists (Cloud)";
     setCloudStatus(options.copy === true
-      ? cloudText("マイリスト（クラウド）へコピーしました", "Copied to My Lists (Cloud)")
-      : cloudText("マイリスト（クラウド）へ移動しました", "Moved to My Lists (Cloud)"));
+      ? cloudText(`${targetLabel}へコピーしました`, `Copied to ${targetLabelEn}`)
+      : cloudText(`${targetLabel}へ移動しました`, `Moved to ${targetLabelEn}`));
   }
   return completed;
-}function uniqueLocalListId(preferredId) {
+}
+
+async function moveCloudListToCloud(storageId, targetScope, options = {}) {
+  const entry = findStorageListEntry(storageId);
+  if (!entry?.cloud || !state.cloud.connected) {
+    setCloudStatus(t("storage.connectFirst"), { error: true });
+    renderStorageLists();
+    return false;
+  }
+  if (targetScope !== "mine" && targetScope !== "testerShared") return false;
+  if (targetScope === "mine" && !state.cloud.canUseMine) {
+    setCloudStatus(cloudText("個別ログインが必要です。", "Individual sign-in is required."), { error: true });
+    return false;
+  }
+  if (targetScope === "testerShared" && !state.cloud.testerActive) {
+    setCloudStatus(cloudText("テスター権限が必要です。", "Tester permission is required."), { error: true });
+    return false;
+  }
+
+  setCloudBusy(true);
+  setCloudProgress(0, 1, t("storage.transferCloudProgress"));
+  let completed = false;
+  try {
+    const client = cloudClientFromInputs();
+    const sourceResult = await client.getList(entry.cloud.id);
+    const sourceList = await hydrateCloudPointListAssets(
+      cloudPayloadToPointList(sourceResult.list, {
+        localId: "cloud-transfer:" + sourceResult.list.list.id,
+        revision: sourceResult.revision,
+        editable: true,
+        scope: entry.cloud.scope || "mine"
+      }),
+      client,
+      { required: true }
+    );
+    for (const point of sourceList.points) point.cloudPhoto = null;
+    const targetCloudId = "cloud:" + createId();
+    const payload = await cloudPayloadWithPhotos(
+      { ...sourceList, id: targetCloudId, cloudId: targetCloudId, cloudScope: targetScope },
+      targetCloudId,
+      client
+    );
+    const created = await client.createList(payload, { scope: targetScope });
+    if (options.copy !== true) {
+      try {
+        await client.deleteList(entry.cloud.id, sourceResult.revision);
+      } catch {
+        cloudDeleteFailed = true;
+      }
+    }
+    setCloudProgress(1, 1, t("storage.transferCloudProgress"));
+    completed = true;
+  } catch (error) {
+    setCloudStatus(cloudErrorMessage(error), { error: true });
+  } finally {
+    setCloudBusy(false);
+  }
+  if (completed) {
+    await refreshCloudLists({ quiet: true });
+    setCloudStatus(cloudDeleteFailed
+      ? cloudText("コピー先を作成しましたが、元の共有先を削除できませんでした。", "The destination was created, but the source could not be deleted.")
+      : options.copy === true
+      ? cloudText(`${targetScope === "testerShared" ? "テスター共有リスト" : "マイリスト（クラウド）"}へコピーしました`, `Copied to ${targetScope === "testerShared" ? "Tester Shared Lists" : "My Lists (Cloud)"}`)
+      : cloudText(`${targetScope === "testerShared" ? "テスター共有リスト" : "マイリスト（クラウド）"}へ移動しました`, `Moved to ${targetScope === "testerShared" ? "Tester Shared Lists" : "My Lists (Cloud)"}`),
+      { error: cloudDeleteFailed });
+  }
+  return completed;
+}
+
+function uniqueLocalListId(preferredId) {
   const existingIds = new Set(state.pointLists.map((list) => list.id));
   const cloudIds = new Set(state.cloud.lists.map((list) => list.id));
   const preferred = typeof preferredId === "string" ? preferredId.trim() : "";

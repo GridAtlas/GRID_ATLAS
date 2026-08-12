@@ -14,6 +14,7 @@ Cloudflare Workers + D1で動く、アクセスコード式の地点リストClo
 - テスター権限は `X-Tester-Code` ヘッダーで追加付与する。テスターコードは通常の個別ログインとは独立して扱う。
 - 個別IDなしの旧テスターは、従来どおりテスターコードをBearer値として送れる。新しい画面ではテスター共有リストだけを表示する。
 - 個別ID＋テスターコードでは、自分のマイリスト（クラウド）とテスター共有リストの両方を返す。
+- リスト作成時は `X-Cloud-Scope: mine` または `X-Cloud-Scope: testerShared` で保存先を指定できる。後者はテスター権限が必要。
 - アクセスコード式ベータでは、Bearer値をCloudflare Worker Secrets `PERSONAL_ACCESS_CODE` / `FRIEND_ACCESS_CODE`と照合する。
 - SecretはSHA-256へ揃えた後に定数時間比較し、ソース・`wrangler.jsonc`・Gitへ保存しない。
 - ローカル控えはGit管理外の `GRID_ATLAS_CLOUD_ACCESS_CODE_PRIVATE.txt`。値を変更する場合はSecretも同時に更新する。

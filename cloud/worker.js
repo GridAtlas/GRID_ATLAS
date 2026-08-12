@@ -1,4 +1,4 @@
-import { AuthError, authenticateRequest } from "./auth.js";
+import { AuthError, authenticateRequest, requestedCloudScope } from "./auth.js";
 
 const MAX_BODY_BYTES = 256 * 1024;
 const MAX_ASSET_BYTES = 10 * 1024 * 1024;
@@ -102,8 +102,9 @@ function authorizedOwnerIds(user) {
   ].filter(Boolean))];
 }
 
-function writeOwnerId(user) {
-  return user.canUseMine ? user.id : user.isTester ? user.testerOwnerId : null;
+function writeOwnerId(user, scope = "mine") {
+  if (scope === "testerShared") return user.isTester ? user.testerOwnerId : null;
+  return user.canUseMine ? user.id : null;
 }
 
 function scopeForOwner(user, ownerId) {
@@ -182,7 +183,10 @@ async function handleListCollection(request, env, cors, user) {
   }
 
   if (request.method === "POST") {
-    const ownerId = writeOwnerId(user);
+    const scope = request.headers.has("X-Cloud-Scope")
+      ? requestedCloudScope(request)
+      : user.legacyTester ? "testerShared" : "mine";
+    const ownerId = writeOwnerId(user, scope);
     if (!ownerId) throw new AuthError("個別ログインまたはテスター権限が必要です", 403);
     const payload = await readPayload(request);
     const now = new Date().toISOString();
@@ -644,13 +648,13 @@ function corsHeaders(origin, env) {
   if (!origin || !allowed.has(origin)) {
     return origin ? null : {
       "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-      "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Asset-Name, X-Tester-Code"
+      "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Asset-Name, X-Tester-Code, X-Cloud-Scope"
     };
   }
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Asset-Name, X-Tester-Code",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Asset-Name, X-Tester-Code, X-Cloud-Scope",
     "Access-Control-Max-Age": "600",
     Vary: "Origin"
   };
