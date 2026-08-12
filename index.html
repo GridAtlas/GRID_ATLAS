@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=70">
-    <script src="src/main.js?v=303" type="module" defer></script>
+    <script src="src/main.js?v=305" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -41,6 +41,7 @@
       <symbol id="icon-fit" viewBox="0 0 24 24"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M9 20H4v-5"></path></symbol>
       <symbol id="icon-locate" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"></circle><path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path></symbol>
       <symbol id="icon-connect" viewBox="0 0 24 24"><path d="m8 16-2 2a3.5 3.5 0 0 1-5-5l3-3M16 8l2-2a3.5 3.5 0 0 1 5 5l-3 3M7 17l10-10"></path></symbol>
+      <symbol id="icon-analysis" viewBox="0 0 24 24"><path d="M5 19V9M12 19V5M19 19v-7"></path><path d="M3 19h18"></path></symbol>
       <symbol id="icon-center" viewBox="0 0 24 24"><path d="m12 3 9 9-9 9-9-9 9-9Z"></path></symbol>
       <symbol id="icon-clear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"></circle><path d="m9 9 6 6M15 9l-6 6"></path></symbol>
       <symbol id="icon-start" viewBox="0 0 24 24"><path d="m7 5 10 7-10 7V5Z"></path></symbol>
@@ -274,6 +275,10 @@
             <button id="actionLinkButton" class="action-button" type="button" title="選択順に地点を接続" disabled>
               <svg class="ui-icon" aria-hidden="true"><use href="#icon-connect"></use></svg>
               <span data-i18n="action.connect">接続</span>
+            </button>
+            <button id="actionAnalyzeButton" class="action-button" type="button" data-i18n-title="action.analyzeTitle" disabled>
+              <svg class="ui-icon" aria-hidden="true"><use href="#icon-analysis"></use></svg>
+              <span data-i18n="action.analyze">分析</span>
             </button>
             <button id="actionCenterButton" class="action-button" type="button" title="選択点の中心に仮ポイントを作成" disabled>
               <svg class="ui-icon" aria-hidden="true"><use href="#icon-center"></use></svg>
@@ -533,6 +538,21 @@
         <div class="grid-link-quick-distance" id="gridLinkQuickDistance"></div>
         <div class="grid-point-quick-actions grid-link-quick-actions" aria-label="線分のクイック操作">
           <button id="gridLinkQuickDeleteButton" class="grid-point-quick-role-button danger-button grid-link-quick-delete-button" type="button" aria-label="削除" title="削除"><svg class="ui-icon" aria-hidden="true"><use href="#icon-trash"></use></svg><span id="gridLinkQuickDeleteLabel">削除</span></button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="analysisDialog" class="analysis-dialog" aria-labelledby="analysisDialogTitle" tabindex="-1">
+      <form class="analysis-dialog-form" method="dialog">
+        <div class="analysis-dialog-heading">
+          <div>
+            <span class="analysis-dialog-kicker" data-i18n="analysis.kicker">選択結果</span>
+            <h2 id="analysisDialogTitle" tabindex="-1">分析</h2>
+          </div>
+          <button class="share-link-close" type="submit" value="cancel" aria-label="閉じる" title="閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
+        </div>
+        <div id="analysisDialogContent" class="analysis-dialog-content"></div>
+        <div class="analysis-dialog-actions">
+          <button id="analysisDialogCopyButton" class="compact-button" type="button" data-i18n="analysis.copy">結果をコピー</button>
         </div>
       </form>
     </dialog>

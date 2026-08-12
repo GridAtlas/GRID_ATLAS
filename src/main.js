@@ -28,6 +28,7 @@ import {
   readGridAtlasLineLayer,
   withoutGridAtlasLineLayer
 } from "./gridatlas-analysis.js?v=1";
+import { analyzeLineIntersection, analyzeSegmentShape } from "./shape-analysis.js?v=1";
 
 const STORAGE_KEY = "grid-atlas-workspace-v2";
 const ANALYSIS_LAYER_VERSION = 1;
@@ -55,7 +56,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1212";
+const WEB_VERSION = "0.1232";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -105,6 +106,7 @@ let canvasResizeObserver = null;
 let locationGlowFrame = 0;
 
 const elements = {
+  actionAnalyzeButton: document.querySelector("#actionAnalyzeButton"),
   actionLinkButton: document.querySelector("#actionLinkButton"),
   actionRegisterButton: document.querySelector("#actionRegisterButton"),
   actionRouteButton: document.querySelector("#actionRouteButton"),
@@ -225,6 +227,10 @@ const elements = {
   gridLinkQuickEndpoints: document.querySelector("#gridLinkQuickEndpoints"),
   gridLinkQuickDeleteButton: document.querySelector("#gridLinkQuickDeleteButton"),
   gridLinkQuickDeleteLabel: document.querySelector("#gridLinkQuickDeleteLabel"),
+  analysisDialog: document.querySelector("#analysisDialog"),
+  analysisDialogTitle: document.querySelector("#analysisDialogTitle"),
+  analysisDialogContent: document.querySelector("#analysisDialogContent"),
+  analysisDialogCopyButton: document.querySelector("#analysisDialogCopyButton"),
   appToast: document.querySelector("#appToast"),
   cloudProgress: document.querySelector("#cloudProgress"),
   cloudProgressTitle: document.querySelector("#cloudProgressTitle"),
@@ -565,6 +571,8 @@ const TRANSLATIONS = {
     "action.target": "対象",
     "action.track": "追跡",
     "action.route": "巡回",
+    "action.analyze": "分析",
+    "action.analyzeTitle": "選択した線分・図形を分析",
 
     "action.cancel": "キャンセル",
     "action.copyToList": "コピー",
@@ -649,6 +657,56 @@ const TRANSLATIONS = {
     "line.reconnected": "「{old}」を「{new}」へ接続変更しました",
     "line.invalidTarget": "別の地点へドロップしてください",
     "line.duplicateTarget": "その2地点を結ぶ線はすでにあります",
+    "analysis.kicker": "選択結果",
+    "analysis.lineTitle": "交差角",
+    "analysis.polygonTitle": "図形の分析",
+    "analysis.noSelection": "2本の線分、または閉じた線分群を選択してください",
+    "analysis.lineHint": "選択した2本の有限線分が交差する点の角度を表示します。",
+    "analysis.polygonHint": "選択した線分の接続順をそのまま閉路として測定します。",
+    "analysis.measurementDeclaration": "{shape} として測りました",
+    "analysis.measurementBasis": "基準 {shape}。頂点角 {angle}、基準 対角÷辺 {ratio}",
+    "analysis.measurementCounts": "{points}地点 / 線{lines}本 / {selfIntersection}",
+    "analysis.selfIntersection": "自己交差あり",
+    "analysis.noSelfIntersection": "自己交差なし",
+    "analysis.shapeClosed": "閉じた線分群",
+    "analysis.shapeOpen": "閉じた線分群として測定できません",
+    "analysis.shapeOpenHint": "3本以上の選択線が、各地点で2本ずつ接続する閉路になっている必要があります。",
+    "analysis.polygonKicker": "測定対象",
+    "analysis.reference": "参考値",
+    "analysis.referenceScore": "参考整い度",
+    "analysis.copy": "結果をコピー",
+    "analysis.copied": "分析結果をコピーしました",
+    "analysis.copyFailed": "コピーできませんでした",
+    "analysis.copyUnavailable": "このブラウザではコピーできません",
+    "analysis.intersection": "交差点",
+    "analysis.angle": "角度",
+    "analysis.segment": "線分",
+    "analysis.notCrossing": "線分同士は交差していません",
+    "analysis.parallel": "平行な線分です",
+    "analysis.collinear": "同一直線上の線分です",
+    "analysis.extension": "延長線上では交わりますが、線分の範囲外です",
+    "analysis.score": "近似度",
+    "analysis.shape": "形状",
+    "analysis.sides": "辺の長さ",
+    "analysis.sideBalance": "辺のそろい方",
+    "analysis.angleBalance": "角のそろい方",
+    "analysis.idealAngle": "理想の内角",
+    "analysis.meanSide": "平均辺長",
+    "analysis.perimeter": "周長",
+    "analysis.sideVariation": "辺のばらつき",
+    "analysis.maxAngleDeviation": "角度の最大ずれ",
+    "analysis.angleDeviationRate": "基準角に対する割合",
+    "analysis.referenceDiagonalRatio": "基準 対角÷辺",
+    "analysis.vertex": "頂点",
+    "analysis.veryClose": "とても近い",
+    "analysis.close": "近い",
+    "analysis.somewhatDifferent": "やや異なる",
+    "analysis.different": "差があります",
+    "analysis.regularTriangle": "正三角形",
+    "analysis.square": "正方形",
+    "analysis.regularPentagon": "正五角形",
+    "analysis.regularPolygon": "正{n}角形",
+    "analysis.coordinates": "緯度経度",
     "metric.points": "地点",
     "metric.links": "線",
     "metric.total": "合計",
@@ -845,6 +903,8 @@ const TRANSLATIONS = {
     "action.target": "Target",
     "action.track": "Track",
     "action.route": "Route",
+    "action.analyze": "Analyze",
+    "action.analyzeTitle": "Analyze selected lines or shape",
 
     "action.cancel": "Cancel",
     "action.copyToList": "Copy",
@@ -929,6 +989,56 @@ const TRANSLATIONS = {
     "line.reconnected": "Changed the connection from “{old}” to “{new}”",
     "line.invalidTarget": "Drop on a different point",
     "line.duplicateTarget": "A line between those points already exists",
+    "analysis.kicker": "Selection result",
+    "analysis.lineTitle": "Crossing angle",
+    "analysis.polygonTitle": "Shape analysis",
+    "analysis.noSelection": "Select two segments or a closed set of segments",
+    "analysis.lineHint": "Shows the angle where the two selected finite segments cross.",
+    "analysis.polygonHint": "Measures the selected segments as the closed walk they form, without reordering them.",
+    "analysis.measurementDeclaration": "Measured as {shape}",
+    "analysis.measurementBasis": "Reference {shape}. Vertex angle {angle}; reference diagonal/side {ratio}",
+    "analysis.measurementCounts": "{points} points / {lines} lines / {selfIntersection}",
+    "analysis.selfIntersection": "self-intersecting",
+    "analysis.noSelfIntersection": "not self-intersecting",
+    "analysis.shapeClosed": "closed segment set",
+    "analysis.shapeOpen": "Cannot measure as a closed segment set",
+    "analysis.shapeOpenHint": "Three or more selected segments must form a cycle with exactly two connections at each point.",
+    "analysis.polygonKicker": "Measured target",
+    "analysis.reference": "Reference",
+    "analysis.referenceScore": "Reference fit",
+    "analysis.copy": "Copy result",
+    "analysis.copied": "Analysis result copied",
+    "analysis.copyFailed": "Could not copy the result",
+    "analysis.copyUnavailable": "Copy is not available in this browser",
+    "analysis.intersection": "Intersection",
+    "analysis.angle": "Angle",
+    "analysis.segment": "Segment",
+    "analysis.notCrossing": "The selected segments do not cross",
+    "analysis.parallel": "The segments are parallel",
+    "analysis.collinear": "The segments are collinear",
+    "analysis.extension": "Their extensions meet, but the finite segments do not",
+    "analysis.score": "Fit",
+    "analysis.shape": "Shape",
+    "analysis.sides": "Side lengths",
+    "analysis.sideBalance": "Side balance",
+    "analysis.angleBalance": "Angle balance",
+    "analysis.idealAngle": "Ideal interior angle",
+    "analysis.meanSide": "Average side",
+    "analysis.perimeter": "Perimeter",
+    "analysis.sideVariation": "Side variation",
+    "analysis.maxAngleDeviation": "Maximum angle deviation",
+    "analysis.angleDeviationRate": "Relative to reference angle",
+    "analysis.referenceDiagonalRatio": "Reference diagonal/side",
+    "analysis.vertex": "Vertex",
+    "analysis.veryClose": "Very close",
+    "analysis.close": "Close",
+    "analysis.somewhatDifferent": "Somewhat different",
+    "analysis.different": "Different",
+    "analysis.regularTriangle": "Equilateral triangle",
+    "analysis.square": "Square",
+    "analysis.regularPentagon": "Regular pentagon",
+    "analysis.regularPolygon": "Regular {n}-gon",
+    "analysis.coordinates": "Coordinates",
     "metric.points": "Points",
     "metric.links": "Lines",
     "metric.total": "Total",
@@ -3118,6 +3228,7 @@ function render() {
   renderPointInfoDialog();
   renderGridPointQuickDialog();
   renderGridLinkQuickDialog();
+  renderSelectionAnalysisDialog();
   syncSettingsControls();
   syncLocationGlowAnimation();
 }
@@ -3434,10 +3545,12 @@ function renderActionButtons() {
   const observationSelected = isLoadedObservationSelected();
   const canDelete = deletablePointCount + linkIds.length > 0 || observationSelected;
   const transferablePointCount = transferableSelectedPoints().length;
+  const analysisTarget = selectionAnalysisTarget();
 
   const canOpenRegistration = !hasPendingPoint && state.selection.length === 0;
   elements.actionRegisterButton.disabled = !hasPendingPoint && !canOpenRegistration;
   elements.actionLinkButton.disabled = pointIds.length < 2;
+  elements.actionAnalyzeButton.disabled = !analysisTarget;
   elements.actionRouteButton.disabled = !routeActive && !routePlan;
   elements.deletePointButton.disabled = !canDelete;
   elements.clearSelectionButton.disabled = state.selection.length === 0 && !hasPendingPoint;
@@ -3464,6 +3577,7 @@ function renderActionButtons() {
     : pointIds.length >= 2
       ? `選択順に${pointIds.length}地点を接続`
       : "2地点以上を選択すると接続できます";
+  elements.actionAnalyzeButton.title = analysisTarget ? t("action.analyzeTitle") : t("analysis.noSelection");
   elements.actionRouteButton.classList.toggle("is-active", routeActive);
   elements.actionRouteButton.setAttribute("aria-pressed", String(routeActive));
   elements.actionRouteButton.title = routeActive ? "巡回表示を解除" : routePlan ? "選択点を起点から巡回計算" : "起点を指定するか3地点以上を選択";
@@ -3782,6 +3896,273 @@ function renderGridLinkQuickDialog() {
   elements.gridLinkQuickDeleteLabel.textContent = t("action.delete");
   elements.gridLinkQuickDeleteButton.setAttribute("aria-label", t("action.delete"));
   elements.gridLinkQuickDeleteButton.title = t("action.delete");
+}
+
+function selectionAnalysisTarget() {
+  const links = selectedLinkIds().map(findLink).filter(Boolean);
+
+  if (links.length === 2) {
+    const segments = links.map((link) => linkEndpoints(link)).filter(Boolean);
+    if (segments.length === 2) {
+      return { type: "line", links, segments };
+    }
+  }
+
+  if (links.length >= 3) {
+    const segments = links.map((link) => linkEndpoints(link)).filter(Boolean);
+    if (segments.length >= 3) return { type: "polygon", links, segments };
+  }
+
+  return null;
+}
+
+function openSelectionAnalysis() {
+  const target = selectionAnalysisTarget();
+  if (!target || !elements.analysisDialog?.showModal) return;
+  if (!elements.analysisDialog.open) elements.analysisDialog.showModal();
+  renderSelectionAnalysisDialog(target);
+  window.setTimeout(() => elements.analysisDialogTitle?.focus(), 0);
+}
+
+function renderSelectionAnalysisDialog(target = selectionAnalysisTarget()) {
+  if (!elements.analysisDialog?.open) return;
+  if (!target) {
+    elements.analysisDialog.close("selection-changed");
+    return;
+  }
+
+  elements.analysisDialogTitle.textContent = target.type === "line" ? t("analysis.lineTitle") : t("analysis.polygonTitle");
+  elements.analysisDialogContent.replaceChildren();
+  if (target.type === "line") {
+    renderLineAnalysisDialog(target);
+  } else {
+    renderPolygonAnalysisDialog(target);
+  }
+  elements.analysisDialogCopyButton.disabled = !target;
+  elements.analysisDialogCopyButton.textContent = t("analysis.copy");
+}
+
+function renderLineAnalysisDialog(target) {
+  const result = analyzeLineIntersection(target.segments[0], target.segments[1]);
+  appendAnalysisText(elements.analysisDialogContent, "p", "analysis-dialog-hint", t("analysis.lineHint"));
+
+  if (!result.intersects) {
+    const status = document.createElement("div");
+    status.className = "analysis-empty-result";
+    status.textContent = result.reason === "parallel"
+      ? t("analysis.parallel")
+      : result.reason === "collinear"
+        ? t("analysis.collinear")
+        : t("analysis.extension");
+    elements.analysisDialogContent.append(status);
+    if (Number.isFinite(result.angle) && result.reason === "extension") {
+      appendAnalysisMetric(elements.analysisDialogContent, t("analysis.angle"), formatAngle(result.angle));
+    }
+    renderAnalysisSegmentList(target.links);
+    return;
+  }
+
+  const hero = document.createElement("div");
+  hero.className = "analysis-hero";
+  appendAnalysisText(hero, "strong", "analysis-hero-value", formatAngle(result.angle));
+  appendAnalysisText(hero, "span", "analysis-hero-label", t("analysis.angle"));
+  elements.analysisDialogContent.append(hero);
+
+  const geo = result.point ? unprojectWorld(result.point.x, result.point.y) : null;
+  if (geo) appendAnalysisMetric(elements.analysisDialogContent, t("analysis.intersection"), `${formatCoordinate(geo.lat)}, ${formatCoordinate(geo.lng)}`);
+  renderAnalysisSegmentList(target.links);
+}
+
+function renderAnalysisSegmentList(links) {
+  const list = document.createElement("div");
+  list.className = "analysis-segment-list";
+  for (const [index, link] of links.entries()) {
+    const endpoints = linkEndpoints(link);
+    const label = endpoints ? `${endpoints.a.title} / ${endpoints.b.title}` : linkTitle(link);
+    appendAnalysisText(list, "span", "analysis-segment-label", `${t("analysis.segment")} ${index + 1}`);
+    appendAnalysisText(list, "strong", "analysis-segment-name", label);
+  }
+  elements.analysisDialogContent.append(list);
+}
+
+async function copySelectionAnalysis() {
+  const target = selectionAnalysisTarget();
+  if (!target) return;
+  const text = selectionAnalysisText(target);
+  const copied = await writeClipboardText(text);
+  if (copied) {
+    showAppToast(t("analysis.copied"));
+    return;
+  }
+  showAppToast(t("analysis.copyFailed"), { error: true });
+}
+
+function selectionAnalysisText(target) {
+  if (target.type === "line") {
+    const result = analyzeLineIntersection(target.segments[0], target.segments[1]);
+    const names = target.links.map((link) => linkTitle(link));
+    return [
+      `GRID ATLAS — ${t("analysis.lineTitle")}`,
+      `${t("analysis.segment")} 1: ${names[0]}`,
+      `${t("analysis.segment")} 2: ${names[1]}`,
+      result.intersects ? `${t("analysis.angle")}: ${formatAngle(result.angle)}` : t("analysis.notCrossing")
+    ].join("\n");
+  }
+
+  const result = analyzeSegmentShape(target.segments);
+  if (!result.valid) {
+    return [t("analysis.polygonTitle"), t("analysis.shapeOpen"), t("analysis.shapeOpenHint")].join("\n");
+  }
+
+  const shape = polygonName(result.n, result.k);
+  const selfIntersection = result.selfIntersections > 0 ? t("analysis.selfIntersection") : t("analysis.noSelfIntersection");
+  return [
+    `GRID ATLAS — ${t("analysis.polygonTitle")}`,
+    t("analysis.measurementDeclaration").replace("{shape}", shape),
+    t("analysis.measurementCounts")
+      .replace("{points}", String(result.n))
+      .replace("{lines}", String(target.links.length))
+      .replace("{selfIntersection}", selfIntersection),
+    t("analysis.measurementBasis")
+      .replace("{shape}", shape)
+      .replace("{angle}", formatAngle(result.idealAngle))
+      .replace("{ratio}", result.idealDiagonalToSide.toFixed(4)),
+    `${t("analysis.sideVariation")}: ${formatPercent(result.sideRangePercent)}`,
+    `${t("analysis.meanSide")}: ${formatDistance(result.meanSide)}`,
+    `${t("analysis.perimeter")}: ${formatDistance(result.perimeter)}`,
+    `${t("analysis.maxAngleDeviation")}: ${formatAngle(result.maxAngleDeviation)} (${formatPercent(result.maxAngleDeviationPercent)})`,
+    `${t("analysis.referenceDiagonalRatio")}: ${result.idealDiagonalToSide.toFixed(4)}`,
+    "",
+    ...result.points.map((point, index) => `${point.title || `${t("analysis.vertex")} ${index + 1}`}: ${formatAngle(result.angles[index])} / ${formatDistance(result.sideLengths[index])}`)
+  ].join("\n");
+}
+
+async function writeClipboardText(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Fall through to the legacy copy path.
+    }
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.append(textarea);
+  textarea.select();
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
+  } catch {
+    copied = false;
+  }
+  textarea.remove();
+  return copied;
+}
+
+function renderPolygonAnalysisDialog(target) {
+  const result = analyzeSegmentShape(target.segments);
+  appendAnalysisText(elements.analysisDialogContent, "p", "analysis-dialog-hint", t("analysis.polygonHint"));
+  if (!result.valid) {
+    appendAnalysisText(elements.analysisDialogContent, "div", "analysis-empty-result", t("analysis.shapeOpen"));
+    appendAnalysisText(elements.analysisDialogContent, "p", "analysis-dialog-hint", t("analysis.shapeOpenHint"));
+    renderAnalysisSegmentList(target.links);
+    return;
+  }
+
+  const shape = polygonName(result.n, result.k);
+  const selfIntersection = result.selfIntersections > 0 ? t("analysis.selfIntersection") : t("analysis.noSelfIntersection");
+  appendAnalysisText(elements.analysisDialogContent, "div", "analysis-measurement-declaration", t("analysis.measurementDeclaration").replace("{shape}", shape));
+  appendAnalysisText(
+    elements.analysisDialogContent,
+    "div",
+    "analysis-measurement-counts",
+    t("analysis.measurementCounts")
+      .replace("{points}", String(result.n))
+      .replace("{lines}", String(target.links.length))
+      .replace("{selfIntersection}", selfIntersection)
+  );
+  appendAnalysisText(
+    elements.analysisDialogContent,
+    "div",
+    "analysis-measurement-basis",
+    t("analysis.measurementBasis")
+      .replace("{shape}", shape)
+      .replace("{angle}", formatAngle(result.idealAngle))
+      .replace("{ratio}", result.idealDiagonalToSide.toFixed(4))
+  );
+
+  const metrics = document.createElement("div");
+  metrics.className = "analysis-metric-grid";
+  appendAnalysisMetric(metrics, t("analysis.sideVariation"), formatPercent(result.sideRangePercent));
+  appendAnalysisMetric(metrics, t("analysis.meanSide"), formatDistance(result.meanSide));
+  appendAnalysisMetric(metrics, t("analysis.perimeter"), formatDistance(result.perimeter));
+  appendAnalysisMetric(metrics, t("analysis.maxAngleDeviation"), formatAngle(result.maxAngleDeviation));
+  appendAnalysisMetric(metrics, t("analysis.angleDeviationRate"), formatPercent(result.maxAngleDeviationPercent));
+  appendAnalysisMetric(metrics, t("analysis.referenceDiagonalRatio"), result.idealDiagonalToSide.toFixed(4));
+  elements.analysisDialogContent.append(metrics);
+
+  const reference = document.createElement("div");
+  reference.className = "analysis-reference-note";
+  appendAnalysisText(reference, "span", "", `${t("analysis.reference")} · ${t("analysis.referenceScore")}`);
+  appendAnalysisText(reference, "strong", "", `${Math.round(result.referenceScore)} / 100`);
+  elements.analysisDialogContent.append(reference);
+
+  const table = document.createElement("div");
+  table.className = "analysis-vertex-table";
+  const header = document.createElement("div");
+  header.className = "analysis-vertex-row analysis-vertex-header";
+  appendAnalysisText(header, "span", "", t("analysis.vertex"));
+  appendAnalysisText(header, "span", "", t("analysis.angle"));
+  appendAnalysisText(header, "span", "", t("analysis.sides"));
+  table.append(header);
+  result.points.forEach((point, index) => {
+    const row = document.createElement("div");
+    row.className = "analysis-vertex-row";
+    appendAnalysisText(row, "span", "analysis-vertex-name", point.title || `${t("analysis.vertex")} ${index + 1}`);
+    appendAnalysisText(row, "span", "", formatAngle(result.angles[index]));
+    appendAnalysisText(row, "span", "", formatDistance(result.sideLengths[index]));
+    table.append(row);
+  });
+  elements.analysisDialogContent.append(table);
+}
+
+function appendAnalysisMetric(container, label, value) {
+  const metric = document.createElement("div");
+  metric.className = "analysis-metric";
+  appendAnalysisText(metric, "span", "", label);
+  appendAnalysisText(metric, "strong", "", value);
+  container.append(metric);
+}
+
+function appendAnalysisText(container, tagName, className, text) {
+  const element = document.createElement(tagName);
+  if (className) element.className = className;
+  element.textContent = text;
+  container.append(element);
+  return element;
+}
+
+function formatAngle(value) {
+  return Number.isFinite(value) ? `${value.toFixed(1)}°` : "-";
+}
+
+function formatPercent(value) {
+  return Number.isFinite(value) ? `${value.toFixed(2)}%` : "-";
+}
+
+function polygonName(count, turn = 1) {
+  const symbol = `{${count}/${turn}}`;
+  if (turn === 1) {
+    if (count === 3) return `${t("analysis.regularTriangle")} ${symbol}`;
+    if (count === 4) return `${t("analysis.square")} ${symbol}`;
+    if (count === 5) return `${t("analysis.regularPentagon")} ${symbol}`;
+    return `${t("analysis.regularPolygon").replace("{n}", String(count))} ${symbol}`;
+  }
+  return `${count}${activeLanguage() === EN_LANGUAGE ? "-point star" : "芒星"} ${symbol}`;
 }
 
 async function deleteGridLinkFromQuickDialog() {
@@ -10769,6 +11150,7 @@ function bindEvents() {
     }
   });
   elements.actionLinkButton.addEventListener("click", connectSelectedPoints);
+  elements.actionAnalyzeButton.addEventListener("click", openSelectionAnalysis);
   elements.actionRegisterButton.addEventListener("click", submitPendingPoint);
   elements.closePointRegistrationButton.addEventListener("click", closePointRegistration);
   elements.actionRouteButton.addEventListener("click", setRouteFromSelectedPoints);
@@ -10830,6 +11212,10 @@ function bindEvents() {
   elements.gridLinkQuickDialog.addEventListener("click", (event) => {
     if (event.target === elements.gridLinkQuickDialog) elements.gridLinkQuickDialog.close("cancel");
   });
+  elements.analysisDialog.addEventListener("click", (event) => {
+    if (event.target === elements.analysisDialog) elements.analysisDialog.close("cancel");
+  });
+  elements.analysisDialogCopyButton.addEventListener("click", () => void copySelectionAnalysis());
   document.addEventListener("pointerdown", (event) => {
     if (!elements.gridPointQuickDialog.open) return;
     if (event.target instanceof Node && elements.gridPointQuickDialog.contains(event.target)) return;

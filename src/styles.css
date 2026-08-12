@@ -2097,6 +2097,7 @@ textarea {
 .point-list-preview-dialog,
 .point-transfer-dialog,
 .grid-link-quick-dialog,
+.analysis-dialog,
 .confirm-dialog,
 .text-input-dialog {
   width: min(560px, calc(100vw - 24px));
@@ -2114,6 +2115,7 @@ textarea {
 .point-list-preview-dialog::backdrop,
 .point-transfer-dialog::backdrop,
 .grid-link-quick-dialog::backdrop,
+.analysis-dialog::backdrop,
 .confirm-dialog::backdrop,
 .text-input-dialog::backdrop {
   background: rgb(0 0 0 / 0.58);
@@ -2125,6 +2127,7 @@ textarea {
 .point-list-preview-dialog-form,
 .point-transfer-dialog-form,
 .grid-link-quick-dialog-form,
+.analysis-dialog-form,
 .confirm-dialog-form,
 .text-input-dialog-form {
   display: grid;
@@ -2137,6 +2140,7 @@ textarea {
 .point-list-preview-dialog-heading,
 .point-transfer-dialog-heading,
 .grid-link-quick-heading,
+.analysis-dialog-heading,
 .confirm-dialog-heading,
 .text-input-dialog-heading {
   display: flex;
@@ -2150,6 +2154,7 @@ textarea {
 .point-list-preview-dialog-heading h2,
 .point-transfer-dialog-heading h2,
 .grid-link-quick-heading h2,
+.analysis-dialog-heading h2,
 .confirm-dialog-heading h2,
 .text-input-dialog-heading h2 {
   margin: 0;
@@ -2387,6 +2392,217 @@ textarea {
   border-color: var(--accent);
   background: var(--active-bg);
   color: var(--accent-strong);
+}
+
+.analysis-dialog {
+  width: min(520px, calc(100vw - 24px));
+}
+
+.analysis-dialog-form {
+  max-height: min(720px, calc(100dvh - 24px));
+  overflow-y: auto;
+}
+
+.analysis-dialog-heading {
+  align-items: flex-start;
+}
+
+.analysis-dialog-kicker {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--accent-strong);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.analysis-dialog-content {
+  display: grid;
+  gap: 12px;
+}
+
+.analysis-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 2px;
+  border-top: 1px solid var(--line);
+}
+
+.analysis-measurement-declaration {
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.analysis-measurement-counts,
+.analysis-measurement-basis {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.analysis-measurement-basis {
+  padding-bottom: 3px;
+}
+
+.analysis-reference-note {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.analysis-reference-note strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.analysis-dialog-hint {
+  margin: -4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.analysis-hero {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  padding: 15px 12px 13px;
+  border: 1px solid color-mix(in srgb, var(--accent) 52%, var(--line));
+  border-radius: 9px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 12%, var(--surface-strong)), var(--surface));
+}
+
+.analysis-hero-value {
+  color: var(--accent-strong);
+  font-size: 32px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.analysis-hero-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.analysis-polygon-hero .analysis-hero-value {
+  font-size: 34px;
+}
+
+.analysis-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.analysis-metric {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-strong);
+}
+
+.analysis-metric span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.analysis-metric strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analysis-segment-list {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 7px 10px;
+  align-items: center;
+  padding-top: 2px;
+}
+
+.analysis-segment-label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.analysis-segment-name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analysis-empty-result {
+  padding: 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.analysis-vertex-table {
+  display: grid;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--line);
+}
+
+.analysis-vertex-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 76px 96px;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 8px 10px;
+  background: var(--surface);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.analysis-vertex-row > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analysis-vertex-row > :not(:first-child) {
+  text-align: right;
+}
+
+.analysis-vertex-header {
+  background: var(--surface-strong);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.analysis-vertex-name {
+  font-weight: 750;
 }
 
 .grid-point-quick-dialog {
