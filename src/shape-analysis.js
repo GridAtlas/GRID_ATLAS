@@ -172,7 +172,12 @@ export function analyzeRegularPolygon(points) {
   }
 
   const ordered = orderAroundCenter(validPoints);
-  const sideLengths = ordered.map((point, index) => length(subtract(ordered[(index + 1) % ordered.length], point)));
+  const sideLengths = ordered.map((point, index) => {
+    const next = ordered[(index + 1) % ordered.length];
+    return validGeo(point.geo) && validGeo(next.geo)
+      ? vincentyDistanceMeters(point, next)
+      : length(subtract(next, point));
+  });
   const angles = ordered.map((point, index) => {
     const previous = ordered[(index + ordered.length - 1) % ordered.length];
     const next = ordered[(index + 1) % ordered.length];

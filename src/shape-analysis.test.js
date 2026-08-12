@@ -27,6 +27,19 @@ describe("shape analysis", () => {
     expect(result.angles.every((angle) => Math.abs(angle - 90) < 0.001)).toBe(true);
   });
 
+  it("keeps regular-polygon distances independent from x/y scale when geo is present", () => {
+    const points = [
+      { x: -1, y: -1, geo: { lat: 35.6, lng: 139.6 } },
+      { x: 1, y: -1, geo: { lat: 35.6, lng: 139.7 } },
+      { x: 1, y: 1, geo: { lat: 35.7, lng: 139.7 } },
+      { x: -1, y: 1, geo: { lat: 35.7, lng: 139.6 } }
+    ];
+    const original = analyzeRegularPolygon(points);
+    const scaled = analyzeRegularPolygon(points.map((point) => ({ ...point, x: point.x / 2, y: point.y / 2 })));
+
+    expect(scaled.meanSide).toBeCloseTo(original.meanSide, 6);
+  });
+
   it("reports when segments only meet on their extensions", () => {
     const result = analyzeLineIntersection(
       { a: { x: 0, y: 0 }, b: { x: 1, y: 0 } },
