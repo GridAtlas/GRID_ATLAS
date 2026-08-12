@@ -12,6 +12,22 @@ export function cloudAuthConfig() {
   };
 }
 
+export function cloudAuthUrlState() {
+  if (typeof window === "undefined") {
+    return { code: "", error: "", errorCode: "", errorDescription: "", type: "" };
+  }
+  const search = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const read = (key) => search.get(key) || hash.get(key) || "";
+  return {
+    code: search.get("code") || "",
+    error: read("error"),
+    errorCode: read("error_code"),
+    errorDescription: read("error_description"),
+    type: read("type")
+  };
+}
+
 export async function createCloudAuthClient() {
   const config = cloudAuthConfig();
   if (!config.url || !config.publishableKey) return null;
@@ -21,6 +37,7 @@ export async function createCloudAuthClient() {
     auth: {
       autoRefreshToken: true,
       detectSessionInUrl: true,
+      flowType: "implicit",
       persistSession: true
     }
   });

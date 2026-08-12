@@ -4,7 +4,7 @@ import {
   createCloudClient,
   pointListToCloudPayload
 } from "./cloud-client.js?v=3";
-import { cloudAuthConfig, createCloudAuthClient } from "./cloud-auth.js?v=1";
+import { cloudAuthConfig, cloudAuthUrlState, createCloudAuthClient } from "./cloud-auth.js?v=1";
 import {
   GRIDATLAS_MIME_TYPE,
   GRIDATLAS_URL_PARAMETER,
@@ -54,7 +54,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1203";
+const WEB_VERSION = "0.1204";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -5732,10 +5732,23 @@ async function initializeCloudAuth() {
   renderCloudAuthControls();
   if (!state.cloud.authClient) return;
 
+  const authUrlState = cloudAuthUrlState();
+  if (authUrlState.error) {
+    const detail = authUrlState.errorCode === "otp_expired"
+      ? "招待リンクの期限が切れているか、すでに使用済みです。Supabaseから新しいメールを送ってください"
+      : authUrlState.errorDescription || "認証リンクを確認できませんでした";
+    setCloudAuthStatus(detail, { error: true });
+  }
+
   state.cloud.authClient.auth.onAuthStateChange((_event, session) => {
     applyCloudAuthSession(session, { forceRefresh: true });
   });
   try {
+    if (authUrlState.code) {
+      const { error } = await state.cloud.authClient.auth.exchangeCodeForSession(authUrlState.code);
+      if (error) throw error;
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
     const { data, error } = await state.cloud.authClient.auth.getSession();
     if (error) throw error;
     applyCloudAuthSession(data.session, { refresh: Boolean(data.session), forceRefresh: true });
