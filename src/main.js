@@ -55,7 +55,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1206";
+const WEB_VERSION = "0.1207";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -273,10 +273,15 @@ const elements = {
   cloudAuthPanel: document.querySelector("#cloudAuthPanel"),
   cloudAuthEmail: document.querySelector("#cloudAuthEmail"),
   cloudAuthPassword: document.querySelector("#cloudAuthPassword"),
+  cloudEmailField: document.querySelector("#cloudEmailField"),
+  cloudPasswordField: document.querySelector("#cloudPasswordField"),
   cloudSignUpButton: document.querySelector("#cloudSignUpButton"),
   cloudSignInButton: document.querySelector("#cloudSignInButton"),
   cloudSignOutButton: document.querySelector("#cloudSignOutButton"),
   cloudAuthStatus: document.querySelector("#cloudAuthStatus"),
+  cloudSessionBadge: document.querySelector("#cloudSessionBadge"),
+  cloudSessionCard: document.querySelector("#cloudSessionCard"),
+  cloudSessionEmail: document.querySelector("#cloudSessionEmail"),
   cloudPasswordPanel: document.querySelector("#cloudPasswordPanel"),
   cloudNewPassword: document.querySelector("#cloudNewPassword"),
   cloudNewPasswordConfirm: document.querySelector("#cloudNewPasswordConfirm"),
@@ -5680,9 +5685,17 @@ function renderCloudAuthControls() {
   const signedIn = Boolean(state.cloud.authSession?.access_token);
   const passwordSetupComplete = hasCloudPasswordSetup(state.cloud.authUser?.id);
   const busy = state.cloud.busy || state.cloud.authBusy;
+  elements.cloudAuthPanel.classList.toggle("is-signed-in", signedIn);
+  if (elements.cloudSessionBadge) elements.cloudSessionBadge.hidden = !signedIn;
+  if (elements.cloudSessionCard) elements.cloudSessionCard.hidden = !signedIn;
+  if (elements.cloudSessionEmail) elements.cloudSessionEmail.textContent = state.cloud.authUser?.email || "";
+  if (elements.cloudEmailField) elements.cloudEmailField.hidden = signedIn;
+  if (elements.cloudPasswordField) elements.cloudPasswordField.hidden = signedIn;
   if (elements.cloudSignUpButton) elements.cloudSignUpButton.disabled = busy || signedIn;
   if (elements.cloudSignInButton) elements.cloudSignInButton.disabled = busy || signedIn;
   if (elements.cloudSignOutButton) elements.cloudSignOutButton.disabled = busy || !signedIn;
+  if (elements.cloudSignInButton) elements.cloudSignInButton.hidden = signedIn;
+  if (elements.cloudSignOutButton) elements.cloudSignOutButton.hidden = !signedIn;
   if (elements.cloudPasswordPanel) elements.cloudPasswordPanel.hidden = !signedIn || passwordSetupComplete;
   if (elements.cloudSetPasswordButton) elements.cloudSetPasswordButton.disabled = busy || !signedIn;
   if (signedIn && state.cloud.authUser?.email && elements.cloudAuthStatus && !elements.cloudAuthStatus.classList.contains("is-error")) {

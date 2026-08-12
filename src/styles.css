@@ -385,6 +385,92 @@ button {
   padding-top: 10px;
 }
 
+.cloud-auth-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
+}
+
+.cloud-auth-panel[hidden],
+.cloud-auth-panel [hidden] {
+  display: none !important;
+}
+
+.cloud-auth-panel.is-signed-in {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+  background: color-mix(in srgb, var(--accent) 7%, var(--panel));
+}
+
+.cloud-auth-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cloud-session-badge {
+  padding: 4px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 65%, var(--line));
+  border-radius: 999px;
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.cloud-session-card {
+  display: grid;
+  grid-template-columns: 30px 1fr 8px;
+  align-items: center;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 11%, var(--panel));
+}
+
+.cloud-session-mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--on-accent);
+  background: var(--accent);
+  font-weight: 900;
+}
+
+.cloud-session-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cloud-session-copy strong {
+  color: var(--accent-strong);
+  font-size: 13px;
+}
+
+.cloud-session-copy > span {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloud-session-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
 .settings-panel label {
   display: grid;
   gap: 5px;
