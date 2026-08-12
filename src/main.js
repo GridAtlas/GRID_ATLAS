@@ -54,7 +54,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1202";
+const WEB_VERSION = "0.1203";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -276,6 +276,11 @@ const elements = {
   cloudSignInButton: document.querySelector("#cloudSignInButton"),
   cloudSignOutButton: document.querySelector("#cloudSignOutButton"),
   cloudAuthStatus: document.querySelector("#cloudAuthStatus"),
+  cloudPasswordPanel: document.querySelector("#cloudPasswordPanel"),
+  cloudNewPassword: document.querySelector("#cloudNewPassword"),
+  cloudNewPasswordConfirm: document.querySelector("#cloudNewPasswordConfirm"),
+  cloudSetPasswordButton: document.querySelector("#cloudSetPasswordButton"),
+  cloudPasswordStatus: document.querySelector("#cloudPasswordStatus"),
   cloudAccessToken: document.querySelector("#cloudAccessToken"),
   cloudConnectButton: document.querySelector("#cloudConnectButton"),
   cloudRefreshButton: document.querySelector("#cloudRefreshButton"),
@@ -393,6 +398,7 @@ let appToastTimerId = 0;
 let pendingConfirmResolve = null;
 let pendingTextInputResolve = null;
 let pendingTextInputOptions = null;
+let pointSubmitInFlight = null;
 let activeStorageListDrag = null;
 let activePointIndexDrag = null;
 
@@ -5653,6 +5659,8 @@ function renderCloudAuthControls() {
   if (elements.cloudSignUpButton) elements.cloudSignUpButton.disabled = busy || signedIn;
   if (elements.cloudSignInButton) elements.cloudSignInButton.disabled = busy || signedIn;
   if (elements.cloudSignOutButton) elements.cloudSignOutButton.disabled = busy || !signedIn;
+  if (elements.cloudPasswordPanel) elements.cloudPasswordPanel.hidden = !signedIn;
+  if (elements.cloudSetPasswordButton) elements.cloudSetPasswordButton.disabled = busy || !signedIn;
   if (signedIn && state.cloud.authUser?.email && elements.cloudAuthStatus && !elements.cloudAuthStatus.classList.contains("is-error")) {
     elements.cloudAuthStatus.textContent = cloudText(
       `${state.cloud.authUser.email} でログイン中`,
@@ -5679,6 +5687,42 @@ function applyCloudAuthSession(session, options = {}) {
   renderCloudAuthControls();
   renderStorageLists();
   syncCloudControls();
+}
+
+function setCloudPasswordStatus(message, options = {}) {
+  if (!elements.cloudPasswordStatus) return;
+  elements.cloudPasswordStatus.textContent = message || "";
+  elements.cloudPasswordStatus.classList.toggle("is-error", options.error === true);
+}
+
+async function setCloudPassword() {
+  if (!state.cloud.authClient || state.cloud.authBusy) return;
+  const password = elements.cloudNewPassword?.value || "";
+  const confirmation = elements.cloudNewPasswordConfirm?.value || "";
+  if (password.length < 6) {
+    setCloudPasswordStatus("パスワードは6文字以上にしてください", { error: true });
+    return;
+  }
+  if (password !== confirmation) {
+    setCloudPasswordStatus("パスワードが一致しません", { error: true });
+    return;
+  }
+
+  state.cloud.authBusy = true;
+  renderCloudAuthControls();
+  setCloudPasswordStatus("パスワードを設定しています…");
+  try {
+    const { error } = await state.cloud.authClient.auth.updateUser({ password });
+    if (error) throw error;
+    elements.cloudNewPassword.value = "";
+    elements.cloudNewPasswordConfirm.value = "";
+    setCloudPasswordStatus("パスワードを設定しました。次回から通常ログインできます");
+  } catch (error) {
+    setCloudPasswordStatus(error?.message || "パスワードの設定に失敗しました", { error: true });
+  } finally {
+    state.cloud.authBusy = false;
+    renderCloudAuthControls();
+  }
 }
 
 async function initializeCloudAuth() {
@@ -8257,6 +8301,18 @@ function closePointRegistration() {
   resetPointFormAfterSubmit();
   render();
 }
+
+function nextAutoPointTitle() {
+  const existingTitles = new Set(
+    [...allPointListPoints(), ...state.cloud.pointLists.flatMap((list) => list.points)]
+      .map((point) => String(point.title || "").trim().toLocaleUpperCase())
+      .filter(Boolean)
+  );
+  let index = 1;
+  while (existingTitles.has(`POINT ${index}`)) index += 1;
+  return `POINT ${index}`;
+}
+
 async function saveEditedPointToDestination(editingList, destinationList, updatedPoint, updatedAt) {
   if (editingList === destinationList) {
     const nextList = {
@@ -8300,6 +8356,20 @@ async function saveEditedPointToDestination(editingList, destinationList, update
 }
 async function submitPoint(event) {
   event.preventDefault();
+  if (pointSubmitInFlight) return;
+
+  elements.pointSubmitButton.disabled = true;
+  const submission = submitPointInternal();
+  pointSubmitInFlight = submission;
+  try {
+    await submission;
+  } finally {
+    if (pointSubmitInFlight === submission) pointSubmitInFlight = null;
+    elements.pointSubmitButton.disabled = state.cloud.busy;
+  }
+}
+
+async function submitPointInternal() {
   const lat = Number.parseFloat(elements.pointLat.value);
   const lng = Number.parseFloat(elements.pointLng.value);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -8380,7 +8450,7 @@ async function submitPoint(event) {
     id: createId(),
     x: projected.x,
     y: projected.y,
-    title: elements.pointTitle.value.trim() || `Point ${list.points.length + 1}`,
+    title: elements.pointTitle.value.trim() || nextAutoPointTitle(),
     note: elements.pointNote.value.trim(),
     photo: photoDisplay || "",
     photoName: file?.name ?? "",
@@ -10408,6 +10478,8 @@ function bindEvents() {
   elements.cloudSignUpButton?.addEventListener("click", () => void signUpCloud());
   elements.cloudSignInButton?.addEventListener("click", () => void signInCloud());
   elements.cloudSignOutButton?.addEventListener("click", () => void signOutCloud());
+  elements.cloudAuthPanel?.addEventListener("submit", (event) => event.preventDefault());
+  elements.cloudSetPasswordButton?.addEventListener("click", () => void setCloudPassword());
   elements.cloudConnectButton.addEventListener("click", () => void connectCloud());
   elements.cloudRefreshButton.addEventListener("click", () => void requestCloudRefresh());
   elements.cloudDisconnectButton.addEventListener("click", disconnectCloud);

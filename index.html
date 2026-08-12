@@ -30,8 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=70">
-    <script src="src/main.js?v=293" type="module" defer></script>
-    <script src="src/cloud-password.js?v=1" type="module" defer></script>
+    <script src="src/main.js?v=294" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -132,7 +131,7 @@
                   <span class="cloud-menu-caption" data-i18n="cloud.experimental">実験機能</span>
                 </summary>
                 <div class="cloud-menu-content">
-                  <section id="cloudAuthPanel" class="cloud-auth-panel" hidden>
+                  <form id="cloudAuthPanel" class="cloud-auth-panel" hidden>
                     <span class="cloud-auth-title" data-i18n="cloud.authTitle">アカウント</span>
                     <label>
                       <span data-i18n="cloud.email">メールアドレス</span>
@@ -163,7 +162,7 @@
                       </div>
                       <output id="cloudPasswordStatus" class="form-status cloud-status" aria-live="polite"></output>
                     </section>
-                  </section>
+                  </form>
                   <details class="cloud-access-code-section">
                     <summary data-i18n="cloud.accessCodeAdvanced">テスターアクセスコード</summary>
                     <label class="cloud-access-code-label">
