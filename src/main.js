@@ -49,6 +49,7 @@ const GPS_ENABLED_KEY = "grid-atlas-gps-enabled";
 
 const CLOUD_ACCESS_TOKEN_KEY = "grid-atlas-cloud-access-token";
 const CLOUD_PASSWORD_SETUP_KEY_PREFIX = "grid-atlas-cloud-password-set:";
+const CLOUD_SIGNUP_PENDING_KEY = "grid-atlas-cloud-signup-pending";
 const CLOUD_PRODUCTION_API_URL = "https://grid-atlas-cloud-staging.kazki1981.workers.dev";
 const CLOUD_AUTO_REFRESH_INTERVAL_MS = 30_000;
 const PASTEL_THEME = "pastel";
@@ -56,7 +57,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1245";
+const WEB_VERSION = "0.1246";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -302,6 +303,12 @@ const elements = {
   cloudAccessToken: document.querySelector("#cloudAccessToken"),
   cloudTesterStatus: document.querySelector("#cloudTesterStatus"),
   cloudTesterSignupButton: document.querySelector("#cloudTesterSignupButton"),
+  cloudTesterSignupPanel: document.querySelector("#cloudTesterSignupPanel"),
+  cloudTesterSignupGridName: document.querySelector("#cloudTesterSignupGridName"),
+  cloudTesterSignupEmail: document.querySelector("#cloudTesterSignupEmail"),
+  cloudTesterSignupSubmitButton: document.querySelector("#cloudTesterSignupSubmitButton"),
+  cloudTesterSignupCancelButton: document.querySelector("#cloudTesterSignupCancelButton"),
+  cloudTesterSignupStatus: document.querySelector("#cloudTesterSignupStatus"),
   cloudConnectButton: document.querySelector("#cloudConnectButton"),
   cloudLastFetched: document.querySelector("#cloudLastFetched"),
 
@@ -341,6 +348,7 @@ const state = {
     authSession: null,
     authUser: null,
     passwordRecoveryActive: false,
+    signupPasswordSetupActive: false,
     testerCode: "",
     testerActive: false,
     testerError: "",
@@ -753,7 +761,11 @@ const TRANSLATIONS = {
     "cloud.authenticate": "認証",
     "cloud.connect": "接続",
     "cloud.testerGranted": "テスター権限あり",
-    "cloud.testerSignupComingSoon": "テスター向けサインアップ（準備中）",
+    "cloud.testerSignup": "テスター向けサインアップ",
+    "cloud.testerSignupTitle": "テスター向けサインアップ",
+    "cloud.gridName": "GRID NAME",
+    "cloud.sendConfirmation": "確認メールを送る",
+    "cloud.close": "閉じる",
     "cloud.refresh": "更新",
     "cloud.disconnect": "切断",
     "cloud.neverFetched": "まだクラウドを確認していません",
@@ -1091,7 +1103,11 @@ const TRANSLATIONS = {
     "cloud.authenticate": "Authenticate",
     "cloud.connect": "Connect",
     "cloud.testerGranted": "Tester permission active",
-    "cloud.testerSignupComingSoon": "Tester sign-up (coming soon)",
+    "cloud.testerSignup": "Tester sign-up",
+    "cloud.testerSignupTitle": "Tester sign-up",
+    "cloud.gridName": "GRID NAME",
+    "cloud.sendConfirmation": "Send confirmation email",
+    "cloud.close": "Close",
     "cloud.refresh": "Refresh",
     "cloud.disconnect": "Disconnect",
     "cloud.neverFetched": "Cloud has not been checked yet",
@@ -6241,6 +6257,21 @@ function markCloudPasswordSetup(userId) {
   } catch {}
 }
 
+function hasPendingCloudSignup() {
+  try {
+    return localStorage.getItem(CLOUD_SIGNUP_PENDING_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function markPendingCloudSignup(pending) {
+  try {
+    if (pending) localStorage.setItem(CLOUD_SIGNUP_PENDING_KEY, "true");
+    else localStorage.removeItem(CLOUD_SIGNUP_PENDING_KEY);
+  } catch {}
+}
+
 function cloudText(ja, en) {
   return activeLanguage() === EN_LANGUAGE ? en : ja;
 }
@@ -6257,6 +6288,7 @@ function renderCloudAuthControls() {
   const signedIn = Boolean(state.cloud.authSession?.access_token);
   const passwordSetupComplete = hasCloudPasswordSetup(state.cloud.authUser?.id);
   const passwordRecoveryActive = signedIn && state.cloud.passwordRecoveryActive;
+  const signupPasswordSetupActive = signedIn && state.cloud.signupPasswordSetupActive;
   const busy = state.cloud.busy || state.cloud.authBusy;
   elements.cloudAuthPanel.classList.toggle("is-signed-in", signedIn);
   if (elements.cloudSessionBadge) elements.cloudSessionBadge.hidden = !signedIn;
@@ -6276,6 +6308,8 @@ function renderCloudAuthControls() {
   if (elements.cloudPasswordPanelTitle) {
     elements.cloudPasswordPanelTitle.textContent = passwordRecoveryActive
       ? cloudText("パスワードの再設定", "Reset your password")
+      : signupPasswordSetupActive
+        ? cloudText("GRID NAME登録が完了しました。パスワードを設定してください", "GRID NAME saved. Set your password")
       : cloudText("招待ユーザーのパスワード設定（初回のみ）", "Set your password (first time only)");
   }
   if (elements.cloudSetPasswordButton) elements.cloudSetPasswordButton.disabled = busy || !signedIn;
@@ -6311,11 +6345,24 @@ function renderCloudTesterStatus() {
   }
   if (elements.cloudTesterSignupButton) {
     elements.cloudTesterSignupButton.hidden = !state.cloud.testerActive;
+    elements.cloudTesterSignupButton.disabled = !state.cloud.testerActive || state.cloud.busy || state.cloud.authBusy;
     elements.cloudTesterSignupButton.textContent = cloudText(
-      "テスター向けサインアップ（準備中）",
-      "Tester sign-up (coming soon)"
+      "テスター向けサインアップ",
+      "Tester sign-up"
     );
   }
+}
+
+function setCloudTesterSignupStatus(message, options = {}) {
+  if (!elements.cloudTesterSignupStatus) return;
+  elements.cloudTesterSignupStatus.textContent = message || "";
+  elements.cloudTesterSignupStatus.classList.toggle("is-error", options.error === true);
+}
+
+function setCloudTesterSignupPanelOpen(open) {
+  if (!elements.cloudTesterSignupPanel) return;
+  elements.cloudTesterSignupPanel.hidden = !open;
+  if (open) elements.cloudTesterSignupGridName?.focus();
 }
 
 function applyCloudAuthSession(session, options = {}) {
@@ -6368,7 +6415,9 @@ async function setCloudPassword() {
     const { error } = await state.cloud.authClient.auth.updateUser({ password });
     if (error) throw error;
     markCloudPasswordSetup(state.cloud.authUser?.id);
+    markPendingCloudSignup(false);
     state.cloud.passwordRecoveryActive = false;
+    state.cloud.signupPasswordSetupActive = false;
     elements.cloudNewPassword.value = "";
     elements.cloudNewPasswordConfirm.value = "";
     setCloudPasswordStatus("パスワードを設定しました。次回から通常ログインできます");
@@ -6389,6 +6438,7 @@ async function initializeCloudAuth() {
 
   const authUrlState = cloudAuthUrlState();
   state.cloud.passwordRecoveryActive = authUrlState.type === "recovery";
+  state.cloud.signupPasswordSetupActive = authUrlState.type === "signup" || hasPendingCloudSignup();
 
   state.cloud.authClient.auth.onAuthStateChange((_event, session) => {
     // Supabase warns against calling other async auth methods directly from
@@ -6452,6 +6502,53 @@ async function signUpCloud() {
   } finally {
     state.cloud.authBusy = false;
     renderCloudAuthControls();
+  }
+}
+
+async function submitTesterSignup() {
+  if (!state.cloud.authClient || !state.cloud.testerActive) return;
+  const gridName = elements.cloudTesterSignupGridName?.value.trim() || "";
+  const email = elements.cloudTesterSignupEmail?.value.trim() || "";
+  if (!gridName || !email) {
+    setCloudTesterSignupStatus(cloudText("GRID NAMEとメールアドレスを入力してください", "Enter a GRID NAME and email address"), { error: true });
+    return;
+  }
+  if (gridName.length > 32) {
+    setCloudTesterSignupStatus(cloudText("GRID NAMEは32文字以内で入力してください", "GRID NAME must be 32 characters or fewer"), { error: true });
+    return;
+  }
+  state.cloud.authBusy = true;
+  setCloudTesterSignupStatus(cloudText("確認メールを送信しています…", "Sending confirmation email…"));
+  renderCloudAuthControls();
+  renderCloudTesterStatus();
+  try {
+    const temporaryPassword = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
+    const { data, error } = await state.cloud.authClient.auth.signUp({
+      email,
+      password: temporaryPassword,
+      options: {
+        emailRedirectTo: window.location.href.split("#", 1)[0],
+        data: {
+          grid_name: gridName,
+          signup_source: "tester"
+        }
+      }
+    });
+    if (error) throw error;
+    markPendingCloudSignup(true);
+    state.cloud.signupPasswordSetupActive = true;
+    if (data.session) {
+      applyCloudAuthSession(data.session, { forceRefresh: true });
+      setCloudTesterSignupStatus(cloudText("登録しました。パスワードを設定してください", "Signed up. Set your password"));
+    } else {
+      setCloudTesterSignupStatus(cloudText("確認メールを送信しました。メールのリンクを開いてください", "Confirmation email sent. Open the link to continue"));
+    }
+  } catch (error) {
+    setCloudTesterSignupStatus(error?.message || cloudText("サインアップに失敗しました", "Sign-up failed"), { error: true });
+  } finally {
+    state.cloud.authBusy = false;
+    renderCloudAuthControls();
+    renderCloudTesterStatus();
   }
 }
 
@@ -11259,6 +11356,16 @@ function bindEvents() {
   elements.cloudAuthPanel?.addEventListener("submit", (event) => event.preventDefault());
   elements.cloudSetPasswordButton?.addEventListener("click", () => void setCloudPassword());
   elements.cloudConnectButton?.addEventListener("click", () => void connectCloud());
+  elements.cloudTesterSignupButton?.addEventListener("click", () => {
+    if (!state.cloud.testerActive) return;
+    setCloudTesterSignupPanelOpen(true);
+    setCloudTesterSignupStatus("");
+  });
+  elements.cloudTesterSignupCancelButton?.addEventListener("click", () => {
+    setCloudTesterSignupPanelOpen(false);
+    setCloudTesterSignupStatus("");
+  });
+  elements.cloudTesterSignupSubmitButton?.addEventListener("click", () => void submitTesterSignup());
   elements.cloudAccessToken?.addEventListener("input", () => {
     state.cloud.testerCode = elements.cloudAccessToken.value.trim();
     state.cloud.testerActive = false;

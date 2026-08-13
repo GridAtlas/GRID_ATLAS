@@ -575,6 +575,36 @@ button {
   font-weight: 750;
 }
 
+.cloud-tester-signup-panel {
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 72%, transparent);
+}
+
+.cloud-tester-signup-panel h3 {
+  margin: 0;
+  color: var(--accent-strong);
+  font-size: 13px;
+}
+
+.cloud-tester-signup-panel label {
+  display: grid;
+  gap: 4px;
+}
+
+.cloud-tester-signup-panel label > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.cloud-tester-signup-panel .button-row {
+  margin-top: 1px;
+}
+
 .settings-panel label {
   display: grid;
   gap: 5px;
