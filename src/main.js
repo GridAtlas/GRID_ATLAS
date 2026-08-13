@@ -57,7 +57,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1269";
+const WEB_VERSION = "0.1270";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -1864,10 +1864,7 @@ function repairLocalCloudPointIdCollisions() {
   let changed = false;
 
   const remapReferences = (previousId, nextId) => {
-    for (const link of state.links) {
-      if (link.a === previousId) link.a = nextId;
-      if (link.b === previousId) link.b = nextId;
-    }
+    remapPointIdInLinks(previousId, nextId);
     state.selection = state.selection.map((entry) => (
       entry.type === "point" && entry.id === previousId ? { ...entry, id: nextId } : entry
     ));
@@ -7473,6 +7470,27 @@ function captureLineEndpoint(point) {
   };
 }
 
+function endpointSnapshotForLink(link, side) {
+  const snapshot = normalizeLineEndpoint(link?.[`${side}Endpoint`] ?? link?.[`${side}Snapshot`]);
+  return snapshot ? { ...snapshot, id: link?.[side] || snapshot.id } : null;
+}
+
+function remapPointIdInLinks(previousId, nextId) {
+  if (!previousId || !nextId || previousId === nextId) return;
+  for (const link of state.links) {
+    for (const side of ["a", "b"]) {
+      if (link[side] === previousId) link[side] = nextId;
+      const endpointKey = `${side}Endpoint`;
+      const legacySnapshotKey = `${side}Snapshot`;
+      const snapshot = link[endpointKey] ?? link[legacySnapshotKey];
+      if (snapshot?.id === previousId) {
+        link[endpointKey] = { ...snapshot, id: nextId };
+        delete link[legacySnapshotKey];
+      }
+    }
+  }
+}
+
 function normalizeLineEndpoint(snapshot) {
   if (!snapshot || typeof snapshot !== "object" || !validGeo(snapshot.geo)) {
     return null;
@@ -7491,9 +7509,7 @@ function linkEndpoint(link, side) {
     return point;
   }
 
-  const endpoint = normalizeLineEndpoint(
-    link?.[`${side}Endpoint`] ?? link?.[`${side}Snapshot`]
-  );
+  const endpoint = endpointSnapshotForLink(link, side);
   if (!endpoint) {
     return null;
   }
@@ -7517,13 +7533,13 @@ function normalizeStoredLink(link) {
     const point = findPoint(next[side]);
     const freshEndpoint = captureLineEndpoint(point);
     if (freshEndpoint) {
-      next[endpointKey] = freshEndpoint;
+      next[endpointKey] = { ...freshEndpoint, id: next[side] };
       delete next[legacySnapshotKey];
       continue;
     }
     const currentEndpoint = normalizeLineEndpoint(next[endpointKey] ?? next[legacySnapshotKey]);
     if (currentEndpoint) {
-      next[endpointKey] = currentEndpoint;
+      next[endpointKey] = { ...currentEndpoint, id: next[side] };
       delete next[legacySnapshotKey];
       continue;
     }
@@ -7538,7 +7554,7 @@ function linkWithDeletedEndpointPositions(link, pointIds) {
     if (!pointIds.has(next[side])) continue;
     const snapshot = captureLineEndpoint(findPoint(next[side]));
     if (snapshot) {
-      next[`${side}Endpoint`] = snapshot;
+      next[`${side}Endpoint`] = { ...snapshot, id: next[side] };
     }
   }
   return next;
@@ -8057,9 +8073,10 @@ function updateGridPointHover(screenPoint, pointerType = "mouse") {
   elements.gridPointHoverLabel.style.top = `${Math.max(4, y - 8)}px`;
 }
 
-function findNearestPoint(screenPoint) {
+function findNearestPoint(screenPoint, options = {}) {
   let nearest = null;
   let nearestDistance = Infinity;
+  const excludedIds = new Set(Array.isArray(options.excludeIds) ? options.excludeIds : []);
   const candidates = visibleSelectablePoints();
   const current = currentLocationPoint();
 
@@ -8068,6 +8085,7 @@ function findNearestPoint(screenPoint) {
   }
 
   for (const point of candidates) {
+    if (excludedIds.has(point.id)) continue;
     const screen = worldToScreen(point);
     const distance = Math.hypot(screen.x - screenPoint.x, screen.y - screenPoint.y);
     if (distance < nearestDistance) {
@@ -8116,9 +8134,12 @@ function updateLineDragTarget(drag, screenPoint) {
   if (!drag?.lineDrag) return;
   const lineDrag = drag.lineDrag;
   lineDrag.current = { ...screenPoint };
-  const candidate = findNearestPoint(screenPoint);
-  const fixedId = findLink(lineDrag.linkId)?.[lineDrag.fixedSide];
-  lineDrag.targetPointId = candidate && candidate.id !== fixedId ? candidate.id : null;
+  const link = findLink(lineDrag.linkId);
+  const fixedId = link?.[lineDrag.fixedSide];
+  const replaceSide = lineDrag.fixedSide === "a" ? "b" : "a";
+  const replaceId = link?.[replaceSide];
+  const candidate = findNearestPoint(screenPoint, { excludeIds: [fixedId, replaceId] });
+  lineDrag.targetPointId = candidate?.id || null;
 }
 
 function beginLineDrag(drag, screenPoint) {
@@ -8144,15 +8165,16 @@ function beginLineDrag(drag, screenPoint) {
 function finishLineDrag(lineDrag, screenPoint) {
   canvas.classList.remove("is-line-dragging");
   const link = findLink(lineDrag?.linkId);
-  const target = findNearestPoint(screenPoint);
+  const fixedId = link?.[lineDrag?.fixedSide];
+  const replaceSide = lineDrag?.fixedSide === "a" ? "b" : "a";
+  const replaceId = link?.[replaceSide];
+  const target = findNearestPoint(screenPoint, { excludeIds: [fixedId, replaceId] });
   if (!link || !target) {
     showAppToast(t("line.invalidTarget"), { error: true });
     render();
     return;
   }
 
-  const fixedId = link[lineDrag.fixedSide];
-  const replaceSide = lineDrag.fixedSide === "a" ? "b" : "a";
   if (target.id === fixedId || target.id === link[replaceSide]) {
     showAppToast(t("line.invalidTarget"), { error: true });
     render();
@@ -8170,10 +8192,11 @@ function finishLineDrag(lineDrag, screenPoint) {
   }
 
   const previous = linkEndpoint(link, replaceSide);
+  const targetEndpoint = captureLineEndpoint(target);
   const next = {
     ...link,
     [replaceSide]: target.id,
-    [`${replaceSide}Endpoint`]: captureLineEndpoint(target),
+    [`${replaceSide}Endpoint`]: targetEndpoint ? { ...targetEndpoint, id: target.id } : undefined,
     updatedAt: new Date().toISOString()
   };
   state.links = state.links.map((candidate) => candidate.id === link.id ? normalizeStoredLink(next) : candidate);
