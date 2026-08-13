@@ -159,6 +159,267 @@ export function analyzeSegmentShape(segments) {
   };
 }
 
+export function analyzeOpenPath(segments) {
+  const normalizedSegments = Array.isArray(segments)
+    ? segments.map(normalizeSegment).filter(Boolean)
+    : [];
+  if (normalizedSegments.length < 2) {
+    return { valid: false, reason: "too-few-segments", segments: normalizedSegments };
+  }
+
+  const vertices = new Map();
+  const edges = normalizedSegments.map((segment) => {
+    const aKey = pointKey(segment.a);
+    const bKey = pointKey(segment.b);
+    if (!vertices.has(aKey)) vertices.set(aKey, segment.a);
+    if (!vertices.has(bKey)) vertices.set(bKey, segment.b);
+    return { ...segment, aKey, bKey };
+  });
+  const adjacency = new Map([...vertices.keys()].map((key) => [key, []]));
+  for (const edge of edges) {
+    adjacency.get(edge.aKey)?.push({ key: edge.bKey, edge });
+    adjacency.get(edge.bKey)?.push({ key: edge.aKey, edge });
+  }
+  const endpointKeys = [...adjacency.entries()]
+    .filter(([, neighbors]) => neighbors.length === 1)
+    .map(([key]) => key);
+  if (endpointKeys.length !== 2 || [...adjacency.values()].some((neighbors) => neighbors.length < 1 || neighbors.length > 2)) {
+    return { valid: false, reason: "not-simple-path", segments: normalizedSegments };
+  }
+
+  const pathKeys = [endpointKeys[0]];
+  const pathEdges = [];
+  const visitedEdges = new Set();
+  let previousKey = null;
+  let currentKey = endpointKeys[0];
+  while (true) {
+    const next = adjacency.get(currentKey)?.find((neighbor) => neighbor.key !== previousKey && !visitedEdges.has(neighbor.edge));
+    if (!next) break;
+    visitedEdges.add(next.edge);
+    pathEdges.push(next.edge);
+    previousKey = currentKey;
+    currentKey = next.key;
+    pathKeys.push(currentKey);
+  }
+  if (visitedEdges.size !== edges.length || currentKey !== endpointKeys[1]) {
+    return { valid: false, reason: "not-simple-path", segments: normalizedSegments };
+  }
+
+  const points = pathKeys.map((key) => vertices.get(key));
+  if (points.some((point) => !validGeo(point.geo))) {
+    return { valid: false, reason: "missing-geo", segments: normalizedSegments };
+  }
+  const earthPoints = points.map((point) => ecef(point.geo));
+  const scatter = sumOuterProducts(earthPoints);
+  const eigen = symmetricEigenDecomposition3(scatter);
+  const normal = normalizeVector(eigen.vectors[eigen.values.indexOf(Math.min(...eigen.values))]);
+  if (!normal) return { valid: false, reason: "degenerate-path", segments: normalizedSegments };
+
+  const planeDistances = earthPoints.map((point) => Math.abs(dot3(point, normal)));
+  const projected = earthPoints.map((point) => subtract3(point, scale3(normal, dot3(point, normal))));
+  const center = meanVector(projected);
+  const centered = projected.map((point) => subtract3(point, center));
+  const directionEigen = symmetricEigenDecomposition3(sumOuterProducts(centered));
+  const direction = normalizeVector(directionEigen.vectors[directionEigen.values.indexOf(Math.max(...directionEigen.values))]);
+  if (!direction) return { valid: false, reason: "degenerate-path", segments: normalizedSegments };
+
+  const positions = centered.map((point) => dot3(point, direction));
+  const span = Math.max(...positions) - Math.min(...positions);
+  if (!(span > EPSILON)) return { valid: false, reason: "degenerate-path", segments: normalizedSegments };
+
+  const regression = linearRegression(positions);
+  const alongResiduals = positions.map((value, index) => value - (regression.intercept + regression.slope * index));
+  const perpendicularRmsMeters = rootMeanSquare(planeDistances);
+  const spacingRmsMeters = rootMeanSquare(alongResiduals);
+  const totalRmsMeters = Math.hypot(perpendicularRmsMeters, spacingRmsMeters);
+  const perpendicularPercent = (perpendicularRmsMeters / span) * 100;
+  const spacingPercent = (spacingRmsMeters / span) * 100;
+  const totalPercent = (totalRmsMeters / span) * 100;
+  const increasing = positions.every((value, index) => index === 0 || value > positions[index - 1] + span * 1e-9);
+  const decreasing = positions.every((value, index) => index === 0 || value < positions[index - 1] - span * 1e-9);
+  const pathLengthMeters = pathEdges.reduce((sum, edge) => sum + vincentyDistanceMeters(edge.a, edge.b), 0);
+  const endpointDistanceMeters = vincentyDistanceMeters(points[0], points.at(-1));
+  const mercator = analyzeMercatorLine(points);
+  const farthestIndex = planeDistances.indexOf(Math.max(...planeDistances));
+
+  return {
+    valid: true,
+    points,
+    segments: pathEdges,
+    vertexCount: points.length,
+    edgeCount: pathEdges.length,
+    span,
+    planeDistances,
+    perpendicularRmsMeters,
+    perpendicularMaxMeters: Math.max(...planeDistances),
+    perpendicularPercent,
+    spacingRmsMeters,
+    spacingPercent,
+    totalRmsMeters,
+    totalPercent,
+    referenceScore: 100 / (1 + totalPercent / 10),
+    pathLengthMeters,
+    endpointDistanceMeters,
+    pathLengthRatioPercent: endpointDistanceMeters > EPSILON ? (pathLengthMeters / endpointDistanceMeters) * 100 : Infinity,
+    bearingDegrees: initialBearingDegrees(points[0].geo, points.at(-1).geo),
+    farthestPoint: points[farthestIndex],
+    farthestPointIndex: farthestIndex,
+    folded: !(increasing || decreasing),
+    mercator
+  };
+}
+
+function analyzeMercatorLine(points) {
+  const projected = points.map((point) => {
+    const lat = toRadians(point.geo.lat);
+    return {
+      x: WGS84_SEMI_MAJOR_METERS * toRadians(shortestLongitudeDelta(0, point.geo.lng)),
+      y: WGS84_SEMI_MAJOR_METERS * Math.log(Math.tan(Math.PI / 4 + lat / 2)),
+      scale: Math.cos(lat)
+    };
+  });
+  const center = {
+    x: average(projected.map((point) => point.x)),
+    y: average(projected.map((point) => point.y))
+  };
+  const centered = projected.map((point) => ({ x: point.x - center.x, y: point.y - center.y }));
+  const covariance = centered.reduce((matrix, point) => {
+    matrix[0][0] += point.x * point.x;
+    matrix[0][1] += point.x * point.y;
+    matrix[1][0] += point.x * point.y;
+    matrix[1][1] += point.y * point.y;
+    return matrix;
+  }, [[0, 0], [0, 0]]);
+  const directionAngle = 0.5 * Math.atan2(2 * covariance[0][1], covariance[0][0] - covariance[1][1]);
+  const direction = { x: Math.cos(directionAngle), y: Math.sin(directionAngle) };
+  const positions = centered.map((point) => point.x * direction.x + point.y * direction.y);
+  const span = Math.max(...positions) - Math.min(...positions);
+  if (!(span > EPSILON)) return { deviationPercent: 0, rmsMeters: 0, maxMeters: 0 };
+  const distances = centered.map((point, index) => Math.abs(point.x * direction.y - point.y * direction.x) * projected[index].scale);
+  return {
+    deviationPercent: (rootMeanSquare(distances) / span) * 100,
+    rmsMeters: rootMeanSquare(distances),
+    maxMeters: Math.max(...distances)
+  };
+}
+
+function ecef(geo) {
+  const latitude = toRadians(geo.lat);
+  const longitude = toRadians(geo.lng);
+  const sinLatitude = Math.sin(latitude);
+  const cosLatitude = Math.cos(latitude);
+  const radius = WGS84_SEMI_MAJOR_METERS / Math.sqrt(1 - WGS84_FLATTENING * (2 - WGS84_FLATTENING) * sinLatitude ** 2);
+  return [
+    radius * cosLatitude * Math.cos(longitude),
+    radius * cosLatitude * Math.sin(longitude),
+    radius * (1 - WGS84_FLATTENING) ** 2 * sinLatitude
+  ];
+}
+
+function sumOuterProducts(points) {
+  return points.reduce((matrix, point) => {
+    for (let row = 0; row < 3; row += 1) {
+      for (let column = 0; column < 3; column += 1) matrix[row][column] += point[row] * point[column];
+    }
+    return matrix;
+  }, [[0, 0, 0], [0, 0, 0], [0, 0, 0]]);
+}
+
+function symmetricEigenDecomposition3(matrix) {
+  const values = matrix.map((row) => [...row]);
+  const vectors = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  for (let iteration = 0; iteration < 32; iteration += 1) {
+    let p = 0;
+    let q = 1;
+    let largest = Math.abs(values[p][q]);
+    for (let row = 0; row < 3; row += 1) {
+      for (let column = row + 1; column < 3; column += 1) {
+        if (Math.abs(values[row][column]) > largest) {
+          largest = Math.abs(values[row][column]);
+          p = row;
+          q = column;
+        }
+      }
+    }
+    if (largest < 1e-7) break;
+    const angle = 0.5 * Math.atan2(2 * values[p][q], values[q][q] - values[p][p]);
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
+    const pDiagonal = values[p][p];
+    const qDiagonal = values[q][q];
+    const offDiagonal = values[p][q];
+    values[p][p] = cosine ** 2 * pDiagonal - 2 * sine * cosine * offDiagonal + sine ** 2 * qDiagonal;
+    values[q][q] = sine ** 2 * pDiagonal + 2 * sine * cosine * offDiagonal + cosine ** 2 * qDiagonal;
+    values[p][q] = 0;
+    values[q][p] = 0;
+    for (let index = 0; index < 3; index += 1) {
+      if (index === p || index === q) continue;
+      const indexP = values[index][p];
+      const indexQ = values[index][q];
+      values[index][p] = values[p][index] = cosine * indexP - sine * indexQ;
+      values[index][q] = values[q][index] = sine * indexP + cosine * indexQ;
+    }
+    for (let index = 0; index < 3; index += 1) {
+      const vectorP = vectors[index][p];
+      const vectorQ = vectors[index][q];
+      vectors[index][p] = cosine * vectorP - sine * vectorQ;
+      vectors[index][q] = sine * vectorP + cosine * vectorQ;
+    }
+  }
+  return { values: [values[0][0], values[1][1], values[2][2]], vectors: [
+    [vectors[0][0], vectors[1][0], vectors[2][0]],
+    [vectors[0][1], vectors[1][1], vectors[2][1]],
+    [vectors[0][2], vectors[1][2], vectors[2][2]]
+  ] };
+}
+
+function meanVector(points) {
+  return points.reduce((sum, point) => sum.map((value, index) => value + point[index] / points.length), [0, 0, 0]);
+}
+
+function subtract3(first, second) {
+  return first.map((value, index) => value - second[index]);
+}
+
+function scale3(point, factor) {
+  return point.map((value) => value * factor);
+}
+
+function dot3(first, second) {
+  return first.reduce((sum, value, index) => sum + value * second[index], 0);
+}
+
+function normalizeVector(vector) {
+  if (!vector) return null;
+  const magnitude = Math.hypot(...vector);
+  return magnitude < EPSILON ? null : vector.map((value) => value / magnitude);
+}
+
+function rootMeanSquare(values) {
+  return Math.sqrt(average(values.map((value) => value * value)));
+}
+
+function linearRegression(values) {
+  const meanIndex = (values.length - 1) / 2;
+  const meanValue = average(values);
+  const denominator = values.reduce((sum, _, index) => sum + (index - meanIndex) ** 2, 0);
+  const slope = denominator > EPSILON
+    ? values.reduce((sum, value, index) => sum + (index - meanIndex) * (value - meanValue), 0) / denominator
+    : 0;
+  return { slope, intercept: meanValue - slope * meanIndex };
+}
+
+function initialBearingDegrees(first, second) {
+  const latitude1 = toRadians(first.lat);
+  const latitude2 = toRadians(second.lat);
+  const longitudeDelta = toRadians(shortestLongitudeDelta(first.lng, second.lng));
+  const bearing = Math.atan2(
+    Math.sin(longitudeDelta) * Math.cos(latitude2),
+    Math.cos(latitude1) * Math.sin(latitude2) - Math.sin(latitude1) * Math.cos(latitude2) * Math.cos(longitudeDelta)
+  ) * (180 / Math.PI);
+  return (bearing + 360) % 360;
+}
+
 function regularityPercent(points, k) {
   const n = points.length;
   const center = points.reduce((sum, point) => ({

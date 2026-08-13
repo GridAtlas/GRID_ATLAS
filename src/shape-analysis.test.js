@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeLineIntersection, analyzeRegularPolygon, analyzeSegmentShape, vincentyDistanceMeters } from "./shape-analysis.js";
+import { analyzeLineIntersection, analyzeOpenPath, analyzeRegularPolygon, analyzeSegmentShape, vincentyDistanceMeters } from "./shape-analysis.js";
 
 describe("shape analysis", () => {
   it("finds the crossing angle of two finite segments", () => {
@@ -215,5 +215,82 @@ describe("shape analysis", () => {
     const second = { lat: 35.689592, lng: 139.700413 };
 
     expect(vincentyDistanceMeters(first, second)).toBeCloseTo(vincentyDistanceMeters(first.geo, second), 6);
+  });
+
+  it("measures a great-circle path and separates screen-line curvature", () => {
+    const points = [
+      [33.000000, 131.000000],
+      [33.943520, 133.299728],
+      [34.843005, 135.649547],
+      [35.695991, 138.049695],
+      [36.500000, 140.500000]
+    ].map(([lat, lng], index) => ({ id: `a${index}`, x: 0, y: 0, geo: { lat, lng } }));
+    const result = analyzeOpenPath(points.slice(0, -1).map((point, index) => ({ a: point, b: points[index + 1] })));
+
+    expect(result.valid).toBe(true);
+    expect(result.perpendicularPercent).toBeCloseTo(0.0022, 3);
+    expect(result.spacingPercent).toBeCloseTo(0.0098, 3);
+    expect(result.totalPercent).toBeCloseTo(0.0101, 3);
+    expect(result.referenceScore).toBeCloseTo(99.90, 1);
+    expect(result.mercator.deviationPercent).toBeCloseTo(0.4086, 2);
+    expect(result.folded).toBe(false);
+  });
+
+  it("distinguishes a screen-straight latitude line from a great circle", () => {
+    const points = [
+      [35.366667, 132.685300],
+      [35.366667, 134.607975],
+      [35.366667, 136.530650],
+      [35.366667, 138.453325],
+      [35.366667, 140.376000]
+    ].map(([lat, lng], index) => ({ id: `b${index}`, x: 0, y: 0, geo: { lat, lng } }));
+    const result = analyzeOpenPath(points.slice(0, -1).map((point, index) => ({ a: point, b: points[index + 1] })));
+
+    expect(result.valid).toBe(true);
+    expect(result.perpendicularPercent).toBeCloseTo(0.4049, 3);
+    expect(result.spacingPercent).toBeCloseTo(0.0080, 3);
+    expect(result.totalPercent).toBeCloseTo(0.4050, 3);
+    expect(result.referenceScore).toBeCloseTo(96.11, 1);
+    expect(result.mercator.deviationPercent).toBeCloseTo(0, 4);
+    expect(result.folded).toBe(false);
+  });
+
+  it("reports uneven spacing and a folded open path", () => {
+    const uneven = [
+      [33.000000, 131.000000],
+      [33.192110, 131.455963],
+      [33.943520, 133.299728],
+      [36.023611, 139.023823],
+      [36.500000, 140.500000]
+    ].map(([lat, lng], index) => ({ id: `u${index}`, x: 0, y: 0, geo: { lat, lng } }));
+    const folded = [
+      [34.000000, 135.000000],
+      [35.000000, 136.200000],
+      [36.000000, 137.400000],
+      [34.500000, 135.600000]
+    ].map(([lat, lng], index) => ({ id: `f${index}`, x: 0, y: 0, geo: { lat, lng } }));
+    const toSegments = (points) => points.slice(0, -1).map((point, index) => ({ a: point, b: points[index + 1] }));
+
+    const unevenResult = analyzeOpenPath(toSegments(uneven));
+    const foldedResult = analyzeOpenPath(toSegments(folded));
+
+    expect(unevenResult.valid).toBe(true);
+    expect(unevenResult.perpendicularPercent).toBeCloseTo(0.0016, 3);
+    expect(unevenResult.spacingPercent).toBeCloseTo(12.5797, 2);
+    expect(unevenResult.referenceScore).toBeCloseTo(44.29, 1);
+    expect(foldedResult.valid).toBe(true);
+    expect(foldedResult.folded).toBe(true);
+    expect(foldedResult.pathLengthRatioPercent).toBeCloseTo(696.46, 1);
+  });
+
+  it("rejects branches, closed cycles, and paths without geography", () => {
+    const a = { id: "a", x: 0, y: 0, geo: { lat: 35, lng: 135 } };
+    const b = { id: "b", x: 1, y: 0, geo: { lat: 35, lng: 136 } };
+    const c = { id: "c", x: 2, y: 0, geo: { lat: 35, lng: 137 } };
+    const d = { id: "d", x: 1, y: 1, geo: { lat: 36, lng: 136 } };
+
+    expect(analyzeOpenPath([{ a, b }, { a: b, b: c }, { a: b, b: d }]).reason).toBe("not-simple-path");
+    expect(analyzeOpenPath([{ a, b }, { a: b, b: c }, { a: c, b: a }]).reason).toBe("not-simple-path");
+    expect(analyzeOpenPath([{ a: { x: 0, y: 0 }, b: { x: 1, y: 0 } }, { a: { x: 1, y: 0 }, b: { x: 2, y: 0 } }]).reason).toBe("missing-geo");
   });
 });

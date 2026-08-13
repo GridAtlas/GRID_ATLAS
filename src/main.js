@@ -29,7 +29,7 @@ import {
   readGridAtlasLineLayer,
   withoutGridAtlasLineLayer
 } from "./gridatlas-analysis.js?v=1";
-import { analyzeLineIntersection, analyzeSegmentShape, vincentyDistanceMeters } from "./shape-analysis.js?v=1";
+import { analyzeLineIntersection, analyzeOpenPath, analyzeSegmentShape, vincentyDistanceMeters } from "./shape-analysis.js?v=1";
 
 const STORAGE_KEY = "grid-atlas-workspace-v2";
 const ANALYSIS_LAYER_VERSION = 1;
@@ -58,7 +58,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1293";
+const WEB_VERSION = "0.1304";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -708,7 +708,7 @@ const TRANSLATIONS = {
     "analysis.dialogTitle": "分析結果",
     "analysis.lineTitle": "交差角",
     "analysis.polygonTitle": "図形の分析",
-    "analysis.noSelection": "2本の線分、または閉じた線分群を選択してください",
+    "analysis.noSelection": "2本以上の線分を選択してください",
     "analysis.lineHint": "2本の線分の分析結果を表示します。",
     "analysis.polygonHint": "図形の分析結果を表示します。",
     "analysis.measurementDeclaration": "図形: {shape}",
@@ -720,6 +720,23 @@ const TRANSLATIONS = {
     "analysis.shapeClosed": "閉じた線分群",
     "analysis.shapeOpen": "閉じた線分群として測定できません",
     "analysis.shapeOpenHint": "3本以上の選択線が、各地点で2本ずつ接続する閉路になっている必要があります。",
+    "analysis.pathTitle": "直線度分析",
+    "analysis.pathHint": "開いた経路を、等間隔に並ぶ直線として測定します。",
+    "analysis.pathDeclaration": "直線として測りました（開いた経路・{vertices}地点／線{edges}本）",
+    "analysis.pathBasis": "基準は等間隔に並んだ{vertices}地点。大円（測地線）上で測っています",
+    "analysis.pathNotScreen": "画面上の直線ではありません",
+    "analysis.pathDeviation": "直線からのずれ",
+    "analysis.spacingVariation": "間隔のばらつき",
+    "analysis.averageDeviation": "平均",
+    "analysis.maximumDeviation": "最大",
+    "analysis.endpointDistance": "端点間距離",
+    "analysis.pathLengthRatio": "経路長 ÷ 端点間距離",
+    "analysis.bearing": "方位角",
+    "analysis.farthestPoint": "最も外れた地点",
+    "analysis.screenLineBasis": "画面上の直線（等角航路）を基準にすると",
+    "analysis.foldedPath": "経路が折り返しています",
+    "analysis.twoPointStraight": "2地点は必ず一直線です",
+    "analysis.pathUnavailable": "開いた単純経路として測定できません",
     "analysis.polygonKicker": "測定対象",
     "analysis.generalTitle": "基本情報",
     "analysis.shapeFeaturesTitle": "形状の特徴",
@@ -1070,7 +1087,7 @@ const TRANSLATIONS = {
     "analysis.dialogTitle": "Analysis result",
     "analysis.lineTitle": "Crossing angle",
     "analysis.polygonTitle": "Shape analysis",
-    "analysis.noSelection": "Select two segments or a closed set of segments",
+    "analysis.noSelection": "Select two or more segments",
     "analysis.lineHint": "Shows the analysis result for the two segments.",
     "analysis.polygonHint": "Shows the analysis result for the shape.",
     "analysis.measurementDeclaration": "Figure: {shape}",
@@ -1082,6 +1099,23 @@ const TRANSLATIONS = {
     "analysis.shapeClosed": "closed segment set",
     "analysis.shapeOpen": "Cannot measure as a closed segment set",
     "analysis.shapeOpenHint": "Three or more selected segments must form a cycle with exactly two connections at each point.",
+    "analysis.pathTitle": "Straightness analysis",
+    "analysis.pathHint": "Measures an open path against an equally spaced straight line.",
+    "analysis.pathDeclaration": "Measured as a straight path ({vertices} points / {edges} segments)",
+    "analysis.pathBasis": "Baseline: {vertices} equally spaced points on a great circle",
+    "analysis.pathNotScreen": "This is not a straight line on screen",
+    "analysis.pathDeviation": "Deviation from great circle",
+    "analysis.spacingVariation": "Spacing variation",
+    "analysis.averageDeviation": "RMS",
+    "analysis.maximumDeviation": "Max",
+    "analysis.endpointDistance": "Endpoint distance",
+    "analysis.pathLengthRatio": "Path length ÷ endpoint distance",
+    "analysis.bearing": "Bearing",
+    "analysis.farthestPoint": "Farthest point",
+    "analysis.screenLineBasis": "Using the screen line (rhumb line) as the baseline",
+    "analysis.foldedPath": "The path folds back on itself",
+    "analysis.twoPointStraight": "Two points are always exactly straight",
+    "analysis.pathUnavailable": "Cannot measure as a simple open path",
     "analysis.polygonKicker": "Measured target",
     "analysis.generalTitle": "General information",
     "analysis.shapeFeaturesTitle": "Shape features",
@@ -4124,17 +4158,17 @@ function renderGridLinkColorDialog() {
 function selectionAnalysisTarget() {
   const links = selectedLinkIds().map(findLink).filter(Boolean);
 
-  if (links.length === 2) {
+  if (links.length === 1) {
     const segments = links.map((link) => linkEndpoints(link)).filter(Boolean);
-    if (segments.length === 2) {
-      return { type: "line", links, segments };
-    }
+    return segments.length === 1 ? { type: "single", links, segments } : null;
   }
-
-  if (links.length >= 3) {
-    const segments = links.map((link) => linkEndpoints(link)).filter(Boolean);
-    if (segments.length >= 3) return { type: "polygon", links, segments };
-  }
+  if (links.length < 2) return null;
+  const segments = links.map((link) => linkEndpoints(link)).filter(Boolean);
+  if (segments.length !== links.length) return null;
+  const path = analyzeOpenPath(segments);
+  if (path.valid) return { type: "path", links, segments };
+  if (links.length === 2) return { type: "line", links, segments };
+  if (links.length >= 3) return { type: "polygon", links, segments };
 
   return null;
 }
@@ -4156,14 +4190,23 @@ function renderSelectionAnalysisDialog(target = selectionAnalysisTarget()) {
 
   elements.analysisDialogTitle.textContent = t("analysis.dialogTitle");
   elements.analysisDialogContent.replaceChildren();
-  if (target.type === "line") {
+  if (target.type === "single") {
+    renderSingleSegmentAnalysisDialog(target);
+  } else if (target.type === "line") {
     renderLineAnalysisDialog(target);
+  } else if (target.type === "path") {
+    renderPathAnalysisDialog(target);
   } else {
     renderPolygonAnalysisDialog(target);
   }
   elements.analysisDialogCopyButton.disabled = !target;
   elements.analysisDialogCopyButton.textContent = t("analysis.copy");
   setAnalysisCopyStatus("");
+}
+
+function renderSingleSegmentAnalysisDialog(target) {
+  appendAnalysisText(elements.analysisDialogContent, "p", "analysis-dialog-hint", t("analysis.twoPointStraight"));
+  renderAnalysisSegmentList(target.links);
 }
 
 function renderLineAnalysisDialog(target) {
@@ -4194,6 +4237,69 @@ function renderLineAnalysisDialog(target) {
 
   const geo = result.point ? unprojectWorld(result.point.x, result.point.y) : null;
   if (geo) appendAnalysisMetric(elements.analysisDialogContent, t("analysis.intersection"), `${formatCoordinate(geo.lat)}, ${formatCoordinate(geo.lng)}`);
+  renderAnalysisSegmentList(target.links);
+}
+
+function renderPathAnalysisDialog(target) {
+  const result = analyzeOpenPath(target.segments);
+  appendAnalysisText(elements.analysisDialogContent, "p", "analysis-dialog-hint", t("analysis.pathHint"));
+  if (!result.valid) {
+    appendAnalysisText(elements.analysisDialogContent, "div", "analysis-empty-result", t("analysis.pathUnavailable"));
+    renderAnalysisSegmentList(target.links);
+    return;
+  }
+
+  appendAnalysisText(
+    elements.analysisDialogContent,
+    "div",
+    "analysis-measurement-basis",
+    t("analysis.pathDeclaration")
+      .replace("{vertices}", String(result.vertexCount))
+      .replace("{edges}", String(result.edgeCount))
+  );
+  appendAnalysisText(
+    elements.analysisDialogContent,
+    "div",
+    "analysis-measurement-basis",
+    t("analysis.pathBasis").replace("{vertices}", String(result.vertexCount))
+  );
+  appendAnalysisText(elements.analysisDialogContent, "div", "analysis-measurement-basis", t("analysis.pathNotScreen"));
+
+  if (result.edgeCount === 2) {
+    const intersection = analyzeLineIntersection(target.segments[0], target.segments[1]);
+    if (Number.isFinite(intersection.angle)) {
+      const angle = document.createElement("div");
+      angle.className = "analysis-hero";
+      appendAnalysisText(angle, "strong", "analysis-hero-value", formatAngle(intersection.angle));
+      appendAnalysisText(angle, "span", "analysis-hero-label", t("analysis.angle"));
+      elements.analysisDialogContent.append(angle);
+    }
+  }
+
+  appendAnalysisText(elements.analysisDialogContent, "h3", "analysis-section-title", t("analysis.shapeFeaturesTitle"));
+  const metrics = document.createElement("div");
+  metrics.className = "analysis-metric-grid";
+  appendAnalysisMetric(metrics, t("analysis.pathDeviation"), `${formatPercent(result.perpendicularPercent)} · ${t("analysis.averageDeviation")} ${formatDistance(result.perpendicularRmsMeters)} / ${t("analysis.maximumDeviation")} ${formatDistance(result.perpendicularMaxMeters)}`);
+  appendAnalysisMetric(metrics, t("analysis.spacingVariation"), `${formatPercent(result.spacingPercent)} · ${t("analysis.averageDeviation")} ${formatDistance(result.spacingRmsMeters)}`);
+  elements.analysisDialogContent.append(metrics);
+
+  const reference = document.createElement("div");
+  reference.className = "analysis-reference-note";
+  appendAnalysisText(reference, "span", "", t("analysis.referenceScore"));
+  appendAnalysisText(reference, "strong", "", `${result.referenceScore.toFixed(1)} / 100`);
+  elements.analysisDialogContent.append(reference);
+
+  appendAnalysisText(elements.analysisDialogContent, "h4", "analysis-subsection-title", t("analysis.generalTitle"));
+  const general = document.createElement("div");
+  general.className = "analysis-metric-grid analysis-general-metrics";
+  appendAnalysisMetric(general, t("analysis.endpointDistance"), formatDistance(result.endpointDistanceMeters));
+  appendAnalysisMetric(general, t("analysis.pathLengthRatio"), formatPercent(result.pathLengthRatioPercent));
+  appendAnalysisMetric(general, t("analysis.bearing"), formatAngle(result.bearingDegrees));
+  appendAnalysisMetric(general, t("analysis.farthestPoint"), `${result.farthestPoint.title} · ${formatDistance(result.perpendicularMaxMeters)}`);
+  elements.analysisDialogContent.append(general);
+  if (result.folded) appendAnalysisText(elements.analysisDialogContent, "p", "analysis-dialog-hint", t("analysis.foldedPath"));
+
+  appendAnalysisText(elements.analysisDialogContent, "div", "analysis-measurement-basis", `${t("analysis.screenLineBasis")} ${formatPercent(result.mercator.deviationPercent)}`);
   renderAnalysisSegmentList(target.links);
 }
 
@@ -4230,6 +4336,13 @@ function setAnalysisCopyStatus(message, { error = false } = {}) {
 }
 
 function selectionAnalysisText(target) {
+  if (target.type === "single") {
+    return [
+      `GRID ATLAS — ${t("analysis.dialogTitle")}`,
+      t("analysis.twoPointStraight"),
+      `${t("analysis.segment")}: ${linkTitle(target.links[0])}`
+    ].join("\n");
+  }
   if (target.type === "line") {
     const result = analyzeLineIntersection(target.segments[0], target.segments[1]);
     const names = target.links.map((link) => linkTitle(link));
@@ -4239,6 +4352,28 @@ function selectionAnalysisText(target) {
       `${t("analysis.segment")} 2: ${names[1]}`,
       result.intersects ? `${t("analysis.angle")}: ${formatAngle(result.angle)}` : t("analysis.notCrossing")
     ].join("\n");
+  }
+
+  if (target.type === "path") {
+    const result = analyzeOpenPath(target.segments);
+    if (!result.valid) return [t("analysis.pathTitle"), t("analysis.pathUnavailable")].join("\n");
+    const intersection = result.edgeCount === 2 ? analyzeLineIntersection(target.segments[0], target.segments[1]) : null;
+    return [
+      `GRID ATLAS — ${t("analysis.pathTitle")}`,
+      t("analysis.pathDeclaration").replace("{vertices}", String(result.vertexCount)).replace("{edges}", String(result.edgeCount)),
+      t("analysis.pathBasis").replace("{vertices}", String(result.vertexCount)),
+      t("analysis.pathNotScreen"),
+      Number.isFinite(intersection?.angle) ? `${t("analysis.angle")}: ${formatAngle(intersection.angle)}` : "",
+      `${t("analysis.pathDeviation")}: ${formatPercent(result.perpendicularPercent)} / ${t("analysis.averageDeviation")} ${formatDistance(result.perpendicularRmsMeters)} / ${t("analysis.maximumDeviation")} ${formatDistance(result.perpendicularMaxMeters)}`,
+      `${t("analysis.spacingVariation")}: ${formatPercent(result.spacingPercent)} / ${t("analysis.averageDeviation")} ${formatDistance(result.spacingRmsMeters)}`,
+      `${t("analysis.referenceScore")}: ${result.referenceScore.toFixed(1)} / 100`,
+      `${t("analysis.endpointDistance")}: ${formatDistance(result.endpointDistanceMeters)}`,
+      `${t("analysis.pathLengthRatio")}: ${formatPercent(result.pathLengthRatioPercent)}`,
+      `${t("analysis.bearing")}: ${formatAngle(result.bearingDegrees)}`,
+      `${t("analysis.farthestPoint")}: ${result.farthestPoint.title} / ${formatDistance(result.perpendicularMaxMeters)}`,
+      result.folded ? t("analysis.foldedPath") : "",
+      `${t("analysis.screenLineBasis")}: ${formatPercent(result.mercator.deviationPercent)}`
+    ].filter(Boolean).join("\n");
   }
 
   const result = analyzeSegmentShape(target.segments);
@@ -10444,25 +10579,6 @@ function setSystemUpdateStatus(key) {
   }
 }
 
-async function clearGridAtlasStaticCaches() {
-  if (!("caches" in window)) {
-    return;
-  }
-
-  const cacheKeys = await caches.keys();
-  await Promise.all(cacheKeys
-    .filter((key) => key.startsWith("grid-atlas-static-"))
-    .map((key) => caches.delete(key)));
-}
-
-async function unregisterGridAtlasServiceWorkers() {
-  if (!("serviceWorker" in navigator)) return;
-  const registrations = await navigator.serviceWorker.getRegistrations();
-  await Promise.all(registrations
-    .filter((registration) => new URL(registration.scope).origin === window.location.origin)
-    .map((registration) => registration.unregister()));
-}
-
 function reloadGridAtlasPage() {
   if (window.__gridAtlasReloadStarted) return;
   window.__gridAtlasReloadStarted = true;
@@ -10476,11 +10592,28 @@ function reloadAfterSystemUpdateCheck() {
   reloadGridAtlasPage();
 }
 
+function waitForPromiseWithTimeout(promise, timeoutMs, message) {
+  let timeoutId = null;
+  const timeout = new Promise((resolve, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId);
+    }
+  });
+}
+
 function waitForServiceWorkerActivation(worker) {
   return new Promise((resolve, reject) => {
+    if (!worker || worker.state === "activated") {
+      resolve();
+      return;
+    }
+
     let timeoutId = window.setTimeout(() => {
       finish(new Error("Service Worker update timed out"));
-    }, 20000);
+    }, 12000);
 
     function finish(error) {
       worker.removeEventListener("statechange", handleStateChange);
@@ -10533,7 +10666,11 @@ async function requestSystemUpdate() {
 
     registration.addEventListener("updatefound", handleUpdateFound);
     try {
-      await registration.update();
+      await waitForPromiseWithTimeout(
+        registration.update(),
+        12000,
+        "Service Worker update check timed out"
+      );
     } finally {
       registration.removeEventListener("updatefound", handleUpdateFound);
     }
@@ -10543,8 +10680,8 @@ async function requestSystemUpdate() {
       setSystemUpdateStatus("systemUpdate.applying");
       await waitForServiceWorkerActivation(updateWorker);
     } else {
-      await clearGridAtlasStaticCaches();
-      await unregisterGridAtlasServiceWorkers();
+      setSystemUpdateStatus("systemUpdate.latest");
+      return;
     }
 
     reloadStarted = true;
