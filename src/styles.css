@@ -2596,7 +2596,7 @@ textarea {
 
 .analysis-dialog-content {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .analysis-dialog-actions {
@@ -2608,11 +2608,12 @@ textarea {
 
 .analysis-measurement-declaration {
   color: var(--text);
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 850;
   line-height: 1.25;
 }
 
+.analysis-shape-status,
 .analysis-measurement-counts,
 .analysis-measurement-basis {
   color: var(--muted);
@@ -2620,16 +2621,35 @@ textarea {
   line-height: 1.45;
 }
 
+.analysis-shape-status {
+  width: fit-content;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-strong);
+}
+
 .analysis-measurement-basis {
-  padding-bottom: 3px;
+  padding: 7px 9px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 6px;
 }
 
 .analysis-section-title {
-  margin: 3px 0 -4px;
+  margin: 3px 0 -3px;
   color: var(--text);
   font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.04em;
+}
+
+.analysis-subsection-title {
+  margin: 0 0 -4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .analysis-reference-note {
@@ -2685,17 +2705,17 @@ textarea {
 
 .analysis-metric-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
 }
 
 .analysis-metric {
   display: grid;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
-  padding: 9px 10px;
+  padding: 7px 9px;
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: 6px;
   background: var(--surface-strong);
 }
 
@@ -2708,9 +2728,15 @@ textarea {
 .analysis-metric strong {
   overflow: hidden;
   color: var(--text);
-  font-size: 13px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .analysis-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .analysis-segment-list {

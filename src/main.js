@@ -57,7 +57,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1263";
+const WEB_VERSION = "0.1264";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -687,8 +687,8 @@ const TRANSLATIONS = {
     "analysis.lineHint": "選択した2本の有限線分が交差する点の角度を表示します。",
     "analysis.polygonHint": "選択した線分の接続順をそのまま閉路として測定します。",
     "analysis.measurementDeclaration": "対象: {shape}",
-    "analysis.measurementBasis": "比較: {shape}。頂点角 {angle}、基準 対角÷辺 {ratio}",
-    "analysis.measurementCounts": "{points}地点 / 線{lines}本 / {selfIntersection}",
+    "analysis.measurementBasis": "{shape} · 内角 {angle} · 対角÷辺 {ratio}",
+    "analysis.shapeStatus": "{selfIntersection}",
     "analysis.selfIntersection": "自己交差あり",
     "analysis.noSelfIntersection": "自己交差なし",
     "analysis.shapeClosed": "閉じた線分群",
@@ -697,6 +697,8 @@ const TRANSLATIONS = {
     "analysis.polygonKicker": "測定対象",
     "analysis.generalTitle": "基本情報",
     "analysis.shapeFeaturesTitle": "形状の特徴",
+    "analysis.resultTitle": "結果",
+    "analysis.comparisonTitle": "比較基準",
     "analysis.reference": "参考値",
     "analysis.referenceScore": "参考整い度",
     "analysis.copy": "結果をコピー",
@@ -1037,8 +1039,8 @@ const TRANSLATIONS = {
     "analysis.lineHint": "Shows the angle where the two selected finite segments cross.",
     "analysis.polygonHint": "Measures the selected segments as the closed walk they form, without reordering them.",
     "analysis.measurementDeclaration": "Target: {shape}",
-    "analysis.measurementBasis": "Comparison: {shape}. Vertex angle {angle}; reference diagonal/side {ratio}",
-    "analysis.measurementCounts": "{points} points / {lines} lines / {selfIntersection}",
+    "analysis.measurementBasis": "{shape} · interior angle {angle} · diagonal/side {ratio}",
+    "analysis.shapeStatus": "{selfIntersection}",
     "analysis.selfIntersection": "self-intersecting",
     "analysis.noSelfIntersection": "not self-intersecting",
     "analysis.shapeClosed": "closed segment set",
@@ -1047,6 +1049,8 @@ const TRANSLATIONS = {
     "analysis.polygonKicker": "Measured target",
     "analysis.generalTitle": "General information",
     "analysis.shapeFeaturesTitle": "Shape features",
+    "analysis.resultTitle": "Result",
+    "analysis.comparisonTitle": "Comparison baseline",
     "analysis.reference": "Reference",
     "analysis.referenceScore": "Reference fit",
     "analysis.copy": "Copy result",
@@ -4172,10 +4176,9 @@ function selectionAnalysisText(target) {
   return [
     `GRID ATLAS — ${t("analysis.polygonTitle")}`,
     t("analysis.measurementDeclaration").replace("{shape}", shape),
-    t("analysis.measurementCounts")
-      .replace("{points}", String(result.n))
-      .replace("{lines}", String(target.links.length))
+    t("analysis.shapeStatus")
       .replace("{selfIntersection}", selfIntersection),
+    `${t("analysis.generalTitle")}`,
     `${t("analysis.perimeter")}: ${formatDistance(result.perimeter)}`,
     `${t("analysis.area")}: ${formatArea(result.area)}`,
     `${t("analysis.vertexCount")}: ${result.vertexCount}`,
@@ -4183,13 +4186,16 @@ function selectionAnalysisText(target) {
     `${t("analysis.meanSide")}: ${formatDistance(result.meanSide)}`,
     `${t("analysis.longestSide")}: ${formatDistance(result.longestSide)}`,
     `${t("analysis.shortestSide")}: ${formatDistance(result.shortestSide)}`,
+    `${t("analysis.shapeFeaturesTitle")} · ${t("analysis.resultTitle")}`,
+    `${t("analysis.sideVariation")}: ${formatPercent(result.sideRangePercent)}`,
+    `${t("analysis.maxAngleDeviation")}: ${formatAngle(result.maxAngleDeviation)} (${formatPercent(result.maxAngleDeviationPercent)})`,
+    `${t("analysis.angleDeviationRate")}: ${formatPercent(result.maxAngleDeviationPercent)}`,
+    `${t("analysis.referenceScore")}: ${Math.round(result.referenceScore)} / 100`,
+    `${t("analysis.comparisonTitle")}`,
     t("analysis.measurementBasis")
       .replace("{shape}", referenceShape)
       .replace("{angle}", formatAngle(result.idealAngle))
       .replace("{ratio}", result.idealDiagonalToSide.toFixed(4)),
-    `${t("analysis.sideVariation")}: ${formatPercent(result.sideRangePercent)}`,
-    `${t("analysis.maxAngleDeviation")}: ${formatAngle(result.maxAngleDeviation)} (${formatPercent(result.maxAngleDeviationPercent)})`,
-    `${t("analysis.referenceDiagonalRatio")}: ${result.idealDiagonalToSide.toFixed(4)}`,
     "",
     ...result.points.map((point, index) => `${point.title || `${t("analysis.vertex")} ${index + 1}`}: ${formatAngle(result.angles[index])} / ${formatDistance(result.sideLengths[index])}`)
   ].join("\n");
@@ -4238,10 +4244,8 @@ function renderPolygonAnalysisDialog(target) {
   appendAnalysisText(
     elements.analysisDialogContent,
     "div",
-    "analysis-measurement-counts",
-    t("analysis.measurementCounts")
-      .replace("{points}", String(result.n))
-      .replace("{lines}", String(target.links.length))
+    "analysis-shape-status",
+    t("analysis.shapeStatus")
       .replace("{selfIntersection}", selfIntersection)
   );
   appendAnalysisText(elements.analysisDialogContent, "h3", "analysis-section-title", t("analysis.generalTitle"));
@@ -4260,6 +4264,22 @@ function renderPolygonAnalysisDialog(target) {
   }
 
   appendAnalysisText(elements.analysisDialogContent, "h3", "analysis-section-title", t("analysis.shapeFeaturesTitle"));
+  appendAnalysisText(elements.analysisDialogContent, "h4", "analysis-subsection-title", t("analysis.resultTitle"));
+
+  const metrics = document.createElement("div");
+  metrics.className = "analysis-metric-grid";
+  appendAnalysisMetric(metrics, t("analysis.sideVariation"), formatPercent(result.sideRangePercent));
+  appendAnalysisMetric(metrics, t("analysis.maxAngleDeviation"), formatAngle(result.maxAngleDeviation));
+  appendAnalysisMetric(metrics, t("analysis.angleDeviationRate"), formatPercent(result.maxAngleDeviationPercent));
+  elements.analysisDialogContent.append(metrics);
+
+  const reference = document.createElement("div");
+  reference.className = "analysis-reference-note";
+  appendAnalysisText(reference, "span", "", t("analysis.referenceScore"));
+  appendAnalysisText(reference, "strong", "", `${Math.round(result.referenceScore)} / 100`);
+  elements.analysisDialogContent.append(reference);
+
+  appendAnalysisText(elements.analysisDialogContent, "h4", "analysis-subsection-title", t("analysis.comparisonTitle"));
   appendAnalysisText(
     elements.analysisDialogContent,
     "div",
@@ -4269,20 +4289,6 @@ function renderPolygonAnalysisDialog(target) {
       .replace("{angle}", formatAngle(result.idealAngle))
       .replace("{ratio}", result.idealDiagonalToSide.toFixed(4))
   );
-
-  const metrics = document.createElement("div");
-  metrics.className = "analysis-metric-grid";
-  appendAnalysisMetric(metrics, t("analysis.sideVariation"), formatPercent(result.sideRangePercent));
-  appendAnalysisMetric(metrics, t("analysis.maxAngleDeviation"), formatAngle(result.maxAngleDeviation));
-  appendAnalysisMetric(metrics, t("analysis.angleDeviationRate"), formatPercent(result.maxAngleDeviationPercent));
-  appendAnalysisMetric(metrics, t("analysis.referenceDiagonalRatio"), result.idealDiagonalToSide.toFixed(4));
-  elements.analysisDialogContent.append(metrics);
-
-  const reference = document.createElement("div");
-  reference.className = "analysis-reference-note";
-  appendAnalysisText(reference, "span", "", `${t("analysis.reference")} · ${t("analysis.referenceScore")}`);
-  appendAnalysisText(reference, "strong", "", `${Math.round(result.referenceScore)} / 100`);
-  elements.analysisDialogContent.append(reference);
 
   const table = document.createElement("div");
   table.className = "analysis-vertex-table";
