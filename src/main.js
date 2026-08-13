@@ -3,7 +3,7 @@ import {
   cloudPayloadToPointList,
   createCloudClient,
   pointListToCloudPayload
-} from "./cloud-client.js?v=3";
+} from "./cloud-client.js?v=4";
 import { cloudAuthConfig, cloudAuthUrlState, createCloudAuthClient } from "./cloud-auth.js?v=2";
 import {
   GRIDATLAS_MIME_TYPE,
@@ -57,7 +57,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1259";
+const WEB_VERSION = "0.1260";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
