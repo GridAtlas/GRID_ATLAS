@@ -73,6 +73,62 @@ describe("shape analysis", () => {
     expect(result.idealDiagonalToSide).toBeCloseTo(0.6180339887, 5);
   });
 
+  it("scores the Kinki pentagram with the overlay-distance reference fit", () => {
+    const points = [
+      [34.4601, 134.8525],
+      [33.8406, 135.7734],
+      [34.4550, 136.7252],
+      [35.4178, 136.4064],
+      [35.4304, 135.1543]
+    ].map(([lat, lng], index) => ({ id: `p${index}`, x: 0, y: 0, geo: { lat, lng } }));
+    const segments = [[0, 2], [2, 4], [4, 1], [1, 3], [3, 0]]
+      .map(([a, b]) => ({ a: points[a], b: points[b] }));
+
+    const result = analyzeSegmentShape(segments);
+
+    expect(result.valid).toBe(true);
+    expect(result.k).toBe(2);
+    expect(result.referenceScore).toBeCloseTo(84.9, 1);
+  });
+
+  it("keeps the reference fit independent from polygon or star traversal", () => {
+    const points = [
+      [34.4601, 134.8525],
+      [33.8406, 135.7734],
+      [34.4550, 136.7252],
+      [35.4178, 136.4064],
+      [35.4304, 135.1543]
+    ].map(([lat, lng], index) => ({ id: `p${index}`, x: 0, y: 0, geo: { lat, lng } }));
+    const polygon = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 0]]
+      .map(([a, b]) => ({ a: points[a], b: points[b] }));
+    const star = [[0, 2], [2, 4], [4, 1], [1, 3], [3, 0]]
+      .map(([a, b]) => ({ a: points[a], b: points[b] }));
+
+    const polygonResult = analyzeSegmentShape(polygon);
+    const starResult = analyzeSegmentShape(star);
+
+    expect(polygonResult.valid).toBe(true);
+    expect(starResult.valid).toBe(true);
+    expect(polygonResult.referenceScore).toBeCloseTo(starResult.referenceScore, 6);
+  });
+
+  it("uses the full vertex placement when equal sides are not a square", () => {
+    const points = [
+      { id: "a", x: -2, y: 0 },
+      { id: "b", x: 0, y: 1.154700538 },
+      { id: "c", x: 2, y: 0 },
+      { id: "d", x: 0, y: -1.154700538 }
+    ];
+    const segments = [[0, 1], [1, 2], [2, 3], [3, 0]]
+      .map(([a, b]) => ({ a: points[a], b: points[b] }));
+
+    const result = analyzeSegmentShape(segments);
+
+    expect(result.valid).toBe(true);
+    expect(result.sideRangePercent).toBeCloseTo(0, 6);
+    expect(result.referenceScore).toBeLessThan(100);
+  });
+
   it("rejects selected lines that do not form a closed cycle", () => {
     const points = [
       { id: "a", x: 0, y: 0 },

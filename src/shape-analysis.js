@@ -128,6 +128,7 @@ export function analyzeSegmentShape(segments) {
   const angleScore = clamp(100 * (1 - maxAngleDeviationPercent / 25), 0, 100);
   const sideScore = clamp(100 * (1 - sideRangePercent / 25), 0, 100);
   const area = selfIntersections === 0 ? polygonArea(points) : null;
+  const regularityDeviationPercent = regularityPercent(points, k);
 
   return {
     valid: true,
@@ -154,8 +155,44 @@ export function analyzeSegmentShape(segments) {
     idealDiagonalToSide,
     sideScore,
     angleScore,
-    referenceScore: sideScore * 0.5 + angleScore * 0.5
+    referenceScore: 100 / (1 + regularityDeviationPercent / 20)
   };
+}
+
+function regularityPercent(points, k) {
+  const n = points.length;
+  const center = points.reduce((sum, point) => ({
+    x: sum.x + point.x / n,
+    y: sum.y + point.y / n
+  }), { x: 0, y: 0 });
+  const centered = points.map((point) => [point.x - center.x, point.y - center.y]);
+  const scaleFactor = Math.sqrt(average(centered.map(([x, y]) => x * x + y * y)));
+  if (scaleFactor < EPSILON) return Infinity;
+  const normalized = centered.map(([x, y]) => [x / scaleFactor, y / scaleFactor]);
+  const target = Array.from({ length: n }, (_, index) => {
+    const angle = (2 * Math.PI * k * index) / n;
+    return [Math.cos(angle), Math.sin(angle)];
+  });
+  const bestResidual = [target, [...target].reverse()].reduce((best, candidate) => {
+    const rotationVector = candidate.reduce((sum, [tx, ty], index) => {
+      const [ax, ay] = normalized[index];
+      return {
+        real: sum.real + tx * ax + ty * ay,
+        imaginary: sum.imaginary + tx * ay - ty * ax
+      };
+    }, { real: 0, imaginary: 0 });
+    const rotation = Math.atan2(rotationVector.imaginary, rotationVector.real);
+    const cosRotation = Math.cos(rotation);
+    const sinRotation = Math.sin(rotation);
+    const residualSquared = normalized.reduce((sum, [ax, ay], index) => {
+      const [tx, ty] = candidate[index];
+      const rotatedX = tx * cosRotation - ty * sinRotation;
+      const rotatedY = tx * sinRotation + ty * cosRotation;
+      return sum + (ax - rotatedX) ** 2 + (ay - rotatedY) ** 2;
+    }, 0) / n;
+    return Math.min(best, Math.sqrt(residualSquared));
+  }, Infinity);
+  return bestResidual * 100;
 }
 
 function polygonArea(points) {
