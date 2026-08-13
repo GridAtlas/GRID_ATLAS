@@ -57,7 +57,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1267";
+const WEB_VERSION = "0.1268";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -7514,17 +7514,18 @@ function normalizeStoredLink(link) {
   for (const side of ["a", "b"]) {
     const endpointKey = `${side}Endpoint`;
     const legacySnapshotKey = `${side}Snapshot`;
+    const point = findPoint(next[side]);
+    const freshEndpoint = captureLineEndpoint(point);
+    if (freshEndpoint) {
+      next[endpointKey] = freshEndpoint;
+      delete next[legacySnapshotKey];
+      continue;
+    }
     const currentEndpoint = normalizeLineEndpoint(next[endpointKey] ?? next[legacySnapshotKey]);
     if (currentEndpoint) {
       next[endpointKey] = currentEndpoint;
       delete next[legacySnapshotKey];
       continue;
-    }
-
-    const point = findPoint(next[side]);
-    const endpoint = captureLineEndpoint(point);
-    if (endpoint) {
-      next[endpointKey] = endpoint;
     }
   }
 

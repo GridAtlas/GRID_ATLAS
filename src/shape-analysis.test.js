@@ -113,6 +113,25 @@ describe("shape analysis", () => {
     expect(result.shortestSide).toBeCloseTo(1000);
   });
 
+  it("treats endpoint snapshots with different ids as the same geometric vertex", () => {
+    const points = [
+      { id: "a", x: 0, y: 0 },
+      { id: "b", x: 1, y: 0 },
+      { id: "c", x: 1, y: 1 },
+      { id: "d", x: 0, y: 1 }
+    ];
+    const result = analyzeSegmentShape([
+      { a: points[0], b: points[1] },
+      { a: { ...points[1], id: "b-snapshot" }, b: points[2] },
+      { a: points[2], b: { ...points[3], id: "d-snapshot" } },
+      { a: points[3], b: { ...points[0], id: "a-snapshot" } }
+    ]);
+
+    expect(result.valid).toBe(true);
+    expect(result.vertexCount).toBe(4);
+    expect(result.edgeCount).toBe(4);
+  });
+
   it("does not label a self-crossing five-edge cycle as a regular pentagon", () => {
     const points = [
       { id: "a", x: -1, y: -2 },

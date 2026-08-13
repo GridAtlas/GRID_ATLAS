@@ -243,7 +243,10 @@ function pointXY(point) {
 }
 
 function pointKey(point) {
-  return point.id || `${point.x}:${point.y}`;
+  if (validGeo(point?.geo)) {
+    return `geo:${point.geo.lat}:${point.geo.lng}`;
+  }
+  return `xy:${point.x}:${point.y}`;
 }
 
 function turningNumber(points) {
