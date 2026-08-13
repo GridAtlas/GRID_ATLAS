@@ -57,7 +57,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1265";
+const WEB_VERSION = "0.1266";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -680,12 +680,12 @@ const TRANSLATIONS = {
     "line.reconnected": "「{old}」を「{new}」へ接続変更しました",
     "line.invalidTarget": "別の地点へドロップしてください",
     "line.duplicateTarget": "その2地点を結ぶ線はすでにあります",
-    "analysis.kicker": "選択結果",
+    "analysis.dialogTitle": "分析結果",
     "analysis.lineTitle": "交差角",
     "analysis.polygonTitle": "図形の分析",
     "analysis.noSelection": "2本の線分、または閉じた線分群を選択してください",
-    "analysis.lineHint": "選択した2本の有限線分が交差する点の角度を表示します。",
-    "analysis.polygonHint": "選択した線分の接続順をそのまま閉路として測定します。",
+    "analysis.lineHint": "2本の線分の分析結果を表示します。",
+    "analysis.polygonHint": "図形の分析結果を表示します。",
     "analysis.measurementDeclaration": "図形: {shape}",
     "analysis.measurementBasis": "{shape} · 内角 {angle} · 対角÷辺 {ratio}",
     "analysis.figure": "図形",
@@ -1033,12 +1033,12 @@ const TRANSLATIONS = {
     "line.reconnected": "Changed the connection from “{old}” to “{new}”",
     "line.invalidTarget": "Drop on a different point",
     "line.duplicateTarget": "A line between those points already exists",
-    "analysis.kicker": "Selection result",
+    "analysis.dialogTitle": "Analysis result",
     "analysis.lineTitle": "Crossing angle",
     "analysis.polygonTitle": "Shape analysis",
     "analysis.noSelection": "Select two segments or a closed set of segments",
-    "analysis.lineHint": "Shows the angle where the two selected finite segments cross.",
-    "analysis.polygonHint": "Measures the selected segments as the closed walk they form, without reordering them.",
+    "analysis.lineHint": "Shows the analysis result for the two segments.",
+    "analysis.polygonHint": "Shows the analysis result for the shape.",
     "analysis.measurementDeclaration": "Figure: {shape}",
     "analysis.measurementBasis": "{shape} · interior angle {angle} · diagonal/side {ratio}",
     "analysis.figure": "Figure",
@@ -4089,7 +4089,7 @@ function renderSelectionAnalysisDialog(target = selectionAnalysisTarget()) {
     return;
   }
 
-  elements.analysisDialogTitle.textContent = target.type === "line" ? t("analysis.lineTitle") : t("analysis.polygonTitle");
+  elements.analysisDialogTitle.textContent = t("analysis.dialogTitle");
   elements.analysisDialogContent.replaceChildren();
   if (target.type === "line") {
     renderLineAnalysisDialog(target);
