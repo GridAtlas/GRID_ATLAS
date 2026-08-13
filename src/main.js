@@ -31,12 +31,13 @@ import {
 } from "./gridatlas-analysis.js?v=1";
 import { analyzeLineIntersection, analyzeOpenPath, analyzeSegmentShape, vincentyDistanceMeters } from "./shape-analysis.js?v=1";
 import {
-  TRAVERSE_CONFIG,
-  grantTraverseStock,
-  sanitizeTraverseLog,
+  BARRIER_CONFIG,
+  grantBarrierStock,
+  sanitizeBarrierLog,
+  stoneIdFromTile,
   tileBounds,
   tileIdFromGeo
-} from "./traverse.js?v=1";
+} from "./barrier.js?v=1";
 
 const STORAGE_KEY = "grid-atlas-workspace-v2";
 const ANALYSIS_LAYER_VERSION = 1;
@@ -54,7 +55,8 @@ const GRIDATLAS_PRESET_PARAMETER = "preset";
 const PUBLIC_PRESET_DIRECTORY = "presets";
 const PUBLIC_PRESET_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const GPS_ENABLED_KEY = "grid-atlas-gps-enabled";
-const TRAVERSE_LOG_KEY = "grid-atlas-traverse-log-v1";
+const BARRIER_LOG_KEY = "grid-atlas-barrier-log-v1";
+const LEGACY_TRAVERSE_LOG_KEY = "grid-atlas-traverse-log-v1";
 const TRAVERSE_URL_PARAMETER = "traverse";
 
 const CLOUD_ACCESS_TOKEN_KEY = "grid-atlas-cloud-access-token";
@@ -67,7 +69,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1329";
+const WEB_VERSION = "0.1339";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -979,7 +981,7 @@ const TRANSLATIONS = {
     "message.quickHint": "接続、リスト間コピー／移動、共有、巡回、削除、解除をクイックボタンで実行できます。",
     "message.currentLocation": "現在地",
     "message.lastObservedLocation": "最終観測位置",
-    "traverse.noLocation": "現在地を取得してから結界石を操作してください",
+  "traverse.noLocation": "現在地を取得してから結界石を操作してください",
     "traverse.gpsUnavailable": "この端末では現在地を取得できません",
     "traverse.accuracyError": "位置情報の精度が低いため、結界石を操作できません",
     "traverse.stockEmpty": "置ける結界石がありません",
@@ -1519,10 +1521,10 @@ function syncSettingsControls() {
 function loadTraverseLog() {
   let raw = null;
   try {
-    const stored = localStorage.getItem(TRAVERSE_LOG_KEY);
+    const stored = localStorage.getItem(BARRIER_LOG_KEY) || localStorage.getItem(LEGACY_TRAVERSE_LOG_KEY);
     raw = stored ? JSON.parse(stored) : null;
   } catch {}
-  const result = sanitizeTraverseLog(raw);
+  const result = sanitizeBarrierLog(raw);
   state.traverseLog = result.log;
   if (result.changed || !raw) persistTraverseLog();
 }
@@ -1530,13 +1532,13 @@ function loadTraverseLog() {
 function persistTraverseLog() {
   if (!state.traverseLog) return;
   try {
-    localStorage.setItem(TRAVERSE_LOG_KEY, JSON.stringify(state.traverseLog));
+    localStorage.setItem(BARRIER_LOG_KEY, JSON.stringify(state.traverseLog));
   } catch {}
 }
 
 function refreshTraverseStock() {
   if (!state.traverseLog) return false;
-  const changed = grantTraverseStock(state.traverseLog);
+  const changed = grantBarrierStock(state.traverseLog);
   if (changed) persistTraverseLog();
   return changed;
 }
@@ -2831,7 +2833,7 @@ function drawGrid(width, height) {
 
 function traverseTilePolygon(tileId) {
   const bounds = tileBounds(tileId);
-  if (!bounds || bounds.z !== TRAVERSE_CONFIG.dataZoom) return null;
+  if (!bounds || bounds.z !== BARRIER_CONFIG.dataZoom) return null;
   return [
     projectLatLng(bounds.north, bounds.west),
     projectLatLng(bounds.north, bounds.east),
@@ -2863,8 +2865,8 @@ function drawTraversePolygon(points, options = {}) {
 function drawTraverseTiles() {
   if (!state.traverseMode || !state.traverseLog) return;
   const colors = canvasPalette();
-  for (const [tileId, tile] of Object.entries(state.traverseLog.tiles)) {
-    const polygon = traverseTilePolygon(tileId);
+  for (const stone of Object.values(state.traverseLog.stones)) {
+    const polygon = traverseTilePolygon(stone.tile);
     if (!polygon) continue;
     context.save();
     context.fillStyle = colors.traverseFill;
@@ -2874,11 +2876,9 @@ function drawTraverseTiles() {
     context.strokeStyle = colors.traverseFill;
     context.lineWidth = 1.25;
     drawTraversePolygon(polygon, { stroke: true });
-    drawTraverseTileCount(polygon, tile.count, colors);
+    drawTraverseTileCount(polygon, stone.count, colors);
     context.restore();
   }
-
-  drawTraverseBarrier();
 
   const currentGeo = state.currentGeo;
   const currentTileId = currentGeo ? tileIdFromGeo(currentGeo) : null;
@@ -2908,36 +2908,6 @@ function drawTraverseTileCount(polygon, count, colors) {
   context.strokeText(String(count), right, bottom);
   context.fillStyle = colors.traverseFill;
   context.fillText(String(count), right, bottom);
-}
-
-function traverseBarrierTileIds() {
-  const ordered = Array.isArray(state.traverseLog?.tileOrder) ? state.traverseLog.tileOrder : [];
-  return ordered.filter((tileId) => state.traverseLog.tiles[tileId]?.count > 0);
-}
-
-function drawTraverseBarrier() {
-  const tileIds = traverseBarrierTileIds();
-  if (tileIds.length < 3) return;
-  const centers = tileIds
-    .map((tileId) => tileBounds(tileId))
-    .filter(Boolean)
-    .map((bounds) => projectLatLng((bounds.north + bounds.south) / 2, (bounds.west + bounds.east) / 2))
-    .map(worldToScreen);
-  if (centers.length < 3) return;
-
-  const colors = canvasPalette();
-  context.save();
-  context.beginPath();
-  context.moveTo(centers[0].x, centers[0].y);
-  for (const center of centers.slice(1)) context.lineTo(center.x, center.y);
-  context.closePath();
-  context.strokeStyle = colors.traverseFill;
-  context.lineWidth = 2.5;
-  context.globalAlpha = 0.9;
-  context.setLineDash([8, 5]);
-  context.stroke();
-  context.setLineDash([]);
-  context.restore();
 }
 
 function drawGridLines(topLeft, bottomRight, step, color, lineWidth) {
@@ -3997,13 +3967,13 @@ function renderTraverseActionButton() {
   const feedbackActive = state.traverseFeedback && Date.now() < state.traverseFeedbackExpiresAt;
   const value = feedbackActive
     ? state.traverseFeedback
-    : `${amount} / ${TRAVERSE_CONFIG.stockCap}`;
+    : `${amount} / ${BARRIER_CONFIG.stockCap}`;
   elements.traverseActionLabel.textContent = t("action.traverse");
   elements.traverseActionValue.textContent = value;
   button.disabled = state.traverseBusy;
   button.setAttribute("aria-label", feedbackActive
     ? `${t("action.traverse")} ${value}`
-    : t("traverse.stockLabel").replace("{amount}", String(amount)).replace("{cap}", String(TRAVERSE_CONFIG.stockCap)));
+    : t("traverse.stockLabel").replace("{amount}", String(amount)).replace("{cap}", String(BARRIER_CONFIG.stockCap)));
   button.title = t("traverse.menuTitle");
 }
 
@@ -4051,7 +4021,7 @@ function performTraverseStoneAction(action) {
   navigator.geolocation.getCurrentPosition(
     (position) => {
       const accuracy = Number(position.coords?.accuracy);
-      if (!Number.isFinite(accuracy) || accuracy > TRAVERSE_CONFIG.accuracyThresholdMeters) {
+      if (!Number.isFinite(accuracy) || accuracy > BARRIER_CONFIG.accuracyThresholdMeters) {
         state.traverseBusy = false;
         setTraverseFeedback(t("traverse.accuracyError"));
         render();
@@ -4072,37 +4042,43 @@ function performTraverseStoneAction(action) {
       }
 
       const now = new Date().toISOString();
-      const tile = state.traverseLog.tiles[tileId];
+      const stoneId = stoneIdFromTile(tileId);
+      const stone = stoneId ? state.traverseLog.stones[stoneId] : null;
       let feedbackAction;
       if (action === "place") {
-        const nextTile = tile ?? { count: 0, firstAt: now, lastAt: now };
-        nextTile.count += 1;
-        nextTile.firstAt ||= now;
-        nextTile.lastAt = now;
-        state.traverseLog.tiles[tileId] = nextTile;
-        if (!state.traverseLog.tileOrder.includes(tileId)) state.traverseLog.tileOrder.push(tileId);
+        const nextStone = stone ?? {
+          tile: tileId,
+          lat: null,
+          lng: null,
+          count: 0,
+          firstAt: now,
+          lastAt: now
+        };
+        nextStone.count += 1;
+        nextStone.firstAt ||= now;
+        nextStone.lastAt = now;
+        state.traverseLog.stones[stoneId] = nextStone;
         state.traverseLog.stock.amount = Math.max(0, state.traverseLog.stock.amount - 1);
         feedbackAction = t("traverse.placeDone");
       } else {
-        if (!tile || tile.count < 1) {
+        if (!stone || stone.count < 1) {
           state.traverseBusy = false;
           setTraverseFeedback(t("traverse.noStone"));
           render();
           return;
         }
-        if (state.traverseLog.stock.amount >= TRAVERSE_CONFIG.stockCap) {
+        if (state.traverseLog.stock.amount >= BARRIER_CONFIG.stockCap) {
           state.traverseBusy = false;
           setTraverseFeedback(t("traverse.stockFull"));
           render();
           return;
         }
-        tile.count -= 1;
-        tile.lastAt = now;
-        if (tile.count <= 0) {
-          delete state.traverseLog.tiles[tileId];
-          state.traverseLog.tileOrder = state.traverseLog.tileOrder.filter((id) => id !== tileId);
+        stone.count -= 1;
+        stone.lastAt = now;
+        if (stone.count <= 0) {
+          delete state.traverseLog.stones[stoneId];
         }
-        state.traverseLog.stock.amount = Math.min(TRAVERSE_CONFIG.stockCap, state.traverseLog.stock.amount + 1);
+        state.traverseLog.stock.amount = Math.min(BARRIER_CONFIG.stockCap, state.traverseLog.stock.amount + 1);
         feedbackAction = t("traverse.pickDone");
       }
       state.currentGeo = geo;
