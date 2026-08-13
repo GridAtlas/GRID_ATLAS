@@ -56,7 +56,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1239";
+const WEB_VERSION = "0.1240";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -289,6 +289,7 @@ const elements = {
   cloudSessionCard: document.querySelector("#cloudSessionCard"),
   cloudSessionEmail: document.querySelector("#cloudSessionEmail"),
   cloudPasswordPanel: document.querySelector("#cloudPasswordPanel"),
+  cloudPasswordPanelTitle: document.querySelector("#cloudPasswordPanelTitle"),
   cloudNewPassword: document.querySelector("#cloudNewPassword"),
   cloudNewPasswordConfirm: document.querySelector("#cloudNewPasswordConfirm"),
   cloudSetPasswordButton: document.querySelector("#cloudSetPasswordButton"),
@@ -335,6 +336,7 @@ const state = {
     authClient: null,
     authSession: null,
     authUser: null,
+    passwordRecoveryActive: false,
     testerCode: "",
     testerActive: false,
     testerError: "",
@@ -6224,6 +6226,7 @@ function renderCloudAuthControls() {
   elements.cloudAuthPanel.hidden = !state.cloud.authConfigured;
   const signedIn = Boolean(state.cloud.authSession?.access_token);
   const passwordSetupComplete = hasCloudPasswordSetup(state.cloud.authUser?.id);
+  const passwordRecoveryActive = signedIn && state.cloud.passwordRecoveryActive;
   const busy = state.cloud.busy || state.cloud.authBusy;
   elements.cloudAuthPanel.classList.toggle("is-signed-in", signedIn);
   if (elements.cloudSessionBadge) elements.cloudSessionBadge.hidden = !signedIn;
@@ -6236,7 +6239,14 @@ function renderCloudAuthControls() {
   if (elements.cloudSignOutButton) elements.cloudSignOutButton.disabled = busy || !signedIn;
   if (elements.cloudSignInButton) elements.cloudSignInButton.hidden = signedIn;
   if (elements.cloudSignOutButton) elements.cloudSignOutButton.hidden = !signedIn;
-  if (elements.cloudPasswordPanel) elements.cloudPasswordPanel.hidden = !signedIn || passwordSetupComplete;
+  if (elements.cloudPasswordPanel) {
+    elements.cloudPasswordPanel.hidden = !signedIn || (!passwordRecoveryActive && passwordSetupComplete);
+  }
+  if (elements.cloudPasswordPanelTitle) {
+    elements.cloudPasswordPanelTitle.textContent = passwordRecoveryActive
+      ? cloudText("パスワードの再設定", "Reset your password")
+      : cloudText("招待ユーザーのパスワード設定（初回のみ）", "Set your password (first time only)");
+  }
   if (elements.cloudSetPasswordButton) elements.cloudSetPasswordButton.disabled = busy || !signedIn;
   if (signedIn && state.cloud.authUser?.email && elements.cloudAuthStatus && !elements.cloudAuthStatus.classList.contains("is-error")) {
     elements.cloudAuthStatus.textContent = cloudText(
@@ -6322,6 +6332,7 @@ async function setCloudPassword() {
     const { error } = await state.cloud.authClient.auth.updateUser({ password });
     if (error) throw error;
     markCloudPasswordSetup(state.cloud.authUser?.id);
+    state.cloud.passwordRecoveryActive = false;
     elements.cloudNewPassword.value = "";
     elements.cloudNewPasswordConfirm.value = "";
     setCloudPasswordStatus("パスワードを設定しました。次回から通常ログインできます");
@@ -6341,6 +6352,7 @@ async function initializeCloudAuth() {
   if (!state.cloud.authClient) return;
 
   const authUrlState = cloudAuthUrlState();
+  state.cloud.passwordRecoveryActive = authUrlState.type === "recovery";
 
   state.cloud.authClient.auth.onAuthStateChange((_event, session) => {
     // Supabase warns against calling other async auth methods directly from
@@ -6356,6 +6368,9 @@ async function initializeCloudAuth() {
     const { data, error } = await state.cloud.authClient.auth.getSession();
     if (error) throw error;
     applyCloudAuthSession(data.session, { refresh: Boolean(data.session), forceRefresh: true });
+    if (data.session && authUrlState.type === "recovery") {
+      window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
+    }
     if (data.session && (authUrlState.code || authUrlState.error)) {
       window.history.replaceState({}, document.title, window.location.pathname);
     } else if (!data.session && authUrlState.error) {
@@ -6414,6 +6429,7 @@ async function signInCloud() {
   try {
     const { data, error } = await state.cloud.authClient.auth.signInWithPassword({ email, password });
     if (error) throw error;
+    state.cloud.passwordRecoveryActive = false;
     markCloudPasswordSetup(data.user?.id);
     applyCloudAuthSession(data.session, { forceRefresh: true });
     setCloudAuthStatus(cloudText("ログインしました", "Signed in"));
@@ -6432,6 +6448,7 @@ async function signOutCloud() {
   try {
     const { error } = await state.cloud.authClient.auth.signOut({ scope: "local" });
     if (error) throw error;
+    state.cloud.passwordRecoveryActive = false;
     applyCloudAuthSession(null, { refresh: false });
     state.cloud.connected = Boolean(state.cloud.testerCode);
     if (state.cloud.testerCode) {
