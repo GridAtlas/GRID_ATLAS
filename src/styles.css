@@ -528,6 +528,47 @@ button {
   border-top: 1px solid var(--line);
 }
 
+.cloud-access-code-section {
+  display: grid;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+}
+
+.cloud-access-code-section summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.cloud-access-code-section[open] summary {
+  color: var(--accent-strong);
+}
+
+.cloud-tester-auth-row {
+  display: grid;
+  grid-template-columns: minmax(0, 112px) minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+}
+
+.cloud-tester-auth-row .cloud-status {
+  min-width: 0;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.cloud-tester-signup-button {
+  width: 100%;
+  min-height: 34px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
 .settings-panel label {
   display: grid;
   gap: 5px;
