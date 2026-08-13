@@ -57,7 +57,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1266";
+const WEB_VERSION = "0.1267";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -238,6 +238,7 @@ const elements = {
   analysisDialog: document.querySelector("#analysisDialog"),
   analysisDialogTitle: document.querySelector("#analysisDialogTitle"),
   analysisDialogContent: document.querySelector("#analysisDialogContent"),
+  analysisDialogCopyStatus: document.querySelector("#analysisDialogCopyStatus"),
   analysisDialogCopyButton: document.querySelector("#analysisDialogCopyButton"),
   appToast: document.querySelector("#appToast"),
   cloudProgress: document.querySelector("#cloudProgress"),
@@ -4098,6 +4099,7 @@ function renderSelectionAnalysisDialog(target = selectionAnalysisTarget()) {
   }
   elements.analysisDialogCopyButton.disabled = !target;
   elements.analysisDialogCopyButton.textContent = t("analysis.copy");
+  setAnalysisCopyStatus("");
 }
 
 function renderLineAnalysisDialog(target) {
@@ -4149,10 +4151,18 @@ async function copySelectionAnalysis() {
   const text = selectionAnalysisText(target);
   const copied = await writeClipboardText(text);
   if (copied) {
-    showAppToast(t("analysis.copied"));
+    setAnalysisCopyStatus(t("analysis.copied"));
     return;
   }
-  showAppToast(t("analysis.copyFailed"), { error: true });
+  setAnalysisCopyStatus(t("analysis.copyFailed"), { error: true });
+}
+
+function setAnalysisCopyStatus(message, { error = false } = {}) {
+  const status = elements.analysisDialogCopyStatus;
+  if (!status) return;
+  status.textContent = message;
+  status.hidden = !message;
+  status.classList.toggle("is-error", error && Boolean(message));
 }
 
 function selectionAnalysisText(target) {

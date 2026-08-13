@@ -2601,9 +2601,23 @@ textarea {
 
 .analysis-dialog-actions {
   display: flex;
+  align-items: center;
+  gap: 10px;
   justify-content: flex-end;
   padding-top: 2px;
   border-top: 1px solid var(--line);
+}
+
+.analysis-copy-status {
+  margin-right: auto;
+  color: var(--accent-strong);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.analysis-copy-status.is-error {
+  color: var(--danger);
 }
 
 .analysis-measurement-basis {

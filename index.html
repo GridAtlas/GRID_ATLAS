@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=70">
-    <script src="src/main.js?v=330" type="module" defer></script>
+    <script src="src/main.js?v=331" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -590,6 +590,7 @@
         </div>
         <div id="analysisDialogContent" class="analysis-dialog-content"></div>
         <div class="analysis-dialog-actions">
+          <span id="analysisDialogCopyStatus" class="analysis-copy-status" aria-live="polite" hidden></span>
           <button id="analysisDialogCopyButton" class="compact-button" type="button" data-i18n="analysis.copy">結果をコピー</button>
         </div>
       </form>
