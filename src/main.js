@@ -57,7 +57,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1260";
+const WEB_VERSION = "0.1261";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -10247,6 +10247,14 @@ async function clearGridAtlasStaticCaches() {
     .map((key) => caches.delete(key)));
 }
 
+async function unregisterGridAtlasServiceWorkers() {
+  if (!("serviceWorker" in navigator)) return;
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(registrations
+    .filter((registration) => new URL(registration.scope).origin === window.location.origin)
+    .map((registration) => registration.unregister()));
+}
+
 function reloadGridAtlasPage() {
   if (window.__gridAtlasReloadStarted) return;
   window.__gridAtlasReloadStarted = true;
@@ -10328,6 +10336,7 @@ async function requestSystemUpdate() {
       await waitForServiceWorkerActivation(updateWorker);
     } else {
       await clearGridAtlasStaticCaches();
+      await unregisterGridAtlasServiceWorkers();
     }
 
     reloadStarted = true;
