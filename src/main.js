@@ -25,6 +25,7 @@ import {
 import {
   GRIDATLAS_LINE_LAYER_EXTENSION,
   buildGridAtlasLineLayer,
+  normalizeGridAtlasLineColor,
   readGridAtlasLineLayer,
   withoutGridAtlasLineLayer
 } from "./gridatlas-analysis.js?v=1";
@@ -57,7 +58,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1283";
+const WEB_VERSION = "0.1293";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -233,8 +234,21 @@ const elements = {
   gridLinkQuickName: document.querySelector("#gridLinkQuickName"),
   gridLinkQuickDistance: document.querySelector("#gridLinkQuickDistance"),
   gridLinkQuickEndpoints: document.querySelector("#gridLinkQuickEndpoints"),
+  gridLinkQuickColorButton: document.querySelector("#gridLinkQuickColorButton"),
+  gridLinkQuickColorLabel: document.querySelector("#gridLinkQuickColorLabel"),
+  gridLinkQuickColorMark: document.querySelector("#gridLinkQuickColorMark"),
   gridLinkQuickDeleteButton: document.querySelector("#gridLinkQuickDeleteButton"),
   gridLinkQuickDeleteLabel: document.querySelector("#gridLinkQuickDeleteLabel"),
+  gridLinkColorDialog: document.querySelector("#gridLinkColorDialog"),
+  gridLinkColorDialogTitle: document.querySelector("#gridLinkColorDialogTitle"),
+  gridLinkColorDialogMessage: document.querySelector("#gridLinkColorDialogMessage"),
+  gridLinkColorInput: document.querySelector("#gridLinkColorInput"),
+  gridLinkColorSegmentOption: document.querySelector("#gridLinkColorSegmentOption"),
+  gridLinkColorSegmentLabel: document.querySelector("#gridLinkColorSegmentLabel"),
+  gridLinkColorShapeOption: document.querySelector("#gridLinkColorShapeOption"),
+  gridLinkColorShapeLabel: document.querySelector("#gridLinkColorShapeLabel"),
+  gridLinkColorCancelButton: document.querySelector("#gridLinkColorCancelButton"),
+  gridLinkColorApplyButton: document.querySelector("#gridLinkColorApplyButton"),
   analysisDialog: document.querySelector("#analysisDialog"),
   analysisDialogTitle: document.querySelector("#analysisDialogTitle"),
   analysisDialogContent: document.querySelector("#analysisDialogContent"),
@@ -390,6 +404,7 @@ const state = {
   pointInfoReturnPhase: null,
   gridPointQuickPointId: null,
   gridLinkQuickLinkId: null,
+  gridLinkColorLinkId: null,
   gridPointHoverPointId: null,
   pointInfoBackdropClickPending: false,
   pointInfoBackdropClickSuppressed: false,
@@ -599,6 +614,7 @@ const TRANSLATIONS = {
     "action.analyzeTitle": "選択した線分・図形を分析",
 
     "action.cancel": "キャンセル",
+    "action.apply": "適用",
     "action.copyToList": "コピー",
     "action.moveToList": "移動",
     "action.shareSelected": "共有",
@@ -675,6 +691,14 @@ const TRANSLATIONS = {
     "line.infoTitle": "線の情報",
     "line.deleteConfirm": "この線を削除しますか？",
     "line.deleted": "線を削除しました",
+    "line.color": "色",
+    "line.colorTitle": "線の色を変更",
+    "line.colorMessage": "色を適用する範囲を選択してください。",
+    "line.colorScope": "適用範囲",
+    "line.colorSegment": "この線分だけ",
+    "line.colorShape": "同じ図形全体（{count}本）",
+    "line.colorNoShape": "この線分は図形に属していません",
+    "line.colorApplied": "線の色を変更しました",
     "line.closeShapeTitle": "図形を閉じますか？",
     "line.closeShapeMessage": "3地点以上が選択されています。最後の地点から起点へ接続して図形を閉じますか？",
     "line.dragStatus": "接続先を変更中：{name} にドロップ",
@@ -952,6 +976,7 @@ const TRANSLATIONS = {
     "action.analyzeTitle": "Analyze selected lines or shape",
 
     "action.cancel": "Cancel",
+    "action.apply": "Apply",
     "action.copyToList": "Copy",
     "action.moveToList": "Move",
     "action.shareSelected": "Share",
@@ -1028,6 +1053,14 @@ const TRANSLATIONS = {
     "line.infoTitle": "Line Info",
     "line.deleteConfirm": "Delete this line?",
     "line.deleted": "Line deleted",
+    "line.color": "Color",
+    "line.colorTitle": "Change line color",
+    "line.colorMessage": "Choose where to apply the color.",
+    "line.colorScope": "Apply to",
+    "line.colorSegment": "This segment only",
+    "line.colorShape": "Entire shape ({count} segments)",
+    "line.colorNoShape": "This segment is not part of a shape",
+    "line.colorApplied": "Line color changed",
     "line.closeShapeTitle": "Close the shape?",
     "line.closeShapeMessage": "Three or more points are selected. Close the shape by connecting the last point back to the first?",
     "line.dragStatus": "Changing connection: drop on {name}",
@@ -2683,7 +2716,7 @@ function drawLinks() {
     context.moveTo(start.x, start.y);
     context.lineTo(end.x, end.y);
     const colors = canvasPalette();
-    context.strokeStyle = isSelected ? colors.linkSelected : colors.link;
+    context.strokeStyle = normalizeGridAtlasLineColor(link.color) || colors.link;
     context.lineWidth = isSelected ? 5 : 2.4;
     context.stroke();
   }
@@ -3384,6 +3417,7 @@ function render() {
   renderPointInfoDialog();
   renderGridPointQuickDialog();
   renderGridLinkQuickDialog();
+  renderGridLinkColorDialog();
   renderSelectionAnalysisDialog();
   syncSettingsControls();
   syncLocationGlowAnimation();
@@ -4049,9 +4083,42 @@ function renderGridLinkQuickDialog() {
   elements.gridLinkQuickName.textContent = linkTitle(link);
   elements.gridLinkQuickDistance.textContent = `${t("field.distance")}: ${formatDistance(distanceBetween(endpoints.a, endpoints.b))}`;
   elements.gridLinkQuickEndpoints.textContent = `${endpoints.a.title} / ${endpoints.b.title}`;
+  const color = normalizeGridAtlasLineColor(link.color) || canvasPalette().link;
+  elements.gridLinkQuickColorLabel.textContent = t("line.color");
+  elements.gridLinkQuickColorButton.setAttribute("aria-label", t("line.color"));
+  elements.gridLinkQuickColorButton.title = t("line.color");
+  elements.gridLinkQuickColorMark.style.backgroundColor = color;
   elements.gridLinkQuickDeleteLabel.textContent = t("action.delete");
   elements.gridLinkQuickDeleteButton.setAttribute("aria-label", t("action.delete"));
   elements.gridLinkQuickDeleteButton.title = t("action.delete");
+}
+
+function renderGridLinkColorDialog() {
+  if (!elements.gridLinkColorDialog?.open) return;
+  const link = state.gridLinkColorLinkId ? findLink(state.gridLinkColorLinkId) : null;
+  if (!link) {
+    elements.gridLinkColorDialog.close("selection-changed");
+    return;
+  }
+
+  const group = linksInStroke(link);
+  const hasShape = group.length > 1 && Boolean(linkStrokeId(link));
+  const color = normalizeGridAtlasLineColor(link.color) || canvasPalette().link;
+  const shapeInput = elements.gridLinkColorShapeOption.querySelector("input");
+
+  elements.gridLinkColorDialogTitle.textContent = t("line.colorTitle");
+  elements.gridLinkColorDialogMessage.textContent = t("line.colorMessage");
+  elements.gridLinkColorInput.value = color;
+  elements.gridLinkColorInput.setAttribute("aria-label", t("line.color"));
+  elements.gridLinkColorSegmentLabel.textContent = t("line.colorSegment");
+  elements.gridLinkColorShapeOption.hidden = !hasShape;
+  shapeInput.disabled = !hasShape;
+  elements.gridLinkColorShapeLabel.textContent = hasShape
+    ? t("line.colorShape").replace("{count}", String(group.length))
+    : t("line.colorNoShape");
+  if (!hasShape) elements.gridLinkColorSegmentOption.checked = true;
+  elements.gridLinkColorCancelButton.textContent = t("action.cancel");
+  elements.gridLinkColorApplyButton.textContent = t("action.apply");
 }
 
 function selectionAnalysisTarget() {
@@ -4382,6 +4449,25 @@ function japanesePolygonCount(count) {
   }[count] || String(count);
 }
 
+function applyGridLinkColorFromDialog() {
+  const link = state.gridLinkColorLinkId ? findLink(state.gridLinkColorLinkId) : null;
+  const color = normalizeGridAtlasLineColor(elements.gridLinkColorInput.value);
+  if (!link || !color) return;
+
+  const shapeInput = elements.gridLinkColorShapeOption.querySelector("input");
+  const targetIds = new Set(
+    shapeInput?.checked ? linksInStroke(link).map((candidate) => candidate.id) : [link.id]
+  );
+  const updatedAt = new Date().toISOString();
+  state.links = state.links.map((candidate) => targetIds.has(candidate.id)
+    ? normalizeStoredLink({ ...candidate, color, updatedAt })
+    : candidate
+  );
+  persistWorkspace();
+  render();
+  showAppToast(t("line.colorApplied"));
+}
+
 async function deleteGridLinkFromQuickDialog() {
   const linkId = state.gridLinkQuickLinkId;
   const link = linkId ? findLink(linkId) : null;
@@ -4491,6 +4577,17 @@ function openGridLinkQuickDialog(link, screenPoint = null) {
   if (!elements.gridLinkQuickDialog.open) elements.gridLinkQuickDialog.show();
   renderGridLinkQuickDialog();
   positionGridLinkQuickDialog(screenPoint);
+}
+
+function openGridLinkColorDialog(link) {
+  if (!link || !elements.gridLinkColorDialog?.showModal) return;
+  state.gridLinkColorLinkId = link.id;
+  elements.gridLinkColorSegmentOption.checked = true;
+  const shapeInput = elements.gridLinkColorShapeOption.querySelector("input");
+  if (shapeInput) shapeInput.checked = false;
+  if (!elements.gridLinkColorDialog.open) elements.gridLinkColorDialog.showModal();
+  renderGridLinkColorDialog();
+  elements.gridLinkColorInput.focus();
 }
 
 function showSelectedPointInfoDialog(pointOrId = null) {
@@ -7509,6 +7606,12 @@ function normalizeStoredLink(link) {
   if (typeof next.strokeId !== "string" || !next.strokeId) {
     delete next.strokeId;
   }
+  const color = normalizeGridAtlasLineColor(next.color);
+  if (color) {
+    next.color = color;
+  } else {
+    delete next.color;
+  }
   for (const side of ["a", "b"]) {
     const endpointKey = `${side}Endpoint`;
     const endpoint = normalizeLineEndpoint(next[endpointKey]);
@@ -7520,7 +7623,7 @@ function normalizeStoredLink(link) {
   return next;
 }
 
-function createStoredLink({ id = createId(), aPoint, bPoint, strokeId = "", createdAt = new Date().toISOString(), updatedAt = "" } = {}) {
+function createStoredLink({ id = createId(), aPoint, bPoint, strokeId = "", color = "", createdAt = new Date().toISOString(), updatedAt = "" } = {}) {
   const aEndpoint = captureLineEndpoint(aPoint);
   const bEndpoint = captureLineEndpoint(bPoint);
   if (!aEndpoint || !bEndpoint || aEndpoint.endpointKey === bEndpoint.endpointKey) {
@@ -7534,6 +7637,7 @@ function createStoredLink({ id = createId(), aPoint, bPoint, strokeId = "", crea
     aEndpoint,
     bEndpoint,
     ...(strokeId ? { strokeId } : {}),
+    ...(normalizeGridAtlasLineColor(color) ? { color: normalizeGridAtlasLineColor(color) } : {}),
     ...(createdAt ? { createdAt } : {}),
     ...(updatedAt ? { updatedAt } : {})
   });
@@ -10834,6 +10938,7 @@ function analysisLayerFromGridAtlasDocument(document, pointList) {
         aPoint: pointById.get(link.a),
         bPoint: pointById.get(link.b),
         strokeId: link.strokeId,
+        color: link.color,
         createdAt: link.createdAt
       }))
       .filter(Boolean)
@@ -11648,11 +11753,26 @@ function bindEvents() {
   elements.gridLinkQuickDialog.addEventListener("close", () => {
     state.gridLinkQuickLinkId = null;
   });
+  bindPointerActionButton(elements.gridLinkQuickColorButton, () => {
+    const link = state.gridLinkQuickLinkId ? findLink(state.gridLinkQuickLinkId) : null;
+    if (!link) return;
+    if (elements.gridLinkQuickDialog.open) elements.gridLinkQuickDialog.close("color");
+    openGridLinkColorDialog(link);
+  });
   bindPointerActionButton(elements.gridLinkQuickDeleteButton, () => {
     void deleteGridLinkFromQuickDialog();
   });
   elements.gridLinkQuickDialog.addEventListener("click", (event) => {
     if (event.target === elements.gridLinkQuickDialog) elements.gridLinkQuickDialog.close("cancel");
+  });
+  elements.gridLinkColorDialog.addEventListener("close", () => {
+    if (elements.gridLinkColorDialog.returnValue === "apply") {
+      applyGridLinkColorFromDialog();
+    }
+    state.gridLinkColorLinkId = null;
+  });
+  elements.gridLinkColorDialog.addEventListener("click", (event) => {
+    if (event.target === elements.gridLinkColorDialog) elements.gridLinkColorDialog.close("cancel");
   });
   elements.analysisDialog.addEventListener("click", (event) => {
     if (event.target === elements.analysisDialog) elements.analysisDialog.close("cancel");

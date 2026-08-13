@@ -2889,6 +2889,102 @@ textarea {
   grid-template-columns: 1fr;
 }
 
+.grid-link-quick-color-mark {
+  width: 11px;
+  height: 11px;
+  margin-right: 4px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.grid-link-color-dialog {
+  width: min(360px, calc(100vw - 24px));
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow), var(--brand-glow);
+}
+
+.grid-link-color-dialog::backdrop {
+  background: rgb(20 12 24 / 0.28);
+}
+
+.grid-link-color-dialog-form {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.grid-link-color-dialog-heading h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.grid-link-color-dialog-message {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.grid-link-color-picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.grid-link-color-picker input[type="color"] {
+  width: 58px;
+  height: 34px;
+  padding: 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface-strong);
+  cursor: pointer;
+}
+
+.grid-link-color-scope {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.grid-link-color-scope legend {
+  padding: 0 5px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.grid-link-color-scope-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.grid-link-color-scope-option input {
+  accent-color: var(--accent);
+}
+
+.grid-link-color-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .grid-point-quick-role-button,
 .point-info-action-button {
   display: inline-flex;

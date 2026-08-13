@@ -1,6 +1,12 @@
 export const GRIDATLAS_LINE_LAYER_EXTENSION = "io.gridatlas.lines";
 export const GRIDATLAS_LINE_LAYER_VERSION = 1;
 
+export function normalizeGridAtlasLineColor(color) {
+  return typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color)
+    ? color.toLowerCase()
+    : "";
+}
+
 export function buildGridAtlasLineLayer(links, toSharedPointId) {
   const items = [];
   const seenPairs = new Set();
@@ -22,6 +28,8 @@ export function buildGridAtlasLineLayer(links, toSharedPointId) {
     const item = { id, a, b };
     if (typeof link?.createdAt === "string" && link.createdAt) item.createdAt = link.createdAt;
     if (typeof link?.strokeId === "string" && link.strokeId) item.strokeId = link.strokeId;
+    const color = normalizeGridAtlasLineColor(link?.color);
+    if (color) item.color = color;
     items.push(item);
   }
 
@@ -57,7 +65,8 @@ export function readGridAtlasLineLayer(document, toLocalPointId, createLocalId) 
       a,
       b,
       ...(typeof item?.createdAt === "string" && item.createdAt ? { createdAt: item.createdAt } : {}),
-      ...(typeof item?.strokeId === "string" && item.strokeId ? { strokeId: item.strokeId } : {})
+      ...(typeof item?.strokeId === "string" && item.strokeId ? { strokeId: item.strokeId } : {}),
+      ...(normalizeGridAtlasLineColor(item?.color) ? { color: normalizeGridAtlasLineColor(item.color) } : {})
     });
   }
   return links;

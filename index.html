@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=70">
-    <script src="src/main.js?v=338" type="module" defer></script>
+    <script src="src/main.js?v=339" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -42,6 +42,7 @@
       <symbol id="icon-locate" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"></circle><path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path></symbol>
       <symbol id="icon-connect" viewBox="0 0 24 24"><path d="m8 16-2 2a3.5 3.5 0 0 1-5-5l3-3M16 8l2-2a3.5 3.5 0 0 1 5 5l-3 3M7 17l10-10"></path></symbol>
       <symbol id="icon-analysis" viewBox="0 0 24 24"><path d="M5 19V9M12 19V5M19 19v-7"></path><path d="M3 19h18"></path></symbol>
+      <symbol id="icon-palette" viewBox="0 0 24 24"><path d="M12 4a8 8 0 0 0 0 16h1.4a2 2 0 0 0 0-4H12a2 2 0 0 1 0-4h2.5A5.5 5.5 0 0 0 20 6.5 8 8 0 0 0 12 4Z"></path><circle cx="7.5" cy="10" r=".9" fill="currentColor" stroke="none"></circle><circle cx="10" cy="7" r=".9" fill="currentColor" stroke="none"></circle><circle cx="14" cy="7" r=".9" fill="currentColor" stroke="none"></circle></symbol>
       <symbol id="icon-center" viewBox="0 0 24 24"><path d="m12 3 9 9-9 9-9-9 9-9Z"></path></symbol>
       <symbol id="icon-clear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"></circle><path d="m9 9 6 6M15 9l-6 6"></path></symbol>
       <symbol id="icon-start" viewBox="0 0 24 24"><path d="m7 5 10 7-10 7V5Z"></path></symbol>
@@ -576,7 +577,35 @@
         </div>
         <div class="grid-link-quick-distance" id="gridLinkQuickDistance"></div>
         <div class="grid-point-quick-actions grid-link-quick-actions" aria-label="線分のクイック操作">
+          <button id="gridLinkQuickColorButton" class="grid-point-quick-role-button" type="button" aria-label="色" title="色"><svg class="ui-icon" aria-hidden="true"><use href="#icon-palette"></use></svg><span id="gridLinkQuickColorMark" class="grid-link-quick-color-mark" aria-hidden="true"></span><span id="gridLinkQuickColorLabel">色</span></button>
           <button id="gridLinkQuickDeleteButton" class="grid-point-quick-role-button danger-button grid-link-quick-delete-button" type="button" aria-label="削除" title="削除"><svg class="ui-icon" aria-hidden="true"><use href="#icon-trash"></use></svg><span id="gridLinkQuickDeleteLabel">削除</span></button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="gridLinkColorDialog" class="grid-link-color-dialog" aria-labelledby="gridLinkColorDialogTitle" aria-describedby="gridLinkColorDialogMessage" tabindex="-1">
+      <form class="grid-link-color-dialog-form" method="dialog">
+        <div class="grid-link-color-dialog-heading">
+          <h2 id="gridLinkColorDialogTitle" tabindex="-1">線の色を変更</h2>
+        </div>
+        <p id="gridLinkColorDialogMessage" class="grid-link-color-dialog-message">色を適用する範囲を選択してください。</p>
+        <label class="grid-link-color-picker">
+          <span data-i18n="line.color">色</span>
+          <input id="gridLinkColorInput" type="color" value="#5e9f9a" aria-label="色">
+        </label>
+        <fieldset class="grid-link-color-scope">
+          <legend data-i18n="line.colorScope">適用範囲</legend>
+          <label class="grid-link-color-scope-option">
+            <input id="gridLinkColorSegmentOption" type="radio" name="gridLinkColorScope" value="segment" checked>
+            <span id="gridLinkColorSegmentLabel">この線分だけ</span>
+          </label>
+          <label id="gridLinkColorShapeOption" class="grid-link-color-scope-option">
+            <input type="radio" name="gridLinkColorScope" value="shape">
+            <span id="gridLinkColorShapeLabel">同じ図形全体</span>
+          </label>
+        </fieldset>
+        <div class="grid-link-color-dialog-actions">
+          <button id="gridLinkColorCancelButton" class="compact-button" type="submit" value="cancel" data-i18n="action.cancel">キャンセル</button>
+          <button id="gridLinkColorApplyButton" class="primary-button" type="submit" value="apply" data-i18n="action.apply">適用</button>
         </div>
       </form>
     </dialog>
