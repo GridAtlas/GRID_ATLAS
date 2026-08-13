@@ -56,7 +56,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1241";
+const WEB_VERSION = "0.1242";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -285,6 +285,7 @@ const elements = {
   cloudAuthPassword: document.querySelector("#cloudAuthPassword"),
   cloudEmailField: document.querySelector("#cloudEmailField"),
   cloudPasswordField: document.querySelector("#cloudPasswordField"),
+  cloudAuthActions: document.querySelector("#cloudAuthActions"),
   cloudSignUpButton: document.querySelector("#cloudSignUpButton"),
   cloudSignInButton: document.querySelector("#cloudSignInButton"),
   cloudSignOutButton: document.querySelector("#cloudSignOutButton"),
@@ -736,9 +737,9 @@ const TRANSLATIONS = {
     "data.cloud": "マイリスト（クラウド）",
     "data.grid": "グリッド",
     "cloud.menuTitle": "クラウド",
-    "cloud.open": "クラウドを開く",
-    "cloud.authTitle": "アカウント",
-    "cloud.email": "メールアドレス",
+    "cloud.open": "ログイン設定",
+    "cloud.authTitle": "ログイン設定",
+    "cloud.email": "メールアドレス（ID）",
     "cloud.password": "パスワード",
     "cloud.signUp": "登録",
     "cloud.signIn": "ログイン",
@@ -1071,9 +1072,9 @@ const TRANSLATIONS = {
     "data.cloud": "My Lists (Cloud)",
     "data.grid": "Grid",
     "cloud.menuTitle": "Cloud",
-    "cloud.open": "Open cloud",
-    "cloud.authTitle": "Account",
-    "cloud.email": "Email address",
+    "cloud.open": "Login settings",
+    "cloud.authTitle": "Login settings",
+    "cloud.email": "Email address (ID)",
     "cloud.password": "Password",
     "cloud.signUp": "Sign up",
     "cloud.signIn": "Sign in",
@@ -6263,6 +6264,7 @@ function renderCloudAuthControls() {
   if (elements.cloudSignOutButton) elements.cloudSignOutButton.disabled = busy || !signedIn;
   if (elements.cloudSignInButton) elements.cloudSignInButton.hidden = signedIn;
   if (elements.cloudSignOutButton) elements.cloudSignOutButton.hidden = !signedIn;
+  if (elements.cloudAuthActions) elements.cloudAuthActions.hidden = signedIn;
   if (elements.cloudPasswordPanel) {
     elements.cloudPasswordPanel.hidden = !signedIn || (!passwordRecoveryActive && passwordSetupComplete);
   }
@@ -6272,6 +6274,7 @@ function renderCloudAuthControls() {
       : cloudText("招待ユーザーのパスワード設定（初回のみ）", "Set your password (first time only)");
   }
   if (elements.cloudSetPasswordButton) elements.cloudSetPasswordButton.disabled = busy || !signedIn;
+  if (elements.cloudAuthStatus) elements.cloudAuthStatus.hidden = signedIn;
   if (signedIn && state.cloud.authUser?.email && elements.cloudAuthStatus && !elements.cloudAuthStatus.classList.contains("is-error")) {
     elements.cloudAuthStatus.textContent = cloudText(
       `${state.cloud.authUser.email} でログイン中`,
@@ -6489,7 +6492,7 @@ async function signOutCloud() {
       state.cloud.pointRows = [];
       renderStorageLists();
     }
-    setCloudAuthStatus(cloudText("ログアウトしました", "Signed out"));
+    setCloudAuthStatus("");
   } catch (error) {
     setCloudAuthStatus(error?.message || cloudText("ログアウトに失敗しました", "Sign-out failed"), { error: true });
   } finally {
