@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=70">
-    <script src="src/main.js?v=341" type="module" defer></script>
+    <script src="src/main.js?v=342" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -588,10 +588,51 @@
           <h2 id="gridLinkColorDialogTitle" tabindex="-1">線の色を変更</h2>
         </div>
         <p id="gridLinkColorDialogMessage" class="grid-link-color-dialog-message">色を適用する範囲を選択してください。</p>
-        <label class="grid-link-color-picker">
-          <span data-i18n="line.color">色</span>
-          <input id="gridLinkColorInput" type="color" value="#5e9f9a" aria-label="色">
-        </label>
+        <fieldset class="grid-link-color-picker">
+          <legend data-i18n="line.color">色</legend>
+          <div id="gridLinkColorPalette" class="grid-link-color-palette" role="radiogroup" aria-label="色">
+            <label class="grid-link-color-option" title="赤">
+              <input type="radio" name="gridLinkColor" value="#e53935" aria-label="赤">
+              <span class="grid-link-color-swatch" style="--line-color: #e53935"></span>
+            </label>
+            <label class="grid-link-color-option" title="オレンジ">
+              <input type="radio" name="gridLinkColor" value="#fb8c00" aria-label="オレンジ">
+              <span class="grid-link-color-swatch" style="--line-color: #fb8c00"></span>
+            </label>
+            <label class="grid-link-color-option" title="黄色">
+              <input type="radio" name="gridLinkColor" value="#fdd835" aria-label="黄色">
+              <span class="grid-link-color-swatch" style="--line-color: #fdd835"></span>
+            </label>
+            <label class="grid-link-color-option" title="緑">
+              <input type="radio" name="gridLinkColor" value="#43a047" aria-label="緑">
+              <span class="grid-link-color-swatch" style="--line-color: #43a047"></span>
+            </label>
+            <label class="grid-link-color-option" title="青緑">
+              <input type="radio" name="gridLinkColor" value="#00897b" aria-label="青緑">
+              <span class="grid-link-color-swatch" style="--line-color: #00897b"></span>
+            </label>
+            <label class="grid-link-color-option" title="青">
+              <input type="radio" name="gridLinkColor" value="#1e88e5" aria-label="青">
+              <span class="grid-link-color-swatch" style="--line-color: #1e88e5"></span>
+            </label>
+            <label class="grid-link-color-option" title="紺">
+              <input type="radio" name="gridLinkColor" value="#3949ab" aria-label="紺">
+              <span class="grid-link-color-swatch" style="--line-color: #3949ab"></span>
+            </label>
+            <label class="grid-link-color-option" title="紫">
+              <input type="radio" name="gridLinkColor" value="#8e24aa" aria-label="紫">
+              <span class="grid-link-color-swatch" style="--line-color: #8e24aa"></span>
+            </label>
+            <label class="grid-link-color-option" title="ピンク">
+              <input type="radio" name="gridLinkColor" value="#d81b60" aria-label="ピンク">
+              <span class="grid-link-color-swatch" style="--line-color: #d81b60"></span>
+            </label>
+            <label class="grid-link-color-option" title="グレー">
+              <input type="radio" name="gridLinkColor" value="#546e7a" aria-label="グレー">
+              <span class="grid-link-color-swatch" style="--line-color: #546e7a"></span>
+            </label>
+          </div>
+        </fieldset>
         <fieldset class="grid-link-color-scope">
           <legend data-i18n="line.colorScope">適用範囲</legend>
           <label class="grid-link-color-scope-option">

@@ -58,7 +58,19 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1304";
+const WEB_VERSION = "0.1305";
+const LINE_COLOR_OPTIONS = Object.freeze([
+  { value: "#e53935", ja: "赤", en: "Red" },
+  { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
+  { value: "#fdd835", ja: "黄色", en: "Yellow" },
+  { value: "#43a047", ja: "緑", en: "Green" },
+  { value: "#00897b", ja: "青緑", en: "Teal" },
+  { value: "#1e88e5", ja: "青", en: "Blue" },
+  { value: "#3949ab", ja: "紺", en: "Navy" },
+  { value: "#8e24aa", ja: "紫", en: "Purple" },
+  { value: "#d81b60", ja: "ピンク", en: "Pink" },
+  { value: "#546e7a", ja: "グレー", en: "Gray" }
+]);
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -242,7 +254,7 @@ const elements = {
   gridLinkColorDialog: document.querySelector("#gridLinkColorDialog"),
   gridLinkColorDialogTitle: document.querySelector("#gridLinkColorDialogTitle"),
   gridLinkColorDialogMessage: document.querySelector("#gridLinkColorDialogMessage"),
-  gridLinkColorInput: document.querySelector("#gridLinkColorInput"),
+  gridLinkColorPalette: document.querySelector("#gridLinkColorPalette"),
   gridLinkColorSegmentOption: document.querySelector("#gridLinkColorSegmentOption"),
   gridLinkColorSegmentLabel: document.querySelector("#gridLinkColorSegmentLabel"),
   gridLinkColorShapeOption: document.querySelector("#gridLinkColorShapeOption"),
@@ -4139,11 +4151,20 @@ function renderGridLinkColorDialog() {
   const hasShape = group.length > 1 && Boolean(linkStrokeId(link));
   const color = normalizeGridAtlasLineColor(link.color) || canvasPalette().link;
   const shapeInput = elements.gridLinkColorShapeOption.querySelector("input");
+  const selectedColor = LINE_COLOR_OPTIONS.some((option) => option.value === color)
+    ? color
+    : LINE_COLOR_OPTIONS[4].value;
 
   elements.gridLinkColorDialogTitle.textContent = t("line.colorTitle");
   elements.gridLinkColorDialogMessage.textContent = t("line.colorMessage");
-  elements.gridLinkColorInput.value = color;
-  elements.gridLinkColorInput.setAttribute("aria-label", t("line.color"));
+  elements.gridLinkColorPalette.setAttribute("aria-label", t("line.color"));
+  elements.gridLinkColorPalette.querySelectorAll("input").forEach((input, index) => {
+    const option = LINE_COLOR_OPTIONS[index];
+    const label = activeLanguage() === EN_LANGUAGE ? option.en : option.ja;
+    input.checked = input.value === selectedColor;
+    input.setAttribute("aria-label", label);
+    input.closest(".grid-link-color-option")?.setAttribute("title", label);
+  });
   elements.gridLinkColorSegmentLabel.textContent = t("line.colorSegment");
   elements.gridLinkColorShapeOption.hidden = !hasShape;
   shapeInput.disabled = !hasShape;
@@ -4586,7 +4607,9 @@ function japanesePolygonCount(count) {
 
 function applyGridLinkColorFromDialog() {
   const link = state.gridLinkColorLinkId ? findLink(state.gridLinkColorLinkId) : null;
-  const color = normalizeGridAtlasLineColor(elements.gridLinkColorInput.value);
+  const color = normalizeGridAtlasLineColor(
+    elements.gridLinkColorPalette.querySelector("input:checked")?.value
+  );
   if (!link || !color) return;
 
   const shapeInput = elements.gridLinkColorShapeOption.querySelector("input");
@@ -4722,7 +4745,7 @@ function openGridLinkColorDialog(link) {
   if (shapeInput) shapeInput.checked = false;
   if (!elements.gridLinkColorDialog.open) elements.gridLinkColorDialog.showModal();
   renderGridLinkColorDialog();
-  elements.gridLinkColorInput.focus();
+  elements.gridLinkColorPalette.querySelector("input:checked")?.focus();
 }
 
 function showSelectedPointInfoDialog(pointOrId = null) {
