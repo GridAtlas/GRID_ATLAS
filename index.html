@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=70">
-    <script src="src/main.js?v=357" type="module" defer></script>
+    <script src="src/main.js?v=364" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -116,7 +116,7 @@
                 <input id="settingsGpsEnabled" type="checkbox">
                 <span data-i18n="settings.gps">GPS機能を使用</span>
               </label>
-              <label class="settings-check">
+              <label class="settings-check" data-tester-feature="barrier">
                 <input id="settingsTraverseMode" type="checkbox">
                 <span data-i18n="settings.traverseMode">結界モード</span>
               </label>
@@ -124,6 +124,9 @@
                 <input id="settingsGuardianLabelInImage" type="checkbox">
                 <span data-i18n="settings.guardianLabelInImage">共有画像に守護点ラベルを表示</span>
               </label>
+              <div class="settings-nav settings-nav-subtle" data-tester-feature="barrier">
+                <button id="openKekkaishiStatusButton" class="settings-nav-button" type="button" data-i18n="settings.kekkaishiStatus">結界師ステータス</button>
+              </div>
 
 
               <div class="settings-nav settings-nav-subtle">
@@ -381,6 +384,7 @@
               <span id="barrierDetailRank"></span>
               <b id="barrierDetailPower"></b>
             </div>
+            <div id="barrierRankProgress" class="barrier-rank-progress"></div>
             <dl class="barrier-score-list">
               <div><dt data-i18n="barrier.scoreDensity">濃度</dt><dd id="barrierDetailDensity"></dd></div>
               <div><dt data-i18n="barrier.scoreArea">面積</dt><dd id="barrierDetailArea"></dd></div>
@@ -521,6 +525,30 @@
         <div class="traverse-action-dialog-actions">
           <button id="traversePlaceButton" class="primary-button" type="button" data-i18n="traverse.place">置く</button>
           <button id="traversePickButton" type="button" data-i18n="traverse.pick">拾う</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="kekkaishiStatusDialog" class="kekkaishi-status-dialog" aria-labelledby="kekkaishiStatusTitle" tabindex="-1">
+      <form class="kekkaishi-status-dialog-form" method="dialog">
+        <div class="traverse-action-dialog-heading">
+          <h2 id="kekkaishiStatusTitle" data-i18n="kekkaishi.title" tabindex="-1">結界師ステータス</h2>
+          <button id="closeKekkaishiStatusButton" class="share-link-close" type="submit" value="cancel" aria-label="閉じる" title="閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
+        </div>
+        <div class="kekkaishi-status-hero">
+          <span data-i18n="kekkaishi.rank">結界師ランク</span>
+          <strong id="kekkaishiStatusRank">F</strong>
+        </div>
+        <dl class="kekkaishi-status-list">
+          <div><dt data-i18n="kekkaishi.lifetime">累積結界力</dt><dd id="kekkaishiStatusLifetime"></dd></div>
+          <div><dt data-i18n="kekkaishi.dailyPower">現在の日次発動力</dt><dd id="kekkaishiStatusDailyPower"></dd></div>
+          <div><dt data-i18n="kekkaishi.peak">ピーク平均</dt><dd id="kekkaishiStatusPeak"></dd></div>
+          <div><dt data-i18n="kekkaishi.recent">直近平均</dt><dd id="kekkaishiStatusRecent"></dd></div>
+          <div><dt data-i18n="kekkaishi.ratio">ピーク比</dt><dd id="kekkaishiStatusRatio"></dd></div>
+          <div><dt data-i18n="kekkaishi.createdCount">作成した結界</dt><dd id="kekkaishiStatusCount"></dd></div>
+        </dl>
+        <p id="kekkaishiStatusProgress" class="kekkaishi-status-progress"></p>
+        <div class="button-row">
+          <button id="shareKekkaishiStatusButton" class="primary-button" type="button" data-i18n="kekkaishi.share">ステータスを共有</button>
         </div>
       </form>
     </dialog>

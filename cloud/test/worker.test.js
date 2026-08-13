@@ -503,12 +503,26 @@ describe("GRID ATLAS Cloud API", () => {
     })).status).toBe(400);
 
     const oversized = samplePayload();
-    oversized.list.description = "x".repeat(256 * 1024);
+    oversized.list.description = "x".repeat(1024 * 1024);
     expect((await api("/v1/me/lists", {
       method: "POST",
       token: validToken,
       body: oversized
     })).status).toBe(413);
+
+    const largerThanLegacyLimit = samplePayload({ name: "大容量リスト" });
+    largerThanLegacyLimit.points = Array.from({ length: 200 }, (_, index) => ({
+      id: `large-point-${index}`,
+      name: `地点${index}`,
+      latitude: 35 + index / 1000,
+      longitude: 139 + index / 1000,
+      comment: "x".repeat(3000)
+    }));
+    expect((await api("/v1/me/lists", {
+      method: "POST",
+      token: validToken,
+      body: largerThanLegacyLimit
+    })).status).toBe(201);
 
     const unsupported = await api("/v1/me/lists", { method: "PATCH", token: validToken });
     expect(unsupported.status).toBe(405);

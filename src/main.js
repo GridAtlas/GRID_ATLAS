@@ -38,6 +38,9 @@ import {
   normalizeGuardian,
   registerBarrier,
   sanitizeBarrierLog,
+  stoneCapFor,
+  stoneDisplayCount,
+  stoneExactCount,
   stoneIdFromTile,
   tileCenterGeo,
   tileBounds,
@@ -45,6 +48,15 @@ import {
   validateBarrierVertices
 } from "./barrier.js?v=1";
 import { scoreBarrier } from "./barrier-score.js?v=1";
+import {
+  BARRIER_EVALUATION_CONFIG,
+  createKekkaishiStatus,
+  evaluateBarrierLog,
+  barrierRankStoneProgress,
+  rankForKekkaishi,
+  rankForBarrier,
+  recentAverage
+} from "./barrier-evaluation.js?v=1";
 
 const STORAGE_KEY = "grid-atlas-workspace-v2";
 const ANALYSIS_LAYER_VERSION = 1;
@@ -77,7 +89,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1401";
+const WEB_VERSION = "0.1561";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -208,6 +220,7 @@ const elements = {
   settingsGpsEnabled: document.querySelector("#settingsGpsEnabled"),
   settingsTraverseMode: document.querySelector("#settingsTraverseMode"),
   settingsGuardianLabelInImage: document.querySelector("#settingsGuardianLabelInImage"),
+  testerBarrierFeatures: Array.from(document.querySelectorAll('[data-tester-feature="barrier"]')),
   settingsMapProviderSelect: document.querySelector("#settingsMapProviderSelect"),
   systemUpdateButton: document.querySelector("#systemUpdateButton"),
   systemUpdateStatus: document.querySelector("#systemUpdateStatus"),
@@ -311,6 +324,19 @@ const elements = {
   barrierDetailTitle: document.querySelector("#barrierDetailTitle"),
   barrierDetailRank: document.querySelector("#barrierDetailRank"),
   barrierDetailPower: document.querySelector("#barrierDetailPower"),
+  barrierRankProgress: document.querySelector("#barrierRankProgress"),
+  openKekkaishiStatusButton: document.querySelector("#openKekkaishiStatusButton"),
+  kekkaishiStatusDialog: document.querySelector("#kekkaishiStatusDialog"),
+  kekkaishiStatusRank: document.querySelector("#kekkaishiStatusRank"),
+  kekkaishiStatusLifetime: document.querySelector("#kekkaishiStatusLifetime"),
+  kekkaishiStatusDailyPower: document.querySelector("#kekkaishiStatusDailyPower"),
+  kekkaishiStatusPeak: document.querySelector("#kekkaishiStatusPeak"),
+  kekkaishiStatusRecent: document.querySelector("#kekkaishiStatusRecent"),
+  kekkaishiStatusRatio: document.querySelector("#kekkaishiStatusRatio"),
+  kekkaishiStatusCount: document.querySelector("#kekkaishiStatusCount"),
+  kekkaishiStatusProgress: document.querySelector("#kekkaishiStatusProgress"),
+  closeKekkaishiStatusButton: document.querySelector("#closeKekkaishiStatusButton"),
+  shareKekkaishiStatusButton: document.querySelector("#shareKekkaishiStatusButton"),
   barrierDetailDensity: document.querySelector("#barrierDetailDensity"),
   barrierDetailArea: document.querySelector("#barrierDetailArea"),
   barrierDetailStones: document.querySelector("#barrierDetailStones"),
@@ -641,6 +667,7 @@ const TRANSLATIONS = {
     "settings.gps": "GPS機能を使用",
     "settings.traverseMode": "結界モード",
     "settings.guardianLabelInImage": "共有画像に守護点ラベルを表示",
+    "settings.kekkaishiStatus": "結界師ステータス",
     "settings.mapProvider": "地図サービス",
     "settings.mapGoogle": "Googleマップ",
     "settings.mapApple": "Appleマップ",
@@ -1029,6 +1056,7 @@ const TRANSLATIONS = {
     "traverse.placeDone": "置き",
     "traverse.pickDone": "拾い",
     "traverse.stockFull": "結界石ストックが満タンです",
+    "traverse.capReached": "このタイルの結界石は上限です",
     "traverse.barrier": "結界",
     "barrier.createTitle": "結界を張る",
     "barrier.createMessage": "選択順に石をつないで結界を張ります。",
@@ -1036,6 +1064,7 @@ const TRANSLATIONS = {
     "barrier.defaultName": "新しい結界",
     "barrier.created": "結界を張りました",
     "barrier.tooFew": "結界には3つ以上の結界石が必要です",
+    "barrier.tooMany": "結界の頂点は{max}つまでです",
     "barrier.stoneUsed": "他の結界で使用済みの結界石が含まれています",
     "barrier.missingStone": "選択した結界石を確認できません",
     "barrier.selection": "結界石を{count}個選択中"
@@ -1046,6 +1075,14 @@ const TRANSLATIONS = {
     ,"barrier.scoreShape": "形状係数"
     ,"barrier.scoreBeauty": "美しさ係数"
     ,"barrier.scoreScale": "規模係数"
+    ,"barrier.rankNext": "次のランク「{rank}」まで"
+    ,"barrier.rankPower": "力"
+    ,"barrier.rankDays": "発動日数"
+    ,"barrier.daysUnit": "日"
+    ,"barrier.rankMax": "最高ランク"
+    ,"barrier.rankStones": "石をあと{count}個積むと届きます（配給{days}日ぶん）"
+    ,"barrier.rankUnreachable": "この形では届きません（満杯でも{power}力）"
+    ,"barrier.rankPowerWait": "結界力が届いてから進みます"
     ,"barrier.guardianTitle": "守護点"
     ,"barrier.guardianUnset": "未設定（重心を基準に計算）"
     ,"barrier.guardianSet": "守護点を地図で指定"
@@ -1063,6 +1100,24 @@ const TRANSLATIONS = {
     ,"barrier.downloaded": "結界画像をPNG保存しました"
     ,"barrier.shareFailed": "結界画像の作成に失敗しました"
     ,"barrier.shareText": "GRID ATLAS「{name}」｜{rank} {power}力 #GRIDATLAS #結界"
+    ,"kekkaishi.title": "結界師ステータス"
+    ,"kekkaishi.rank": "結界師ランク"
+    ,"kekkaishi.lifetime": "累積結界力"
+    ,"kekkaishi.peak": "ピーク平均"
+    ,"kekkaishi.recent": "直近平均"
+    ,"kekkaishi.ratio": "ピーク比"
+    ,"kekkaishi.createdCount": "作成した結界"
+    ,"kekkaishi.next": "次のランクまで"
+    ,"kekkaishi.progressLifetime": "累積"
+    ,"kekkaishi.dailyPower": "現在の日次発動力"
+    ,"kekkaishi.progressDays": "現在のペースであと{days}日"
+    ,"kekkaishi.noDailyPower": "結界を張ると進みます"
+    ,"kekkaishi.rankMax": "最高ランク"
+    ,"kekkaishi.share": "ステータスを共有"
+    ,"kekkaishi.shared": "ステータス画像を共有しました"
+    ,"kekkaishi.downloaded": "ステータス画像を保存しました"
+    ,"kekkaishi.shareFailed": "ステータス画像の作成に失敗しました"
+    ,"kekkaishi.shareText": "GRID ATLAS 結界師ランク {rank}｜累積 {power} #GRIDATLAS #結界"
   },
   en: {
     "settings.title": "Settings",
@@ -1074,6 +1129,7 @@ const TRANSLATIONS = {
     "settings.gps": "Use GPS",
     "settings.traverseMode": "Barrier mode",
     "settings.guardianLabelInImage": "Show guardian label in shared image",
+    "settings.kekkaishiStatus": "Kekkaishi status",
     "settings.mapProvider": "Map service",
     "settings.mapGoogle": "Google Maps",
     "settings.mapApple": "Apple Maps",
@@ -1462,6 +1518,7 @@ const TRANSLATIONS = {
     "traverse.placeDone": "placed",
     "traverse.pickDone": "picked up",
     "traverse.stockFull": "Barrier stone stock is full",
+    "traverse.capReached": "This tile has reached its barrier-stone cap",
     "traverse.barrier": "Barrier",
     "barrier.createTitle": "Create barrier",
     "barrier.createMessage": "Connect the stones in selection order to create a barrier.",
@@ -1469,6 +1526,7 @@ const TRANSLATIONS = {
     "barrier.defaultName": "New barrier",
     "barrier.created": "Barrier created",
     "barrier.tooFew": "A barrier needs at least three stones",
+    "barrier.tooMany": "A barrier can have at most {max} vertices",
     "barrier.stoneUsed": "One or more selected stones already belong to another barrier",
     "barrier.missingStone": "The selected barrier stone could not be found",
     "barrier.selection": "{count} barrier stone(s) selected"
@@ -1479,6 +1537,14 @@ const TRANSLATIONS = {
     ,"barrier.scoreShape": "Shape factor"
     ,"barrier.scoreBeauty": "Beauty factor"
     ,"barrier.scoreScale": "Scale factor"
+    ,"barrier.rankNext": "To the next rank: {rank}"
+    ,"barrier.rankPower": "Power"
+    ,"barrier.rankDays": "Active days"
+    ,"barrier.daysUnit": "days"
+    ,"barrier.rankMax": "Maximum rank"
+    ,"barrier.rankStones": "Add {count} more stone(s) to reach it ({days} days of supply)"
+    ,"barrier.rankUnreachable": "This shape cannot reach it (only {power} power when full)"
+    ,"barrier.rankPowerWait": "Active days progress after reaching the power threshold"
     ,"barrier.guardianTitle": "Guardian point"
     ,"barrier.guardianUnset": "Not set (uses the centroid)"
     ,"barrier.guardianSet": "Choose guardian on map"
@@ -1496,6 +1562,24 @@ const TRANSLATIONS = {
     ,"barrier.downloaded": "Barrier image saved as PNG"
     ,"barrier.shareFailed": "Could not create the barrier image"
     ,"barrier.shareText": "GRID ATLAS \"{name}\" | {rank} {power} power #GRIDATLAS #Barrier"
+    ,"kekkaishi.title": "Kekkaishi status"
+    ,"kekkaishi.rank": "Kekkaishi rank"
+    ,"kekkaishi.lifetime": "Lifetime barrier power"
+    ,"kekkaishi.peak": "Peak average"
+    ,"kekkaishi.recent": "Recent average"
+    ,"kekkaishi.ratio": "Peak ratio"
+    ,"kekkaishi.createdCount": "Barriers created"
+    ,"kekkaishi.next": "To the next rank"
+    ,"kekkaishi.progressLifetime": "Lifetime"
+    ,"kekkaishi.dailyPower": "Current daily power"
+    ,"kekkaishi.progressDays": "At this pace: {days} more days"
+    ,"kekkaishi.noDailyPower": "Create a barrier to make progress"
+    ,"kekkaishi.rankMax": "Maximum rank"
+    ,"kekkaishi.share": "Share status"
+    ,"kekkaishi.shared": "Status image shared"
+    ,"kekkaishi.downloaded": "Status image downloaded"
+    ,"kekkaishi.shareFailed": "Could not create the status image"
+    ,"kekkaishi.shareText": "GRID ATLAS Kekkaishi rank {rank} | lifetime {power} #GRIDATLAS #Barrier"
   }
 };
 
@@ -1615,14 +1699,27 @@ async function setGpsEnabled(value, options = {}) {
   return true;
 }
 function syncSettingsControls() {
+  enforceBarrierModeAccess();
+  for (const feature of elements.testerBarrierFeatures) feature.hidden = state.cloud.testerActive !== true;
   elements.settingsThemeSelect.value = currentTheme();
   elements.settingsLanguageSelect.value = activeLanguage();
   elements.settingsUnitSelect.value = state.distanceUnit;
   elements.settingsGpsEnabled.checked = state.gpsEnabled;
   elements.settingsTraverseMode.checked = state.traverseMode;
   if (elements.settingsGuardianLabelInImage) elements.settingsGuardianLabelInImage.checked = state.guardianLabelInImage;
+  if (elements.openKekkaishiStatusButton) elements.openKekkaishiStatusButton.disabled = !state.traverseMode;
   elements.settingsMapProviderSelect.value = state.mapProvider;
   elements.routeReturnToStart.checked = state.routeReturnToStart;
+}
+
+function enforceBarrierModeAccess() {
+  if (state.cloud.testerActive === true || !state.traverseMode) return;
+  state.traverseMode = false;
+  state.barrierSelection = [];
+  state.selectedBarrierId = null;
+  state.guardianPlacementMode = false;
+  clearSelection({ render: false });
+  closeTraverseActionDialog();
 }
 
 function loadTraverseLog() {
@@ -1646,7 +1743,8 @@ function loadTraverseLog() {
     result = { log: createBarrierLog(), changed: true };
   }
   state.traverseLog = result.log;
-  if (result.changed || !raw) persistTraverseLog();
+  const evaluation = evaluateBarrierLog(state.traverseLog);
+  if (result.changed || !raw || evaluation.changed) persistTraverseLog();
 }
 
 function persistTraverseLog() {
@@ -1664,13 +1762,16 @@ function refreshTraverseStock() {
 }
 
 function setTraverseMode(enabled) {
-  state.traverseMode = Boolean(enabled);
+  state.traverseMode = Boolean(enabled) && state.cloud.testerActive === true;
   state.barrierSelection = [];
   state.selectedBarrierId = null;
   state.guardianPlacementMode = false;
   clearSelection({ render: false });
   if (!state.traverseMode) closeTraverseActionDialog();
-  if (state.traverseMode) refreshTraverseStock();
+  if (state.traverseMode) {
+    if (evaluateBarrierLog(state.traverseLog).changed) persistTraverseLog();
+    refreshTraverseStock();
+  }
   render();
 }
 
@@ -2776,7 +2877,7 @@ function barrierShareGeometry(score) {
     .filter(Boolean)
     .map((stone) => ({
       geo: tileCenterGeo(stone.tile),
-      count: Math.max(0, Number(stone.count) || 0)
+      count: stoneDisplayCount(stone)
     }))
     .filter((vertex) => vertex.geo);
 }
@@ -2824,7 +2925,7 @@ async function renderBarrierShareImage(score) {
   const local = geometry.map((vertex) => ({
     x: (vertex.geo.lng - originLng) * Math.cos(originLat * Math.PI / 180),
     y: originLat - vertex.geo.lat,
-    count: vertex.count
+      count: stoneDisplayCount(vertex)
   }));
   const minX = Math.min(...local.map((point) => point.x));
   const maxX = Math.max(...local.map((point) => point.x));
@@ -2848,7 +2949,7 @@ async function renderBarrierShareImage(score) {
   context.closePath();
   context.fillStyle = colors.accent;
   context.globalAlpha = 0.2;
-  context.fill();
+  context.fill("nonzero");
   context.globalAlpha = 1;
   context.strokeStyle = colors.accent;
   context.lineWidth = 8;
@@ -2898,7 +2999,8 @@ async function renderBarrierShareImage(score) {
 
   context.fillStyle = colors.accentStrong;
   context.font = "800 32px system-ui, sans-serif";
-  context.fillText(`${score.rank.name}（${score.rank.reading}）`, 120, 720);
+  const rank = rankForBarrier(state.traverseLog, score.barrierId);
+  context.fillText(`${rank.name}（${rank.reading}）`, 120, 720);
   context.fillStyle = colors.muted;
   context.font = "600 18px system-ui, sans-serif";
   context.fillText(`${t("barrier.scoreShape")} ${formatFactor(score.shapeCoefficient)}  /  ${t("barrier.scoreBeauty")} ${formatFactor(score.beautyCoefficient)}`, 120, 758);
@@ -2925,7 +3027,7 @@ async function shareSelectedBarrierImage() {
       try {
         const shareText = t("barrier.shareText")
           .replace("{name}", score.name || t("barrier.defaultName"))
-          .replace("{rank}", score.rank.name)
+          .replace("{rank}", rankForBarrier(state.traverseLog, score.barrierId).name)
           .replace("{power}", formatScoreValue(score.power));
         await navigator.share({ files: [file], title: `GRID ATLAS — ${score.name || t("barrier.defaultName")}`, text: shareText });
         setShareFeedback(t("barrier.shared"));
@@ -3199,7 +3301,7 @@ function drawTraverseTiles() {
     context.strokeStyle = colors.traverseFill;
     context.lineWidth = selected ? 2.75 : 1.25;
     drawTraversePolygon(polygon, { stroke: true });
-    drawTraverseTileCount(polygon, stone.count, colors);
+      drawTraverseTileCount(polygon, stoneDisplayCount(stone), colors);
     context.restore();
   }
 
@@ -3255,7 +3357,7 @@ function drawTraverseBarriers() {
     const selected = barrierId === state.selectedBarrierId;
     context.fillStyle = colors.traverseFill;
     context.globalAlpha = selected ? 0.28 : 0.16;
-    context.fill();
+    context.fill("nonzero");
     context.strokeStyle = colors.traverseFill;
     context.globalAlpha = 0.92;
     context.lineWidth = selected ? 4 : 2.5;
@@ -4015,12 +4117,14 @@ function drawRangeSelection() {
 }
 
 function render() {
+  enforceBarrierModeAccess();
   refreshVisiblePoints();
   pruneHiddenPointReferences();
   normalizeSelection();
   syncCanvasSize();
   draw();
   renderDetails();
+  renderKekkaishiStatusDialog();
   renderAnalysis();
   renderRoute();
   renderPointDestinationSelect();
@@ -4208,7 +4312,10 @@ function selectionInfoText() {
     if (state.guardianPlacementMode) return t("barrier.guardianPlacementHint");
     if (state.selectedBarrierId) {
       const score = scoreBarrier(state.traverseLog, state.selectedBarrierId);
-      if (score) return `${score.name || t("barrier.defaultName")} | ${score.rank.name} ${formatScoreValue(score.power)}`;
+      if (score) {
+        const rank = rankForBarrier(state.traverseLog, score.barrierId);
+        return `${score.name || t("barrier.defaultName")} | ${rank.name} ${formatScoreValue(score.power)}`;
+      }
     }
     return state.barrierSelection.length > 0
       ? t("barrier.selection").replace("{count}", String(state.barrierSelection.length))
@@ -4377,10 +4484,16 @@ function renderTraverseActionDialog() {
   if (!elements.traverseActionDialog) return;
   refreshTraverseStock();
   const amount = Math.max(0, Math.floor(Number(state.traverseLog?.stock?.amount) || 0));
+  const currentTile = state.currentGeo ? tileIdFromGeo(state.currentGeo) : null;
+  const currentStoneId = currentTile ? stoneIdFromTile(currentTile) : null;
+  const currentStone = currentStoneId ? state.traverseLog?.stones?.[currentStoneId] : null;
+  const currentCap = currentStoneId ? stoneCapFor(state.traverseLog, currentStoneId) : null;
+  const currentTileAtCap = currentCap !== null && stoneDisplayCount(currentStone) >= currentCap;
   if (elements.traverseActionDialogTitle) elements.traverseActionDialogTitle.textContent = t("traverse.menuTitle");
   if (elements.traversePlaceButton) {
     elements.traversePlaceButton.textContent = t("traverse.place");
-    elements.traversePlaceButton.disabled = state.traverseBusy || amount <= 0;
+    elements.traversePlaceButton.disabled = state.traverseBusy || amount <= 0 || currentTileAtCap;
+    elements.traversePlaceButton.title = currentTileAtCap ? t("traverse.capReached") : "";
   }
   if (elements.traversePickButton) {
     elements.traversePickButton.textContent = t("traverse.pick");
@@ -4442,15 +4555,24 @@ function performTraverseStoneAction(action) {
       const stone = stoneId ? state.traverseLog.stones[stoneId] : null;
       let feedbackAction;
       if (action === "place") {
+        const stoneCap = stoneCapFor(state.traverseLog, stoneId);
+        if (stoneDisplayCount(stone) >= stoneCap) {
+          state.traverseBusy = false;
+          setTraverseFeedback(t("traverse.capReached"));
+          render();
+          return;
+        }
         const nextStone = stone ?? {
           tile: tileId,
           lat: null,
           lng: null,
+          countExact: 0,
           count: 0,
           firstAt: now,
           lastAt: now
         };
-        nextStone.count += 1;
+        nextStone.countExact = stoneExactCount(nextStone) + 1;
+        nextStone.count = stoneDisplayCount(nextStone);
         nextStone.firstAt ||= now;
         nextStone.lastAt = now;
         state.traverseLog.stones[stoneId] = nextStone;
@@ -4461,11 +4583,12 @@ function performTraverseStoneAction(action) {
           tile: tileId,
           stoneId,
           barrierId: barrierIdForStone(state.traverseLog, stoneId),
-          amount: 1
+          amount: 1,
+          countExact: nextStone.countExact
         });
         feedbackAction = t("traverse.placeDone");
       } else {
-        if (!stone || stone.count < 1) {
+        if (!stone || stoneDisplayCount(stone) < 1) {
           state.traverseBusy = false;
           setTraverseFeedback(t("traverse.noStone"));
           render();
@@ -4477,9 +4600,11 @@ function performTraverseStoneAction(action) {
           render();
           return;
         }
-        stone.count -= 1;
+        const isVertex = stoneCapFor(state.traverseLog, stoneId) === BARRIER_CONFIG.stoneCapVertex;
+        stone.countExact = Math.max(isVertex ? 1 : 0, stoneExactCount(stone) - 1);
+        stone.count = stoneDisplayCount(stone);
         stone.lastAt = now;
-        if (stone.count <= 0) {
+        if (stone.countExact <= 0) {
           delete state.traverseLog.stones[stoneId];
         }
         state.traverseLog.stock.amount = Math.min(BARRIER_CONFIG.stockCap, state.traverseLog.stock.amount + 1);
@@ -4489,7 +4614,8 @@ function performTraverseStoneAction(action) {
           tile: tileId,
           stoneId,
           barrierId: barrierIdForStone(state.traverseLog, stoneId),
-          amount: 1
+          amount: 1,
+          countExact: stone.countExact
         });
         feedbackAction = t("traverse.pickDone");
       }
@@ -5600,7 +5726,8 @@ function renderBarrierDetails() {
   if (elements.barrierGuardianRemoveButton) elements.barrierGuardianRemoveButton.hidden = !score || !score.guardian;
   if (!score) return false;
   elements.barrierDetailTitle.textContent = score.name || t("barrier.defaultName");
-  elements.barrierDetailRank.textContent = `${score.rank.name}（${score.rank.reading}）`;
+  const rank = rankForBarrier(state.traverseLog, score.barrierId);
+  elements.barrierDetailRank.textContent = `${rank.name}（${rank.reading}）`;
   elements.barrierDetailPower.textContent = `${formatScoreValue(score.power)} 力`;
   elements.barrierDetailDensity.textContent = `${formatScoreValue(score.density)} / km²`;
   elements.barrierDetailArea.textContent = `${formatAreaValue(score.areaKm2)} km²`;
@@ -5608,12 +5735,146 @@ function renderBarrierDetails() {
   elements.barrierDetailShape.textContent = formatFactor(score.shapeCoefficient);
   elements.barrierDetailBeauty.textContent = formatFactor(score.beautyCoefficient);
   elements.barrierDetailScale.textContent = formatFactor(score.scaleCoefficient);
+  if (elements.barrierRankProgress) {
+    const nextIndex = Math.min(rank.index + 1, BARRIER_EVALUATION_CONFIG.daysRequired.length - 1);
+    if (rank.index >= BARRIER_EVALUATION_CONFIG.daysRequired.length - 1) {
+      elements.barrierRankProgress.textContent = t("barrier.rankMax");
+    } else {
+      const nextName = BARRIER_EVALUATION_CONFIG.rankNames[nextIndex];
+      const nextPower = BARRIER_EVALUATION_CONFIG.powerThresholds[nextIndex];
+      const progress = state.traverseLog.barriers[score.barrierId]?.rankProgress;
+      const activeDays = Number(progress?.activeDays?.[nextIndex]) || 0;
+      const stoneProgress = barrierRankStoneProgress(score, state.traverseLog.barriers[score.barrierId]);
+      const stoneLine = stoneProgress.reachable
+        ? t("barrier.rankStones")
+          .replace("{count}", String(stoneProgress.missingStoneCount))
+          .replace("{days}", String(Math.ceil(stoneProgress.missingStoneCount / Math.max(1, BARRIER_CONFIG.dailyGrant))))
+        : t("barrier.rankUnreachable").replace("{power}", formatScoreValue(stoneProgress.maxPower));
+      const daysLine = score.power >= nextPower
+        ? `${t("barrier.rankDays")} ${activeDays} / ${BARRIER_EVALUATION_CONFIG.daysRequired[nextIndex]} ${t("barrier.daysUnit")}`
+        : `${t("barrier.rankDays")} ${activeDays} / ${BARRIER_EVALUATION_CONFIG.daysRequired[nextIndex]} ${t("barrier.daysUnit")}\n${t("barrier.rankPowerWait")}`;
+      elements.barrierRankProgress.textContent = `${t("barrier.rankNext").replace("{rank}", `${nextName}（${BARRIER_EVALUATION_CONFIG.rankReadings[nextIndex]}）`)}\n${t("barrier.rankPower")} ${formatScoreValue(score.power)} / ${formatScoreValue(nextPower)}\n${stoneLine}\n${daysLine}`;
+    }
+  }
   if (elements.barrierGuardianSummary) {
     elements.barrierGuardianSummary.textContent = score.guardian
       ? `${score.guardian.label || t("barrier.guardianUnset")} · ${score.guardian.lat.toFixed(5)}, ${score.guardian.lng.toFixed(5)}`
       : t("barrier.guardianUnset");
   }
   return true;
+}
+
+function renderKekkaishiStatusDialog() {
+  if (!state.traverseLog || !elements.kekkaishiStatusDialog) return;
+  const status = state.traverseLog.kekkaishi || createKekkaishiStatus(Date.now(), Object.keys(state.traverseLog.barriers || {}).length);
+  const rank = rankForKekkaishi(status);
+  const recent = recentAverage(status);
+  const peakRatio = rank.peak > 0 ? recent / rank.peak : null;
+  if (elements.kekkaishiStatusRank) elements.kekkaishiStatusRank.textContent = rank.name;
+  if (elements.kekkaishiStatusLifetime) elements.kekkaishiStatusLifetime.textContent = `${formatScoreValue(rank.lifetime)} 結界日`;
+  if (elements.kekkaishiStatusPeak) elements.kekkaishiStatusPeak.textContent = `${formatScoreValue(rank.peak)} 力${status.peakAchievedAt ? `（${formatMonth(status.peakAchievedAt)}）` : ""}`;
+  if (elements.kekkaishiStatusRecent) elements.kekkaishiStatusRecent.textContent = `${formatScoreValue(recent)} 力`;
+  if (elements.kekkaishiStatusRatio) elements.kekkaishiStatusRatio.textContent = peakRatio === null ? "—" : `${Math.round(peakRatio * 100)}%`;
+  if (elements.kekkaishiStatusCount) elements.kekkaishiStatusCount.textContent = String(Math.max(0, Number(status.kekkaiCreatedCount) || 0));
+  if (elements.kekkaishiStatusDailyPower) elements.kekkaishiStatusDailyPower.textContent = `${formatScoreValue(status.lastDailyPower)} 力`;
+  if (elements.kekkaishiStatusProgress) {
+    if (rank.index >= BARRIER_EVALUATION_CONFIG.kekkaishiRankNames.length - 1) {
+      elements.kekkaishiStatusProgress.textContent = t("kekkaishi.rankMax");
+    } else {
+      const nextIndex = rank.index + 1;
+      const remaining = Math.max(0, rank.nextLifetime - rank.lifetime);
+      const days = Number(status.lastDailyPower) > 0
+        ? t("kekkaishi.progressDays").replace("{days}", String(Math.ceil(remaining / status.lastDailyPower)))
+        : t("kekkaishi.noDailyPower");
+      elements.kekkaishiStatusProgress.textContent = `${t("kekkaishi.next")}: ${BARRIER_EVALUATION_CONFIG.kekkaishiRankNames[nextIndex]}\n${t("kekkaishi.progressLifetime")} ${formatScoreValue(rank.lifetime)} / ${formatScoreValue(rank.nextLifetime)} 結界日\n${days}`;
+    }
+  }
+}
+
+function openKekkaishiStatusDialog() {
+  if (!state.traverseMode || !elements.kekkaishiStatusDialog) return;
+  const evaluation = evaluateBarrierLog(state.traverseLog);
+  if (evaluation.changed) persistTraverseLog();
+  renderKekkaishiStatusDialog();
+  if (!elements.kekkaishiStatusDialog.open) elements.kekkaishiStatusDialog.showModal();
+}
+
+async function renderKekkaishiStatusShareImage() {
+  const status = state.traverseLog?.kekkaishi || createKekkaishiStatus();
+  const rank = rankForKekkaishi(status);
+  const recent = recentAverage(status);
+  const canvas = document.createElement("canvas");
+  canvas.width = 1200;
+  canvas.height = 820;
+  const context = canvas.getContext("2d");
+  const colors = barrierShareColors();
+  context.fillStyle = colors.background;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = colors.surface;
+  context.fillRect(72, 72, 1056, 676);
+  context.strokeStyle = colors.line;
+  context.lineWidth = 2;
+  context.strokeRect(72, 72, 1056, 676);
+  context.fillStyle = colors.muted;
+  context.font = "700 24px system-ui, sans-serif";
+  context.fillText("GRID ATLAS / KEKKAISHI", 120, 132);
+  context.fillStyle = colors.text;
+  context.font = "800 54px system-ui, sans-serif";
+  context.fillText(t("kekkaishi.title"), 120, 214);
+  context.fillStyle = colors.accent;
+  context.font = "900 128px system-ui, sans-serif";
+  context.fillText(rank.name, 120, 380);
+  context.fillStyle = colors.text;
+  context.font = "700 26px system-ui, sans-serif";
+  context.fillText(`${t("kekkaishi.rank")}  ${rank.name}`, 320, 282);
+  const stats = [
+    [t("kekkaishi.lifetime"), `${formatScoreValue(rank.lifetime)} 結界日`],
+    [t("kekkaishi.dailyPower"), `${formatScoreValue(status.lastDailyPower)} 力`],
+    [t("kekkaishi.peak"), `${formatScoreValue(rank.peak)} 力`],
+    [t("kekkaishi.recent"), `${formatScoreValue(recent)} 力`],
+    [t("kekkaishi.createdCount"), String(Math.max(0, Number(status.kekkaiCreatedCount) || 0))]
+  ];
+  stats.forEach(([label, value], index) => {
+    const x = 520 + (index % 2) * 280;
+    const y = 360 + Math.floor(index / 2) * 106;
+    context.fillStyle = colors.muted;
+    context.font = "600 18px system-ui, sans-serif";
+    context.fillText(label, x, y);
+    context.fillStyle = colors.text;
+    context.font = "800 30px system-ui, sans-serif";
+    context.fillText(value, x, y + 38);
+  });
+  context.fillStyle = colors.muted;
+  context.font = "600 18px system-ui, sans-serif";
+  context.fillText("gridatlas.github.io/GRID_ATLAS/", 120, 780);
+  context.textAlign = "right";
+  context.fillText("#GRIDATLAS  #結界", 1080, 780);
+  return canvasToPngBlob(canvas);
+}
+
+async function shareKekkaishiStatus() {
+  if (!state.traverseMode) return;
+  try {
+    const blob = await renderKekkaishiStatusShareImage();
+    const status = state.traverseLog?.kekkaishi || createKekkaishiStatus();
+    const rank = rankForKekkaishi(status);
+    const file = new File([blob], `grid-atlas-kekkaishi-${rank.name}.png`, { type: "image/png" });
+    const canShareFile = typeof navigator.share === "function" && (!navigator.canShare || navigator.canShare({ files: [file] }));
+    if (canShareFile) {
+      try {
+        await navigator.share({ files: [file], title: t("kekkaishi.title"), text: t("kekkaishi.shareText").replace("{rank}", rank.name).replace("{power}", `${formatScoreValue(rank.lifetime)} 結界日`) });
+        setShareFeedback(t("kekkaishi.shared"));
+        return;
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+      }
+    }
+    downloadGridAtlasFile(file);
+    setShareFeedback(t("kekkaishi.downloaded"));
+  } catch (error) {
+    console.warn("GRID ATLAS kekkaishi status image export failed", error);
+    setShareFeedback(t("kekkaishi.shareFailed"), { error: true });
+  }
 }
 
 function beginGuardianPlacement() {
@@ -8060,6 +8321,7 @@ async function refreshCloudLists(options = {}) {
     state.cloud.canUseMine = response.permissions?.mine === true;
     state.cloud.testerActive = response.permissions?.tester === true
       || state.cloud.lists.some((list) => list.scope === "testerShared");
+    if (state.cloud.testerActive) applyTraverseModeFromUrl();
     state.cloud.testerError = state.cloud.testerCode && !state.cloud.testerActive
       ? cloudText("テスター権限を確認できませんでした。コードを確認してください。", "Tester permission could not be confirmed. Check the code.")
       : "";
@@ -9560,11 +9822,17 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
+function formatMonth(value) {
+  return new Intl.DateTimeFormat(localeName(), { year: "numeric", month: "long" }).format(new Date(value));
+}
+
 async function createBarrierFromSelection() {
   const vertices = [...state.barrierSelection];
   const validation = validateBarrierVertices(state.traverseLog, vertices);
   if (!validation.ok) {
-    const message = validation.reason === "used"
+    const message = validation.reason === "too-many"
+      ? t("barrier.tooMany").replace("{max}", String(BARRIER_CONFIG.maxVertices))
+      : validation.reason === "used"
       ? t("barrier.stoneUsed")
       : validation.reason === "missing"
         ? t("barrier.missingStone")
@@ -9584,6 +9852,8 @@ async function createBarrierFromSelection() {
   if (input === null) return;
   const name = input.trim() || defaultName;
   const barrierId = createId();
+  const evaluation = evaluateBarrierLog(state.traverseLog);
+  if (evaluation.changed) persistTraverseLog();
   const result = registerBarrier(state.traverseLog, {
     id: barrierId,
     name,
@@ -9591,7 +9861,10 @@ async function createBarrierFromSelection() {
     createdAt: new Date().toISOString()
   });
   if (!result.ok) {
-    showAppToast(result.reason === "used" ? t("barrier.stoneUsed") : t("barrier.missingStone"), { error: true });
+    const message = result.reason === "too-many"
+      ? t("barrier.tooMany").replace("{max}", String(BARRIER_CONFIG.maxVertices))
+      : result.reason === "used" ? t("barrier.stoneUsed") : t("barrier.missingStone");
+    showAppToast(message, { error: true });
     render();
     return;
   }
@@ -12521,7 +12794,7 @@ function incomingTraverseModeEnabled() {
 }
 
 function applyTraverseModeFromUrl() {
-  if (incomingTraverseModeEnabled()) {
+  if (state.cloud.testerActive === true && incomingTraverseModeEnabled()) {
     state.traverseMode = true;
   }
 }
@@ -12919,6 +13192,11 @@ function bindEvents() {
       localStorage.setItem(GUARDIAN_LABEL_IN_IMAGE_KEY, String(state.guardianLabelInImage));
     } catch {}
   });
+  elements.openKekkaishiStatusButton?.addEventListener("click", openKekkaishiStatusDialog);
+  elements.shareKekkaishiStatusButton?.addEventListener("click", () => void shareKekkaishiStatus());
+  elements.kekkaishiStatusDialog?.addEventListener("click", (event) => {
+    if (event.target === elements.kekkaishiStatusDialog) elements.kekkaishiStatusDialog.close("cancel");
+  });
   elements.systemUpdateButton.addEventListener("click", () => void requestSystemUpdate());
   elements.cloudSignUpButton?.addEventListener("click", () => void signUpCloud());
   elements.cloudSignInButton?.addEventListener("click", () => void signInCloud());
@@ -12942,12 +13220,16 @@ function bindEvents() {
     if (event.target === elements.cloudTesterSignupDialog) setCloudTesterSignupPanelOpen(false);
   });
   elements.cloudAccessToken?.addEventListener("input", () => {
+    const wasTraverseMode = state.traverseMode;
     state.cloud.testerCode = elements.cloudAccessToken.value.trim();
     state.cloud.testerActive = false;
     state.cloud.testerError = "";
     state.cloud.connected = Boolean(state.cloud.authSession?.access_token);
+    enforceBarrierModeAccess();
     renderStorageLists();
     syncCloudControls();
+    if (wasTraverseMode) render();
+    else syncSettingsControls();
   });
   document.addEventListener("visibilitychange", maybeAutoRefreshCloudLists);
   window.addEventListener("focus", maybeAutoRefreshCloudLists);

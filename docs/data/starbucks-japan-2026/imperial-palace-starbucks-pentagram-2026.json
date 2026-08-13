@@ -1,0 +1,74 @@
+{
+  "method": "皇居固定中心・局所正距方位図投影・決定論的乱択100万通り＋座標降下局所探索",
+  "center": {
+    "id": "imperial-palace-tokyo-center",
+    "name": "皇居（中心点）",
+    "position": {
+      "latitude": 35.68518,
+      "longitude": 139.7528
+    },
+    "note": "東京都千代田区千代田1-1 / 皇居全体を代表する中心座標"
+  },
+  "candidateRule": {
+    "source": "C:\\Users\\jimas\\Documents\\GRID_ATLAS_WEB\\docs\\data\\starbucks-japan-2026\\starbucks-japan-stores-2026.gridatlas",
+    "sourcePlaceCount": 2136,
+    "minRadiusMeters": 5000,
+    "maxRadiusMeters": 80000,
+    "candidatePlaceCount": 648
+  },
+  "objective": "皇居からの距離CV(%) + 周回角度の72°からのRMS誤差(°) + 五芒星辺長CV(%) + 中心ずれ(%)",
+  "sampleCount": 1000000,
+  "localSearchRounds": 6,
+  "winner": {
+    "score": 6.184736349346942,
+    "gapsDegrees": [
+      71.90796765638123,
+      73.96447041904298,
+      69.40724066959751,
+      72.57968027251968,
+      72.14064098245859
+    ],
+    "gapRmsDegrees": 1.4795826458330357,
+    "radialCvPercent": 2.2344016867792202,
+    "starEdgeCvPercent": 1.922593310600794,
+    "centroidOffsetMeters": 199.3527661517021,
+    "centroidOffsetPercent": 0.5481587061338921,
+    "meanRadiusMeters": 36367.709555817695,
+    "orderedStoreIds": [
+      "starbucks-jp-270",
+      "starbucks-jp-1073",
+      "starbucks-jp-1777",
+      "starbucks-jp-4624",
+      "starbucks-jp-1447"
+    ],
+    "orderedStoreNames": [
+      "アトレ取手店",
+      "市原店",
+      "三井アウトレットパーク 横浜ベイサイド店",
+      "スターバックス ティー＆カフェ セレオ八王子北館店",
+      "上尾二ツ宮店"
+    ],
+    "starOrderStoreIds": [
+      "starbucks-jp-270",
+      "starbucks-jp-1777",
+      "starbucks-jp-1447",
+      "starbucks-jp-1073",
+      "starbucks-jp-4624"
+    ],
+    "starOrderStoreNames": [
+      "アトレ取手店",
+      "三井アウトレットパーク 横浜ベイサイド店",
+      "上尾二ツ宮店",
+      "市原店",
+      "スターバックス ティー＆カフェ セレオ八王子北館店"
+    ],
+    "starEdgeLengthsMeters": [
+      68677.56602066467,
+      67017.26360190912,
+      69022.22060091204,
+      70628.74487291202,
+      70517.88923502198
+    ]
+  },
+  "generatedAt": "2026-08-13T14:10:10.072Z"
+}

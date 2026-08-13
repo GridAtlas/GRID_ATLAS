@@ -1,10 +1,12 @@
-import { BARRIER_CONFIG } from "./barrier.js";
+import { BARRIER_CONFIG, stoneDisplayCount } from "./barrier.js";
 
 export const BARRIER_SCORE_CONFIG = Object.freeze({
   earthRadiusKm: 6371.0088,
   beautyMin: 0.5,
+  // The shiniki threshold is designed around this upper bound and SCALE_L0.
   beautyMax: 3,
   beautyGamma: 1,
+  scaleL0: 30,
   shapeCoefficients: Object.freeze({
     triangle: 1,
     quadrilateral: 1.2,
@@ -25,13 +27,15 @@ export function scoreBarrier(log, barrierId, config = BARRIER_SCORE_CONFIG) {
   const geos = stones.map((stone) => tileCenterGeo(stone.tile)).filter(Boolean);
   if (geos.length < 3) return null;
 
-  const areaKm2 = sphericalPolygonAreaKm2(geos, config.earthRadiusKm);
   const selfIntersecting = polygonSelfIntersects(geos);
+  const areaKm2 = selfIntersecting
+    ? nonZeroPolygonAreaKm2(geos, config.earthRadiusKm)
+    : sphericalPolygonAreaKm2(geos, config.earthRadiusKm);
   const shape = shapeCoefficient(geos.length, selfIntersecting, config.shapeCoefficients);
   const guardian = BARRIER_CONFIG.guardianEnabled ? barrier.guardian : null;
   const beauty = beautyCoefficient(geos, config, guardian);
-  const scale = 1 + Math.sqrt(Math.max(0, areaKm2)) / 10;
-  const stoneCount = stones.reduce((sum, stone) => sum + Math.max(0, Number(stone.count) || 0), 0);
+  const scale = scaleCoefficient(areaKm2, config);
+  const stoneCount = stones.reduce((sum, stone) => sum + stoneDisplayCount(stone), 0);
   const power = stoneCount * shape * beauty * scale;
   const density = areaKm2 > 0 ? power / areaKm2 : 0;
   return {
@@ -51,6 +55,12 @@ export function scoreBarrier(log, barrierId, config = BARRIER_SCORE_CONFIG) {
   };
 }
 
+export function scaleCoefficient(areaKm2, config = BARRIER_SCORE_CONFIG) {
+  const representativeDistance = Math.sqrt(Math.max(0, Number(areaKm2) || 0));
+  const l0 = Math.max(0.0001, Number(config.scaleL0) || 30);
+  return representativeDistance / (1 + representativeDistance / l0);
+}
+
 export function sphericalPolygonAreaKm2(geos, earthRadiusKm = BARRIER_SCORE_CONFIG.earthRadiusKm) {
   if (!Array.isArray(geos) || geos.length < 3) return 0;
   const origin = unitVector(geos[0]);
@@ -59,6 +69,212 @@ export function sphericalPolygonAreaKm2(geos, earthRadiusKm = BARRIER_SCORE_CONF
     signedArea += signedTriangleArea(origin, unitVector(geos[index]), unitVector(geos[index + 1]));
   }
   return Math.abs(signedArea) * earthRadiusKm ** 2;
+}
+
+// Self-intersecting polygons use the non-zero rule: every bounded region with
+// a non-zero winding number contributes once, while the area remains spherical.
+export function nonZeroPolygonAreaKm2(geos, earthRadiusKm = BARRIER_SCORE_CONFIG.earthRadiusKm) {
+  if (!Array.isArray(geos) || geos.length < 3) return 0;
+  const basis = projectionBasis(geos);
+  const projectedVertices = geos.map((geo) => projectUnitVector(unitVector(geo), basis));
+  if (projectedVertices.some((point) => !point)) return sphericalPolygonAreaKm2(geos, earthRadiusKm);
+
+  const edgeSplits = geos.map((_, index) => [
+    { t: 0, x: projectedVertices[index].x, y: projectedVertices[index].y, vector: unitVector(geos[index]) },
+    { t: 1, x: projectedVertices[(index + 1) % geos.length].x, y: projectedVertices[(index + 1) % geos.length].y, vector: unitVector(geos[(index + 1) % geos.length]) }
+  ]);
+  let intersectionCount = 0;
+
+  for (let first = 0; first < geos.length; first += 1) {
+    const firstNext = (first + 1) % geos.length;
+    for (let second = first + 1; second < geos.length; second += 1) {
+      const secondNext = (second + 1) % geos.length;
+      if (first === second || firstNext === second || secondNext === first) continue;
+      const intersection = segmentIntersection(
+        projectedVertices[first],
+        projectedVertices[firstNext],
+        projectedVertices[second],
+        projectedVertices[secondNext]
+      );
+      if (!intersection) continue;
+      const vector = inverseProject(intersection.x, intersection.y, basis);
+      edgeSplits[first].push({ t: intersection.t, x: intersection.x, y: intersection.y, vector });
+      edgeSplits[second].push({ t: intersection.u, x: intersection.x, y: intersection.y, vector });
+      intersectionCount += 1;
+    }
+  }
+  if (intersectionCount === 0) return sphericalPolygonAreaKm2(geos, earthRadiusKm);
+
+  const nodes = new Map();
+  const adjacency = new Map();
+  const getNode = (point) => {
+    const key = pointKey(point.x, point.y);
+    if (!nodes.has(key)) nodes.set(key, { key, x: point.x, y: point.y, vector: point.vector });
+    return nodes.get(key);
+  };
+  const addEdge = (from, to) => {
+    if (from.key === to.key) return;
+    if (!adjacency.has(from.key)) adjacency.set(from.key, []);
+    if (!adjacency.has(to.key)) adjacency.set(to.key, []);
+    const outgoing = adjacency.get(from.key);
+    if (!outgoing.some((edge) => edge.to === to.key)) outgoing.push({ to: to.key });
+    const reverse = adjacency.get(to.key);
+    if (!reverse.some((edge) => edge.to === from.key)) reverse.push({ to: from.key });
+  };
+
+  edgeSplits.forEach((splits) => {
+    const ordered = splits
+      .sort((a, b) => a.t - b.t)
+      .filter((point, index, all) => index === 0 || Math.abs(point.t - all[index - 1].t) > 1e-9);
+    for (let index = 0; index < ordered.length - 1; index += 1) {
+      addEdge(getNode(ordered[index]), getNode(ordered[index + 1]));
+    }
+  });
+
+  for (const [from, outgoing] of adjacency.entries()) {
+    const origin = nodes.get(from);
+    outgoing.sort((left, right) => {
+      const leftNode = nodes.get(left.to);
+      const rightNode = nodes.get(right.to);
+      return Math.atan2(leftNode.y - origin.y, leftNode.x - origin.x)
+        - Math.atan2(rightNode.y - origin.y, rightNode.x - origin.x);
+    });
+  }
+
+  let area = 0;
+  for (const face of extractFaces(nodes, adjacency)) {
+    if (face.length < 3 || planarSignedArea(face) <= 1e-12) continue;
+    const sample = face.reduce((sum, node) => ({ x: sum.x + node.x, y: sum.y + node.y }), { x: 0, y: 0 });
+    sample.x /= face.length;
+    sample.y /= face.length;
+    if (planarWindingNumber(sample, projectedVertices) === 0) continue;
+    const faceGeos = face.map((node) => vectorToGeo(node.vector));
+    area += sphericalPolygonAreaKm2(faceGeos, earthRadiusKm);
+  }
+  return area;
+}
+
+function projectionBasis(geos) {
+  const center = normalizedVector(geos.map(unitVector).reduce(addVector, { x: 0, y: 0, z: 0 }));
+  const reference = Math.abs(center.z) > 0.9 ? { x: 0, y: 1, z: 0 } : { x: 0, y: 0, z: 1 };
+  const east = normalizedVector(cross(reference, center));
+  const north = normalizedVector(cross(center, east));
+  return { center, east, north };
+}
+
+function projectUnitVector(vector, basis) {
+  const denominator = dot(vector, basis.center);
+  if (denominator <= 1e-9) return null;
+  return {
+    x: dot(vector, basis.east) / denominator,
+    y: dot(vector, basis.north) / denominator
+  };
+}
+
+function inverseProject(x, y, basis) {
+  return normalizedVector({
+    x: basis.center.x + x * basis.east.x + y * basis.north.x,
+    y: basis.center.y + x * basis.east.y + y * basis.north.y,
+    z: basis.center.z + x * basis.east.z + y * basis.north.z
+  });
+}
+
+function vectorToGeo(vector) {
+  return {
+    lat: Math.atan2(vector.z, Math.hypot(vector.x, vector.y)) * 180 / Math.PI,
+    lng: Math.atan2(vector.y, vector.x) * 180 / Math.PI
+  };
+}
+
+function pointKey(x, y) {
+  return `${x.toFixed(10)}:${y.toFixed(10)}`;
+}
+
+function cross2d(a, b) {
+  return a.x * b.y - a.y * b.x;
+}
+
+function segmentIntersection(a, b, c, d) {
+  const direction = { x: b.x - a.x, y: b.y - a.y };
+  const otherDirection = { x: d.x - c.x, y: d.y - c.y };
+  const denominator = cross2d(direction, otherDirection);
+  if (Math.abs(denominator) <= 1e-12) return null;
+  const offset = { x: c.x - a.x, y: c.y - a.y };
+  const t = cross2d(offset, otherDirection) / denominator;
+  const u = cross2d(offset, direction) / denominator;
+  if (t <= 1e-9 || t >= 1 - 1e-9 || u <= 1e-9 || u >= 1 - 1e-9) return null;
+  return {
+    t,
+    u,
+    x: a.x + direction.x * t,
+    y: a.y + direction.y * t
+  };
+}
+
+function extractFaces(nodes, adjacency) {
+  const visited = new Set();
+  const faces = [];
+  for (const [from, outgoing] of adjacency.entries()) {
+    for (const edge of outgoing) {
+      const startKey = `${from}>${edge.to}`;
+      if (visited.has(startKey)) continue;
+      const face = [];
+      let currentFrom = from;
+      let currentTo = edge.to;
+      let closed = false;
+      for (let step = 0; step <= nodes.size * 4; step += 1) {
+        const key = `${currentFrom}>${currentTo}`;
+        if (visited.has(key)) {
+          closed = currentFrom === from && currentTo === edge.to;
+          break;
+        }
+        visited.add(key);
+        face.push(nodes.get(currentFrom));
+        const next = nextFaceEdge(currentFrom, currentTo, adjacency);
+        if (!next) break;
+        currentFrom = currentTo;
+        currentTo = next;
+        if (currentFrom === from && currentTo === edge.to) {
+          closed = true;
+          break;
+        }
+      }
+      if (closed) faces.push(face);
+    }
+  }
+  return faces;
+}
+
+function nextFaceEdge(from, to, adjacency) {
+  const outgoing = adjacency.get(to) || [];
+  const reverseIndex = outgoing.findIndex((edge) => edge.to === from);
+  if (reverseIndex < 0 || outgoing.length < 2) return null;
+  return outgoing[(reverseIndex - 1 + outgoing.length) % outgoing.length].to;
+}
+
+function planarSignedArea(points) {
+  return points.reduce((sum, point, index) => {
+    const next = points[(index + 1) % points.length];
+    return sum + point.x * next.y - next.x * point.y;
+  }, 0) / 2;
+}
+
+function planarWindingNumber(point, polygon) {
+  let winding = 0;
+  for (let index = 0; index < polygon.length; index += 1) {
+    const current = polygon[index];
+    const next = polygon[(index + 1) % polygon.length];
+    const crossing = cross2d(
+      { x: next.x - current.x, y: next.y - current.y },
+      { x: point.x - current.x, y: point.y - current.y }
+    );
+    if (current.y <= point.y) {
+      if (next.y > point.y && crossing > 0) winding += 1;
+    } else if (next.y <= point.y && crossing < 0) {
+      winding -= 1;
+    }
+  }
+  return winding;
 }
 
 export function beautyCoefficient(geos, config = BARRIER_SCORE_CONFIG, guardian = null) {
@@ -92,6 +308,9 @@ export function shapeCoefficient(vertexCount, selfIntersecting, coefficients = B
   if (vertexCount === 4) return coefficients.quadrilateral;
   if (vertexCount === 5) return coefficients.pentagon;
   if (vertexCount === 6) return coefficients.hexagon;
+  // Defensive-only fallback for corrupt or future data outside maxVertices.
+  // New barriers cannot reach this scoring path while maxVertices is 6.
+  console.warn("GRID ATLAS shape coefficient fallback", { vertexCount });
   return coefficients.other;
 }
 

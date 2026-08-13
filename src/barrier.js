@@ -2,14 +2,19 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const BARRIER_CONFIG = Object.freeze({
   dataZoom: 18,
+  maxVertices: 6,
   dailyGrant: 3,
   stockCap: 20,
+  stoneCapVertex: 100,
+  stoneCapLoose: 20,
+  windowDays: 90,
+  weatherRate: 0.001,
   accuracyThresholdMeters: 100,
   guardianEnabled: true,
   guardianLabelInImage: false
 });
 
-export const BARRIER_LOG_SCHEMA_VERSION = 2;
+export const BARRIER_LOG_SCHEMA_VERSION = 3;
 
 export function createBarrierLog(now = Date.now()) {
   return {
@@ -18,6 +23,15 @@ export function createBarrierLog(now = Date.now()) {
     stones: {},
     barriers: {},
     events: [],
+    kekkaishi: {
+      lifetimeOutput: 0,
+      dailyHistory: Array(BARRIER_CONFIG.windowDays).fill(0),
+      peakAverage: 0,
+      peakAchievedAt: "",
+      lastEvaluatedAt: new Date(now).toISOString(),
+      lastDailyPower: 0,
+      kekkaiCreatedCount: 0
+    },
     stock: {
       amount: BARRIER_CONFIG.dailyGrant,
       lastGrantAt: new Date(now).toISOString()
@@ -35,7 +49,7 @@ export function sanitizeBarrierLog(raw, now = Date.now()) {
     return { log: createBarrierLog(now), changed: true };
   }
 
-  const isBarrierLog = raw.type === "barrier-log" && [1, BARRIER_LOG_SCHEMA_VERSION].includes(raw.schemaVersion);
+  const isBarrierLog = raw.type === "barrier-log" && [1, 2, BARRIER_LOG_SCHEMA_VERSION].includes(raw.schemaVersion);
   const isLegacyLog = raw.type === "traverse-log" && [1, 2].includes(raw.schemaVersion);
   if (!isBarrierLog && !isLegacyLog) {
     return { log: createBarrierLog(now), changed: true };
@@ -66,6 +80,7 @@ export function sanitizeBarrierLog(raw, now = Date.now()) {
     stones,
     barriers,
     events,
+    kekkaishi: raw.kekkaishi && typeof raw.kekkaishi === "object" ? raw.kekkaishi : undefined,
     stock: {
       amount,
       lastGrantAt: new Date(lastGrantAt).toISOString()
@@ -93,6 +108,9 @@ export function validateBarrierVertices(log, vertices) {
   if (!Array.isArray(vertices) || vertices.length < 3) {
     return { ok: false, reason: "too-few" };
   }
+  if (vertices.length > BARRIER_CONFIG.maxVertices) {
+    return { ok: false, reason: "too-many", maxVertices: BARRIER_CONFIG.maxVertices };
+  }
   if (new Set(vertices).size !== vertices.length) {
     return { ok: false, reason: "duplicate" };
   }
@@ -107,25 +125,46 @@ export function validateBarrierVertices(log, vertices) {
   return { ok: true };
 }
 
+export function stoneCapFor(log, stoneId) {
+  const isVertex = Object.values(log?.barriers || {}).some((barrier) => barrier?.vertices?.includes(stoneId));
+  return isVertex ? BARRIER_CONFIG.stoneCapVertex : BARRIER_CONFIG.stoneCapLoose;
+}
+
+export function stoneExactCount(stone) {
+  const value = Number(stone?.countExact ?? stone?.count);
+  return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+export function stoneDisplayCount(stone) {
+  return Math.floor(stoneExactCount(stone));
+}
+
 export function registerBarrier(log, barrier) {
   const validation = validateBarrierVertices(log, barrier?.vertices);
   if (!validation.ok) return validation;
   if (!barrier?.id || typeof barrier.id !== "string") {
     return { ok: false, reason: "missing-id" };
   }
+  const createdAt = typeof barrier.createdAt === "string" ? barrier.createdAt : new Date().toISOString();
+  const rankProgress = normalizeRankProgress(barrier.rankProgress);
   log.barriers[barrier.id] = {
     name: typeof barrier.name === "string" ? barrier.name : "",
     vertices: [...barrier.vertices],
-    createdAt: typeof barrier.createdAt === "string" ? barrier.createdAt : new Date().toISOString(),
-    guardian: normalizeGuardian(barrier.guardian, barrier.createdAt)
+    createdAt,
+    guardian: normalizeGuardian(barrier.guardian, createdAt),
+    rankProgress
   };
+  if (log.kekkaishi && typeof log.kekkaishi === "object") {
+    log.kekkaishi.kekkaiCreatedCount = Math.max(0, Math.floor(Number(log.kekkaishi.kekkaiCreatedCount) || 0)) + 1;
+  }
   appendBarrierEvent(log, {
     type: "barrier-created",
     at: log.barriers[barrier.id].createdAt,
     barrierId: barrier.id,
     name: log.barriers[barrier.id].name,
     vertices: [...log.barriers[barrier.id].vertices],
-    guardian: log.barriers[barrier.id].guardian
+    guardian: log.barriers[barrier.id].guardian,
+    rankProgress: log.barriers[barrier.id].rankProgress
   });
   return { ok: true, barrier: log.barriers[barrier.id] };
 }
@@ -158,6 +197,16 @@ export function normalizeGuardian(rawGuardian, fallbackAt = Date.now()) {
   };
 }
 
+function normalizeRankProgress(rawProgress) {
+  const activeDays = Array.from({ length: 7 }, (_, index) => Math.max(0, Number(rawProgress?.activeDays?.[index]) || 0));
+  return {
+    activeDays,
+    lastPower: rawProgress && rawProgress.lastPower !== null && rawProgress.lastPower !== undefined
+      ? Math.max(0, Number(rawProgress.lastPower) || 0)
+      : null
+  };
+}
+
 export function replayBarrierEvents(events) {
   const stones = {};
   const barriers = {};
@@ -173,7 +222,9 @@ export function replayBarrierEvents(events) {
         if (barrier && typeof barrier === "object") barriers[barrierId] = {
           name: typeof barrier.name === "string" ? barrier.name : "",
           vertices: Array.isArray(barrier.vertices) ? [...barrier.vertices] : [],
-          createdAt: typeof barrier.createdAt === "string" ? barrier.createdAt : event.at
+          createdAt: typeof barrier.createdAt === "string" ? barrier.createdAt : event.at,
+          guardian: normalizeGuardian(barrier.guardian, event.at),
+          rankProgress: normalizeRankProgress(barrier.rankProgress)
         };
       }
       continue;
@@ -183,7 +234,8 @@ export function replayBarrierEvents(events) {
         name: typeof event.name === "string" ? event.name : "",
         vertices: Array.isArray(event.vertices) ? [...event.vertices] : [],
         createdAt: event.at,
-        guardian: normalizeGuardian(event.guardian, event.at)
+        guardian: normalizeGuardian(event.guardian, event.at),
+        rankProgress: normalizeRankProgress(event.rankProgress)
       };
       continue;
     }
@@ -205,18 +257,25 @@ export function replayBarrierEvents(events) {
       lat: null,
       lng: null,
       count: 0,
+      countExact: 0,
       firstAt: event.at,
       lastAt: event.at
     };
     if (event.type === "stone-placed") {
-      stone.count += Math.max(1, Number(event.amount) || 1);
+      stone.countExact = stoneExactCount(stone) + Math.max(1, Number(event.amount) || 1);
+      stone.count = Math.floor(stone.countExact);
       stone.firstAt ||= event.at;
       stone.lastAt = event.at;
       stones[event.stoneId] = stone;
-    } else if (event.type === "stone-picked") {
-      stone.count = Math.max(0, stone.count - Math.max(1, Number(event.amount) || 1));
+    } else if (event.type === "stone-picked" || event.type === "stone-weathered") {
+      if (Number.isFinite(Number(event.countExact))) {
+        stone.countExact = Math.max(0, Number(event.countExact));
+      } else {
+        stone.countExact = Math.max(0, stoneExactCount(stone) - Math.max(1, Number(event.amount) || 1));
+      }
+      stone.count = Math.floor(stone.countExact);
       stone.lastAt = event.at;
-      if (stone.count > 0) stones[event.stoneId] = stone;
+      if (stone.countExact > 0) stones[event.stoneId] = stone;
       else delete stones[event.stoneId];
     }
   }
@@ -296,14 +355,14 @@ function normalizeStones(rawStones, now) {
     if (!parsed) continue;
     const tileId = formatTileId(parsed.x, parsed.y, parsed.z);
     const stoneId = stoneIdFromTile(tileId);
-    const count = normalizeCount(stone.count);
-    if (!stoneId || count < 1) continue;
-    stones[stoneId] = normalizeStone(stoneId, tileId, count, stone, now);
+    const countExact = normalizeExactCount(stone.countExact ?? stone.count);
+    if (!stoneId || countExact <= 0) continue;
+    stones[stoneId] = normalizeStone(stoneId, tileId, countExact, stone, now);
   }
   return stones;
 }
 
-function normalizeStone(stoneId, tileId, count, source, now) {
+function normalizeStone(stoneId, tileId, countExact, source, now) {
   const fallback = new Date(now).toISOString();
   const firstAt = typeof source.firstAt === "string" && Number.isFinite(Date.parse(source.firstAt))
     ? source.firstAt
@@ -315,7 +374,8 @@ function normalizeStone(stoneId, tileId, count, source, now) {
     tile: tileId,
     lat: null,
     lng: null,
-    count,
+    countExact,
+    count: Math.floor(countExact),
     firstAt,
     lastAt
   };
@@ -353,7 +413,8 @@ function normalizeEvent(event, now, fallbackId = "") {
       barrierId: String(event.barrierId),
       name: typeof event.name === "string" ? event.name : "",
       vertices,
-      guardian: normalizeGuardian(event.guardian, at)
+      guardian: normalizeGuardian(event.guardian, at),
+      rankProgress: normalizeRankProgress(event.rankProgress)
     };
   }
   if (event.type === "guardian-placed") {
@@ -369,10 +430,41 @@ function normalizeEvent(event, now, fallbackId = "") {
     if (!event.barrierId) return null;
     return { id, type: event.type, at, barrierId: String(event.barrierId) };
   }
-  if (![
-    "stone-placed",
-    "stone-picked"
-  ].includes(event.type)) return null;
+  if (event.type === "daily-evaluation") {
+    const elapsedDays = Math.max(1, Math.floor(Number(event.elapsedDays) || 0));
+    const evaluatedLastAt = typeof event.lastEvaluatedAt === "string" && Number.isFinite(Date.parse(event.lastEvaluatedAt))
+      ? new Date(Date.parse(event.lastEvaluatedAt)).toISOString()
+      : at;
+    return {
+      id,
+      type: event.type,
+      at,
+      elapsedDays,
+      lastEvaluatedAt: evaluatedLastAt,
+      dailyPower: Math.max(0, Number(event.dailyPower) || 0),
+      lifetimeOutput: Math.max(0, Number(event.lifetimeOutput) || 0)
+    };
+  }
+  if (event.type === "evaluation-settings") {
+    const arrays = ["powerThresholds", "daysRequired", "kekkaishiLifetimeThresholds"];
+    if (arrays.some((key) => !Array.isArray(event[key]))) return null;
+    return {
+      id,
+      type: event.type,
+      at,
+      weatherRate: Number(event.weatherRate),
+      powerThresholds: event.powerThresholds.map((value) => Number(value)),
+      daysRequired: event.daysRequired.map((value) => Number(value)),
+      kekkaishiLifetimeThresholds: event.kekkaishiLifetimeThresholds.map((value) => Number(value)),
+      windowDays: Number(event.windowDays),
+      scaleL0: Number(event.scaleL0),
+      stoneCapVertex: Number(event.stoneCapVertex),
+      dailyGrant: Number(event.dailyGrant),
+      maxVertices: Number(event.maxVertices)
+    };
+  }
+  const stoneEventTypes = new Set(["stone-placed", "stone-picked", "stone-weathered"]);
+  if (!stoneEventTypes.has(event.type)) return null;
   const parsed = parseTileId(event.tile);
   const stoneId = stoneIdFromTile(event.tile);
   if (!parsed || !stoneId || event.stoneId !== stoneId) return null;
@@ -383,7 +475,10 @@ function normalizeEvent(event, now, fallbackId = "") {
     tile: formatTileId(parsed.x, parsed.y, parsed.z),
     stoneId,
     barrierId: typeof event.barrierId === "string" ? event.barrierId : null,
-    amount: Math.max(1, Math.floor(Number(event.amount) || 1))
+    amount: Math.max(1, Math.floor(Number(event.amount) || 1)),
+    ...(Number.isFinite(Number(event.countExact))
+      ? { countExact: Math.max(0, Number(event.countExact)) }
+      : {})
   };
 }
 
@@ -411,7 +506,8 @@ function normalizeSnapshotBarriers(rawBarriers, now) {
       name: typeof barrier.name === "string" ? barrier.name : "",
       vertices,
       createdAt,
-      guardian: normalizeGuardian(barrier.guardian, createdAt)
+      guardian: normalizeGuardian(barrier.guardian, createdAt),
+      rankProgress: normalizeRankProgress(barrier.rankProgress)
     }]];
   }));
 }
@@ -426,7 +522,8 @@ function createMigrationSnapshotEvent(stones, barriers, now) {
       name: barrier.name,
       vertices: [...barrier.vertices],
       createdAt: barrier.createdAt,
-      guardian: barrier.guardian
+      guardian: barrier.guardian,
+      rankProgress: barrier.rankProgress
     }]))
   };
 }
@@ -447,7 +544,8 @@ function normalizeBarriers(rawBarriers, stones, now) {
       name: typeof rawBarrier.name === "string" ? rawBarrier.name : "",
       vertices,
       createdAt,
-      guardian: normalizeGuardian(rawBarrier.guardian, createdAt)
+      guardian: normalizeGuardian(rawBarrier.guardian, createdAt),
+      rankProgress: normalizeRankProgress(rawBarrier.rankProgress)
     };
     vertices.forEach((stoneId) => usedStoneIds.add(stoneId));
   }
@@ -456,6 +554,10 @@ function normalizeBarriers(rawBarriers, stones, now) {
 
 function normalizeCount(value) {
   return Number.isFinite(Number(value)) ? Math.max(0, Math.floor(Number(value))) : 0;
+}
+
+function normalizeExactCount(value) {
+  return Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0;
 }
 
 function tileYToLatitude(y, scale) {

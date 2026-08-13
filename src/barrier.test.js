@@ -96,6 +96,20 @@ describe("barrier data helpers", () => {
     expect(validateBarrierVertices(log, [vertices[0], vertices[0], vertices[1]])).toMatchObject({ ok: false, reason: "duplicate" });
   });
 
+  it("limits newly created barriers to the configured vertex cap", () => {
+    const log = createBarrierLog();
+    const vertices = Array.from({ length: BARRIER_CONFIG.maxVertices + 1 }, (_, index) => {
+      const tile = `18/${232798 + index}/103246`;
+      const stoneId = stoneIdFromTile(tile);
+      log.stones[stoneId] = { tile, count: 1, countExact: 1, firstAt: "2026-08-13T00:00:00Z", lastAt: "2026-08-13T00:00:00Z" };
+      return stoneId;
+    });
+    expect(validateBarrierVertices(log, vertices.slice(0, 2))).toMatchObject({ ok: false, reason: "too-few" });
+    expect(validateBarrierVertices(log, vertices.slice(0, 3))).toEqual({ ok: true });
+    expect(validateBarrierVertices(log, vertices.slice(0, BARRIER_CONFIG.maxVertices))).toEqual({ ok: true });
+    expect(validateBarrierVertices(log, vertices)).toMatchObject({ ok: false, reason: "too-many", maxVertices: BARRIER_CONFIG.maxVertices });
+  });
+
   it("grants three stones per elapsed day up to the cap", () => {
     const now = Date.parse("2026-08-13T00:00:00Z");
     const log = createBarrierLog(Date.parse("2026-08-01T00:00:00Z"));

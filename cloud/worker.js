@@ -1,6 +1,8 @@
 import { AuthError, authenticateRequest, requestedCloudScope } from "./auth.js";
 
-const MAX_BODY_BYTES = 256 * 1024;
+// Keep this below D1's 2 MB maximum string/row size while allowing large
+// imported place lists such as the Starbucks Japan snapshot.
+const MAX_BODY_BYTES = 1024 * 1024;
 const MAX_ASSET_BYTES = 10 * 1024 * 1024;
 const ALLOWED_ASSET_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const MAX_POINTS = 5000;

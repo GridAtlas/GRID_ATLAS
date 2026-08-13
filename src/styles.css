@@ -1188,6 +1188,73 @@ button {
   gap: 10px;
 }
 
+.kekkaishi-status-dialog {
+  width: min(420px, calc(100vw - 24px));
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow), var(--brand-glow);
+}
+
+.kekkaishi-status-dialog::backdrop {
+  background: rgb(0 0 0 / 0.58);
+  backdrop-filter: blur(3px);
+}
+
+.kekkaishi-status-dialog-form {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.kekkaishi-status-hero {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  background: var(--surface-strong);
+}
+
+.kekkaishi-status-hero strong {
+  font-size: 42px;
+  line-height: 1;
+  letter-spacing: 0.08em;
+}
+
+.kekkaishi-status-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.kekkaishi-status-list div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 7px;
+}
+
+.kekkaishi-status-list dt {
+  color: var(--muted);
+}
+
+.kekkaishi-status-list dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.kekkaishi-status-progress {
+  margin: 0;
+  color: var(--muted);
+  white-space: pre-line;
+}
+
 :root[data-theme="retro"] .traverse-action-button {
   box-shadow: var(--shadow), 0 0 14px rgb(44 255 100 / 0.26);
 }
@@ -1381,6 +1448,16 @@ textarea {
 .barrier-score-hero b {
   font-size: 24px;
   font-variant-numeric: tabular-nums;
+}
+
+.barrier-rank-progress {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-strong);
+  white-space: pre-line;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .barrier-score-list {
