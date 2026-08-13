@@ -57,7 +57,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1272";
+const WEB_VERSION = "0.1273";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -1574,7 +1574,7 @@ function applyWorkspace(workspace) {
   const duplicateListsCoalesced = coalesceDuplicateLocalLists();
   const activeListVisibilityChanged = ensureActivePointListVisible();
   refreshVisiblePoints();
-  state.analysisLayer = normalizeAnalysisLayer(workspace.analysisLayer, workspace.links);
+  state.analysisLayer = normalizeAnalysisLayer(workspace.analysisLayer);
   state.selection = [];
   state.selectedPointId = null;
   state.selectedLinkId = null;
@@ -7012,7 +7012,6 @@ function removeLocalListForStorageChange(listId) {
     state.pointLists = state.pointLists.filter((item) => item.id !== list.id);
     if (state.activePointListId === list.id) state.activePointListId = DEFAULT_POINT_LIST_ID;
   }
-  state.links = state.links.map((link) => linkWithDeletedEndpointPositions(link, pointIds));
   ensurePointLists();
   refreshVisiblePoints();
   pruneHiddenPointReferences();
@@ -7316,7 +7315,6 @@ async function deletePointList(listId) {
 
   const pointIds = new Set(list.points.map((point) => point.id));
   state.pointLists = state.pointLists.filter((item) => item.id !== listId);
-  state.links = state.links.map((link) => linkWithDeletedEndpointPositions(link, pointIds));
   ensurePointLists();
   refreshVisiblePoints();
   pruneHiddenPointReferences();
@@ -7430,20 +7428,12 @@ function validLinkEndpointId(id) {
   return id === CURRENT_LOCATION_ID || Boolean(findPointAny(id)) || Boolean(findCloudPointAny(id));
 }
 
-function validStoredLinkEndpointId(id) {
-  return typeof id === "string" && id.length > 0;
-}
-
 function findLink(id) {
   return state.links.find((link) => link.id === id) ?? null;
 }
 
-function normalizeAnalysisLayer(layer, legacyLinks = []) {
-  const rawLinks = Array.isArray(layer?.links)
-    ? layer.links
-    : Array.isArray(legacyLinks)
-      ? legacyLinks
-      : [];
+function normalizeAnalysisLayer(layer) {
+  const rawLinks = Array.isArray(layer?.links) ? layer.links : [];
   return {
     version: ANALYSIS_LAYER_VERSION,
     id: typeof layer?.id === "string" && layer.id ? layer.id : DEFAULT_ANALYSIS_LAYER_ID,
@@ -7500,66 +7490,53 @@ function normalizeLineEndpoint(snapshot) {
 }
 
 function linkEndpoint(link, side) {
-  const endpoint = endpointSnapshotForLink(link, side);
-  if (endpoint) return endpoint;
-  const point = findPoint(link?.[side]);
-  if (!point) return null;
-  const snapshot = captureLineEndpoint(point);
-  const projected = projectLatLng(snapshot.geo.lat, snapshot.geo.lng);
-  return { ...snapshot, ...projected };
+  return endpointSnapshotForLink(link, side);
 }
 
 function endpointSnapshotForLink(link, side) {
-  const snapshot = normalizeLineEndpoint(link?.[`${side}Endpoint`] ?? link?.[`${side}Snapshot`]);
+  const snapshot = normalizeLineEndpoint(link?.[`${side}Endpoint`]);
   if (!snapshot) return null;
   return { ...snapshot, ...projectLatLng(snapshot.geo.lat, snapshot.geo.lng) };
 }
 
 function normalizeStoredLink(link) {
-  if (!link || !validStoredLinkEndpointId(link.a) || !validStoredLinkEndpointId(link.b)) {
+  if (!link || typeof link.id !== "string" || !link.id) {
     return null;
   }
 
   const next = { ...link };
+  const endpoints = {};
   if (typeof next.strokeId !== "string" || !next.strokeId) {
     delete next.strokeId;
   }
   for (const side of ["a", "b"]) {
     const endpointKey = `${side}Endpoint`;
-    const legacySnapshotKey = `${side}Snapshot`;
-    const rawEndpoint = next[endpointKey] ?? next[legacySnapshotKey];
-    const currentEndpoint = normalizeLineEndpoint(rawEndpoint);
-    const hasStableEndpointKey = typeof rawEndpoint?.endpointKey === "string" && rawEndpoint.endpointKey;
-    if (currentEndpoint && hasStableEndpointKey) {
-      next[endpointKey] = currentEndpoint;
-      delete next[legacySnapshotKey];
-      continue;
-    }
-    const point = findPoint(next[side]);
-    const freshEndpoint = captureLineEndpoint(point);
-    if (freshEndpoint) {
-      next[endpointKey] = freshEndpoint;
-      delete next[legacySnapshotKey];
-    } else if (currentEndpoint) {
-      next[endpointKey] = currentEndpoint;
-      delete next[legacySnapshotKey];
-    }
+    const endpoint = normalizeLineEndpoint(next[endpointKey]);
+    if (!endpoint) return null;
+    endpoints[side] = endpoint;
+    next[endpointKey] = endpoint;
   }
-
+  if (endpoints.a.endpointKey === endpoints.b.endpointKey) return null;
   return next;
 }
 
-function linkWithDeletedEndpointPositions(link, pointIds) {
-  const next = normalizeStoredLink(link) ?? { ...link };
-  for (const side of ["a", "b"]) {
-    if (!pointIds.has(next[side])) continue;
-    if (next[`${side}Endpoint`] || next[`${side}Snapshot`]) continue;
-    const snapshot = captureLineEndpoint(findPoint(next[side]));
-    if (snapshot) {
-      next[`${side}Endpoint`] = snapshot;
-    }
+function createStoredLink({ id = createId(), aPoint, bPoint, strokeId = "", createdAt = new Date().toISOString(), updatedAt = "" } = {}) {
+  const aEndpoint = captureLineEndpoint(aPoint);
+  const bEndpoint = captureLineEndpoint(bPoint);
+  if (!aEndpoint || !bEndpoint || aEndpoint.endpointKey === bEndpoint.endpointKey) {
+    return null;
   }
-  return next;
+
+  return normalizeStoredLink({
+    id,
+    a: typeof aPoint.id === "string" ? aPoint.id : "",
+    b: typeof bPoint.id === "string" ? bPoint.id : "",
+    aEndpoint,
+    bEndpoint,
+    ...(strokeId ? { strokeId } : {}),
+    ...(createdAt ? { createdAt } : {}),
+    ...(updatedAt ? { updatedAt } : {})
+  });
 }
 
 function linkTitle(link) {
@@ -8327,28 +8304,34 @@ async function connectSelectedPoints() {
       continue;
     }
 
-    state.links.push(normalizeStoredLink({
+    const link = createStoredLink({
       id: createId(),
-      a,
-      b,
+      aPoint: findPoint(a),
+      bPoint: findPoint(b),
       strokeId,
       createdAt: new Date().toISOString()
-    }));
-    created = true;
+    });
+    if (link) {
+      state.links.push(link);
+      created = true;
+    }
   }
 
   if (closeShape) {
     const a = pointIds.at(-1);
     const b = pointIds[0];
     if (!findLinkBetween(a, b)) {
-      state.links.push(normalizeStoredLink({
+      const link = createStoredLink({
         id: createId(),
-        a,
-        b,
+        aPoint: findPoint(a),
+        bPoint: findPoint(b),
         strokeId,
         createdAt: new Date().toISOString()
-      }));
-      created = true;
+      });
+      if (link) {
+        state.links.push(link);
+        created = true;
+      }
     }
   }
 
@@ -10834,16 +10817,26 @@ function analysisLayerFromGridAtlasDocument(document, pointList) {
     point.gridAtlas?.placeId || point.id,
     point.id
   ]));
+  const pointById = new Map(pointList.points.map((point) => [point.id, point]));
+  const importedLinks = readGridAtlasLineLayer(
+    document,
+    (sharedPointId) => localPointIdBySharedId.get(sharedPointId) || "",
+    createId
+  );
   return {
     version: ANALYSIS_LAYER_VERSION,
     id: createId(),
     name: `${document.name || DEFAULT_ANALYSIS_LAYER_NAME} - ${DEFAULT_ANALYSIS_LAYER_NAME}`,
     sourceDocumentId: document.id,
-    links: readGridAtlasLineLayer(
-      document,
-      (sharedPointId) => localPointIdBySharedId.get(sharedPointId) || "",
-      createId
-    )
+    links: importedLinks
+      .map((link) => createStoredLink({
+        id: link.id,
+        aPoint: pointById.get(link.a),
+        bPoint: pointById.get(link.b),
+        strokeId: link.strokeId,
+        createdAt: link.createdAt
+      }))
+      .filter(Boolean)
   };
 }
 
@@ -11413,11 +11406,7 @@ async function deleteSelectedPoint() {
     return;
   }
 
-  const linksAfterPointDeletion = state.links.map((link) => (
-    deletionPointIdSet.size > 0
-      ? linkWithDeletedEndpointPositions(link, deletionPointIdSet)
-      : link
-  ));
+  const linksAfterPointDeletion = state.links.slice();
 
   if (cloudPointIdSet.size > 0) {
     const cloudLists = state.cloud.pointLists.filter((list) => (
