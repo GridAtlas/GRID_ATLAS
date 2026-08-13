@@ -57,7 +57,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1258";
+const WEB_VERSION = "0.1259";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -6340,6 +6340,11 @@ function cloudText(ja, en) {
   return activeLanguage() === EN_LANGUAGE ? en : ja;
 }
 
+function isTesterSignupUser(user) {
+  return user?.user_metadata?.tester_signup === true
+    || user?.user_metadata?.signup_source === "tester";
+}
+
 function setCloudAuthStatus(message, options = {}) {
   if (!elements.cloudAuthStatus) return;
   elements.cloudAuthStatus.textContent = message || "";
@@ -6427,11 +6432,15 @@ function setCloudTesterSignupPanelOpen(open) {
   if (!elements.cloudTesterSignupDialog) return;
   if (open) {
     moveCloudPasswordPanelToTesterDialog();
+    if (elements.cloudTesterSignupPanel) {
+      elements.cloudTesterSignupPanel.hidden = state.cloud.signupPasswordSetupActive;
+    }
     setSettingsMenuOpen(false);
     if (!elements.cloudTesterSignupDialog.open) elements.cloudTesterSignupDialog.showModal();
     elements.cloudTesterSignupGridName?.focus();
     return;
   }
+  if (elements.cloudTesterSignupPanel) elements.cloudTesterSignupPanel.hidden = false;
   if (elements.cloudTesterSignupDialog.open) elements.cloudTesterSignupDialog.close();
 }
 
@@ -6508,7 +6517,7 @@ async function initializeCloudAuth() {
 
   const authUrlState = cloudAuthUrlState();
   state.cloud.passwordRecoveryActive = authUrlState.type === "recovery";
-  state.cloud.signupPasswordSetupActive = authUrlState.type === "signup" || hasPendingCloudSignup();
+  state.cloud.signupPasswordSetupActive = authUrlState.type === "signup";
 
   state.cloud.authClient.auth.onAuthStateChange((_event, session) => {
     // Supabase warns against calling other async auth methods directly from
@@ -6523,8 +6532,12 @@ async function initializeCloudAuth() {
     }
     const { data, error } = await state.cloud.authClient.auth.getSession();
     if (error) throw error;
+    const testerSignupUser = isTesterSignupUser(data.session?.user);
+    state.cloud.signupPasswordSetupActive = state.cloud.signupPasswordSetupActive || testerSignupUser;
     applyCloudAuthSession(data.session, { refresh: Boolean(data.session), forceRefresh: true });
-    if (authUrlState.type === "signup") {
+    if (testerSignupUser) {
+      setCloudTesterSignupPanelOpen(true);
+    } else if (authUrlState.type === "signup") {
       setCloudTesterSignupPanelOpen(true);
     } else if (["invite", "recovery", "magiclink"].includes(authUrlState.type)) {
       setCloudDialogOpen(true);
