@@ -77,7 +77,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1391";
+const WEB_VERSION = "0.1401";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -178,6 +178,7 @@ const elements = {
   actionCopyToListButton: document.querySelector("#actionCopyToListButton"),
   actionMoveToListButton: document.querySelector("#actionMoveToListButton"),
   actionShareSelectedButton: document.querySelector("#actionShareSelectedButton"),
+  actionInvertButton: document.querySelector("#actionInvertButton"),
   clearSelectionButton: document.querySelector("#clearSelectionButton"),
   actionCenterButton: document.querySelector("#actionCenterButton"),
   actionMapButton: document.querySelector("#actionMapButton"),
@@ -697,6 +698,8 @@ const TRANSLATIONS = {
     "action.moveToList": "移動",
     "action.shareSelected": "共有",
     "action.shareSelectedTitle": "選択地点を共有",
+    "action.invert": "反転",
+    "action.invertTitle": "表示中の地点の選択を反転",
     "action.info": "情報",
     "action.delete": "削除",
     "delete.linksOnly": "線のみ",
@@ -1128,6 +1131,8 @@ const TRANSLATIONS = {
     "action.moveToList": "Move",
     "action.shareSelected": "Share",
     "action.shareSelectedTitle": "Share selected points",
+    "action.invert": "Invert",
+    "action.invertTitle": "Invert selection of displayed points",
     "action.info": "Info",
     "action.delete": "Delete",
     "delete.linksOnly": "Lines only",
@@ -4546,6 +4551,11 @@ function handleTraverseActionClick(event) {
 function renderActionButtons() {
   const hasPendingPoint = validGeo(state.pendingGeo);
   const pointIds = selectedPointIds();
+  const visiblePointCount = visibleSelectablePoints().length;
+  const canInvertSelection = !state.traverseMode
+    && !state.editingPointId
+    && !hasPendingPoint
+    && visiblePointCount > 0;
   const linkIds = selectedLinkIds();
   const barrierSelectionCount = state.barrierSelection.length;
   const routePlan = routePlanFromCurrentSelection();
@@ -4581,6 +4591,7 @@ function renderActionButtons() {
   elements.actionMoveToListButton.disabled = transferablePointCount === 0;
   elements.actionShareSelectedButton.disabled = shareableSelectedPointCount === 0;
   elements.actionMapButton.disabled = !mapCandidate;
+  elements.actionInvertButton.disabled = !canInvertSelection;
   elements.actionMapButton.title = mapCandidate?.isPending
     ? "仮ポイントを地図で開く"
     : mapCandidate
@@ -4622,6 +4633,12 @@ function renderActionButtons() {
     ? cloudText(`選択した${shareableSelectedPointCount}地点を共有`, `Share ${shareableSelectedPointCount} selected point(s)`)
     : t("list.shareSelectedUnavailable");
   elements.actionMapButton.classList.toggle("is-active", false);
+  elements.actionInvertButton.classList.toggle("is-active", false);
+  elements.actionInvertButton.title = state.traverseMode
+    ? t("action.invertTitle")
+    : visiblePointCount > 0
+      ? t("action.invertTitle")
+      : t("state.noPoints");
   elements.pointSubmitButton.textContent = state.editingPointId ? t("button.update") : t("button.submitRegister");
   elements.actionRouteLabel.textContent = t("action.route");
   renderLocationFollowButton();
@@ -9072,6 +9089,22 @@ function toggleSelection(type, id) {
   setSelection(next);
 }
 
+function invertVisiblePointSelection() {
+  if (state.traverseMode) return;
+
+  const visiblePointIds = [...new Set(visibleSelectablePoints().map((point) => point.id))];
+  if (visiblePointIds.length === 0) return;
+
+  const selectedIds = new Set(selectedPointIds());
+  const nextPointSelection = visiblePointIds
+    .filter((id) => !selectedIds.has(id))
+    .map((id) => ({ type: "point", id }));
+  const nonPointSelection = state.selection.filter((entry) => entry.type !== "point");
+
+  state.mode = "inspect";
+  setSelection([...nonPointSelection, ...nextPointSelection]);
+}
+
 function clearSelection(options = {}) {
   state.mode = "inspect";
   state.selection = [];
@@ -12960,6 +12993,7 @@ function bindEvents() {
   elements.actionCopyToListButton.addEventListener("click", () => beginPointTransfer("copy"));
   elements.actionMoveToListButton.addEventListener("click", () => beginPointTransfer("move"));
   elements.actionShareSelectedButton.addEventListener("click", () => void shareSelectedPointsFile());
+  elements.actionInvertButton.addEventListener("click", invertVisiblePointSelection);
   elements.actionMapButton.addEventListener("click", openSelectedPointInPreferredMap);
   elements.pointInfoEditButton.addEventListener("click", () => {
     if (elements.pointInfoEditButton.disabled) return;
