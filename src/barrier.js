@@ -7,12 +7,15 @@ export const BARRIER_CONFIG = Object.freeze({
   accuracyThresholdMeters: 100
 });
 
+export const BARRIER_LOG_SCHEMA_VERSION = 2;
+
 export function createBarrierLog(now = Date.now()) {
   return {
     type: "barrier-log",
-    schemaVersion: 1,
+    schemaVersion: BARRIER_LOG_SCHEMA_VERSION,
     stones: {},
     barriers: {},
+    events: [],
     stock: {
       amount: BARRIER_CONFIG.dailyGrant,
       lastGrantAt: new Date(now).toISOString()
@@ -30,7 +33,7 @@ export function sanitizeBarrierLog(raw, now = Date.now()) {
     return { log: createBarrierLog(now), changed: true };
   }
 
-  const isBarrierLog = raw.type === "barrier-log" && raw.schemaVersion === 1;
+  const isBarrierLog = raw.type === "barrier-log" && [1, BARRIER_LOG_SCHEMA_VERSION].includes(raw.schemaVersion);
   const isLegacyLog = raw.type === "traverse-log" && [1, 2].includes(raw.schemaVersion);
   if (!isBarrierLog && !isLegacyLog) {
     return { log: createBarrierLog(now), changed: true };
@@ -42,15 +45,25 @@ export function sanitizeBarrierLog(raw, now = Date.now()) {
     : BARRIER_CONFIG.dailyGrant;
   const parsedLastGrantAt = Date.parse(sourceStock.lastGrantAt);
   const lastGrantAt = Number.isFinite(parsedLastGrantAt) ? parsedLastGrantAt : now;
-  const stones = isLegacyLog
+  let stones = isLegacyLog
     ? normalizeLegacyStones(raw.tiles, now)
     : normalizeStones(raw.stones, now);
-  const barriers = normalizeBarriers(raw.barriers, stones, now);
+  let barriers = normalizeBarriers(raw.barriers, stones, now);
+  const events = normalizeEvents(raw.events, { stones, barriers, now });
+  if (!isLegacyLog && events.length > 0) {
+    const replayed = replayBarrierEvents(events);
+    stones = replayed.stones;
+    barriers = replayed.barriers;
+  }
+  if (events.length === 0 && (Object.keys(stones).length > 0 || Object.keys(barriers).length > 0)) {
+    events.push(createMigrationSnapshotEvent(stones, barriers, now));
+  }
   const log = {
     type: "barrier-log",
-    schemaVersion: 1,
+    schemaVersion: BARRIER_LOG_SCHEMA_VERSION,
     stones,
     barriers,
+    events,
     stock: {
       amount,
       lastGrantAt: new Date(lastGrantAt).toISOString()
@@ -103,7 +116,75 @@ export function registerBarrier(log, barrier) {
     vertices: [...barrier.vertices],
     createdAt: typeof barrier.createdAt === "string" ? barrier.createdAt : new Date().toISOString()
   };
+  appendBarrierEvent(log, {
+    type: "barrier-created",
+    at: log.barriers[barrier.id].createdAt,
+    barrierId: barrier.id,
+    name: log.barriers[barrier.id].name,
+    vertices: [...log.barriers[barrier.id].vertices]
+  });
   return { ok: true, barrier: log.barriers[barrier.id] };
+}
+
+export function appendBarrierEvent(log, event) {
+  if (!log || typeof log !== "object") return null;
+  if (!Array.isArray(log.events)) log.events = [];
+  const normalized = normalizeEvent(event, Date.now());
+  if (!normalized) return null;
+  log.events.push(normalized);
+  return normalized;
+}
+
+export function replayBarrierEvents(events) {
+  const stones = {};
+  const barriers = {};
+  for (const event of Array.isArray(events) ? events : []) {
+    if (!event || typeof event !== "object") continue;
+    if (event.type === "barrier-snapshot") {
+      for (const stone of Array.isArray(event.stones) ? event.stones : []) {
+        const normalized = normalizeStones({ [stone.stoneId || stoneIdFromTile(stone.tile)]: stone }, Date.parse(event.at) || Date.now());
+        const [stoneId, value] = Object.entries(normalized)[0] || [];
+        if (stoneId && value) stones[stoneId] = value;
+      }
+      for (const [barrierId, barrier] of Object.entries(event.barriers || {})) {
+        if (barrier && typeof barrier === "object") barriers[barrierId] = {
+          name: typeof barrier.name === "string" ? barrier.name : "",
+          vertices: Array.isArray(barrier.vertices) ? [...barrier.vertices] : [],
+          createdAt: typeof barrier.createdAt === "string" ? barrier.createdAt : event.at
+        };
+      }
+      continue;
+    }
+    if (event.type === "barrier-created" && typeof event.barrierId === "string") {
+      barriers[event.barrierId] = {
+        name: typeof event.name === "string" ? event.name : "",
+        vertices: Array.isArray(event.vertices) ? [...event.vertices] : [],
+        createdAt: event.at
+      };
+      continue;
+    }
+    if (!event.tile || !event.stoneId) continue;
+    const stone = stones[event.stoneId] || {
+      tile: event.tile,
+      lat: null,
+      lng: null,
+      count: 0,
+      firstAt: event.at,
+      lastAt: event.at
+    };
+    if (event.type === "stone-placed") {
+      stone.count += Math.max(1, Number(event.amount) || 1);
+      stone.firstAt ||= event.at;
+      stone.lastAt = event.at;
+      stones[event.stoneId] = stone;
+    } else if (event.type === "stone-picked") {
+      stone.count = Math.max(0, stone.count - Math.max(1, Number(event.amount) || 1));
+      stone.lastAt = event.at;
+      if (stone.count > 0) stones[event.stoneId] = stone;
+      else delete stones[event.stoneId];
+    }
+  }
+  return { stones, barriers };
 }
 
 export function parseTileId(tileId) {
@@ -201,6 +282,100 @@ function normalizeStone(stoneId, tileId, count, source, now) {
     count,
     firstAt,
     lastAt
+  };
+}
+
+function normalizeEvents(rawEvents, context) {
+  if (!Array.isArray(rawEvents)) return [];
+  return rawEvents.map((event, index) => normalizeEvent(event, context.now, `barrier-event-${index + 1}`)).filter(Boolean);
+}
+
+function normalizeEvent(event, now, fallbackId = "") {
+  if (!event || typeof event !== "object") return null;
+  const at = typeof event.at === "string" && Number.isFinite(Date.parse(event.at))
+    ? event.at
+    : new Date(now).toISOString();
+  const id = typeof event.id === "string" && event.id.trim()
+    ? event.id
+    : fallbackId || `barrier-event-${Date.parse(at)}-${Math.random().toString(36).slice(2, 8)}`;
+  if (event.type === "barrier-snapshot") {
+    return {
+      id,
+      type: "barrier-snapshot",
+      at,
+      stones: normalizeSnapshotStones(event.stones, now),
+      barriers: normalizeSnapshotBarriers(event.barriers, now)
+    };
+  }
+  if (event.type === "barrier-created") {
+    const vertices = Array.isArray(event.vertices) ? event.vertices.filter((value) => typeof value === "string") : [];
+    if (!event.barrierId || vertices.length < 3 || new Set(vertices).size !== vertices.length) return null;
+    return {
+      id,
+      type: event.type,
+      at,
+      barrierId: String(event.barrierId),
+      name: typeof event.name === "string" ? event.name : "",
+      vertices
+    };
+  }
+  if (![
+    "stone-placed",
+    "stone-picked"
+  ].includes(event.type)) return null;
+  const parsed = parseTileId(event.tile);
+  const stoneId = stoneIdFromTile(event.tile);
+  if (!parsed || !stoneId || event.stoneId !== stoneId) return null;
+  return {
+    id,
+    type: event.type,
+    at,
+    tile: formatTileId(parsed.x, parsed.y, parsed.z),
+    stoneId,
+    barrierId: typeof event.barrierId === "string" ? event.barrierId : null,
+    amount: Math.max(1, Math.floor(Number(event.amount) || 1))
+  };
+}
+
+function normalizeSnapshotStones(rawStones, now) {
+  if (!Array.isArray(rawStones)) return [];
+  return rawStones.map((stone) => {
+    if (!stone || typeof stone !== "object") return null;
+    const tile = typeof stone.tile === "string" ? stone.tile : "";
+    const stoneId = stoneIdFromTile(tile);
+    const normalized = stoneId ? normalizeStones({ [stoneId]: stone }, now)[stoneId] : null;
+    return normalized ? { stoneId, ...normalized } : null;
+  }).filter(Boolean);
+}
+
+function normalizeSnapshotBarriers(rawBarriers, now) {
+  if (!rawBarriers || typeof rawBarriers !== "object" || Array.isArray(rawBarriers)) return {};
+  return Object.fromEntries(Object.entries(rawBarriers).flatMap(([barrierId, barrier]) => {
+    if (!barrier || typeof barrier !== "object") return [];
+    const vertices = Array.isArray(barrier.vertices) ? barrier.vertices.filter((value) => typeof value === "string") : [];
+    if (vertices.length < 3 || new Set(vertices).size !== vertices.length) return [];
+    const createdAt = typeof barrier.createdAt === "string" && Number.isFinite(Date.parse(barrier.createdAt))
+      ? barrier.createdAt
+      : new Date(now).toISOString();
+    return [[barrierId, {
+      name: typeof barrier.name === "string" ? barrier.name : "",
+      vertices,
+      createdAt
+    }]];
+  }));
+}
+
+function createMigrationSnapshotEvent(stones, barriers, now) {
+  return {
+    id: `barrier-snapshot-${now}`,
+    type: "barrier-snapshot",
+    at: new Date(now).toISOString(),
+    stones: Object.entries(stones).map(([stoneId, stone]) => ({ stoneId, ...stone })),
+    barriers: Object.fromEntries(Object.entries(barriers).map(([barrierId, barrier]) => [barrierId, {
+      name: barrier.name,
+      vertices: [...barrier.vertices],
+      createdAt: barrier.createdAt
+    }]))
   };
 }
 

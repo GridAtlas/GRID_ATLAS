@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   BARRIER_CONFIG,
+  BARRIER_LOG_SCHEMA_VERSION,
+  appendBarrierEvent,
   createBarrierLog,
   grantBarrierStock,
+  replayBarrierEvents,
   registerBarrier,
   sanitizeBarrierLog,
   stoneIdFromTile,
@@ -16,9 +19,10 @@ describe("barrier data helpers", () => {
     const log = createBarrierLog(Date.parse("2026-08-13T00:00:00Z"));
     expect(log).toMatchObject({
       type: "barrier-log",
-      schemaVersion: 1,
+      schemaVersion: BARRIER_LOG_SCHEMA_VERSION,
       stones: {},
       barriers: {},
+      events: [],
       stock: { amount: BARRIER_CONFIG.dailyGrant }
     });
   });
@@ -62,6 +66,8 @@ describe("barrier data helpers", () => {
     });
     expect(log.stones[stoneA].lat).toBeNull();
     expect(Object.keys(log.barriers)).toEqual(["valid"]);
+    expect(log.events).toHaveLength(1);
+    expect(log.events[0]).toMatchObject({ type: "barrier-snapshot" });
   });
 
   it("validates and registers a barrier without sharing stones", () => {
@@ -80,6 +86,11 @@ describe("barrier data helpers", () => {
     });
     expect(validateBarrierVertices(log, vertices)).toEqual({ ok: true });
     expect(registerBarrier(log, { id: "first", name: "三角", vertices })).toMatchObject({ ok: true });
+    expect(log.events).toContainEqual(expect.objectContaining({
+      type: "barrier-created",
+      barrierId: "first",
+      vertices
+    }));
     expect(validateBarrierVertices(log, vertices)).toMatchObject({ ok: false, reason: "used" });
     expect(validateBarrierVertices(log, [vertices[0], vertices[0], vertices[1]])).toMatchObject({ ok: false, reason: "duplicate" });
   });
@@ -96,5 +107,61 @@ describe("barrier data helpers", () => {
     const bounds = tileBounds("18/232798/103246");
     expect(bounds.east).toBeGreaterThan(bounds.west);
     expect(bounds.north).toBeGreaterThan(bounds.south);
+  });
+
+  it("preserves stone placement inputs and replays them", () => {
+    const log = createBarrierLog();
+    const tile = "18/232798/103246";
+    const stoneId = stoneIdFromTile(tile);
+    appendBarrierEvent(log, {
+      type: "stone-placed",
+      at: "2026-08-13T09:00:00Z",
+      tile,
+      stoneId,
+      barrierId: null,
+      amount: 1
+    });
+    appendBarrierEvent(log, {
+      type: "stone-placed",
+      at: "2026-08-14T09:00:00Z",
+      tile,
+      stoneId,
+      barrierId: "barrier-1",
+      amount: 2
+    });
+    appendBarrierEvent(log, {
+      type: "stone-picked",
+      at: "2026-08-15T09:00:00Z",
+      tile,
+      stoneId,
+      barrierId: "barrier-1",
+      amount: 1
+    });
+    const replayed = replayBarrierEvents(log.events);
+    expect(log.events).toMatchObject([
+      { type: "stone-placed", tile, at: "2026-08-13T09:00:00Z", barrierId: null },
+      { type: "stone-placed", tile, at: "2026-08-14T09:00:00Z", barrierId: "barrier-1", amount: 2 },
+      { type: "stone-picked", tile, at: "2026-08-15T09:00:00Z", barrierId: "barrier-1", amount: 1 }
+    ]);
+    expect(replayed.stones[stoneId]).toMatchObject({ tile, count: 2, firstAt: "2026-08-13T09:00:00Z", lastAt: "2026-08-15T09:00:00Z" });
+  });
+
+  it("rebuilds current stones from v2 events when loading", () => {
+    const tile = "18/232798/103246";
+    const stoneId = stoneIdFromTile(tile);
+    const raw = {
+      type: "barrier-log",
+      schemaVersion: BARRIER_LOG_SCHEMA_VERSION,
+      stones: {},
+      barriers: {},
+      events: [
+        { id: "event-1", type: "stone-placed", at: "2026-08-13T09:00:00Z", tile, stoneId, barrierId: null, amount: 1 },
+        { id: "event-2", type: "stone-placed", at: "2026-08-14T09:00:00Z", tile, stoneId, barrierId: null, amount: 1 }
+      ],
+      stock: { amount: 1, lastGrantAt: "2026-08-14T09:00:00Z" }
+    };
+    const { log } = sanitizeBarrierLog(raw, Date.parse("2026-08-14T12:00:00Z"));
+    expect(log.stones[stoneId]).toMatchObject({ tile, count: 2 });
+    expect(log.events).toHaveLength(2);
   });
 });

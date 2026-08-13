@@ -32,6 +32,7 @@ import {
 import { analyzeLineIntersection, analyzeOpenPath, analyzeSegmentShape, vincentyDistanceMeters } from "./shape-analysis.js?v=1";
 import {
   BARRIER_CONFIG,
+  appendBarrierEvent,
   createBarrierLog,
   grantBarrierStock,
   registerBarrier,
@@ -74,7 +75,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1370";
+const WEB_VERSION = "0.1380";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -4369,6 +4370,14 @@ function performTraverseStoneAction(action) {
         nextStone.lastAt = now;
         state.traverseLog.stones[stoneId] = nextStone;
         state.traverseLog.stock.amount = Math.max(0, state.traverseLog.stock.amount - 1);
+        appendBarrierEvent(state.traverseLog, {
+          type: "stone-placed",
+          at: now,
+          tile: tileId,
+          stoneId,
+          barrierId: barrierIdForStone(state.traverseLog, stoneId),
+          amount: 1
+        });
         feedbackAction = t("traverse.placeDone");
       } else {
         if (!stone || stone.count < 1) {
@@ -4389,6 +4398,14 @@ function performTraverseStoneAction(action) {
           delete state.traverseLog.stones[stoneId];
         }
         state.traverseLog.stock.amount = Math.min(BARRIER_CONFIG.stockCap, state.traverseLog.stock.amount + 1);
+        appendBarrierEvent(state.traverseLog, {
+          type: "stone-picked",
+          at: now,
+          tile: tileId,
+          stoneId,
+          barrierId: barrierIdForStone(state.traverseLog, stoneId),
+          amount: 1
+        });
         feedbackAction = t("traverse.pickDone");
       }
       state.currentGeo = geo;
@@ -4406,6 +4423,11 @@ function performTraverseStoneAction(action) {
     },
     geolocationOptions()
   );
+}
+
+function barrierIdForStone(log, stoneId) {
+  return Object.entries(log?.barriers || {})
+    .find(([, barrier]) => Array.isArray(barrier?.vertices) && barrier.vertices.includes(stoneId))?.[0] || null;
 }
 
 function startTraverseLongPress(event) {
