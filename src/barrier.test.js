@@ -3,10 +3,12 @@ import {
   BARRIER_CONFIG,
   createBarrierLog,
   grantBarrierStock,
+  registerBarrier,
   sanitizeBarrierLog,
   stoneIdFromTile,
   tileBounds,
-  tileIdFromGeo
+  tileIdFromGeo,
+  validateBarrierVertices
 } from "./barrier.js";
 
 describe("barrier data helpers", () => {
@@ -60,6 +62,26 @@ describe("barrier data helpers", () => {
     });
     expect(log.stones[stoneA].lat).toBeNull();
     expect(Object.keys(log.barriers)).toEqual(["valid"]);
+  });
+
+  it("validates and registers a barrier without sharing stones", () => {
+    const log = createBarrierLog();
+    const vertices = ["18/232798/103246", "18/232799/103246", "18/232800/103246"]
+      .map(stoneIdFromTile);
+    vertices.forEach((stoneId, index) => {
+      log.stones[stoneId] = {
+        tile: `18/${232798 + index}/103246`,
+        lat: null,
+        lng: null,
+        count: 1,
+        firstAt: "2026-08-13T00:00:00Z",
+        lastAt: "2026-08-13T00:00:00Z"
+      };
+    });
+    expect(validateBarrierVertices(log, vertices)).toEqual({ ok: true });
+    expect(registerBarrier(log, { id: "first", name: "三角", vertices })).toMatchObject({ ok: true });
+    expect(validateBarrierVertices(log, vertices)).toMatchObject({ ok: false, reason: "used" });
+    expect(validateBarrierVertices(log, [vertices[0], vertices[0], vertices[1]])).toMatchObject({ ok: false, reason: "duplicate" });
   });
 
   it("grants three stones per elapsed day up to the cap", () => {

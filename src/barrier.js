@@ -74,6 +74,38 @@ export function grantBarrierStock(log, now = Date.now()) {
   return true;
 }
 
+export function validateBarrierVertices(log, vertices) {
+  if (!Array.isArray(vertices) || vertices.length < 3) {
+    return { ok: false, reason: "too-few" };
+  }
+  if (new Set(vertices).size !== vertices.length) {
+    return { ok: false, reason: "duplicate" };
+  }
+  if (vertices.some((stoneId) => !log?.stones?.[stoneId])) {
+    return { ok: false, reason: "missing" };
+  }
+  const usedStoneIds = new Set(Object.values(log.barriers || {}).flatMap((barrier) => barrier.vertices || []));
+  const usedStoneId = vertices.find((stoneId) => usedStoneIds.has(stoneId));
+  if (usedStoneId) {
+    return { ok: false, reason: "used", stoneId: usedStoneId };
+  }
+  return { ok: true };
+}
+
+export function registerBarrier(log, barrier) {
+  const validation = validateBarrierVertices(log, barrier?.vertices);
+  if (!validation.ok) return validation;
+  if (!barrier?.id || typeof barrier.id !== "string") {
+    return { ok: false, reason: "missing-id" };
+  }
+  log.barriers[barrier.id] = {
+    name: typeof barrier.name === "string" ? barrier.name : "",
+    vertices: [...barrier.vertices],
+    createdAt: typeof barrier.createdAt === "string" ? barrier.createdAt : new Date().toISOString()
+  };
+  return { ok: true, barrier: log.barriers[barrier.id] };
+}
+
 export function parseTileId(tileId) {
   if (typeof tileId !== "string") return null;
   const parts = tileId.split("/").map(Number);

@@ -33,10 +33,13 @@ import { analyzeLineIntersection, analyzeOpenPath, analyzeSegmentShape, vincenty
 import {
   BARRIER_CONFIG,
   grantBarrierStock,
+  registerBarrier,
   sanitizeBarrierLog,
   stoneIdFromTile,
+  tileCenterGeo,
   tileBounds,
-  tileIdFromGeo
+  tileIdFromGeo,
+  validateBarrierVertices
 } from "./barrier.js?v=1";
 
 const STORAGE_KEY = "grid-atlas-workspace-v2";
@@ -69,7 +72,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1339";
+const WEB_VERSION = "0.1349";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -133,6 +136,7 @@ let locationGlowFrame = 0;
 const elements = {
   actionAnalyzeButton: document.querySelector("#actionAnalyzeButton"),
   actionLinkButton: document.querySelector("#actionLinkButton"),
+  actionLinkLabel: document.querySelector("#actionLinkLabel"),
   actionRegisterButton: document.querySelector("#actionRegisterButton"),
   actionRouteButton: document.querySelector("#actionRouteButton"),
   actionRouteLabel: document.querySelector("#actionRouteLabel"),
@@ -456,6 +460,7 @@ const state = {
   loadedObservations: [],
   traverseMode: false,
   traverseLog: null,
+  barrierSelection: [],
   traverseFeedback: "",
   traverseFeedbackExpiresAt: 0,
   traverseBusy: false,
@@ -658,6 +663,7 @@ const TRANSLATIONS = {
     "action.analyze": "分析",
     "action.analyzeTitle": "選択した線分・図形を分析",
     "action.traverse": "結界",
+    "action.barrier": "結界を張る",
 
     "action.cancel": "キャンセル",
     "action.apply": "適用",
@@ -994,7 +1000,16 @@ const TRANSLATIONS = {
     "traverse.placeDone": "置き",
     "traverse.pickDone": "拾い",
     "traverse.stockFull": "結界石ストックが満タンです",
-    "traverse.barrier": "結界"
+    "traverse.barrier": "結界",
+    "barrier.createTitle": "結界を張る",
+    "barrier.createMessage": "選択順に石をつないで結界を張ります。",
+    "barrier.nameLabel": "結界名",
+    "barrier.defaultName": "新しい結界",
+    "barrier.created": "結界を張りました",
+    "barrier.tooFew": "結界には3つ以上の結界石が必要です",
+    "barrier.stoneUsed": "他の結界で使用済みの結界石が含まれています",
+    "barrier.missingStone": "選択した結界石を確認できません",
+    "barrier.selection": "結界石を{count}個選択中"
   },
   en: {
     "settings.title": "Settings",
@@ -1053,6 +1068,7 @@ const TRANSLATIONS = {
     "action.analyze": "Analyze",
     "action.analyzeTitle": "Analyze selected lines or shape",
     "action.traverse": "Barrier",
+    "action.barrier": "Create barrier",
 
     "action.cancel": "Cancel",
     "action.apply": "Apply",
@@ -1389,7 +1405,16 @@ const TRANSLATIONS = {
     "traverse.placeDone": "placed",
     "traverse.pickDone": "picked up",
     "traverse.stockFull": "Barrier stone stock is full",
-    "traverse.barrier": "Barrier"
+    "traverse.barrier": "Barrier",
+    "barrier.createTitle": "Create barrier",
+    "barrier.createMessage": "Connect the stones in selection order to create a barrier.",
+    "barrier.nameLabel": "Barrier name",
+    "barrier.defaultName": "New barrier",
+    "barrier.created": "Barrier created",
+    "barrier.tooFew": "A barrier needs at least three stones",
+    "barrier.stoneUsed": "One or more selected stones already belong to another barrier",
+    "barrier.missingStone": "The selected barrier stone could not be found",
+    "barrier.selection": "{count} barrier stone(s) selected"
   }
 };
 
@@ -1545,6 +1570,8 @@ function refreshTraverseStock() {
 
 function setTraverseMode(enabled) {
   state.traverseMode = Boolean(enabled);
+  state.barrierSelection = [];
+  clearSelection({ render: false });
   if (!state.traverseMode) closeTraverseActionDialog();
   if (state.traverseMode) refreshTraverseStock();
   render();
@@ -2868,17 +2895,21 @@ function drawTraverseTiles() {
   for (const stone of Object.values(state.traverseLog.stones)) {
     const polygon = traverseTilePolygon(stone.tile);
     if (!polygon) continue;
+    const stoneId = stoneIdFromTile(stone.tile);
+    const selected = stoneId ? state.barrierSelection.includes(stoneId) : false;
     context.save();
     context.fillStyle = colors.traverseFill;
-    context.globalAlpha = 0.2;
+    context.globalAlpha = selected ? 0.32 : 0.2;
     drawTraversePolygon(polygon, { fill: true });
     context.globalAlpha = 0.72;
     context.strokeStyle = colors.traverseFill;
-    context.lineWidth = 1.25;
+    context.lineWidth = selected ? 2.75 : 1.25;
     drawTraversePolygon(polygon, { stroke: true });
     drawTraverseTileCount(polygon, stone.count, colors);
     context.restore();
   }
+
+  drawTraverseBarriers();
 
   const currentGeo = state.currentGeo;
   const currentTileId = currentGeo ? tileIdFromGeo(currentGeo) : null;
@@ -2908,6 +2939,33 @@ function drawTraverseTileCount(polygon, count, colors) {
   context.strokeText(String(count), right, bottom);
   context.fillStyle = colors.traverseFill;
   context.fillText(String(count), right, bottom);
+}
+
+function drawTraverseBarriers() {
+  const colors = canvasPalette();
+  for (const barrier of Object.values(state.traverseLog?.barriers || {})) {
+    const vertices = (barrier.vertices || [])
+      .map((stoneId) => state.traverseLog.stones[stoneId])
+      .filter(Boolean)
+      .map((stone) => tileCenterGeo(stone.tile))
+      .filter(Boolean)
+      .map((geo) => projectLatLng(geo.lat, geo.lng))
+      .map(worldToScreen);
+    if (vertices.length < 3) continue;
+    context.save();
+    context.beginPath();
+    context.moveTo(vertices[0].x, vertices[0].y);
+    for (const vertex of vertices.slice(1)) context.lineTo(vertex.x, vertex.y);
+    context.closePath();
+    context.fillStyle = colors.traverseFill;
+    context.globalAlpha = 0.16;
+    context.fill();
+    context.strokeStyle = colors.traverseFill;
+    context.globalAlpha = 0.92;
+    context.lineWidth = 2.5;
+    context.stroke();
+    context.restore();
+  }
 }
 
 function drawGridLines(topLeft, bottomRight, step, color, lineWidth) {
@@ -3819,6 +3877,12 @@ function renderSelectionInfo() {
 }
 
 function selectionInfoText() {
+  if (state.traverseMode) {
+    return state.barrierSelection.length > 0
+      ? t("barrier.selection").replace("{count}", String(state.barrierSelection.length))
+      : t("state.unselected");
+  }
+
   const observationText = observationInfoText();
   if (observationText) {
     return observationText;
@@ -4135,6 +4199,7 @@ function renderActionButtons() {
   const hasPendingPoint = validGeo(state.pendingGeo);
   const pointIds = selectedPointIds();
   const linkIds = selectedLinkIds();
+  const barrierSelectionCount = state.barrierSelection.length;
   const routePlan = routePlanFromCurrentSelection();
   const routeActive = Boolean(state.routeResult);
   const centerCandidateCount = pointIds.length;
@@ -4150,11 +4215,15 @@ function renderActionButtons() {
 
   const canOpenRegistration = !hasPendingPoint && state.selection.length === 0;
   elements.actionRegisterButton.disabled = !hasPendingPoint && !canOpenRegistration;
-  elements.actionLinkButton.disabled = pointIds.length < 2;
+  elements.actionLinkButton.disabled = state.traverseMode
+    ? barrierSelectionCount < 3
+    : pointIds.length < 2;
   elements.actionAnalyzeButton.disabled = !analysisTarget;
   elements.actionRouteButton.disabled = !routeActive && !routePlan;
   elements.deletePointButton.disabled = !canDelete;
-  elements.clearSelectionButton.disabled = state.selection.length === 0 && !hasPendingPoint;
+  elements.clearSelectionButton.disabled = state.traverseMode
+    ? barrierSelectionCount === 0
+    : state.selection.length === 0 && !hasPendingPoint;
   elements.actionCenterButton.disabled = centerCandidateCount < 2;
   const shareableSelectedPointCount = selectedPointIds()
     .map(findPoint)
@@ -4173,11 +4242,19 @@ function renderActionButtons() {
   elements.actionRegisterButton.classList.remove("is-active");
   elements.actionRegisterButton.title = hasPendingPoint ? "仮ポイントを登録" : canOpenRegistration ? "地点登録画面を開く" : "仮ポイントを作成すると登録できます";
   elements.actionLinkButton.classList.toggle("is-active", false);
-  elements.actionLinkButton.title = pointIds.length >= 3
-    ? `選択順に${pointIds.length}地点を接続（最後と最初も接続）`
-    : pointIds.length >= 2
-      ? `選択順に${pointIds.length}地点を接続`
-      : "2地点以上を選択すると接続できます";
+  if (state.traverseMode) {
+    if (elements.actionLinkLabel) elements.actionLinkLabel.textContent = t("action.barrier");
+    elements.actionLinkButton.title = barrierSelectionCount >= 3
+      ? t("barrier.createTitle")
+      : t("barrier.tooFew");
+  } else {
+    if (elements.actionLinkLabel) elements.actionLinkLabel.textContent = t("action.connect");
+    elements.actionLinkButton.title = pointIds.length >= 3
+      ? `選択順に${pointIds.length}地点を接続（最後と最初も接続）`
+      : pointIds.length >= 2
+        ? `選択順に${pointIds.length}地点を接続`
+        : "2地点以上を選択すると接続できます";
+  }
   elements.actionAnalyzeButton.title = analysisTarget ? t("action.analyzeTitle") : t("analysis.noSelection");
   elements.actionRouteButton.classList.toggle("is-active", routeActive);
   elements.actionRouteButton.setAttribute("aria-pressed", String(routeActive));
@@ -8524,6 +8601,7 @@ function toggleSelection(type, id) {
 function clearSelection(options = {}) {
   state.mode = "inspect";
   state.selection = [];
+  state.barrierSelection = [];
   state.selectedPointId = null;
   state.selectedLinkId = null;
   state.pendingLinkPointId = null;
@@ -8719,6 +8797,38 @@ function findNearestPoint(screenPoint, options = {}) {
   return nearestDistance <= POINT_RADIUS + 12 ? nearest : null;
 }
 
+function findNearestBarrierStone(screenPoint) {
+  if (!state.traverseMode || !state.traverseLog) return null;
+  for (const [stoneId, stone] of Object.entries(state.traverseLog.stones)) {
+    const polygon = traverseTilePolygon(stone.tile);
+    if (polygon && pointInPolygon(screenPoint, polygon)) {
+      return { stoneId, stone };
+    }
+  }
+  return null;
+}
+
+function pointInPolygon(point, polygon) {
+  let inside = false;
+  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index++) {
+    const currentPoint = polygon[index];
+    const previousPoint = polygon[previous];
+    const intersects = ((currentPoint.y > point.y) !== (previousPoint.y > point.y))
+      && point.x < (previousPoint.x - currentPoint.x) * (point.y - currentPoint.y)
+        / (previousPoint.y - currentPoint.y) + currentPoint.x;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function toggleBarrierStoneSelection(stoneId) {
+  if (!state.traverseLog?.stones?.[stoneId]) return;
+  state.barrierSelection = state.barrierSelection.includes(stoneId)
+    ? state.barrierSelection.filter((id) => id !== stoneId)
+    : [...state.barrierSelection, stoneId];
+  render();
+}
+
 function findNearestLink(screenPoint) {
   let nearest = null;
   let nearestDistance = Infinity;
@@ -8903,6 +9013,54 @@ function formatDate(value) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+async function createBarrierFromSelection() {
+  const vertices = [...state.barrierSelection];
+  const validation = validateBarrierVertices(state.traverseLog, vertices);
+  if (!validation.ok) {
+    const message = validation.reason === "used"
+      ? t("barrier.stoneUsed")
+      : validation.reason === "missing"
+        ? t("barrier.missingStone")
+        : t("barrier.tooFew");
+    showAppToast(message, { error: true });
+    return;
+  }
+
+  const defaultName = t("barrier.defaultName");
+  const input = await requestTextInput({
+    title: t("barrier.createTitle"),
+    message: t("barrier.createMessage"),
+    label: t("barrier.nameLabel"),
+    defaultValue: defaultName,
+    submitLabel: t("action.apply")
+  });
+  if (input === null) return;
+  const name = input.trim() || defaultName;
+  const result = registerBarrier(state.traverseLog, {
+    id: createId(),
+    name,
+    vertices,
+    createdAt: new Date().toISOString()
+  });
+  if (!result.ok) {
+    showAppToast(result.reason === "used" ? t("barrier.stoneUsed") : t("barrier.missingStone"), { error: true });
+    render();
+    return;
+  }
+  state.barrierSelection = [];
+  persistTraverseLog();
+  showAppToast(t("barrier.created"));
+  render();
+}
+
+function handleLinkAction() {
+  if (state.traverseMode) {
+    void createBarrierFromSelection();
+    return;
+  }
+  void connectSelectedPoints();
 }
 
 async function connectSelectedPoints() {
@@ -9120,6 +9278,17 @@ function findNearestLoadedObservation(screenPoint) {
 }
 
 function handleCanvasClick(screenPoint) {
+  if (state.traverseMode) {
+    const barrierStone = findNearestBarrierStone(screenPoint);
+    if (barrierStone) {
+      toggleBarrierStoneSelection(barrierStone.stoneId);
+    } else if (state.barrierSelection.length > 0) {
+      state.barrierSelection = [];
+      render();
+    }
+    return;
+  }
+
   const nearest = findNearestPoint(screenPoint);
   const nearestLink = nearest ? null : findNearestLink(screenPoint);
   const nearestObservation = nearest || nearestLink ? null : findNearestLoadedObservation(screenPoint);
@@ -9649,8 +9818,9 @@ function pointerMidpoint(a, b) {
 }
 
 function startDragGesture(pointerId, point, options = {}) {
-  const longPressPoint = options.moved ? null : findNearestPoint(point);
-  const longPressLink = options.moved || longPressPoint ? null : findNearestLink(point);
+  const barrierMode = state.traverseMode;
+  const longPressPoint = options.moved || barrierMode ? null : findNearestPoint(point);
+  const longPressLink = options.moved || barrierMode || longPressPoint ? null : findNearestLink(point);
   const drag = {
     id: pointerId,
     start: point,
@@ -9669,7 +9839,7 @@ function startDragGesture(pointerId, point, options = {}) {
   };
   state.pointer.drag = drag;
 
-  if (!options.moved) {
+  if (!options.moved && !barrierMode) {
     const longPressDelay = longPressLink ? LINE_INFO_LONG_PRESS_MS : RANGE_SELECTION_LONG_PRESS_MS;
     if (longPressLink) {
       drag.lineDragReadyTimerId = window.setTimeout(() => {
@@ -12237,7 +12407,7 @@ function bindEvents() {
       setSettingsMenuOpen(false);
     }
   });
-  elements.actionLinkButton.addEventListener("click", connectSelectedPoints);
+  elements.actionLinkButton.addEventListener("click", handleLinkAction);
   elements.actionAnalyzeButton.addEventListener("click", openSelectionAnalysis);
   elements.actionRegisterButton.addEventListener("click", submitPendingPoint);
   elements.closePointRegistrationButton.addEventListener("click", closePointRegistration);

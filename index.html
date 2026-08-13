@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=70">
-    <script src="src/main.js?v=349" type="module" defer></script>
+    <script src="src/main.js?v=350" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -276,7 +276,7 @@
             </button>
             <button id="actionLinkButton" class="action-button" type="button" title="選択順に地点を接続" disabled>
               <svg class="ui-icon" aria-hidden="true"><use href="#icon-connect"></use></svg>
-              <span data-i18n="action.connect">接続</span>
+              <span id="actionLinkLabel" data-i18n="action.connect">接続</span>
             </button>
             <button id="actionAnalyzeButton" class="action-button" type="button" data-i18n-title="action.analyzeTitle" disabled>
               <svg class="ui-icon" aria-hidden="true"><use href="#icon-analysis"></use></svg>
