@@ -547,16 +547,22 @@ button {
   color: var(--accent-strong);
 }
 
-.cloud-tester-auth-row {
+.cloud-tester-code-row {
   display: grid;
-  grid-template-columns: minmax(0, 112px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 9px;
 }
 
-.cloud-tester-auth-row .cloud-status {
+.cloud-tester-code-row .primary-button {
+  min-width: 72px;
+  min-height: 38px;
+  padding-inline: 14px;
+}
+
+.cloud-tester-status {
   min-width: 0;
-  margin: 0;
+  margin: 0 0 1px;
   font-size: 11px;
   line-height: 1.35;
 }

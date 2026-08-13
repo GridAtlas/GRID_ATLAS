@@ -56,7 +56,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1244";
+const WEB_VERSION = "0.1245";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -6662,7 +6662,7 @@ async function refreshCloudLists(options = {}) {
     syncProjectedCoordinates();
     state.cloud.connected = true;
     state.cloud.lastFetchedAt = Date.now();
-    if (options.quiet !== true) {
+    if (options.quiet !== true && state.cloud.canUseMine) {
       setCloudStatus(cloudText(
         `${state.cloud.lists.length}件のマイリスト（クラウド）を読み込みました`,
         `Loaded ${state.cloud.lists.length} My List(s) (Cloud)`
