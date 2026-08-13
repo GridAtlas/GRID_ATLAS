@@ -58,7 +58,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1305";
+const WEB_VERSION = "0.1306";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },

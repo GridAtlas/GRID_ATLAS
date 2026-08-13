@@ -3011,12 +3011,24 @@ textarea {
   align-items: center;
   gap: 8px;
   min-height: 28px;
+  min-width: 0;
   font-size: 12px;
   font-weight: 750;
 }
 
 .grid-link-color-scope-option input {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 0;
   accent-color: var(--accent);
+}
+
+.grid-link-color-scope-option span {
+  display: block;
+  min-width: 0;
+  flex: 1 1 auto;
+  white-space: normal;
+  writing-mode: horizontal-tb;
 }
 
 .grid-link-color-dialog-actions {
