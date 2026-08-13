@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=70">
-    <script src="src/main.js?v=351" type="module" defer></script>
+    <script src="src/main.js?v=352" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -361,6 +361,25 @@
                 <button id="targetPointButton" type="button" data-i18n="button.setTarget">ターゲットにする</button>
               </div>
             </div>
+          </section>
+
+          <section id="barrierDetails" class="panel desktop-secondary-panel barrier-details" data-mobile-panel="detail" hidden>
+            <div class="panel-heading">
+              <h2 data-i18n="barrier.scoreTitle">結界力</h2>
+            </div>
+            <div class="barrier-score-hero">
+              <strong id="barrierDetailTitle"></strong>
+              <span id="barrierDetailRank"></span>
+              <b id="barrierDetailPower"></b>
+            </div>
+            <dl class="barrier-score-list">
+              <div><dt data-i18n="barrier.scoreDensity">濃度</dt><dd id="barrierDetailDensity"></dd></div>
+              <div><dt data-i18n="barrier.scoreArea">面積</dt><dd id="barrierDetailArea"></dd></div>
+              <div><dt data-i18n="barrier.scoreStones">石の総数</dt><dd id="barrierDetailStones"></dd></div>
+              <div><dt data-i18n="barrier.scoreShape">形状係数</dt><dd id="barrierDetailShape"></dd></div>
+              <div><dt data-i18n="barrier.scoreBeauty">美しさ係数</dt><dd id="barrierDetailBeauty"></dd></div>
+              <div><dt data-i18n="barrier.scoreScale">規模係数</dt><dd id="barrierDetailScale"></dd></div>
+            </dl>
           </section>
 
           <section class="panel desktop-secondary-panel" data-mobile-panel="analysis">

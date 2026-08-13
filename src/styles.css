@@ -1353,6 +1353,55 @@ textarea {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
+
+.barrier-details {
+  display: grid;
+  gap: 12px;
+}
+
+.barrier-score-hero {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: var(--active-bg);
+}
+
+.barrier-score-hero strong {
+  overflow-wrap: anywhere;
+}
+
+.barrier-score-hero span {
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.barrier-score-hero b {
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.barrier-score-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.barrier-score-list > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.barrier-score-list dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  text-align: right;
+}
 .target-actions {
   display: grid;
   gap: 8px;

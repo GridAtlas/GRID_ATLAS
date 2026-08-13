@@ -42,6 +42,7 @@ import {
   tileIdFromGeo,
   validateBarrierVertices
 } from "./barrier.js?v=1";
+import { scoreBarrier } from "./barrier-score.js?v=1";
 
 const STORAGE_KEY = "grid-atlas-workspace-v2";
 const ANALYSIS_LAYER_VERSION = 1;
@@ -73,7 +74,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1350";
+const WEB_VERSION = "0.1360";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -301,6 +302,16 @@ const elements = {
   originButton: document.querySelector("#originButton"),
   emptyDetails: document.querySelector("#emptyDetails"),
   pointDetails: document.querySelector("#pointDetails"),
+  barrierDetails: document.querySelector("#barrierDetails"),
+  barrierDetailTitle: document.querySelector("#barrierDetailTitle"),
+  barrierDetailRank: document.querySelector("#barrierDetailRank"),
+  barrierDetailPower: document.querySelector("#barrierDetailPower"),
+  barrierDetailDensity: document.querySelector("#barrierDetailDensity"),
+  barrierDetailArea: document.querySelector("#barrierDetailArea"),
+  barrierDetailStones: document.querySelector("#barrierDetailStones"),
+  barrierDetailShape: document.querySelector("#barrierDetailShape"),
+  barrierDetailBeauty: document.querySelector("#barrierDetailBeauty"),
+  barrierDetailScale: document.querySelector("#barrierDetailScale"),
   selectionHeading: document.querySelector("#selectionHeading"),
   detailPhoto: document.querySelector("#detailPhoto"),
   detailTitleLabel: document.querySelector("#detailTitleLabel"),
@@ -462,6 +473,7 @@ const state = {
   traverseMode: false,
   traverseLog: null,
   barrierSelection: [],
+  selectedBarrierId: null,
   traverseFeedback: "",
   traverseFeedbackExpiresAt: 0,
   traverseBusy: false,
@@ -1011,6 +1023,13 @@ const TRANSLATIONS = {
     "barrier.stoneUsed": "他の結界で使用済みの結界石が含まれています",
     "barrier.missingStone": "選択した結界石を確認できません",
     "barrier.selection": "結界石を{count}個選択中"
+    ,"barrier.scoreTitle": "結界力"
+    ,"barrier.scoreDensity": "濃度"
+    ,"barrier.scoreArea": "面積"
+    ,"barrier.scoreStones": "石の総数"
+    ,"barrier.scoreShape": "形状係数"
+    ,"barrier.scoreBeauty": "美しさ係数"
+    ,"barrier.scoreScale": "規模係数"
   },
   en: {
     "settings.title": "Settings",
@@ -1416,6 +1435,13 @@ const TRANSLATIONS = {
     "barrier.stoneUsed": "One or more selected stones already belong to another barrier",
     "barrier.missingStone": "The selected barrier stone could not be found",
     "barrier.selection": "{count} barrier stone(s) selected"
+    ,"barrier.scoreTitle": "Barrier power"
+    ,"barrier.scoreDensity": "Density"
+    ,"barrier.scoreArea": "Area"
+    ,"barrier.scoreStones": "Total stones"
+    ,"barrier.scoreShape": "Shape factor"
+    ,"barrier.scoreBeauty": "Beauty factor"
+    ,"barrier.scoreScale": "Scale factor"
   }
 };
 
@@ -1585,6 +1611,7 @@ function refreshTraverseStock() {
 function setTraverseMode(enabled) {
   state.traverseMode = Boolean(enabled);
   state.barrierSelection = [];
+  state.selectedBarrierId = null;
   clearSelection({ render: false });
   if (!state.traverseMode) closeTraverseActionDialog();
   if (state.traverseMode) refreshTraverseStock();
@@ -2957,7 +2984,7 @@ function drawTraverseTileCount(polygon, count, colors) {
 
 function drawTraverseBarriers() {
   const colors = canvasPalette();
-  for (const barrier of Object.values(state.traverseLog?.barriers || {})) {
+  for (const [barrierId, barrier] of Object.entries(state.traverseLog?.barriers || {})) {
     const vertices = (barrier.vertices || [])
       .map((stoneId) => state.traverseLog.stones[stoneId])
       .filter(Boolean)
@@ -2971,12 +2998,13 @@ function drawTraverseBarriers() {
     context.moveTo(vertices[0].x, vertices[0].y);
     for (const vertex of vertices.slice(1)) context.lineTo(vertex.x, vertex.y);
     context.closePath();
+    const selected = barrierId === state.selectedBarrierId;
     context.fillStyle = colors.traverseFill;
-    context.globalAlpha = 0.16;
+    context.globalAlpha = selected ? 0.28 : 0.16;
     context.fill();
     context.strokeStyle = colors.traverseFill;
     context.globalAlpha = 0.92;
-    context.lineWidth = 2.5;
+    context.lineWidth = selected ? 4 : 2.5;
     context.stroke();
     context.restore();
   }
@@ -3892,6 +3920,10 @@ function renderSelectionInfo() {
 
 function selectionInfoText() {
   if (state.traverseMode) {
+    if (state.selectedBarrierId) {
+      const score = scoreBarrier(state.traverseLog, state.selectedBarrierId);
+      if (score) return `${score.name || t("barrier.defaultName")} | ${score.rank.name} ${formatScoreValue(score.power)}`;
+    }
     return state.barrierSelection.length > 0
       ? t("barrier.selection").replace("{count}", String(state.barrierSelection.length))
       : t("state.unselected");
@@ -5233,7 +5265,47 @@ function showSelectedPointInfoDialog(pointOrId = null) {
   renderActionButtons();
 }
 
+function renderBarrierDetails() {
+  const panel = elements.barrierDetails;
+  if (!panel) return false;
+  const score = state.traverseMode && state.selectedBarrierId
+    ? scoreBarrier(state.traverseLog, state.selectedBarrierId)
+    : null;
+  panel.hidden = !score;
+  if (!score) return false;
+  elements.barrierDetailTitle.textContent = score.name || t("barrier.defaultName");
+  elements.barrierDetailRank.textContent = `${score.rank.name}（${score.rank.reading}）`;
+  elements.barrierDetailPower.textContent = `${formatScoreValue(score.power)} 力`;
+  elements.barrierDetailDensity.textContent = `${formatScoreValue(score.density)} / km²`;
+  elements.barrierDetailArea.textContent = `${formatAreaValue(score.areaKm2)} km²`;
+  elements.barrierDetailStones.textContent = `${score.stoneCount}`;
+  elements.barrierDetailShape.textContent = formatFactor(score.shapeCoefficient);
+  elements.barrierDetailBeauty.textContent = formatFactor(score.beautyCoefficient);
+  elements.barrierDetailScale.textContent = formatFactor(score.scaleCoefficient);
+  return true;
+}
+
+function formatScoreValue(value) {
+  return Number(value).toLocaleString(localeName(), { maximumFractionDigits: 1 });
+}
+
+function formatAreaValue(value) {
+  return Number(value).toLocaleString(localeName(), { maximumFractionDigits: 3 });
+}
+
+function formatFactor(value) {
+  return Number(value).toFixed(2);
+}
+
 function renderDetails() {
+  const showingBarrier = renderBarrierDetails();
+  if (state.traverseMode) {
+    elements.emptyDetails.hidden = true;
+    elements.pointDetails.hidden = true;
+    elements.selectionHeading.textContent = t("barrier.scoreTitle");
+    return;
+  }
+  if (showingBarrier) return;
   const entries = state.selection;
   const point = selectedPoint();
   const link = selectedLink();
@@ -8616,6 +8688,7 @@ function clearSelection(options = {}) {
   state.mode = "inspect";
   state.selection = [];
   state.barrierSelection = [];
+  state.selectedBarrierId = null;
   state.selectedPointId = null;
   state.selectedLinkId = null;
   state.pendingLinkPointId = null;
@@ -8820,6 +8893,43 @@ function findNearestBarrierStone(screenPoint) {
     }
   }
   return null;
+}
+
+function barrierScreenVertices(barrier) {
+  return (barrier?.vertices || [])
+    .map((stoneId) => state.traverseLog?.stones?.[stoneId])
+    .filter(Boolean)
+    .map((stone) => tileCenterGeo(stone.tile))
+    .filter(Boolean)
+    .map((geo) => projectLatLng(geo.lat, geo.lng))
+    .map(worldToScreen);
+}
+
+function findNearestBarrier(screenPoint) {
+  if (!state.traverseMode || !state.traverseLog) return null;
+  let nearest = null;
+  let nearestDistance = Infinity;
+  for (const [barrierId, barrier] of Object.entries(state.traverseLog.barriers || {})) {
+    const vertices = barrierScreenVertices(barrier);
+    if (vertices.length < 3) continue;
+    const inside = pointInPolygon(screenPoint, vertices);
+    let edgeDistance = Infinity;
+    for (let index = 0; index < vertices.length; index += 1) {
+      edgeDistance = Math.min(edgeDistance, distanceToSegment(
+        screenPoint,
+        vertices[index],
+        vertices[(index + 1) % vertices.length]
+      ));
+    }
+    if (inside || edgeDistance <= 14) {
+      const distance = inside ? 0 : edgeDistance;
+      if (distance < nearestDistance) {
+        nearest = { barrierId, barrier };
+        nearestDistance = distance;
+      }
+    }
+  }
+  return nearest;
 }
 
 function pointInPolygon(point, polygon) {
@@ -9052,8 +9162,9 @@ async function createBarrierFromSelection() {
   });
   if (input === null) return;
   const name = input.trim() || defaultName;
+  const barrierId = createId();
   const result = registerBarrier(state.traverseLog, {
-    id: createId(),
+    id: barrierId,
     name,
     vertices,
     createdAt: new Date().toISOString()
@@ -9064,6 +9175,7 @@ async function createBarrierFromSelection() {
     return;
   }
   state.barrierSelection = [];
+  state.selectedBarrierId = barrierId;
   persistTraverseLog();
   showAppToast(t("barrier.created"));
   render();
@@ -9295,8 +9407,17 @@ function handleCanvasClick(screenPoint) {
   if (state.traverseMode) {
     const barrierStone = findNearestBarrierStone(screenPoint);
     if (barrierStone) {
+      state.selectedBarrierId = null;
       toggleBarrierStoneSelection(barrierStone.stoneId);
-    } else if (state.barrierSelection.length > 0) {
+    } else {
+      const barrier = findNearestBarrier(screenPoint);
+      if (barrier) {
+        state.barrierSelection = [];
+        state.selectedBarrierId = state.selectedBarrierId === barrier.barrierId ? null : barrier.barrierId;
+        render();
+        return;
+      }
+      state.selectedBarrierId = null;
       state.barrierSelection = [];
       render();
     }
