@@ -1107,8 +1107,8 @@ button {
 .traverse-action-button {
   position: absolute;
   left: 50%;
-  bottom: 14px;
-  z-index: 4;
+  bottom: max(70px, calc(14px + env(safe-area-inset-bottom)));
+  z-index: 10;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1123,6 +1123,7 @@ button {
   box-shadow: var(--shadow), 0 0 0 3px rgb(255 255 255 / 0.12);
   transform: translateX(-50%);
   white-space: nowrap;
+  pointer-events: auto;
 }
 
 .traverse-action-button:hover:not(:disabled),

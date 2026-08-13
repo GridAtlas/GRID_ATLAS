@@ -34,7 +34,6 @@ import {
   TRAVERSE_CONFIG,
   grantTraverseStock,
   sanitizeTraverseLog,
-  tileAreaSquareMeters,
   tileBounds,
   tileIdFromGeo,
   traverseLevelForCount
@@ -69,7 +68,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1317";
+const WEB_VERSION = "0.1318";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -956,7 +955,6 @@ const TRANSLATIONS = {
     "status.grid": "格子",
     "status.zoom": "ズーム",
     "status.rangeSelect": "範囲選択中",
-    "status.traverse": "踏破",
     "label.points": "点",
     "label.links": "線",
     "label.observations": "観察",
@@ -980,8 +978,7 @@ const TRANSLATIONS = {
     "traverse.stockEmpty": "踏破ストックがありません",
     "traverse.stockLabel": "踏破ストック {amount} / {cap}",
     "traverse.center": "中心へ",
-    "traverse.progress": "あと{count}回で Lv{level}",
-    "traverse.summary": "踏破 {tiles}タイル / 約{area}"
+    "traverse.progress": "あと{count}回で Lv{level}"
   },
   en: {
     "settings.title": "Settings",
@@ -1346,7 +1343,6 @@ const TRANSLATIONS = {
     "status.grid": "Grid",
     "status.zoom": "Zoom",
     "status.rangeSelect": "Selecting range",
-    "status.traverse": "Traverse",
     "label.points": "pts",
     "label.links": "lines",
     "label.observations": "observations",
@@ -1370,8 +1366,7 @@ const TRANSLATIONS = {
     "traverse.stockEmpty": "No traverse stock available",
     "traverse.stockLabel": "Traverse stock {amount} / {cap}",
     "traverse.center": "Center",
-    "traverse.progress": "{count} more for Lv{level}",
-    "traverse.summary": "Traverse {tiles} tiles / approx. {area}"
+    "traverse.progress": "{count} more for Lv{level}"
   }
 };
 
@@ -3923,21 +3918,7 @@ function renderStatus() {
     return;
   }
 
-  const gridStatus = t("status.grid") + " " + formatDistance(chooseGridStep());
-  elements.statusLine.value = state.traverseMode
-    ? `${gridStatus} · ${traverseSummaryText()}`
-    : gridStatus;
-}
-
-function traverseSummaryText() {
-  const tiles = Object.entries(state.traverseLog?.tiles ?? {});
-  const area = tiles.reduce((total, [tileId]) => total + tileAreaSquareMeters(tileId), 0);
-  const formattedArea = area >= 10_000
-    ? `${(area / 1_000_000).toFixed(2)} km²`
-    : `${Math.round(area)} m²`;
-  return t("traverse.summary")
-    .replace("{tiles}", String(tiles.length))
-    .replace("{area}", formattedArea);
+  elements.statusLine.value = t("status.grid") + " " + formatDistance(chooseGridStep());
 }
 
 function traverseCurrentLocationOffscreen() {
