@@ -68,7 +68,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1318";
+const WEB_VERSION = "0.1319";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -860,7 +860,7 @@ const TRANSLATIONS = {
     "cloud.authenticate": "認証",
     "cloud.connect": "接続",
     "cloud.testerGranted": "テスター権限あり",
-    "cloud.testerSignup": "個別IDを作成",
+    "cloud.testerSignup": "個別IDを設定",
     "cloud.testerSignupTitle": "個別IDの設定",
     "cloud.gridName": "表示名（ニックネーム）",
     "cloud.sendConfirmation": "アカウント設定メールを送信",
@@ -1248,7 +1248,7 @@ const TRANSLATIONS = {
     "cloud.authenticate": "Authenticate",
     "cloud.connect": "Connect",
     "cloud.testerGranted": "Tester permission active",
-    "cloud.testerSignup": "Create individual ID",
+    "cloud.testerSignup": "Set up individual ID",
     "cloud.testerSignupTitle": "Set up individual ID",
     "cloud.gridName": "Display name (nickname)",
     "cloud.sendConfirmation": "Send account setup email",
@@ -6982,8 +6982,8 @@ function renderCloudTesterStatus() {
     elements.cloudTesterSignupButton.hidden = !state.cloud.testerActive;
     elements.cloudTesterSignupButton.disabled = !state.cloud.testerActive || state.cloud.busy || state.cloud.authBusy;
     elements.cloudTesterSignupButton.textContent = cloudText(
-      "個別IDを作成",
-      "Create individual ID"
+      "個別IDを設定",
+      "Set up individual ID"
     );
   }
 }
