@@ -132,6 +132,25 @@ describe("shape analysis", () => {
     expect(result.edgeCount).toBe(4);
   });
 
+  it("tolerates tiny coordinate differences when an endpoint returns to a vertex", () => {
+    const points = [
+      { id: "a", x: 0, y: 0, geo: { lat: 35, lng: 135 } },
+      { id: "b", x: 1000, y: 0, geo: { lat: 35, lng: 135.01 } },
+      { id: "c", x: 1000, y: 1000, geo: { lat: 35.01, lng: 135.01 } },
+      { id: "d", x: 0, y: 1000, geo: { lat: 35.01, lng: 135 } }
+    ];
+    const result = analyzeSegmentShape([
+      { a: points[0], b: points[1] },
+      { a: { ...points[1], id: "b-returned", geo: { lat: 35.0000004, lng: 135.0100004 } }, b: points[2] },
+      { a: points[2], b: { ...points[3], id: "d-returned", geo: { lat: 35.0100004, lng: 134.9999996 } } },
+      { a: points[3], b: { ...points[0], id: "a-returned", geo: { lat: 35.0000004, lng: 135.0000004 } } }
+    ]);
+
+    expect(result.valid).toBe(true);
+    expect(result.vertexCount).toBe(4);
+    expect(result.edgeCount).toBe(4);
+  });
+
   it("does not label a self-crossing five-edge cycle as a regular pentagon", () => {
     const points = [
       { id: "a", x: -1, y: -2 },

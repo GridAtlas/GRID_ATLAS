@@ -2,6 +2,8 @@ const EPSILON = 1e-9;
 const WGS84_SEMI_MAJOR_METERS = 6378137;
 const WGS84_FLATTENING = 1 / 298.257223563;
 const WGS84_SEMI_MINOR_METERS = (1 - WGS84_FLATTENING) * WGS84_SEMI_MAJOR_METERS;
+const GEO_KEY_DECIMALS = 6;
+const XY_KEY_DECIMALS = 3;
 
 export function analyzeLineIntersection(first, second) {
   const a = pointXY(first?.a ?? first?.start);
@@ -244,9 +246,15 @@ function pointXY(point) {
 
 function pointKey(point) {
   if (validGeo(point?.geo)) {
-    return `geo:${point.geo.lat}:${point.geo.lng}`;
+    return `geo:${roundForKey(point.geo.lat, GEO_KEY_DECIMALS)}:${roundForKey(point.geo.lng, GEO_KEY_DECIMALS)}`;
   }
-  return `xy:${point.x}:${point.y}`;
+  return `xy:${roundForKey(point.x, XY_KEY_DECIMALS)}:${roundForKey(point.y, XY_KEY_DECIMALS)}`;
+}
+
+function roundForKey(value, decimals) {
+  const factor = 10 ** decimals;
+  const rounded = Math.round(value * factor) / factor;
+  return Object.is(rounded, -0) ? 0 : rounded;
 }
 
 function turningNumber(points) {
