@@ -1,9 +1,10 @@
-const DAY_MS = 24 * 60 * 60 * 1000;
+const STOCK_GRANT_HOURS = Object.freeze([4, 12, 20]);
 
 export const BARRIER_CONFIG = Object.freeze({
   dataZoom: 18,
   maxVertices: 6,
   dailyGrant: 3,
+  stockGrantHours: STOCK_GRANT_HOURS,
   stockCap: 20,
   stoneCapVertex: 100,
   stoneCapLoose: 20,
@@ -92,16 +93,33 @@ export function sanitizeBarrierLog(raw, now = Date.now()) {
 
 export function grantBarrierStock(log, now = Date.now()) {
   const lastGrantAt = Date.parse(log.stock.lastGrantAt);
-  if (!Number.isFinite(lastGrantAt) || now <= lastGrantAt) return false;
-  const days = Math.floor((now - lastGrantAt) / DAY_MS);
-  if (days < 1) return false;
+  if (!Number.isFinite(lastGrantAt)) return false;
+  const grantTimes = barrierStockGrantTimes(lastGrantAt, now);
+  if (grantTimes.length === 0) return false;
 
   log.stock.amount = Math.min(
     BARRIER_CONFIG.stockCap,
-    Math.max(0, Math.floor(Number(log.stock.amount) || 0)) + days * BARRIER_CONFIG.dailyGrant
+    Math.max(0, Math.floor(Number(log.stock.amount) || 0)) + grantTimes.length
   );
-  log.stock.lastGrantAt = new Date(lastGrantAt + days * DAY_MS).toISOString();
+  log.stock.lastGrantAt = new Date(grantTimes[grantTimes.length - 1]).toISOString();
   return true;
+}
+
+function barrierStockGrantTimes(afterAt, throughAt) {
+  if (!Number.isFinite(afterAt) || !Number.isFinite(throughAt) || throughAt <= afterAt) return [];
+  const start = new Date(afterAt);
+  const end = new Date(throughAt);
+  const firstDay = new Date(start.getFullYear(), start.getMonth(), start.getDate() - 1);
+  const lastDay = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1);
+  const grantTimes = [];
+
+  for (const day = new Date(firstDay); day <= lastDay; day.setDate(day.getDate() + 1)) {
+    for (const hour of BARRIER_CONFIG.stockGrantHours) {
+      const grantAt = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour, 0, 0, 0).getTime();
+      if (grantAt > afterAt && grantAt <= throughAt) grantTimes.push(grantAt);
+    }
+  }
+  return grantTimes.sort((left, right) => left - right);
 }
 
 export function validateBarrierVertices(log, vertices) {

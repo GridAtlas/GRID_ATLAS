@@ -110,12 +110,31 @@ describe("barrier data helpers", () => {
     expect(validateBarrierVertices(log, vertices)).toMatchObject({ ok: false, reason: "too-many", maxVertices: BARRIER_CONFIG.maxVertices });
   });
 
-  it("grants three stones per elapsed day up to the cap", () => {
-    const now = Date.parse("2026-08-13T00:00:00Z");
-    const log = createBarrierLog(Date.parse("2026-08-01T00:00:00Z"));
+  it("grants one stone at 12:00, 20:00, and 04:00 in local time", () => {
+    const firstCheck = new Date(2026, 7, 13, 11, 59).getTime();
+    const log = createBarrierLog(firstCheck);
+    log.stock.amount = 0;
+
+    expect(grantBarrierStock(log, firstCheck)).toBe(false);
+    expect(grantBarrierStock(log, new Date(2026, 7, 13, 12, 0).getTime())).toBe(true);
+    expect(log.stock.amount).toBe(1);
+    expect(grantBarrierStock(log, new Date(2026, 7, 13, 19, 59).getTime())).toBe(false);
+    expect(grantBarrierStock(log, new Date(2026, 7, 13, 20, 0).getTime())).toBe(true);
+    expect(log.stock.amount).toBe(2);
+    expect(grantBarrierStock(log, new Date(2026, 7, 14, 3, 59).getTime())).toBe(false);
+    expect(grantBarrierStock(log, new Date(2026, 7, 14, 4, 0).getTime())).toBe(true);
+    expect(log.stock.amount).toBe(3);
+    expect(log.stock.lastGrantAt).toBe(new Date(2026, 7, 14, 4, 0).toISOString());
+  });
+
+  it("catches up missed grant times without exceeding the stock cap", () => {
+    const lastGrantAt = new Date(2026, 7, 1, 0, 0).getTime();
+    const now = new Date(2026, 7, 13, 0, 0).getTime();
+    const log = createBarrierLog(lastGrantAt);
     log.stock.amount = 1;
     expect(grantBarrierStock(log, now)).toBe(true);
     expect(log.stock.amount).toBe(BARRIER_CONFIG.stockCap);
+    expect(log.stock.lastGrantAt).toBe(new Date(2026, 7, 12, 20, 0).toISOString());
   });
 
   it("normalizes an optional fixed guardian point on a barrier", () => {

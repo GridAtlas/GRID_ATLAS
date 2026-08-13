@@ -89,7 +89,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1561";
+const WEB_VERSION = "0.1582";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -106,6 +106,7 @@ const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
+const BARRIER_TILE_MIN_SCREEN_SIZE = POINT_RADIUS * 2 + 8;
 const POINT_SELECTION_RING_RADIUS = POINT_RADIUS + 2;
 const LINE_SELECTION_HIT_RADIUS = 16;
 const POINT_SELECTION_RING_WIDTH = 4;
@@ -201,6 +202,7 @@ const elements = {
   traverseActionDialogTitle: document.querySelector("#traverseActionDialogTitle"),
   traversePlaceButton: document.querySelector("#traversePlaceButton"),
   traversePickButton: document.querySelector("#traversePickButton"),
+  traverseCreateBarrierButton: document.querySelector("#traverseCreateBarrierButton"),
   editionBadge: document.querySelector("#editionBadge"),
   webVersionBadge: document.querySelector("#webVersionBadge"),
   settingsMenu: document.querySelector("#settingsMenu"),
@@ -1766,7 +1768,6 @@ function setTraverseMode(enabled) {
   state.barrierSelection = [];
   state.selectedBarrierId = null;
   state.guardianPlacementMode = false;
-  clearSelection({ render: false });
   if (!state.traverseMode) closeTraverseActionDialog();
   if (state.traverseMode) {
     if (evaluateBarrierLog(state.traverseLog).changed) persistTraverseLog();
@@ -3265,6 +3266,29 @@ function traverseTilePolygon(tileId) {
   ].map(worldToScreen);
 }
 
+function displayedTraverseTilePolygon(tileId) {
+  const polygon = traverseTilePolygon(tileId);
+  if (!polygon) return null;
+
+  const width = Math.max(...polygon.map((point) => point.x)) - Math.min(...polygon.map((point) => point.x));
+  const height = Math.max(...polygon.map((point) => point.y)) - Math.min(...polygon.map((point) => point.y));
+  const scale = Math.max(
+    1,
+    BARRIER_TILE_MIN_SCREEN_SIZE / Math.max(1, width),
+    BARRIER_TILE_MIN_SCREEN_SIZE / Math.max(1, height)
+  );
+  if (scale === 1) return polygon;
+
+  const center = polygon.reduce((sum, point) => ({
+    x: sum.x + point.x / polygon.length,
+    y: sum.y + point.y / polygon.length
+  }), { x: 0, y: 0 });
+  return polygon.map((point) => ({
+    x: center.x + (point.x - center.x) * scale,
+    y: center.y + (point.y - center.y) * scale
+  }));
+}
+
 function drawTraversePolygon(points, options = {}) {
   if (!points || points.length !== 4) return;
   const center = points.reduce((sum, point) => ({
@@ -3289,7 +3313,7 @@ function drawTraverseTiles() {
   if (!state.traverseMode || !state.traverseLog) return;
   const colors = canvasPalette();
   for (const stone of Object.values(state.traverseLog?.stones || {})) {
-    const polygon = traverseTilePolygon(stone.tile);
+    const polygon = displayedTraverseTilePolygon(stone.tile);
     if (!polygon) continue;
     const stoneId = stoneIdFromTile(stone.tile);
     const selected = stoneId ? state.barrierSelection.includes(stoneId) : false;
@@ -4308,15 +4332,15 @@ function renderSelectionInfo() {
 }
 
 function selectionInfoText() {
-  if (state.traverseMode) {
-    if (state.guardianPlacementMode) return t("barrier.guardianPlacementHint");
-    if (state.selectedBarrierId) {
-      const score = scoreBarrier(state.traverseLog, state.selectedBarrierId);
-      if (score) {
-        const rank = rankForBarrier(state.traverseLog, score.barrierId);
-        return `${score.name || t("barrier.defaultName")} | ${rank.name} ${formatScoreValue(score.power)}`;
-      }
+  if (state.guardianPlacementMode) return t("barrier.guardianPlacementHint");
+  if (state.selectedBarrierId) {
+    const score = scoreBarrier(state.traverseLog, state.selectedBarrierId);
+    if (score) {
+      const rank = rankForBarrier(state.traverseLog, score.barrierId);
+      return `${score.name || t("barrier.defaultName")} | ${rank.name} ${formatScoreValue(score.power)}`;
     }
+  }
+  if (state.barrierSelection.length > 0) {
     return state.barrierSelection.length > 0
       ? t("barrier.selection").replace("{count}", String(state.barrierSelection.length))
       : t("state.unselected");
@@ -4499,6 +4523,14 @@ function renderTraverseActionDialog() {
     elements.traversePickButton.textContent = t("traverse.pick");
     elements.traversePickButton.disabled = state.traverseBusy;
   }
+  if (elements.traverseCreateBarrierButton) {
+    const validation = validateBarrierVertices(state.traverseLog, state.barrierSelection);
+    elements.traverseCreateBarrierButton.textContent = t("barrier.createTitle");
+    elements.traverseCreateBarrierButton.disabled = state.traverseBusy || !validation.ok;
+    elements.traverseCreateBarrierButton.title = validation.ok
+      ? t("barrier.createTitle")
+      : t("barrier.selection").replace("{count}", String(state.barrierSelection.length));
+  }
 }
 
 function openTraverseActionDialog() {
@@ -4678,8 +4710,7 @@ function renderActionButtons() {
   const hasPendingPoint = validGeo(state.pendingGeo);
   const pointIds = selectedPointIds();
   const visiblePointCount = visibleSelectablePoints().length;
-  const canInvertSelection = !state.traverseMode
-    && !state.editingPointId
+  const canInvertSelection = !state.editingPointId
     && !hasPendingPoint
     && visiblePointCount > 0;
   const linkIds = selectedLinkIds();
@@ -4699,15 +4730,11 @@ function renderActionButtons() {
 
   const canOpenRegistration = !hasPendingPoint && state.selection.length === 0;
   elements.actionRegisterButton.disabled = !hasPendingPoint && !canOpenRegistration;
-  elements.actionLinkButton.disabled = state.traverseMode
-    ? barrierSelectionCount < 3
-    : pointIds.length < 2;
+  elements.actionLinkButton.disabled = pointIds.length < 2;
   elements.actionAnalyzeButton.disabled = !analysisTarget;
   elements.actionRouteButton.disabled = !routeActive && !routePlan;
   elements.deletePointButton.disabled = !canDelete;
-  elements.clearSelectionButton.disabled = state.traverseMode
-    ? barrierSelectionCount === 0
-    : state.selection.length === 0 && !hasPendingPoint;
+  elements.clearSelectionButton.disabled = state.selection.length === 0 && !hasPendingPoint && barrierSelectionCount === 0;
   elements.actionCenterButton.disabled = centerCandidateCount < 2;
   const shareableSelectedPointCount = selectedPointIds()
     .map(findPoint)
@@ -4727,19 +4754,12 @@ function renderActionButtons() {
   elements.actionRegisterButton.classList.remove("is-active");
   elements.actionRegisterButton.title = hasPendingPoint ? "仮ポイントを登録" : canOpenRegistration ? "地点登録画面を開く" : "仮ポイントを作成すると登録できます";
   elements.actionLinkButton.classList.toggle("is-active", false);
-  if (state.traverseMode) {
-    if (elements.actionLinkLabel) elements.actionLinkLabel.textContent = t("action.barrier");
-    elements.actionLinkButton.title = barrierSelectionCount >= 3
-      ? t("barrier.createTitle")
-      : t("barrier.tooFew");
-  } else {
-    if (elements.actionLinkLabel) elements.actionLinkLabel.textContent = t("action.connect");
-    elements.actionLinkButton.title = pointIds.length >= 3
-      ? `選択順に${pointIds.length}地点を接続（最後と最初も接続）`
-      : pointIds.length >= 2
-        ? `選択順に${pointIds.length}地点を接続`
-        : "2地点以上を選択すると接続できます";
-  }
+  if (elements.actionLinkLabel) elements.actionLinkLabel.textContent = t("action.connect");
+  elements.actionLinkButton.title = pointIds.length >= 3
+    ? `選択順に${pointIds.length}地点を接続（最後と最初も接続）`
+    : pointIds.length >= 2
+      ? `選択順に${pointIds.length}地点を接続`
+      : "2地点以上を選択すると接続できます";
   elements.actionAnalyzeButton.title = analysisTarget ? t("action.analyzeTitle") : t("analysis.noSelection");
   elements.actionRouteButton.classList.toggle("is-active", routeActive);
   elements.actionRouteButton.setAttribute("aria-pressed", String(routeActive));
@@ -4760,11 +4780,9 @@ function renderActionButtons() {
     : t("list.shareSelectedUnavailable");
   elements.actionMapButton.classList.toggle("is-active", false);
   elements.actionInvertButton.classList.toggle("is-active", false);
-  elements.actionInvertButton.title = state.traverseMode
+  elements.actionInvertButton.title = visiblePointCount > 0
     ? t("action.invertTitle")
-    : visiblePointCount > 0
-      ? t("action.invertTitle")
-      : t("state.noPoints");
+    : t("state.noPoints");
   elements.pointSubmitButton.textContent = state.editingPointId ? t("button.update") : t("button.submitRegister");
   elements.actionRouteLabel.textContent = t("action.route");
   renderLocationFollowButton();
@@ -5965,12 +5983,6 @@ function formatFactor(value) {
 
 function renderDetails() {
   const showingBarrier = renderBarrierDetails();
-  if (state.traverseMode) {
-    elements.emptyDetails.hidden = true;
-    elements.pointDetails.hidden = true;
-    elements.selectionHeading.textContent = t("barrier.scoreTitle");
-    return;
-  }
   if (showingBarrier) return;
   const entries = state.selection;
   const point = selectedPoint();
@@ -9352,8 +9364,6 @@ function toggleSelection(type, id) {
 }
 
 function invertVisiblePointSelection() {
-  if (state.traverseMode) return;
-
   const visiblePointIds = [...new Set(visibleSelectablePoints().map((point) => point.id))];
   if (visiblePointIds.length === 0) return;
 
@@ -9570,7 +9580,7 @@ function findNearestPoint(screenPoint, options = {}) {
 function findNearestBarrierStone(screenPoint) {
   if (!state.traverseMode || !state.traverseLog) return null;
   for (const [stoneId, stone] of Object.entries(state.traverseLog?.stones || {})) {
-    const polygon = traverseTilePolygon(stone.tile);
+    const polygon = displayedTraverseTilePolygon(stone.tile);
     if (polygon && pointInPolygon(screenPoint, polygon)) {
       return { stoneId, stone };
     }
@@ -9876,10 +9886,6 @@ async function createBarrierFromSelection() {
 }
 
 function handleLinkAction() {
-  if (state.traverseMode) {
-    void createBarrierFromSelection();
-    return;
-  }
   void connectSelectedPoints();
 }
 
@@ -10098,27 +10104,8 @@ function findNearestLoadedObservation(screenPoint) {
 }
 
 function handleCanvasClick(screenPoint) {
-  if (state.traverseMode) {
-    if (state.guardianPlacementMode) {
-      void placeGuardianAtScreen(screenPoint);
-      return;
-    }
-    const barrierStone = findNearestBarrierStone(screenPoint);
-    if (barrierStone) {
-      state.selectedBarrierId = null;
-      toggleBarrierStoneSelection(barrierStone.stoneId);
-    } else {
-      const barrier = findNearestBarrier(screenPoint);
-      if (barrier) {
-        state.barrierSelection = [];
-        state.selectedBarrierId = state.selectedBarrierId === barrier.barrierId ? null : barrier.barrierId;
-        render();
-        return;
-      }
-      state.selectedBarrierId = null;
-      state.barrierSelection = [];
-      render();
-    }
+  if (state.guardianPlacementMode) {
+    void placeGuardianAtScreen(screenPoint);
     return;
   }
 
@@ -10127,18 +10114,42 @@ function handleCanvasClick(screenPoint) {
   const nearestObservation = nearest || nearestLink ? null : findNearestLoadedObservation(screenPoint);
 
   if (nearest) {
+    state.barrierSelection = [];
+    state.selectedBarrierId = null;
     toggleSelection("point", nearest.id);
     return;
   }
 
   if (nearestLink) {
+    state.barrierSelection = [];
+    state.selectedBarrierId = null;
     toggleSelection("link", nearestLink.id);
     return;
   }
 
   if (nearestObservation) {
+    state.barrierSelection = [];
+    state.selectedBarrierId = null;
     toggleSelection("observation", nearestObservation);
     return;
+  }
+
+  if (state.traverseMode) {
+    const barrierStone = findNearestBarrierStone(screenPoint);
+    if (barrierStone) {
+      state.selectedBarrierId = null;
+      toggleBarrierStoneSelection(barrierStone.stoneId);
+      return;
+    }
+    const barrier = findNearestBarrier(screenPoint);
+    if (barrier) {
+      state.barrierSelection = [];
+      state.selectedBarrierId = state.selectedBarrierId === barrier.barrierId ? null : barrier.barrierId;
+      render();
+      return;
+    }
+    state.selectedBarrierId = null;
+    state.barrierSelection = [];
   }
 
   pauseLocationFollowForManualView();
@@ -10651,9 +10662,8 @@ function pointerMidpoint(a, b) {
 }
 
 function startDragGesture(pointerId, point, options = {}) {
-  const barrierMode = state.traverseMode;
-  const longPressPoint = options.moved || barrierMode ? null : findNearestPoint(point);
-  const longPressLink = options.moved || barrierMode || longPressPoint ? null : findNearestLink(point);
+  const longPressPoint = options.moved ? null : findNearestPoint(point);
+  const longPressLink = options.moved || longPressPoint ? null : findNearestLink(point);
   const drag = {
     id: pointerId,
     start: point,
@@ -10672,7 +10682,7 @@ function startDragGesture(pointerId, point, options = {}) {
   };
   state.pointer.drag = drag;
 
-  if (!options.moved && !barrierMode) {
+  if (!options.moved) {
     const longPressDelay = longPressLink ? LINE_INFO_LONG_PRESS_MS : RANGE_SELECTION_LONG_PRESS_MS;
     if (longPressLink) {
       drag.lineDragReadyTimerId = window.setTimeout(() => {
@@ -13473,6 +13483,10 @@ function bindEvents() {
   elements.traversePickButton.addEventListener("click", () => {
     closeTraverseActionDialog();
     void performTraverseStoneAction("pick");
+  });
+  elements.traverseCreateBarrierButton.addEventListener("click", () => {
+    closeTraverseActionDialog();
+    void createBarrierFromSelection();
   });
   elements.traverseActionDialog.addEventListener("click", (event) => {
     if (event.target === elements.traverseActionDialog) closeTraverseActionDialog();
