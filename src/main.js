@@ -56,7 +56,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1240";
+const WEB_VERSION = "0.1241";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -152,7 +152,11 @@ const elements = {
   settingsMenu: document.querySelector("#settingsMenu"),
   settingsMenuButton: document.querySelector("#settingsMenuButton"),
   openGridAtlasButton: document.querySelector("#openGridAtlasButton"),
+  openCloudButton: document.querySelector("#openCloudButton"),
   settingsPanel: document.querySelector("#settingsPanel"),
+  cloudDialog: document.querySelector("#cloudDialog"),
+  closeCloudButton: document.querySelector("#closeCloudButton"),
+  cloudDialogBody: document.querySelector("#cloudDialogBody"),
   settingsThemeSelect: document.querySelector("#settingsThemeSelect"),
   settingsLanguageSelect: document.querySelector("#settingsLanguageSelect"),
   settingsUnitSelect: document.querySelector("#settingsUnitSelect"),
@@ -732,6 +736,7 @@ const TRANSLATIONS = {
     "data.cloud": "マイリスト（クラウド）",
     "data.grid": "グリッド",
     "cloud.menuTitle": "クラウド",
+    "cloud.open": "クラウドを開く",
     "cloud.authTitle": "アカウント",
     "cloud.email": "メールアドレス",
     "cloud.password": "パスワード",
@@ -1066,6 +1071,7 @@ const TRANSLATIONS = {
     "data.cloud": "My Lists (Cloud)",
     "data.grid": "Grid",
     "cloud.menuTitle": "Cloud",
+    "cloud.open": "Open cloud",
     "cloud.authTitle": "Account",
     "cloud.email": "Email address",
     "cloud.password": "Password",
@@ -1341,6 +1347,24 @@ function loadPreferences() {
 function setSettingsMenuOpen(open) {
   elements.settingsPanel.hidden = !open;
   elements.settingsMenuButton.setAttribute("aria-expanded", String(open));
+}
+
+function moveCloudAuthPanelToDialog() {
+  if (!elements.cloudAuthPanel || !elements.cloudDialogBody) return;
+  if (elements.cloudAuthPanel.parentElement !== elements.cloudDialogBody) {
+    elements.cloudDialogBody.append(elements.cloudAuthPanel);
+  }
+}
+
+function setCloudDialogOpen(open) {
+  if (!elements.cloudDialog) return;
+  if (open) {
+    moveCloudAuthPanelToDialog();
+    setSettingsMenuOpen(false);
+    if (!elements.cloudDialog.open) elements.cloudDialog.showModal();
+    return;
+  }
+  if (elements.cloudDialog.open) elements.cloudDialog.close();
 }
 
 function toggleSettingsMenu() {
@@ -6368,6 +6392,9 @@ async function initializeCloudAuth() {
     const { data, error } = await state.cloud.authClient.auth.getSession();
     if (error) throw error;
     applyCloudAuthSession(data.session, { refresh: Boolean(data.session), forceRefresh: true });
+    if (["invite", "recovery", "signup", "magiclink"].includes(authUrlState.type)) {
+      setCloudDialogOpen(true);
+    }
     if (data.session && authUrlState.type === "recovery") {
       window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
     }
@@ -11170,6 +11197,11 @@ function bindEvents() {
     setSettingsMenuOpen(false);
     elements.pointImportFile.click();
   });
+  elements.openCloudButton?.addEventListener("click", () => setCloudDialogOpen(true));
+  elements.closeCloudButton?.addEventListener("click", () => setCloudDialogOpen(false));
+  elements.cloudDialog?.addEventListener("click", (event) => {
+    if (event.target === elements.cloudDialog) setCloudDialogOpen(false);
+  });
   elements.settingsMenu.addEventListener("click", (event) => event.stopPropagation());
   elements.settingsThemeSelect.addEventListener("change", () => {
     setTheme(elements.settingsThemeSelect.value);
@@ -11602,6 +11634,7 @@ loadTheme();
 loadWorkspace();
 loadPreferences();
 loadCloudSettings();
+moveCloudAuthPanelToDialog();
 registerGridAtlasFileLaunchHandler();
 bindEvents();
 void initializeCloudAuth();

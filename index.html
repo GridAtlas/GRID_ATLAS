@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=70">
-    <script src="src/main.js?v=313" type="module" defer></script>
+    <script src="src/main.js?v=314" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -132,6 +132,9 @@
                   <span class="cloud-menu-caption" data-i18n="cloud.experimental">実験機能</span>
                 </summary>
                 <div class="cloud-menu-content">
+                  <button id="openCloudButton" class="settings-nav-button cloud-open-button" type="button">
+                    <span data-i18n="cloud.open">クラウドを開く</span>
+                  </button>
                   <form id="cloudAuthPanel" class="cloud-auth-panel" hidden>
                     <div class="cloud-auth-heading">
                       <span class="cloud-auth-title" data-i18n="cloud.authTitle">アカウント</span>
@@ -424,6 +427,18 @@
         </aside>
       </main>
     </div>
+    <dialog id="cloudDialog" class="cloud-dialog" aria-labelledby="cloudDialogTitle" tabindex="-1">
+      <div class="cloud-dialog-card">
+        <div class="cloud-dialog-heading">
+          <div>
+            <span class="cloud-dialog-kicker" data-i18n="cloud.menuTitle">クラウド</span>
+            <h2 id="cloudDialogTitle" data-i18n="cloud.authTitle">アカウント</h2>
+          </div>
+          <button id="closeCloudButton" class="share-link-close" type="button" aria-label="閉じる" title="クラウドを閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
+        </div>
+        <div id="cloudDialogBody" class="cloud-dialog-body"></div>
+      </div>
+    </dialog>
     <dialog id="pointRegistrationDialog" class="point-registration-dialog" aria-labelledby="pointRegistrationDialogTitle" tabindex="-1">
       <form id="pointForm" class="point-registration-dialog-form">
         <div class="point-registration-dialog-heading">
