@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=70">
-    <script src="src/main.js?v=319" type="module" defer></script>
+    <script src="src/main.js?v=320" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -170,7 +170,7 @@
                       <output id="cloudPasswordStatus" class="form-status cloud-status" aria-live="polite"></output>
                     </section>
                   </form>
-                    <details class="cloud-access-code-section">
+                    <details id="cloudAccessCodeSection" class="cloud-access-code-section">
                       <summary data-i18n="cloud.accessCodeAdvanced">テスター権限</summary>
                       <label class="cloud-access-code-label">
                         <span data-i18n="cloud.testerCode">テスター権限コード</span>
@@ -184,7 +184,7 @@
                       <section id="cloudTesterSignupPanel" class="cloud-tester-signup-panel" hidden>
                         <h3 data-i18n="cloud.testerSignupTitle">テスター向けサインアップ</h3>
                         <label>
-                          <span data-i18n="cloud.gridName">GRID NAME</span>
+                          <span data-i18n="cloud.gridName">GRID NAME（ニックネーム）</span>
                           <input id="cloudTesterSignupGridName" type="text" maxlength="32" autocomplete="nickname" spellcheck="false">
                         </label>
                         <label>
@@ -192,7 +192,7 @@
                           <input id="cloudTesterSignupEmail" type="email" autocomplete="email" spellcheck="false">
                         </label>
                         <div class="button-row">
-                          <button id="cloudTesterSignupSubmitButton" class="primary-button" type="button" data-i18n="cloud.sendConfirmation">確認メールを送る</button>
+                          <button id="cloudTesterSignupSubmitButton" class="primary-button" type="button" data-i18n="cloud.sendConfirmation">送信</button>
                           <button id="cloudTesterSignupCancelButton" type="button" data-i18n="cloud.close">閉じる</button>
                         </div>
                         <output id="cloudTesterSignupStatus" class="form-status cloud-status" aria-live="polite"></output>

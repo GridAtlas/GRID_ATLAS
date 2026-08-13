@@ -57,7 +57,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1246";
+const WEB_VERSION = "0.1247";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -282,6 +282,7 @@ const elements = {
   storageListContainers: Array.from(document.querySelectorAll("[data-storage-list-items]")),
 
   cloudAuthPanel: document.querySelector("#cloudAuthPanel"),
+  cloudAccessCodeSection: document.querySelector("#cloudAccessCodeSection"),
   cloudAuthEmail: document.querySelector("#cloudAuthEmail"),
   cloudAuthPassword: document.querySelector("#cloudAuthPassword"),
   cloudEmailField: document.querySelector("#cloudEmailField"),
@@ -763,8 +764,8 @@ const TRANSLATIONS = {
     "cloud.testerGranted": "テスター権限あり",
     "cloud.testerSignup": "テスター向けサインアップ",
     "cloud.testerSignupTitle": "テスター向けサインアップ",
-    "cloud.gridName": "GRID NAME",
-    "cloud.sendConfirmation": "確認メールを送る",
+    "cloud.gridName": "GRID NAME（ニックネーム）",
+    "cloud.sendConfirmation": "送信",
     "cloud.close": "閉じる",
     "cloud.refresh": "更新",
     "cloud.disconnect": "切断",
@@ -1105,8 +1106,8 @@ const TRANSLATIONS = {
     "cloud.testerGranted": "Tester permission active",
     "cloud.testerSignup": "Tester sign-up",
     "cloud.testerSignupTitle": "Tester sign-up",
-    "cloud.gridName": "GRID NAME",
-    "cloud.sendConfirmation": "Send confirmation email",
+    "cloud.gridName": "GRID NAME (nickname)",
+    "cloud.sendConfirmation": "Send",
     "cloud.close": "Close",
     "cloud.refresh": "Refresh",
     "cloud.disconnect": "Disconnect",
@@ -1375,6 +1376,9 @@ function moveCloudAuthPanelToDialog() {
   if (!elements.cloudAuthPanel || !elements.cloudDialogBody) return;
   if (elements.cloudAuthPanel.parentElement !== elements.cloudDialogBody) {
     elements.cloudDialogBody.append(elements.cloudAuthPanel);
+  }
+  if (elements.cloudAccessCodeSection?.parentElement !== elements.cloudDialogBody) {
+    elements.cloudDialogBody.append(elements.cloudAccessCodeSection);
   }
 }
 
