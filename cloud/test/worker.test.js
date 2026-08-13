@@ -33,6 +33,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await env.DB.prepare("DELETE FROM cloud_lists").run();
   await env.DB.prepare("DELETE FROM cloud_assets").run();
+  await env.DB.prepare("DELETE FROM test_signup_registrations").run();
 });
 
 afterAll(() => {
@@ -198,6 +199,56 @@ describe("GRID ATLAS Cloud API", () => {
 
     const malformed = await api("/v1/me/lists/%ZZ", { token: null });
     expect(malformed.status).toBe(400);
+  });
+
+  it("allows test sign-up only with a tester code and records the registration", async () => {
+    const testEnv = {
+      DB: env.DB,
+      WEB_ORIGINS: "https://gridatlas.github.io",
+      PERSONAL_ACCESS_CODE: "ga_personal_test",
+      PERSONAL_OWNER_ID: "personal-test",
+      SUPABASE_URL: "https://project.supabase.co",
+      SUPABASE_SECRET_KEY: "sb_secret_test"
+    };
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockImplementationOnce(async (input, init) => {
+      expect(String(input)).toBe("https://project.supabase.co/auth/v1/invite");
+      expect(init.headers.apikey).toBe("sb_secret_test");
+      expect(JSON.parse(init.body)).toMatchObject({
+        email: "tester@example.com",
+        data: { grid_name: "Grid Tester", tester_signup: true, signup_source: "tester" }
+      });
+      return new Response(JSON.stringify({ user: { id: "supabase-user-1" } }), { status: 200 });
+    });
+
+    const invited = await api("/v1/test-signups", {
+      method: "POST",
+      token: null,
+      testerCode: "ga_personal_test",
+      body: { email: "tester@example.com", gridName: "Grid Tester" },
+      environment: testEnv
+    });
+    expect(invited.status).toBe(201);
+    expect(await invited.json()).toMatchObject({ status: "invited" });
+
+    const saved = await env.DB.prepare(
+      "SELECT email, grid_name, auth_user_id, tester_owner_id, status FROM test_signup_registrations"
+    ).first();
+    expect(saved).toEqual({
+      email: "tester@example.com",
+      grid_name: "Grid Tester",
+      auth_user_id: "supabase-user-1",
+      tester_owner_id: "personal-test",
+      status: "invited"
+    });
+
+    const rejected = await api("/v1/test-signups", {
+      method: "POST",
+      token: null,
+      body: { email: "other@example.com", gridName: "Other" },
+      environment: testEnv
+    });
+    expect(rejected.status).toBe(401);
   });
 
   it("isolates owners and protects updates with revisions", async () => {
@@ -465,10 +516,11 @@ describe("GRID ATLAS Cloud API", () => {
   });
 });
 
-async function api(path, { method = "GET", token, body, origin, contentType = "application/json", environment = env } = {}) {
+async function api(path, { method = "GET", token, testerCode, body, origin, contentType = "application/json", environment = env } = {}) {
   const headers = new Headers();
   const bearer = token === undefined ? await issueToken("owner-a") : token;
   if (bearer) headers.set("Authorization", `Bearer ${bearer}`);
+  if (testerCode) headers.set("X-Tester-Code", testerCode);
   if (origin) headers.set("Origin", origin);
   if (body !== undefined && contentType) headers.set("Content-Type", contentType);
   return worker.fetch(new Request(`https://api.test${path}`, {

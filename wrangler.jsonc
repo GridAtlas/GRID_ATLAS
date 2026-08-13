@@ -8,7 +8,8 @@
     "WEB_ORIGINS": "http://localhost:5177,http://127.0.0.1:5177,http://localhost:4173,http://127.0.0.1:4173",
     "AUTH_JWKS_URL": "https://pjzwlsffctqqegnwwgrt.supabase.co/auth/v1/.well-known/jwks.json",
     "AUTH_ISSUER": "https://pjzwlsffctqqegnwwgrt.supabase.co/auth/v1",
-    "AUTH_AUDIENCE": "authenticated"
+    "AUTH_AUDIENCE": "authenticated",
+    "SUPABASE_URL": "https://pjzwlsffctqqegnwwgrt.supabase.co"
   },
   "r2_buckets": [
     {
@@ -39,6 +40,8 @@
         "AUTH_JWKS_URL": "https://pjzwlsffctqqegnwwgrt.supabase.co/auth/v1/.well-known/jwks.json",
         "AUTH_ISSUER": "https://pjzwlsffctqqegnwwgrt.supabase.co/auth/v1",
         "AUTH_AUDIENCE": "authenticated",
+        "SUPABASE_URL": "https://pjzwlsffctqqegnwwgrt.supabase.co",
+        "TEST_SIGNUP_REDIRECT_URL": "https://gridatlas.github.io/GRID_ATLAS/",
         "PERSONAL_OWNER_ID": "personal-beta",
         "FRIEND_OWNER_ID": "friend-beta"
       },
@@ -57,7 +60,7 @@
         }
       ],
       "secrets": {
-        "required": ["PERSONAL_ACCESS_CODE", "FRIEND_ACCESS_CODE"]
+        "required": ["PERSONAL_ACCESS_CODE", "FRIEND_ACCESS_CODE", "SUPABASE_SECRET_KEY"]
       }
     }
   }

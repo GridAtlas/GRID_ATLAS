@@ -28,6 +28,10 @@ export default {
       const user = await authenticateRequest(request, env);
       if (!env.DB) return jsonResponse({ error: "データベースが未設定です" }, 503, cors);
 
+      if (route.testSignup) {
+        return await handleTestSignup(request, env, cors, user);
+      }
+
       if (route.assetId) {
         return await handleAsset(request, env, cors, user, route.listId, route.assetId);
       }
@@ -82,7 +86,93 @@ function parseRoute(pathname) {
     validateId(listId, "リストID");
     return { listId };
   }
+  if (parts.length === 2 && parts[0] === "v1" && parts[1] === "test-signups") {
+    return { testSignup: true };
+  }
   return null;
+}
+
+async function handleTestSignup(request, env, cors, user) {
+  if (request.method !== "POST") return methodNotAllowed(["POST"], cors);
+  if (!user.isTester) throw new AuthError("テスター権限が必要です", 403);
+  if (!env.SUPABASE_URL || !env.SUPABASE_SECRET_KEY) {
+    return jsonResponse({ error: "テスト用サインアップが未設定です" }, 503, cors);
+  }
+
+  const body = await readJsonObject(request);
+  const email = String(body.email || "").trim().toLowerCase();
+  const gridName = String(body.gridName || "").trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 320) {
+    throw new HttpError("メールアドレスを確認してください", 400);
+  }
+  if (!gridName || gridName.length > 32) {
+    throw new HttpError("GRID NAMEは1〜32文字で入力してください", 400);
+  }
+
+  const existing = await env.DB.prepare(
+    `SELECT id FROM test_signup_registrations
+     WHERE email = ?1 AND status = 'invited'
+     LIMIT 1`
+  ).bind(email).first();
+  if (existing) {
+    return jsonResponse({ error: "このメールアドレスにはすでに登録メールを送信しています" }, 409, cors);
+  }
+
+  const redirectTo = env.TEST_SIGNUP_REDIRECT_URL || undefined;
+  const inviteResponse = await fetch(`${env.SUPABASE_URL.replace(/\/+$/, "")}/auth/v1/invite`, {
+    method: "POST",
+    headers: {
+      apikey: env.SUPABASE_SECRET_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SECRET_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      email,
+      ...(redirectTo ? { redirect_to: redirectTo } : {}),
+      data: {
+        grid_name: gridName,
+        tester_signup: true,
+        signup_source: "tester"
+      }
+    })
+  });
+  const invitePayload = await readExternalJson(inviteResponse);
+  if (!inviteResponse.ok) {
+    if (inviteResponse.status === 422 || inviteResponse.status === 409) {
+      return jsonResponse({ error: "このメールアドレスはすでに登録されています" }, 409, cors);
+    }
+    console.error(JSON.stringify({
+      message: "test signup invite failed",
+      status: inviteResponse.status,
+      detail: invitePayload?.msg || invitePayload?.message || invitePayload?.error
+    }));
+    return jsonResponse({ error: "登録メールを送信できませんでした" }, 502, cors);
+  }
+
+  const registrationId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    `INSERT INTO test_signup_registrations
+      (id, email, grid_name, auth_user_id, tester_owner_id, status, created_at, updated_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, 'invited', ?6, ?6)`
+  ).bind(
+    registrationId,
+    email,
+    gridName,
+    invitePayload?.user?.id || null,
+    user.testerOwnerId || "unknown",
+    now
+  ).run();
+
+  return jsonResponse({ registrationId, status: "invited" }, 201, cors);
+}
+
+async function readExternalJson(response) {
+  try {
+    return await response.json();
+  } catch {
+    return {};
+  }
 }
 
 async function orderedCloudListIds(db, ownerId) {

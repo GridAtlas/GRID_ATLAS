@@ -63,6 +63,10 @@ export function createCloudClient({ baseUrl, getAccessToken, getTesterCode, fetc
   }
   return {
     listLists: () => request("v1/me/lists"),
+    testSignup: ({ email, gridName }) => request("v1/test-signups", {
+      method: "POST",
+      body: { email, gridName }
+    }),
     updateListOrder: (listIds) => request("v1/me/lists/order", {
       method: "PUT",
       body: { listIds }

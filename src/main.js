@@ -6547,27 +6547,11 @@ async function submitTesterSignup() {
   renderCloudAuthControls();
   renderCloudTesterStatus();
   try {
-    const temporaryPassword = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
-    const { data, error } = await state.cloud.authClient.auth.signUp({
-      email,
-      password: temporaryPassword,
-      options: {
-        emailRedirectTo: window.location.href.split("#", 1)[0],
-        data: {
-          grid_name: gridName,
-          signup_source: "tester"
-        }
-      }
-    });
-    if (error) throw error;
+    const result = await cloudClientFromInputs().testSignup({ email, gridName });
     markPendingCloudSignup(true);
-    state.cloud.signupPasswordSetupActive = true;
-    if (data.session) {
-      applyCloudAuthSession(data.session, { forceRefresh: true });
-      setCloudTesterSignupStatus(cloudText("登録しました。パスワードを設定してください", "Signed up. Set your password"));
-    } else {
-      setCloudTesterSignupStatus(cloudText("確認メールを送信しました。メールのリンクを開いてください", "Confirmation email sent. Open the link to continue"));
-    }
+    setCloudTesterSignupStatus(result?.status === "invited"
+      ? cloudText("登録メールを送信しました。メールのリンクを開いてください", "Invitation sent. Open the link to continue")
+      : cloudText("送信しました", "Sent"));
   } catch (error) {
     setCloudTesterSignupStatus(error?.message || cloudText("サインアップに失敗しました", "Sign-up failed"), { error: true });
   } finally {

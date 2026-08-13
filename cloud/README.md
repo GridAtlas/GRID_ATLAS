@@ -14,6 +14,7 @@ Cloudflare Workers + D1で動く、アクセスコード式の地点リストClo
 - テスター権限は `X-Tester-Code` ヘッダーで追加付与する。テスターコードは通常の個別ログインとは独立して扱う。
 - 個別IDなしの旧テスターは、従来どおりテスターコードをBearer値として送れる。新しい画面ではテスター共有リストだけを表示する。
 - 個別ID＋テスターコードでは、自分のマイリスト（クラウド）とテスター共有リストの両方を返す。
+- テスター向けサインアップは `POST /v1/test-signups` だけを入口にし、Workerが `X-Tester-Code` を検証してからSupabase Admin APIの招待メールを送る。登録内容は `test_signup_registrations` に保存し、Supabaseユーザーメタデータにも `tester_signup=true` と `grid_name` を付ける。
 - リスト作成時は `X-Cloud-Scope: mine` または `X-Cloud-Scope: testerShared` で保存先を指定できる。後者はテスター権限が必要。
 - アクセスコード式ベータでは、Bearer値をCloudflare Worker Secrets `PERSONAL_ACCESS_CODE` / `FRIEND_ACCESS_CODE`と照合する。
 - SecretはSHA-256へ揃えた後に定数時間比較し、ソース・`wrangler.jsonc`・Gitへ保存しない。
@@ -46,10 +47,17 @@ Get-Content -LiteralPath GRID_ATLAS_CLOUD_ACCESS_CODE_PRIVATE.txt -Raw | npx wra
 Get-Content -LiteralPath GRID_ATLAS_FRIEND_ACCESS_CODE_PRIVATE.txt -Raw | npx wrangler secret put FRIEND_ACCESS_CODE --env staging
 ```
 
+SupabaseのSecret keyはブラウザへ出さず、Worker Secretとして一度だけ登録する。
+
+```powershell
+npx wrangler secret put SUPABASE_SECRET_KEY --env staging
+```
+
 ## API
 
 ```text
 GET    /v1/me/lists
+POST   /v1/test-signups
 POST   /v1/me/lists
 GET    /v1/me/lists/:listId
 PUT    /v1/me/lists/:listId
@@ -57,6 +65,16 @@ DELETE /v1/me/lists/:listId
 ```
 
 作成は `grid-atlas-share` v1ペイロード、更新・削除は `expectedRevision` を受け取る。競合時は409を返し、自動マージしない。削除は現在は論理削除。
+
+登録者の確認はD1で次のように行う。
+
+```sql
+SELECT created_at, email, grid_name, auth_user_id, tester_owner_id, status
+FROM test_signup_registrations
+ORDER BY created_at DESC;
+```
+
+このAPIを有効にした後、Supabase Authenticationの「Allow new users to sign up」はオフにする。これにより、公開の `auth.signUp()` 直呼びを止め、テスターコード付きWorker APIだけが新規登録の入口になる。
 
 ## 未決事項
 
