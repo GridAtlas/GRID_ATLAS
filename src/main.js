@@ -57,7 +57,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1271";
+const WEB_VERSION = "0.1272";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -7527,15 +7527,23 @@ function normalizeStoredLink(link) {
   for (const side of ["a", "b"]) {
     const endpointKey = `${side}Endpoint`;
     const legacySnapshotKey = `${side}Snapshot`;
-    const currentEndpoint = normalizeLineEndpoint(next[endpointKey] ?? next[legacySnapshotKey]);
-    if (currentEndpoint) {
+    const rawEndpoint = next[endpointKey] ?? next[legacySnapshotKey];
+    const currentEndpoint = normalizeLineEndpoint(rawEndpoint);
+    const hasStableEndpointKey = typeof rawEndpoint?.endpointKey === "string" && rawEndpoint.endpointKey;
+    if (currentEndpoint && hasStableEndpointKey) {
       next[endpointKey] = currentEndpoint;
       delete next[legacySnapshotKey];
       continue;
     }
     const point = findPoint(next[side]);
     const freshEndpoint = captureLineEndpoint(point);
-    if (freshEndpoint) next[endpointKey] = freshEndpoint;
+    if (freshEndpoint) {
+      next[endpointKey] = freshEndpoint;
+      delete next[legacySnapshotKey];
+    } else if (currentEndpoint) {
+      next[endpointKey] = currentEndpoint;
+      delete next[legacySnapshotKey];
+    }
   }
 
   return next;
