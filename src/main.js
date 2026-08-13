@@ -57,7 +57,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1262";
+const WEB_VERSION = "0.1263";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -6574,11 +6574,22 @@ async function initializeCloudAuth() {
     const { data, error } = await state.cloud.authClient.auth.getSession();
     if (error) throw error;
     const testerSignupUser = isTesterSignupUser(data.session?.user);
-    state.cloud.signupPasswordSetupActive = state.cloud.signupPasswordSetupActive || testerSignupUser;
+    const passwordSetupComplete = hasCloudPasswordSetup(data.session?.user?.id);
+    const signupLink = authUrlState.type === "signup";
+    if (data.session && signupLink && !passwordSetupComplete) {
+      // Keep the setup flow available if the user reloads before setting a password.
+      markPendingCloudSignup(true);
+    }
+    if (passwordSetupComplete) {
+      // A stale Supabase signup URL or old pending flag must not reopen setup.
+      markPendingCloudSignup(false);
+    }
+    state.cloud.signupPasswordSetupActive = !passwordSetupComplete
+      && (signupLink || (testerSignupUser && hasPendingCloudSignup()));
     applyCloudAuthSession(data.session, { refresh: Boolean(data.session), forceRefresh: true });
-    if (testerSignupUser) {
+    if (testerSignupUser && state.cloud.signupPasswordSetupActive) {
       setCloudTesterSignupPanelOpen(true);
-    } else if (authUrlState.type === "signup") {
+    } else if (signupLink && !passwordSetupComplete) {
       setCloudTesterSignupPanelOpen(true);
     } else if (["invite", "recovery", "magiclink"].includes(authUrlState.type)) {
       setCloudDialogOpen(true);
@@ -6586,7 +6597,7 @@ async function initializeCloudAuth() {
     if (data.session && authUrlState.type === "recovery") {
       window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
     }
-    if (data.session && (authUrlState.code || authUrlState.error)) {
+    if (data.session && (authUrlState.code || authUrlState.error || signupLink)) {
       window.history.replaceState({}, document.title, window.location.pathname);
     } else if (!data.session && authUrlState.error) {
       const detail = authUrlState.errorCode === "otp_expired"
