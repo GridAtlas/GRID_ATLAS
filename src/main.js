@@ -57,7 +57,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1270";
+const WEB_VERSION = "0.1271";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -7463,31 +7463,25 @@ function captureLineEndpoint(point) {
     return null;
   }
 
+  const geo = normalizeGeo(point.geo);
   return {
     id: typeof point.id === "string" ? point.id : "",
     title: typeof point.title === "string" && point.title.trim() ? point.title.trim() : "Point",
-    geo: normalizeGeo(point.geo)
+    geo,
+    endpointKey: canonicalEndpointKey(geo)
   };
 }
 
-function endpointSnapshotForLink(link, side) {
-  const snapshot = normalizeLineEndpoint(link?.[`${side}Endpoint`] ?? link?.[`${side}Snapshot`]);
-  return snapshot ? { ...snapshot, id: link?.[side] || snapshot.id } : null;
+function canonicalEndpointKey(geo) {
+  if (!validGeo(geo)) return "";
+  return `geo:${geo.lat}:${geo.lng}`;
 }
 
 function remapPointIdInLinks(previousId, nextId) {
   if (!previousId || !nextId || previousId === nextId) return;
   for (const link of state.links) {
-    for (const side of ["a", "b"]) {
-      if (link[side] === previousId) link[side] = nextId;
-      const endpointKey = `${side}Endpoint`;
-      const legacySnapshotKey = `${side}Snapshot`;
-      const snapshot = link[endpointKey] ?? link[legacySnapshotKey];
-      if (snapshot?.id === previousId) {
-        link[endpointKey] = { ...snapshot, id: nextId };
-        delete link[legacySnapshotKey];
-      }
-    }
+    if (link.a === previousId) link.a = nextId;
+    if (link.b === previousId) link.b = nextId;
   }
 }
 
@@ -7496,26 +7490,29 @@ function normalizeLineEndpoint(snapshot) {
     return null;
   }
 
+  const geo = normalizeGeo(snapshot.geo);
   return {
     id: typeof snapshot.id === "string" ? snapshot.id : "",
     title: typeof snapshot.title === "string" && snapshot.title.trim() ? snapshot.title.trim() : "Point",
-    geo: normalizeGeo(snapshot.geo)
+    geo,
+    endpointKey: canonicalEndpointKey(geo)
   };
 }
 
 function linkEndpoint(link, side) {
-  const point = findPoint(link?.[side]);
-  if (point) {
-    return point;
-  }
-
   const endpoint = endpointSnapshotForLink(link, side);
-  if (!endpoint) {
-    return null;
-  }
+  if (endpoint) return endpoint;
+  const point = findPoint(link?.[side]);
+  if (!point) return null;
+  const snapshot = captureLineEndpoint(point);
+  const projected = projectLatLng(snapshot.geo.lat, snapshot.geo.lng);
+  return { ...snapshot, ...projected };
+}
 
-  const projected = projectLatLng(endpoint.geo.lat, endpoint.geo.lng);
-  return { ...endpoint, x: projected.x, y: projected.y };
+function endpointSnapshotForLink(link, side) {
+  const snapshot = normalizeLineEndpoint(link?.[`${side}Endpoint`] ?? link?.[`${side}Snapshot`]);
+  if (!snapshot) return null;
+  return { ...snapshot, ...projectLatLng(snapshot.geo.lat, snapshot.geo.lng) };
 }
 
 function normalizeStoredLink(link) {
@@ -7530,19 +7527,15 @@ function normalizeStoredLink(link) {
   for (const side of ["a", "b"]) {
     const endpointKey = `${side}Endpoint`;
     const legacySnapshotKey = `${side}Snapshot`;
-    const point = findPoint(next[side]);
-    const freshEndpoint = captureLineEndpoint(point);
-    if (freshEndpoint) {
-      next[endpointKey] = { ...freshEndpoint, id: next[side] };
-      delete next[legacySnapshotKey];
-      continue;
-    }
     const currentEndpoint = normalizeLineEndpoint(next[endpointKey] ?? next[legacySnapshotKey]);
     if (currentEndpoint) {
-      next[endpointKey] = { ...currentEndpoint, id: next[side] };
+      next[endpointKey] = currentEndpoint;
       delete next[legacySnapshotKey];
       continue;
     }
+    const point = findPoint(next[side]);
+    const freshEndpoint = captureLineEndpoint(point);
+    if (freshEndpoint) next[endpointKey] = freshEndpoint;
   }
 
   return next;
@@ -7552,9 +7545,10 @@ function linkWithDeletedEndpointPositions(link, pointIds) {
   const next = normalizeStoredLink(link) ?? { ...link };
   for (const side of ["a", "b"]) {
     if (!pointIds.has(next[side])) continue;
+    if (next[`${side}Endpoint`] || next[`${side}Snapshot`]) continue;
     const snapshot = captureLineEndpoint(findPoint(next[side]));
     if (snapshot) {
-      next[`${side}Endpoint`] = { ...snapshot, id: next[side] };
+      next[`${side}Endpoint`] = snapshot;
     }
   }
   return next;
@@ -7978,7 +7972,23 @@ function routePlanFromCurrentSelection() {
 }
 
 function findLinkBetween(a, b) {
-  return state.links.find((link) => (link.a === a && link.b === b) || (link.a === b && link.b === a)) ?? null;
+  const pair = [pointEndpointIdentityKey(a), pointEndpointIdentityKey(b)].sort().join("\u0000");
+  return state.links.find((link) => linkEndpointPairKey(link) === pair) ?? null;
+}
+
+function pointEndpointIdentityKey(pointId) {
+  const point = findPoint(pointId);
+  return point && validGeo(point.geo) ? canonicalEndpointKey(point.geo) : `id:${pointId}`;
+}
+
+function linkEndpointIdentityKey(link, side) {
+  const snapshot = normalizeLineEndpoint(link?.[`${side}Endpoint`] ?? link?.[`${side}Snapshot`]);
+  if (snapshot?.endpointKey) return snapshot.endpointKey;
+  return pointEndpointIdentityKey(link?.[side]);
+}
+
+function linkEndpointPairKey(link) {
+  return [linkEndpointIdentityKey(link, "a"), linkEndpointIdentityKey(link, "b")].sort().join("\u0000");
 }
 
 function setRouteFromSelectedPoints() {
@@ -8138,7 +8148,9 @@ function updateLineDragTarget(drag, screenPoint) {
   const fixedId = link?.[lineDrag.fixedSide];
   const replaceSide = lineDrag.fixedSide === "a" ? "b" : "a";
   const replaceId = link?.[replaceSide];
-  const candidate = findNearestPoint(screenPoint, { excludeIds: [fixedId, replaceId] });
+  const candidate = findNearestPoint(screenPoint, {
+    excludeIds: [fixedId, replaceId]
+  });
   lineDrag.targetPointId = candidate?.id || null;
 }
 
@@ -8168,7 +8180,9 @@ function finishLineDrag(lineDrag, screenPoint) {
   const fixedId = link?.[lineDrag?.fixedSide];
   const replaceSide = lineDrag?.fixedSide === "a" ? "b" : "a";
   const replaceId = link?.[replaceSide];
-  const target = findNearestPoint(screenPoint, { excludeIds: [fixedId, replaceId] });
+  const target = findNearestPoint(screenPoint, {
+    excludeIds: [fixedId, replaceId]
+  });
   if (!link || !target) {
     showAppToast(t("line.invalidTarget"), { error: true });
     render();
@@ -8181,9 +8195,11 @@ function finishLineDrag(lineDrag, screenPoint) {
     return;
   }
 
+  const targetPair = [pointEndpointIdentityKey(fixedId), pointEndpointIdentityKey(target.id)]
+    .sort()
+    .join("\u0000");
   const duplicate = state.links.find((candidate) => (
-    candidate.id !== link.id
-    && ((candidate.a === fixedId && candidate.b === target.id) || (candidate.a === target.id && candidate.b === fixedId))
+    candidate.id !== link.id && linkEndpointPairKey(candidate) === targetPair
   ));
   if (duplicate) {
     showAppToast(t("line.duplicateTarget"), { error: true });
@@ -10921,7 +10937,7 @@ async function gridAtlasPackageToPointList(gridAtlasPackage, existingPointIds, e
 }
 
 function analysisLinkPairKey(link) {
-  return [link?.a, link?.b].sort().join("\u0000");
+  return linkEndpointPairKey(link);
 }
 
 function mergeAnalysisLinks(links) {

@@ -237,13 +237,20 @@ function normalizeSegment(segment) {
 
 function pointXY(point) {
   if (Number.isFinite(point?.x) && Number.isFinite(point?.y)) {
-    return { x: point.x, y: point.y, id: point.id, title: point.title, geo: point.geo };
+    return {
+      x: point.x,
+      y: point.y,
+      id: point.id,
+      title: point.title,
+      geo: point.geo,
+      endpointKey: point.endpointKey || point.key
+    };
   }
   return null;
 }
 
 function pointKey(point) {
-  return point.id || `${point.x}:${point.y}`;
+  return point.endpointKey || point.id || `${point.x}:${point.y}`;
 }
 
 function turningNumber(points) {

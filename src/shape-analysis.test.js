@@ -113,22 +113,23 @@ describe("shape analysis", () => {
     expect(result.shortestSide).toBeCloseTo(1000);
   });
 
-  it("keeps endpoint identity separate even when coordinates are equal", () => {
+  it("uses a stable endpoint key when copied points have different ids", () => {
     const points = [
-      { id: "a", x: 0, y: 0 },
-      { id: "b", x: 1, y: 0 },
-      { id: "c", x: 1, y: 1 },
-      { id: "d", x: 0, y: 1 }
+      { id: "a", endpointKey: "geo:35:135", x: 0, y: 0 },
+      { id: "b", endpointKey: "geo:35:135.01", x: 1, y: 0 },
+      { id: "c", endpointKey: "geo:35.01:135.01", x: 1, y: 1 },
+      { id: "d", endpointKey: "geo:35.01:135", x: 0, y: 1 }
     ];
     const result = analyzeSegmentShape([
       { a: points[0], b: points[1] },
-      { a: { ...points[1], id: "b-snapshot" }, b: points[2] },
-      { a: points[2], b: { ...points[3], id: "d-snapshot" } },
-      { a: points[3], b: { ...points[0], id: "a-snapshot" } }
+      { a: { ...points[1], id: "b-copy" }, b: points[2] },
+      { a: points[2], b: { ...points[3], id: "d-copy" } },
+      { a: points[3], b: { ...points[0], id: "a-copy" } }
     ]);
 
-    expect(result.valid).toBe(false);
-    expect(result.reason).toBe("not-simple-cycle");
+    expect(result.valid).toBe(true);
+    expect(result.vertexCount).toBe(4);
+    expect(result.edgeCount).toBe(4);
   });
 
   it("does not label a self-crossing five-edge cycle as a regular pentagon", () => {
