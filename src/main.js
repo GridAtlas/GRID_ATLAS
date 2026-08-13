@@ -57,7 +57,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1248";
+const WEB_VERSION = "0.1258";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -690,6 +690,8 @@ const TRANSLATIONS = {
     "analysis.shapeOpen": "閉じた線分群として測定できません",
     "analysis.shapeOpenHint": "3本以上の選択線が、各地点で2本ずつ接続する閉路になっている必要があります。",
     "analysis.polygonKicker": "測定対象",
+    "analysis.generalTitle": "基本情報",
+    "analysis.shapeFeaturesTitle": "形状の特徴",
     "analysis.reference": "参考値",
     "analysis.referenceScore": "参考整い度",
     "analysis.copy": "結果をコピー",
@@ -711,6 +713,12 @@ const TRANSLATIONS = {
     "analysis.idealAngle": "理想の内角",
     "analysis.meanSide": "平均辺長",
     "analysis.perimeter": "周長",
+    "analysis.area": "面積",
+    "analysis.vertexCount": "頂点数",
+    "analysis.edgeCount": "辺数",
+    "analysis.longestSide": "最長辺",
+    "analysis.shortestSide": "最短辺",
+    "analysis.areaUnavailable": "自己交差する図形のため、面積は算出していません。",
     "analysis.sideVariation": "辺のばらつき",
     "analysis.maxAngleDeviation": "角度の最大ずれ",
     "analysis.angleDeviationRate": "基準角に対する割合",
@@ -1032,6 +1040,8 @@ const TRANSLATIONS = {
     "analysis.shapeOpen": "Cannot measure as a closed segment set",
     "analysis.shapeOpenHint": "Three or more selected segments must form a cycle with exactly two connections at each point.",
     "analysis.polygonKicker": "Measured target",
+    "analysis.generalTitle": "General information",
+    "analysis.shapeFeaturesTitle": "Shape features",
     "analysis.reference": "Reference",
     "analysis.referenceScore": "Reference fit",
     "analysis.copy": "Copy result",
@@ -1053,6 +1063,12 @@ const TRANSLATIONS = {
     "analysis.idealAngle": "Ideal interior angle",
     "analysis.meanSide": "Average side",
     "analysis.perimeter": "Perimeter",
+    "analysis.area": "Area",
+    "analysis.vertexCount": "Vertices",
+    "analysis.edgeCount": "Edges",
+    "analysis.longestSide": "Longest side",
+    "analysis.shortestSide": "Shortest side",
+    "analysis.areaUnavailable": "Area is not calculated for self-intersecting shapes.",
     "analysis.sideVariation": "Side variation",
     "analysis.maxAngleDeviation": "Maximum angle deviation",
     "analysis.angleDeviationRate": "Relative to reference angle",
@@ -4155,13 +4171,18 @@ function selectionAnalysisText(target) {
       .replace("{points}", String(result.n))
       .replace("{lines}", String(target.links.length))
       .replace("{selfIntersection}", selfIntersection),
+    `${t("analysis.perimeter")}: ${formatDistance(result.perimeter)}`,
+    `${t("analysis.area")}: ${formatArea(result.area)}`,
+    `${t("analysis.vertexCount")}: ${result.vertexCount}`,
+    `${t("analysis.edgeCount")}: ${result.edgeCount}`,
+    `${t("analysis.meanSide")}: ${formatDistance(result.meanSide)}`,
+    `${t("analysis.longestSide")}: ${formatDistance(result.longestSide)}`,
+    `${t("analysis.shortestSide")}: ${formatDistance(result.shortestSide)}`,
     t("analysis.measurementBasis")
       .replace("{shape}", referenceShape)
       .replace("{angle}", formatAngle(result.idealAngle))
       .replace("{ratio}", result.idealDiagonalToSide.toFixed(4)),
     `${t("analysis.sideVariation")}: ${formatPercent(result.sideRangePercent)}`,
-    `${t("analysis.meanSide")}: ${formatDistance(result.meanSide)}`,
-    `${t("analysis.perimeter")}: ${formatDistance(result.perimeter)}`,
     `${t("analysis.maxAngleDeviation")}: ${formatAngle(result.maxAngleDeviation)} (${formatPercent(result.maxAngleDeviationPercent)})`,
     `${t("analysis.referenceDiagonalRatio")}: ${result.idealDiagonalToSide.toFixed(4)}`,
     "",
@@ -4218,6 +4239,22 @@ function renderPolygonAnalysisDialog(target) {
       .replace("{lines}", String(target.links.length))
       .replace("{selfIntersection}", selfIntersection)
   );
+  appendAnalysisText(elements.analysisDialogContent, "h3", "analysis-section-title", t("analysis.generalTitle"));
+  const generalMetrics = document.createElement("div");
+  generalMetrics.className = "analysis-metric-grid analysis-general-metrics";
+  appendAnalysisMetric(generalMetrics, t("analysis.perimeter"), formatDistance(result.perimeter));
+  appendAnalysisMetric(generalMetrics, t("analysis.area"), formatArea(result.area));
+  appendAnalysisMetric(generalMetrics, t("analysis.vertexCount"), String(result.vertexCount));
+  appendAnalysisMetric(generalMetrics, t("analysis.edgeCount"), String(result.edgeCount));
+  appendAnalysisMetric(generalMetrics, t("analysis.meanSide"), formatDistance(result.meanSide));
+  appendAnalysisMetric(generalMetrics, t("analysis.longestSide"), formatDistance(result.longestSide));
+  appendAnalysisMetric(generalMetrics, t("analysis.shortestSide"), formatDistance(result.shortestSide));
+  elements.analysisDialogContent.append(generalMetrics);
+  if (!Number.isFinite(result.area)) {
+    appendAnalysisText(elements.analysisDialogContent, "p", "analysis-dialog-hint", t("analysis.areaUnavailable"));
+  }
+
+  appendAnalysisText(elements.analysisDialogContent, "h3", "analysis-section-title", t("analysis.shapeFeaturesTitle"));
   appendAnalysisText(
     elements.analysisDialogContent,
     "div",
@@ -4231,8 +4268,6 @@ function renderPolygonAnalysisDialog(target) {
   const metrics = document.createElement("div");
   metrics.className = "analysis-metric-grid";
   appendAnalysisMetric(metrics, t("analysis.sideVariation"), formatPercent(result.sideRangePercent));
-  appendAnalysisMetric(metrics, t("analysis.meanSide"), formatDistance(result.meanSide));
-  appendAnalysisMetric(metrics, t("analysis.perimeter"), formatDistance(result.perimeter));
   appendAnalysisMetric(metrics, t("analysis.maxAngleDeviation"), formatAngle(result.maxAngleDeviation));
   appendAnalysisMetric(metrics, t("analysis.angleDeviationRate"), formatPercent(result.maxAngleDeviationPercent));
   appendAnalysisMetric(metrics, t("analysis.referenceDiagonalRatio"), result.idealDiagonalToSide.toFixed(4));
@@ -4285,6 +4320,18 @@ function formatAngle(value) {
 
 function formatPercent(value) {
   return Number.isFinite(value) ? `${value.toFixed(2)}%` : "-";
+}
+
+function formatArea(area) {
+  if (!Number.isFinite(area) || area < 0) return "-";
+  if (state.distanceUnit === IMPERIAL_UNIT) {
+    const squareMiles = area / 2589988.110336;
+    return squareMiles < 0.01
+      ? `${Math.round(area * 10.7639104167).toLocaleString(localeName())} sq ft`
+      : `${squareMiles.toFixed(2)} sq mi`;
+  }
+  if (area < 1000000) return `${Math.round(area).toLocaleString(localeName())} m²`;
+  return `${(area / 1000000).toFixed(2)} km²`;
 }
 
 function polygonName(count, turn = 1, selfIntersections = 0) {

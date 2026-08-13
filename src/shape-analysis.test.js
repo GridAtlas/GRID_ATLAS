@@ -91,6 +91,28 @@ describe("shape analysis", () => {
     expect(result.reason).toBe("not-simple-cycle");
   });
 
+  it("reports general polygon measurements", () => {
+    const points = [
+      { id: "a", x: 0, y: 0 },
+      { id: "b", x: 1000, y: 0 },
+      { id: "c", x: 1000, y: 1000 },
+      { id: "d", x: 0, y: 1000 }
+    ];
+    const result = analyzeSegmentShape([
+      { a: points[0], b: points[1] },
+      { a: points[1], b: points[2] },
+      { a: points[2], b: points[3] },
+      { a: points[3], b: points[0] }
+    ]);
+
+    expect(result.vertexCount).toBe(4);
+    expect(result.edgeCount).toBe(4);
+    expect(result.area).toBeCloseTo(1_000_000);
+    expect(result.meanSide).toBeCloseTo(1000);
+    expect(result.longestSide).toBeCloseTo(1000);
+    expect(result.shortestSide).toBeCloseTo(1000);
+  });
+
   it("does not label a self-crossing five-edge cycle as a regular pentagon", () => {
     const points = [
       { id: "a", x: -1, y: -2 },

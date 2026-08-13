@@ -2581,6 +2581,14 @@ textarea {
   padding-bottom: 3px;
 }
 
+.analysis-section-title {
+  margin: 3px 0 -4px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+}
+
 .analysis-reference-note {
   display: flex;
   justify-content: space-between;

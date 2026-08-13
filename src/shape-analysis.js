@@ -108,7 +108,11 @@ export function analyzeSegmentShape(segments) {
   const selfIntersections = countSelfIntersections(sequenceEdges);
   const idealAngle = 180 * (n - 2 * k) / n;
   const idealDiagonalToSide = Math.sin((2 * Math.PI * k) / n) / Math.sin((Math.PI * k) / n);
-  const sideLengths = sequenceEdges.map((edge) => vincentyDistanceMeters(edge.a, edge.b));
+  const sideLengths = sequenceEdges.map((edge) => (
+    validGeo(edge.a.geo) && validGeo(edge.b.geo)
+      ? vincentyDistanceMeters(edge.a, edge.b)
+      : length(subtract(edge.b, edge.a))
+  ));
   const angles = points.map((point, index) => {
     const previous = points[(index + n - 1) % n];
     const next = points[(index + 1) % n];
@@ -123,6 +127,7 @@ export function analyzeSegmentShape(segments) {
   const maxAngleDeviationPercent = idealAngle > EPSILON ? (maxAngleDeviation / idealAngle) * 100 : 0;
   const angleScore = clamp(100 * (1 - maxAngleDeviationPercent / 25), 0, 100);
   const sideScore = clamp(100 * (1 - sideRangePercent / 25), 0, 100);
+  const area = selfIntersections === 0 ? polygonArea(points) : null;
 
   return {
     valid: true,
@@ -134,9 +139,14 @@ export function analyzeSegmentShape(segments) {
     selfIntersections,
     shapeKind: selfIntersections > 0 ? (k > 1 ? "star" : "self-crossing") : "polygon",
     sideLengths,
+    shortestSide: Math.min(...sideLengths),
+    longestSide: Math.max(...sideLengths),
     angles,
     meanSide,
     perimeter,
+    area,
+    vertexCount: points.length,
+    edgeCount: sequenceEdges.length,
     sideRangePercent,
     idealAngle,
     maxAngleDeviation,
@@ -146,6 +156,16 @@ export function analyzeSegmentShape(segments) {
     angleScore,
     referenceScore: sideScore * 0.5 + angleScore * 0.5
   };
+}
+
+function polygonArea(points) {
+  let twiceArea = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
+    twiceArea += current.x * next.y - next.x * current.y;
+  }
+  return Math.abs(twiceArea) / 2;
 }
 
 function projectSegmentsAroundMean(segments) {
