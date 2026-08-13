@@ -35,8 +35,7 @@ import {
   grantTraverseStock,
   sanitizeTraverseLog,
   tileBounds,
-  tileIdFromGeo,
-  traverseLevelForCount
+  tileIdFromGeo
 } from "./traverse.js?v=1";
 
 const STORAGE_KEY = "grid-atlas-workspace-v2";
@@ -68,7 +67,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1319";
+const WEB_VERSION = "0.1329";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -174,6 +173,10 @@ const elements = {
   traverseActionButton: document.querySelector("#traverseActionButton"),
   traverseActionLabel: document.querySelector("#traverseActionLabel"),
   traverseActionValue: document.querySelector("#traverseActionValue"),
+  traverseActionDialog: document.querySelector("#traverseActionDialog"),
+  traverseActionDialogTitle: document.querySelector("#traverseActionDialogTitle"),
+  traversePlaceButton: document.querySelector("#traversePlaceButton"),
+  traversePickButton: document.querySelector("#traversePickButton"),
   editionBadge: document.querySelector("#editionBadge"),
   webVersionBadge: document.querySelector("#webVersionBadge"),
   settingsMenu: document.querySelector("#settingsMenu"),
@@ -490,6 +493,10 @@ let pointSubmitInFlight = null;
 let activeStorageListDrag = null;
 let activePointIndexDrag = null;
 let traverseFeedbackTimerId = 0;
+let traversePressTimerId = 0;
+let traversePressPointerId = null;
+let traverseLongPressTriggered = false;
+let traverseSuppressClick = false;
 
 Object.defineProperty(state, "links", {
   configurable: true,
@@ -600,7 +607,7 @@ const TRANSLATIONS = {
     "settings.language": "言語",
     "settings.units": "距離単位",
     "settings.gps": "GPS機能を使用",
-    "settings.traverseMode": "踏破モード",
+    "settings.traverseMode": "結界モード",
     "settings.mapProvider": "地図サービス",
     "settings.mapGoogle": "Googleマップ",
     "settings.mapApple": "Appleマップ",
@@ -648,7 +655,7 @@ const TRANSLATIONS = {
     "action.route": "巡回",
     "action.analyze": "分析",
     "action.analyzeTitle": "選択した線分・図形を分析",
-    "action.traverse": "踏破",
+    "action.traverse": "結界",
 
     "action.cancel": "キャンセル",
     "action.apply": "適用",
@@ -972,13 +979,20 @@ const TRANSLATIONS = {
     "message.quickHint": "接続、リスト間コピー／移動、共有、巡回、削除、解除をクイックボタンで実行できます。",
     "message.currentLocation": "現在地",
     "message.lastObservedLocation": "最終観測位置",
-    "traverse.noLocation": "現在地を取得してから踏破してください",
+    "traverse.noLocation": "現在地を取得してから結界石を操作してください",
     "traverse.gpsUnavailable": "この端末では現在地を取得できません",
-    "traverse.accuracyError": "位置情報の精度が低いため、踏破を記録できません",
-    "traverse.stockEmpty": "踏破ストックがありません",
-    "traverse.stockLabel": "踏破ストック {amount} / {cap}",
-    "traverse.center": "中心へ",
-    "traverse.progress": "あと{count}回で Lv{level}"
+    "traverse.accuracyError": "位置情報の精度が低いため、結界石を操作できません",
+    "traverse.stockEmpty": "置ける結界石がありません",
+    "traverse.noStone": "このタイルに結界石がありません",
+    "traverse.stockLabel": "結界石 {amount} / {cap}",
+    "traverse.progress": "結界石を{action}ました",
+    "traverse.place": "置く",
+    "traverse.pick": "拾う",
+    "traverse.menuTitle": "結界石",
+    "traverse.placeDone": "置き",
+    "traverse.pickDone": "拾い",
+    "traverse.stockFull": "結界石ストックが満タンです",
+    "traverse.barrier": "結界"
   },
   en: {
     "settings.title": "Settings",
@@ -988,7 +1002,7 @@ const TRANSLATIONS = {
     "settings.language": "Language",
     "settings.units": "Distance Unit",
     "settings.gps": "Use GPS",
-    "settings.traverseMode": "Traverse mode",
+    "settings.traverseMode": "Barrier mode",
     "settings.mapProvider": "Map service",
     "settings.mapGoogle": "Google Maps",
     "settings.mapApple": "Apple Maps",
@@ -1036,7 +1050,7 @@ const TRANSLATIONS = {
     "action.route": "Route",
     "action.analyze": "Analyze",
     "action.analyzeTitle": "Analyze selected lines or shape",
-    "action.traverse": "Traverse",
+    "action.traverse": "Barrier",
 
     "action.cancel": "Cancel",
     "action.apply": "Apply",
@@ -1360,13 +1374,20 @@ const TRANSLATIONS = {
     "message.quickHint": "Use quick buttons to link, copy or move between lists, share, route, delete, or clear.",
     "message.currentLocation": "Current location",
     "message.lastObservedLocation": "Last observed position",
-    "traverse.noLocation": "Get your current location before traversing",
+    "traverse.noLocation": "Get your current location before placing or picking up a stone",
     "traverse.gpsUnavailable": "Current location is unavailable on this device",
-    "traverse.accuracyError": "Location accuracy is too low to record this traverse",
-    "traverse.stockEmpty": "No traverse stock available",
-    "traverse.stockLabel": "Traverse stock {amount} / {cap}",
-    "traverse.center": "Center",
-    "traverse.progress": "{count} more for Lv{level}"
+    "traverse.accuracyError": "Location accuracy is too low to operate a barrier stone",
+    "traverse.stockEmpty": "No barrier stones available to place",
+    "traverse.noStone": "There is no barrier stone on this tile",
+    "traverse.stockLabel": "Barrier stones {amount} / {cap}",
+    "traverse.progress": "Barrier stone {action}",
+    "traverse.place": "Place",
+    "traverse.pick": "Pick up",
+    "traverse.menuTitle": "Barrier stones",
+    "traverse.placeDone": "placed",
+    "traverse.pickDone": "picked up",
+    "traverse.stockFull": "Barrier stone stock is full",
+    "traverse.barrier": "Barrier"
   }
 };
 
@@ -1522,6 +1543,7 @@ function refreshTraverseStock() {
 
 function setTraverseMode(enabled) {
   state.traverseMode = Boolean(enabled);
+  if (!state.traverseMode) closeTraverseActionDialog();
   if (state.traverseMode) refreshTraverseStock();
   render();
 }
@@ -2844,19 +2866,19 @@ function drawTraverseTiles() {
   for (const [tileId, tile] of Object.entries(state.traverseLog.tiles)) {
     const polygon = traverseTilePolygon(tileId);
     if (!polygon) continue;
-    const level = traverseLevelForCount(tile.count);
     context.save();
     context.fillStyle = colors.traverseFill;
-    context.globalAlpha = Math.min(0.7, 0.16 + Math.min(level.level, 8) * 0.06);
+    context.globalAlpha = 0.2;
     drawTraversePolygon(polygon, { fill: true });
     context.globalAlpha = 0.72;
     context.strokeStyle = colors.traverseFill;
     context.lineWidth = 1.25;
-    for (let ring = 0; ring < Math.min(3, Math.max(1, level.level)); ring += 1) {
-      drawTraversePolygon(polygon, { stroke: true, scale: 1 - ring * 0.1 });
-    }
+    drawTraversePolygon(polygon, { stroke: true });
+    drawTraverseTileCount(polygon, tile.count, colors);
     context.restore();
   }
+
+  drawTraverseBarrier();
 
   const currentGeo = state.currentGeo;
   const currentTileId = currentGeo ? tileIdFromGeo(currentGeo) : null;
@@ -2871,6 +2893,49 @@ function drawTraverseTiles() {
   context.lineWidth = 1.2;
   context.setLineDash([4, 4]);
   drawTraversePolygon(preview, { stroke: true });
+  context.setLineDash([]);
+  context.restore();
+}
+
+function drawTraverseTileCount(polygon, count, colors) {
+  const right = Math.max(...polygon.map((point) => point.x)) - 5;
+  const bottom = Math.max(...polygon.map((point) => point.y)) - 5;
+  context.textAlign = "right";
+  context.textBaseline = "bottom";
+  context.font = "800 14px ui-monospace, SFMono-Regular, Consolas, monospace";
+  context.lineWidth = 4;
+  context.strokeStyle = colors.pointBaseStroke;
+  context.strokeText(String(count), right, bottom);
+  context.fillStyle = colors.traverseFill;
+  context.fillText(String(count), right, bottom);
+}
+
+function traverseBarrierTileIds() {
+  const ordered = Array.isArray(state.traverseLog?.tileOrder) ? state.traverseLog.tileOrder : [];
+  return ordered.filter((tileId) => state.traverseLog.tiles[tileId]?.count > 0);
+}
+
+function drawTraverseBarrier() {
+  const tileIds = traverseBarrierTileIds();
+  if (tileIds.length < 3) return;
+  const centers = tileIds
+    .map((tileId) => tileBounds(tileId))
+    .filter(Boolean)
+    .map((bounds) => projectLatLng((bounds.north + bounds.south) / 2, (bounds.west + bounds.east) / 2))
+    .map(worldToScreen);
+  if (centers.length < 3) return;
+
+  const colors = canvasPalette();
+  context.save();
+  context.beginPath();
+  context.moveTo(centers[0].x, centers[0].y);
+  for (const center of centers.slice(1)) context.lineTo(center.x, center.y);
+  context.closePath();
+  context.strokeStyle = colors.traverseFill;
+  context.lineWidth = 2.5;
+  context.globalAlpha = 0.9;
+  context.setLineDash([8, 5]);
+  context.stroke();
   context.setLineDash([]);
   context.restore();
 }
@@ -3921,14 +3986,6 @@ function renderStatus() {
   elements.statusLine.value = t("status.grid") + " " + formatDistance(chooseGridStep());
 }
 
-function traverseCurrentLocationOffscreen() {
-  const current = currentLocationPoint();
-  if (!current) return false;
-  const screen = worldToScreen(current);
-  const size = canvasSize();
-  return screen.x < 0 || screen.y < 0 || screen.x > size.width || screen.y > size.height;
-}
-
 function renderTraverseActionButton() {
   const button = elements.traverseActionButton;
   if (!button) return;
@@ -3938,67 +3995,52 @@ function renderTraverseActionButton() {
   refreshTraverseStock();
   const amount = Math.max(0, Math.floor(Number(state.traverseLog?.stock?.amount) || 0));
   const feedbackActive = state.traverseFeedback && Date.now() < state.traverseFeedbackExpiresAt;
-  const centerRequired = amount > 0 && !feedbackActive && traverseCurrentLocationOffscreen();
   const value = feedbackActive
     ? state.traverseFeedback
-    : centerRequired
-      ? t("traverse.center")
-      : `${amount} / ${TRAVERSE_CONFIG.stockCap}`;
+    : `${amount} / ${TRAVERSE_CONFIG.stockCap}`;
   elements.traverseActionLabel.textContent = t("action.traverse");
   elements.traverseActionValue.textContent = value;
-  button.disabled = state.traverseBusy || amount <= 0;
-  button.classList.toggle("is-centering", centerRequired && amount > 0 && !state.traverseBusy);
+  button.disabled = state.traverseBusy;
   button.setAttribute("aria-label", feedbackActive
     ? `${t("action.traverse")} ${value}`
     : t("traverse.stockLabel").replace("{amount}", String(amount)).replace("{cap}", String(TRAVERSE_CONFIG.stockCap)));
-  button.title = amount <= 0
-    ? t("traverse.stockEmpty")
-    : centerRequired
-      ? t("traverse.center")
-      : t("action.traverse");
+  button.title = t("traverse.menuTitle");
 }
 
-function centerForTraverse() {
-  const current = currentLocationPoint();
-  if (!current) return false;
-  if (state.gpsEnabled && "geolocation" in navigator) {
-    centerAndFollowCurrentLocation();
-    return true;
-  }
-  setProjectionCenterGeo(pointGeo(current));
-  const centeredCurrent = currentLocationPoint();
-  if (centeredCurrent) {
-    state.viewport.x = centeredCurrent.x;
-    state.viewport.y = centeredCurrent.y;
-  }
-  render();
-  return true;
-}
-
-function traverseActionPressed() {
-  if (!state.traverseMode || state.traverseBusy) return;
+function renderTraverseActionDialog() {
+  if (!elements.traverseActionDialog) return;
   refreshTraverseStock();
-  if ((state.traverseLog?.stock?.amount ?? 0) <= 0) {
-    setTraverseFeedback(t("traverse.stockEmpty"));
-    render();
-    return;
+  const amount = Math.max(0, Math.floor(Number(state.traverseLog?.stock?.amount) || 0));
+  if (elements.traverseActionDialogTitle) elements.traverseActionDialogTitle.textContent = t("traverse.menuTitle");
+  if (elements.traversePlaceButton) {
+    elements.traversePlaceButton.textContent = t("traverse.place");
+    elements.traversePlaceButton.disabled = state.traverseBusy || amount <= 0;
   }
-  if (traverseCurrentLocationOffscreen()) {
-    centerForTraverse();
-    return;
+  if (elements.traversePickButton) {
+    elements.traversePickButton.textContent = t("traverse.pick");
+    elements.traversePickButton.disabled = state.traverseBusy;
   }
-  void performTraverseAction();
 }
 
-function performTraverseAction() {
-  if (!state.traverseMode || state.traverseBusy) return;
+function openTraverseActionDialog() {
+  if (!state.traverseMode || state.traverseBusy || !elements.traverseActionDialog) return;
+  renderTraverseActionDialog();
+  if (!elements.traverseActionDialog.open) elements.traverseActionDialog.showModal();
+}
+
+function closeTraverseActionDialog() {
+  if (elements.traverseActionDialog?.open) elements.traverseActionDialog.close("cancel");
+}
+
+function performTraverseStoneAction(action) {
+  if (!state.traverseMode || state.traverseBusy || !state.traverseLog) return;
   if (!navigator.geolocation?.getCurrentPosition) {
     setTraverseFeedback(t("traverse.gpsUnavailable"));
     render();
     return;
   }
   refreshTraverseStock();
-  if ((state.traverseLog?.stock?.amount ?? 0) <= 0) {
+  if (action === "place" && (state.traverseLog.stock?.amount ?? 0) <= 0) {
     setTraverseFeedback(t("traverse.stockEmpty"));
     render();
     return;
@@ -4022,7 +4064,7 @@ function performTraverseAction() {
         accuracy
       });
       const tileId = tileIdFromGeo(geo);
-      if (!tileId || !state.traverseLog) {
+      if (!tileId) {
         state.traverseBusy = false;
         setTraverseFeedback(t("traverse.gpsUnavailable"));
         render();
@@ -4030,25 +4072,45 @@ function performTraverseAction() {
       }
 
       const now = new Date().toISOString();
-      const tile = state.traverseLog.tiles[tileId] ?? {
-        count: 0,
-        firstAt: now,
-        lastAt: now
-      };
-      tile.count += 1;
-      tile.firstAt ||= now;
-      tile.lastAt = now;
-      state.traverseLog.tiles[tileId] = tile;
-      state.traverseLog.stock.amount = Math.max(0, state.traverseLog.stock.amount - 1);
+      const tile = state.traverseLog.tiles[tileId];
+      let feedbackAction;
+      if (action === "place") {
+        const nextTile = tile ?? { count: 0, firstAt: now, lastAt: now };
+        nextTile.count += 1;
+        nextTile.firstAt ||= now;
+        nextTile.lastAt = now;
+        state.traverseLog.tiles[tileId] = nextTile;
+        if (!state.traverseLog.tileOrder.includes(tileId)) state.traverseLog.tileOrder.push(tileId);
+        state.traverseLog.stock.amount = Math.max(0, state.traverseLog.stock.amount - 1);
+        feedbackAction = t("traverse.placeDone");
+      } else {
+        if (!tile || tile.count < 1) {
+          state.traverseBusy = false;
+          setTraverseFeedback(t("traverse.noStone"));
+          render();
+          return;
+        }
+        if (state.traverseLog.stock.amount >= TRAVERSE_CONFIG.stockCap) {
+          state.traverseBusy = false;
+          setTraverseFeedback(t("traverse.stockFull"));
+          render();
+          return;
+        }
+        tile.count -= 1;
+        tile.lastAt = now;
+        if (tile.count <= 0) {
+          delete state.traverseLog.tiles[tileId];
+          state.traverseLog.tileOrder = state.traverseLog.tileOrder.filter((id) => id !== tileId);
+        }
+        state.traverseLog.stock.amount = Math.min(TRAVERSE_CONFIG.stockCap, state.traverseLog.stock.amount + 1);
+        feedbackAction = t("traverse.pickDone");
+      }
       state.currentGeo = geo;
       state.lastLocationUpdateAt = Date.now();
       state.lastLocationError = null;
       persistTraverseLog();
-      const progress = traverseLevelForCount(tile.count);
       state.traverseBusy = false;
-      setTraverseFeedback(t("traverse.progress")
-        .replace("{count}", String(progress.remaining))
-        .replace("{level}", String(progress.nextLevel)));
+      setTraverseFeedback(t("traverse.progress").replace("{action}", feedbackAction));
       render();
     },
     () => {
@@ -4058,6 +4120,39 @@ function performTraverseAction() {
     },
     geolocationOptions()
   );
+}
+
+function startTraverseLongPress(event) {
+  if (!state.traverseMode || state.traverseBusy) return;
+  if (event.pointerType === "mouse" && event.button !== 0) return;
+  traversePressPointerId = event.pointerId;
+  traverseLongPressTriggered = false;
+  if (traversePressTimerId) clearTimeout(traversePressTimerId);
+  event.preventDefault();
+  traversePressTimerId = window.setTimeout(() => {
+    traversePressTimerId = 0;
+    traverseLongPressTriggered = true;
+    traverseSuppressClick = true;
+    openTraverseActionDialog();
+  }, 550);
+}
+
+function finishTraverseLongPress(event) {
+  if (traversePressPointerId !== null && event.pointerId !== traversePressPointerId) return;
+  if (traversePressTimerId) clearTimeout(traversePressTimerId);
+  traversePressTimerId = 0;
+  traversePressPointerId = null;
+  if (traverseLongPressTriggered) event.preventDefault();
+  traverseLongPressTriggered = false;
+}
+
+function handleTraverseActionClick(event) {
+  if (traverseSuppressClick) {
+    traverseSuppressClick = false;
+    event.preventDefault();
+    return;
+  }
+  if (event.detail === 0) openTraverseActionDialog();
 }
 
 function renderActionButtons() {
@@ -12360,7 +12455,23 @@ function bindEvents() {
     if (event.target === elements.pointListPreviewDialog) elements.pointListPreviewDialog.close("cancel");
   });
   elements.useLocationButton.addEventListener("click", useCurrentLocation);
-  elements.traverseActionButton.addEventListener("click", traverseActionPressed);
+  elements.traverseActionButton.addEventListener("pointerdown", startTraverseLongPress);
+  elements.traverseActionButton.addEventListener("pointerup", finishTraverseLongPress);
+  elements.traverseActionButton.addEventListener("pointercancel", finishTraverseLongPress);
+  elements.traverseActionButton.addEventListener("pointerleave", finishTraverseLongPress);
+  elements.traverseActionButton.addEventListener("contextmenu", (event) => event.preventDefault());
+  elements.traverseActionButton.addEventListener("click", handleTraverseActionClick);
+  elements.traversePlaceButton.addEventListener("click", () => {
+    closeTraverseActionDialog();
+    void performTraverseStoneAction("place");
+  });
+  elements.traversePickButton.addEventListener("click", () => {
+    closeTraverseActionDialog();
+    void performTraverseStoneAction("pick");
+  });
+  elements.traverseActionDialog.addEventListener("click", (event) => {
+    if (event.target === elements.traverseActionDialog) closeTraverseActionDialog();
+  });
   elements.zoomInButton.addEventListener("click", () => zoomAtStage({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 1));
   elements.zoomOutButton.addEventListener("click", () => zoomAtStage({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, -1));
   elements.fitButton.addEventListener("click", fitToPoints);

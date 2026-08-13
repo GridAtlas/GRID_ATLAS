@@ -1,19 +1,18 @@
-const EARTH_RADIUS_METERS = 6378137;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const TRAVERSE_CONFIG = Object.freeze({
   dataZoom: 18,
   dailyGrant: 5,
   stockCap: 20,
-  accuracyThresholdMeters: 100,
-  levelRequirements: Object.freeze([1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144])
+  accuracyThresholdMeters: 100
 });
 
 export function createTraverseLog(now = Date.now()) {
   return {
     type: "traverse-log",
-    schemaVersion: 1,
+    schemaVersion: 2,
     tiles: {},
+    tileOrder: [],
     stock: {
       amount: TRAVERSE_CONFIG.dailyGrant,
       lastGrantAt: new Date(now).toISOString()
@@ -22,7 +21,7 @@ export function createTraverseLog(now = Date.now()) {
 }
 
 export function sanitizeTraverseLog(raw, now = Date.now()) {
-  if (!raw || typeof raw !== "object" || raw.type !== "traverse-log" || raw.schemaVersion !== 1) {
+  if (!raw || typeof raw !== "object" || raw.type !== "traverse-log" || ![1, 2].includes(raw.schemaVersion)) {
     return { log: createTraverseLog(now), changed: true };
   }
 
@@ -50,10 +49,21 @@ export function sanitizeTraverseLog(raw, now = Date.now()) {
     }
   }
 
+  const tileOrder = [];
+  const rawOrder = Array.isArray(raw.tileOrder) ? raw.tileOrder : [];
+  for (const tileId of rawOrder) {
+    if (typeof tileId === "string" && tiles[tileId] && !tileOrder.includes(tileId)) tileOrder.push(tileId);
+  }
+  Object.keys(tiles)
+    .filter((tileId) => !tileOrder.includes(tileId))
+    .sort((a, b) => Date.parse(tiles[a].firstAt) - Date.parse(tiles[b].firstAt))
+    .forEach((tileId) => tileOrder.push(tileId));
+
   const log = {
     type: "traverse-log",
-    schemaVersion: 1,
+    schemaVersion: 2,
     tiles,
+    tileOrder,
     stock: {
       amount,
       lastGrantAt: new Date(lastGrantAt).toISOString()
@@ -123,51 +133,6 @@ export function tileCenterGeo(tileId) {
     lat: (bounds.north + bounds.south) / 2,
     lng: (bounds.west + bounds.east) / 2
   };
-}
-
-export function tileAreaSquareMeters(tileId) {
-  const center = tileCenterGeo(tileId);
-  const parsed = parseTileId(tileId);
-  if (!center || !parsed) return 0;
-  const mercatorTileSize = (2 * Math.PI * EARTH_RADIUS_METERS) / (2 ** parsed.z);
-  const groundTileSize = mercatorTileSize * Math.cos((center.lat * Math.PI) / 180);
-  return groundTileSize ** 2;
-}
-
-export function traverseLevelForCount(count) {
-  let level = Math.max(0, Math.floor(Number(count) || 0));
-  if (level === 0) {
-    return { level: 0, nextLevel: 1, remaining: 1, requirement: 1 };
-  }
-
-  level = 1;
-  let spent = Math.max(0, Math.floor(Number(count) || 0) - 1);
-  let requirementIndex = 0;
-  while (spent >= nextLevelRequirement(requirementIndex)) {
-    spent -= nextLevelRequirement(requirementIndex);
-    level += 1;
-    requirementIndex += 1;
-  }
-  const requirement = nextLevelRequirement(requirementIndex);
-  return {
-    level,
-    nextLevel: level + 1,
-    remaining: requirement - spent,
-    requirement
-  };
-}
-
-function nextLevelRequirement(index) {
-  const requirements = TRAVERSE_CONFIG.levelRequirements;
-  if (index < requirements.length) return requirements[index];
-  let previous = requirements.at(-2);
-  let current = requirements.at(-1);
-  for (let cursor = requirements.length; cursor <= index; cursor += 1) {
-    const next = previous + current;
-    previous = current;
-    current = next;
-  }
-  return current;
 }
 
 function tileYToLatitude(y, scale) {

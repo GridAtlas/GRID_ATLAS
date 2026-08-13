@@ -3,9 +3,8 @@ import {
   TRAVERSE_CONFIG,
   createTraverseLog,
   sanitizeTraverseLog,
-  tileAreaSquareMeters,
-  tileIdFromGeo,
-  traverseLevelForCount
+  tileBounds,
+  tileIdFromGeo
 } from "./traverse.js";
 
 describe("traverse helpers", () => {
@@ -20,6 +19,8 @@ describe("traverse helpers", () => {
     });
     expect(JSON.stringify(log)).not.toContain("35.6");
     expect(log.tiles[tileId].count).toBe(2);
+    expect(log.schemaVersion).toBe(2);
+    expect(log.tileOrder).toEqual([tileId]);
   });
 
   it("starts with the daily grant and caps delayed grants", () => {
@@ -33,13 +34,9 @@ describe("traverse helpers", () => {
     expect(delayed.log.stock.amount).toBe(TRAVERSE_CONFIG.stockCap);
   });
 
-  it("reports increasing levels and next-level progress", () => {
-    expect(traverseLevelForCount(1)).toMatchObject({ level: 1, nextLevel: 2, remaining: 1 });
-    expect(traverseLevelForCount(2)).toMatchObject({ level: 2, nextLevel: 3, remaining: 2 });
-    expect(traverseLevelForCount(4)).toMatchObject({ level: 3, nextLevel: 4, remaining: 3 });
-  });
-
-  it("estimates a positive area for a tile", () => {
-    expect(tileAreaSquareMeters("18/232798/103246")).toBeGreaterThan(0);
+  it("provides bounds for drawing a barrier tile", () => {
+    const bounds = tileBounds("18/232798/103246");
+    expect(bounds.east).toBeGreaterThan(bounds.west);
+    expect(bounds.north).toBeGreaterThan(bounds.south);
   });
 });
