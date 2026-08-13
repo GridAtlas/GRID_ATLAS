@@ -32,6 +32,7 @@ import {
 import { analyzeLineIntersection, analyzeOpenPath, analyzeSegmentShape, vincentyDistanceMeters } from "./shape-analysis.js?v=1";
 import {
   BARRIER_CONFIG,
+  createBarrierLog,
   grantBarrierStock,
   registerBarrier,
   sanitizeBarrierLog,
@@ -72,7 +73,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1349";
+const WEB_VERSION = "0.1350";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -1544,12 +1545,25 @@ function syncSettingsControls() {
 }
 
 function loadTraverseLog() {
-  let raw = null;
+  const storedLogs = [BARRIER_LOG_KEY, LEGACY_TRAVERSE_LOG_KEY]
+    .map((key) => {
+      try {
+        const stored = localStorage.getItem(key);
+        return stored ? JSON.parse(stored) : null;
+      } catch {
+        return null;
+      }
+    });
+  const raw = storedLogs.find((candidate) => (
+    candidate?.type === "barrier-log" || candidate?.type === "traverse-log"
+  )) || null;
+  let result;
   try {
-    const stored = localStorage.getItem(BARRIER_LOG_KEY) || localStorage.getItem(LEGACY_TRAVERSE_LOG_KEY);
-    raw = stored ? JSON.parse(stored) : null;
-  } catch {}
-  const result = sanitizeBarrierLog(raw);
+    result = sanitizeBarrierLog(raw);
+  } catch (error) {
+    console.warn("GRID ATLAS barrier log recovery failed", error);
+    result = { log: createBarrierLog(), changed: true };
+  }
   state.traverseLog = result.log;
   if (result.changed || !raw) persistTraverseLog();
 }
@@ -2892,7 +2906,7 @@ function drawTraversePolygon(points, options = {}) {
 function drawTraverseTiles() {
   if (!state.traverseMode || !state.traverseLog) return;
   const colors = canvasPalette();
-  for (const stone of Object.values(state.traverseLog.stones)) {
+  for (const stone of Object.values(state.traverseLog?.stones || {})) {
     const polygon = traverseTilePolygon(stone.tile);
     if (!polygon) continue;
     const stoneId = stoneIdFromTile(stone.tile);
@@ -8799,7 +8813,7 @@ function findNearestPoint(screenPoint, options = {}) {
 
 function findNearestBarrierStone(screenPoint) {
   if (!state.traverseMode || !state.traverseLog) return null;
-  for (const [stoneId, stone] of Object.entries(state.traverseLog.stones)) {
+  for (const [stoneId, stone] of Object.entries(state.traverseLog?.stones || {})) {
     const polygon = traverseTilePolygon(stone.tile);
     if (polygon && pointInPolygon(screenPoint, polygon)) {
       return { stoneId, stone };
