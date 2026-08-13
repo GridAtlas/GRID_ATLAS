@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=70">
-    <script src="src/main.js?v=343" type="module" defer></script>
+    <script src="src/main.js?v=345" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -115,6 +115,10 @@
                 <input id="settingsGpsEnabled" type="checkbox">
                 <span data-i18n="settings.gps">GPS機能を使用</span>
               </label>
+              <label class="settings-check">
+                <input id="settingsTraverseMode" type="checkbox">
+                <span data-i18n="settings.traverseMode">踏破モード</span>
+              </label>
 
 
               <div class="settings-nav settings-nav-subtle">
@@ -181,7 +185,7 @@
                         </span>
                       </label>
                       <output id="cloudTesterStatus" class="form-status cloud-status cloud-tester-status" aria-live="polite"></output>
-                      <button id="cloudTesterSignupButton" class="cloud-tester-signup-button" type="button" disabled hidden data-i18n="cloud.testerSignup">テスター向けサインアップ</button>
+                      <button id="cloudTesterSignupButton" class="cloud-tester-signup-button" type="button" disabled hidden data-i18n="cloud.testerSignup">個別IDを作成</button>
                     </details>
                   <output id="cloudMenuStatus" class="form-status cloud-status" data-cloud-status aria-live="polite"></output>
                 </div>
@@ -239,6 +243,10 @@
                 <button id="originButton" class="icon-button" type="button" aria-pressed="false" title="現在地を中央にして画面追従">⌾</button>
               </div>
               <output id="statusLine" class="status-line" aria-live="polite"></output>
+              <button id="traverseActionButton" class="traverse-action-button" type="button" hidden>
+                <span id="traverseActionLabel" class="traverse-action-label" data-i18n="action.traverse">踏破</span>
+                <strong id="traverseActionValue" class="traverse-action-value"></strong>
+              </button>
             </section>
 
             <section class="mobile-content-panel" data-mobile-grid-panel="points" aria-label="地点一覧">
@@ -435,14 +443,14 @@
         <div class="cloud-dialog-heading">
           <div>
             <span class="cloud-dialog-kicker" data-i18n="cloud.menuTitle">クラウド</span>
-            <h2 id="cloudTesterSignupDialogTitle" data-i18n="cloud.testerSignupTitle">テスター向けサインアップ</h2>
+            <h2 id="cloudTesterSignupDialogTitle" data-i18n="cloud.testerSignupTitle">個別IDの設定</h2>
           </div>
-          <button id="closeCloudTesterSignupButton" class="share-link-close" type="button" aria-label="閉じる" title="テスター向けサインアップを閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
+          <button id="closeCloudTesterSignupButton" class="share-link-close" type="button" aria-label="閉じる" title="個別IDの設定を閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
         </div>
         <div id="cloudTesterSignupDialogBody" class="cloud-dialog-body">
           <section id="cloudTesterSignupPanel" class="cloud-tester-signup-panel">
             <label>
-              <span data-i18n="cloud.gridName">GRID NAME（ニックネーム）</span>
+              <span data-i18n="cloud.gridName">表示名（ニックネーム）</span>
               <input id="cloudTesterSignupGridName" type="text" maxlength="32" autocomplete="nickname" spellcheck="false">
             </label>
             <label>
@@ -450,15 +458,15 @@
               <input id="cloudTesterSignupEmail" type="email" autocomplete="email" spellcheck="false">
             </label>
             <div class="button-row">
-              <button id="cloudTesterSignupSubmitButton" class="primary-button" type="button" data-i18n="cloud.sendConfirmation">送信</button>
+              <button id="cloudTesterSignupSubmitButton" class="primary-button" type="button" data-i18n="cloud.sendConfirmation">アカウント設定メールを送信</button>
               <button id="cloudTesterSignupCancelButton" type="button" data-i18n="cloud.close">閉じる</button>
             </div>
             <output id="cloudTesterSignupStatus" class="form-status cloud-status" aria-live="polite"></output>
           </section>
           <section id="cloudTesterSignupCompletePanel" class="cloud-tester-signup-complete" hidden>
             <div class="cloud-tester-signup-complete-mark" aria-hidden="true">✓</div>
-            <h3 id="cloudTesterSignupCompleteTitle">登録が完了しました</h3>
-            <p id="cloudTesterSignupCompleteMessage">GRID NAMEとパスワードを設定しました。次回から通常のログイン設定でログインできます。</p>
+            <h3 id="cloudTesterSignupCompleteTitle">設定が完了しました</h3>
+            <p id="cloudTesterSignupCompleteMessage">表示名とパスワードを設定しました。次回から通常のログイン設定でログインできます。</p>
             <button id="cloudTesterSignupCompleteCloseButton" type="button">閉じる</button>
           </section>
         </div>

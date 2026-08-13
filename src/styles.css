@@ -1104,6 +1104,52 @@ button {
   box-shadow: var(--shadow);
 }
 
+.traverse-action-button {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 124px;
+  min-height: 48px;
+  padding: 0 15px;
+  border: 2px solid var(--accent);
+  border-radius: 999px 999px 12px 999px;
+  background: var(--surface-strong);
+  color: var(--accent-strong);
+  box-shadow: var(--shadow), 0 0 0 3px rgb(255 255 255 / 0.12);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.traverse-action-button:hover:not(:disabled),
+.traverse-action-button.is-centering {
+  background: var(--active-bg);
+}
+
+.traverse-action-button:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.traverse-action-label {
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.traverse-action-value {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+:root[data-theme="retro"] .traverse-action-button {
+  box-shadow: var(--shadow), 0 0 14px rgb(44 255 100 / 0.26);
+}
+
 .sidebar {
   min-height: 0;
   overflow-y: auto;

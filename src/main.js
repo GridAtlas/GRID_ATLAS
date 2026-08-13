@@ -30,6 +30,15 @@ import {
   withoutGridAtlasLineLayer
 } from "./gridatlas-analysis.js?v=1";
 import { analyzeLineIntersection, analyzeOpenPath, analyzeSegmentShape, vincentyDistanceMeters } from "./shape-analysis.js?v=1";
+import {
+  TRAVERSE_CONFIG,
+  grantTraverseStock,
+  sanitizeTraverseLog,
+  tileAreaSquareMeters,
+  tileBounds,
+  tileIdFromGeo,
+  traverseLevelForCount
+} from "./traverse.js?v=1";
 
 const STORAGE_KEY = "grid-atlas-workspace-v2";
 const ANALYSIS_LAYER_VERSION = 1;
@@ -47,6 +56,8 @@ const GRIDATLAS_PRESET_PARAMETER = "preset";
 const PUBLIC_PRESET_DIRECTORY = "presets";
 const PUBLIC_PRESET_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const GPS_ENABLED_KEY = "grid-atlas-gps-enabled";
+const TRAVERSE_LOG_KEY = "grid-atlas-traverse-log-v1";
+const TRAVERSE_URL_PARAMETER = "traverse";
 
 const CLOUD_ACCESS_TOKEN_KEY = "grid-atlas-cloud-access-token";
 const CLOUD_PASSWORD_SETUP_KEY_PREFIX = "grid-atlas-cloud-password-set:";
@@ -58,7 +69,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1306";
+const WEB_VERSION = "0.1317";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -161,6 +172,9 @@ const elements = {
   clearSelectionButton: document.querySelector("#clearSelectionButton"),
   actionCenterButton: document.querySelector("#actionCenterButton"),
   actionMapButton: document.querySelector("#actionMapButton"),
+  traverseActionButton: document.querySelector("#traverseActionButton"),
+  traverseActionLabel: document.querySelector("#traverseActionLabel"),
+  traverseActionValue: document.querySelector("#traverseActionValue"),
   editionBadge: document.querySelector("#editionBadge"),
   webVersionBadge: document.querySelector("#webVersionBadge"),
   settingsMenu: document.querySelector("#settingsMenu"),
@@ -178,6 +192,7 @@ const elements = {
   settingsLanguageSelect: document.querySelector("#settingsLanguageSelect"),
   settingsUnitSelect: document.querySelector("#settingsUnitSelect"),
   settingsGpsEnabled: document.querySelector("#settingsGpsEnabled"),
+  settingsTraverseMode: document.querySelector("#settingsTraverseMode"),
   settingsMapProviderSelect: document.querySelector("#settingsMapProviderSelect"),
   systemUpdateButton: document.querySelector("#systemUpdateButton"),
   systemUpdateStatus: document.querySelector("#systemUpdateStatus"),
@@ -435,6 +450,11 @@ const state = {
   observationStart: null,
   observationTrail: [],
   loadedObservations: [],
+  traverseMode: false,
+  traverseLog: null,
+  traverseFeedback: "",
+  traverseFeedbackExpiresAt: 0,
+  traverseBusy: false,
   editingPointId: null,
   pendingGeo: null,
   gpsEnabled: false,
@@ -470,6 +490,7 @@ let pendingTextInputOptions = null;
 let pointSubmitInFlight = null;
 let activeStorageListDrag = null;
 let activePointIndexDrag = null;
+let traverseFeedbackTimerId = 0;
 
 Object.defineProperty(state, "links", {
   configurable: true,
@@ -504,6 +525,7 @@ const CANVAS_PALETTES = {
     routeStart: "#6d9bc3",
     routeSelected: "#9b8bc7",
     pendingPointStroke: "#5e9f9a",
+    traverseFill: "#5e9f9a",
     selected: "#9f4772",
     badgeFill: "#fffafd",
     badgeText: "#67548f",
@@ -532,6 +554,7 @@ const CANVAS_PALETTES = {
     routeStart: "#2ddfff",
     routeSelected: "#8dffaa",
     pendingPointStroke: "#d6ffe0",
+    traverseFill: "#29ff68",
     selected: "#ffffff",
     badgeFill: "#020806",
     badgeText: "#d6ffe0",
@@ -560,6 +583,7 @@ const CANVAS_PALETTES = {
     routeStart: "#0f766e",
     routeSelected: "#7c3aed",
     pendingPointStroke: "#0f8b8d",
+    traverseFill: "#0f8b8d",
     selected: "#111827",
     badgeFill: "#fffaf0",
     badgeText: "#24313a",
@@ -577,6 +601,7 @@ const TRANSLATIONS = {
     "settings.language": "言語",
     "settings.units": "距離単位",
     "settings.gps": "GPS機能を使用",
+    "settings.traverseMode": "踏破モード",
     "settings.mapProvider": "地図サービス",
     "settings.mapGoogle": "Googleマップ",
     "settings.mapApple": "Appleマップ",
@@ -624,6 +649,7 @@ const TRANSLATIONS = {
     "action.route": "巡回",
     "action.analyze": "分析",
     "action.analyzeTitle": "選択した線分・図形を分析",
+    "action.traverse": "踏破",
 
     "action.cancel": "キャンセル",
     "action.apply": "適用",
@@ -835,10 +861,10 @@ const TRANSLATIONS = {
     "cloud.authenticate": "認証",
     "cloud.connect": "接続",
     "cloud.testerGranted": "テスター権限あり",
-    "cloud.testerSignup": "テスター向けサインアップ",
-    "cloud.testerSignupTitle": "テスター向けサインアップ",
-    "cloud.gridName": "GRID NAME（ニックネーム）",
-    "cloud.sendConfirmation": "送信",
+    "cloud.testerSignup": "個別IDを作成",
+    "cloud.testerSignupTitle": "個別IDの設定",
+    "cloud.gridName": "表示名（ニックネーム）",
+    "cloud.sendConfirmation": "アカウント設定メールを送信",
     "cloud.close": "閉じる",
     "cloud.refresh": "更新",
     "cloud.disconnect": "切断",
@@ -930,6 +956,7 @@ const TRANSLATIONS = {
     "status.grid": "格子",
     "status.zoom": "ズーム",
     "status.rangeSelect": "範囲選択中",
+    "status.traverse": "踏破",
     "label.points": "点",
     "label.links": "線",
     "label.observations": "観察",
@@ -946,7 +973,15 @@ const TRANSLATIONS = {
     "message.linkUnavailable": "線を確認できません",
     "message.quickHint": "接続、リスト間コピー／移動、共有、巡回、削除、解除をクイックボタンで実行できます。",
     "message.currentLocation": "現在地",
-    "message.lastObservedLocation": "最終観測位置"
+    "message.lastObservedLocation": "最終観測位置",
+    "traverse.noLocation": "現在地を取得してから踏破してください",
+    "traverse.gpsUnavailable": "この端末では現在地を取得できません",
+    "traverse.accuracyError": "位置情報の精度が低いため、踏破を記録できません",
+    "traverse.stockEmpty": "踏破ストックがありません",
+    "traverse.stockLabel": "踏破ストック {amount} / {cap}",
+    "traverse.center": "中心へ",
+    "traverse.progress": "あと{count}回で Lv{level}",
+    "traverse.summary": "踏破 {tiles}タイル / 約{area}"
   },
   en: {
     "settings.title": "Settings",
@@ -956,6 +991,7 @@ const TRANSLATIONS = {
     "settings.language": "Language",
     "settings.units": "Distance Unit",
     "settings.gps": "Use GPS",
+    "settings.traverseMode": "Traverse mode",
     "settings.mapProvider": "Map service",
     "settings.mapGoogle": "Google Maps",
     "settings.mapApple": "Apple Maps",
@@ -1003,6 +1039,7 @@ const TRANSLATIONS = {
     "action.route": "Route",
     "action.analyze": "Analyze",
     "action.analyzeTitle": "Analyze selected lines or shape",
+    "action.traverse": "Traverse",
 
     "action.cancel": "Cancel",
     "action.apply": "Apply",
@@ -1214,10 +1251,10 @@ const TRANSLATIONS = {
     "cloud.authenticate": "Authenticate",
     "cloud.connect": "Connect",
     "cloud.testerGranted": "Tester permission active",
-    "cloud.testerSignup": "Tester sign-up",
-    "cloud.testerSignupTitle": "Tester sign-up",
-    "cloud.gridName": "GRID NAME (nickname)",
-    "cloud.sendConfirmation": "Send",
+    "cloud.testerSignup": "Create individual ID",
+    "cloud.testerSignupTitle": "Set up individual ID",
+    "cloud.gridName": "Display name (nickname)",
+    "cloud.sendConfirmation": "Send account setup email",
     "cloud.close": "Close",
     "cloud.refresh": "Refresh",
     "cloud.disconnect": "Disconnect",
@@ -1309,6 +1346,7 @@ const TRANSLATIONS = {
     "status.grid": "Grid",
     "status.zoom": "Zoom",
     "status.rangeSelect": "Selecting range",
+    "status.traverse": "Traverse",
     "label.points": "pts",
     "label.links": "lines",
     "label.observations": "observations",
@@ -1325,7 +1363,15 @@ const TRANSLATIONS = {
     "message.linkUnavailable": "Line unavailable",
     "message.quickHint": "Use quick buttons to link, copy or move between lists, share, route, delete, or clear.",
     "message.currentLocation": "Current location",
-    "message.lastObservedLocation": "Last observed position"
+    "message.lastObservedLocation": "Last observed position",
+    "traverse.noLocation": "Get your current location before traversing",
+    "traverse.gpsUnavailable": "Current location is unavailable on this device",
+    "traverse.accuracyError": "Location accuracy is too low to record this traverse",
+    "traverse.stockEmpty": "No traverse stock available",
+    "traverse.stockLabel": "Traverse stock {amount} / {cap}",
+    "traverse.center": "Center",
+    "traverse.progress": "{count} more for Lv{level}",
+    "traverse.summary": "Traverse {tiles} tiles / approx. {area}"
   }
 };
 
@@ -1449,8 +1495,52 @@ function syncSettingsControls() {
   elements.settingsLanguageSelect.value = activeLanguage();
   elements.settingsUnitSelect.value = state.distanceUnit;
   elements.settingsGpsEnabled.checked = state.gpsEnabled;
+  elements.settingsTraverseMode.checked = state.traverseMode;
   elements.settingsMapProviderSelect.value = state.mapProvider;
   elements.routeReturnToStart.checked = state.routeReturnToStart;
+}
+
+function loadTraverseLog() {
+  let raw = null;
+  try {
+    const stored = localStorage.getItem(TRAVERSE_LOG_KEY);
+    raw = stored ? JSON.parse(stored) : null;
+  } catch {}
+  const result = sanitizeTraverseLog(raw);
+  state.traverseLog = result.log;
+  if (result.changed || !raw) persistTraverseLog();
+}
+
+function persistTraverseLog() {
+  if (!state.traverseLog) return;
+  try {
+    localStorage.setItem(TRAVERSE_LOG_KEY, JSON.stringify(state.traverseLog));
+  } catch {}
+}
+
+function refreshTraverseStock() {
+  if (!state.traverseLog) return false;
+  const changed = grantTraverseStock(state.traverseLog);
+  if (changed) persistTraverseLog();
+  return changed;
+}
+
+function setTraverseMode(enabled) {
+  state.traverseMode = Boolean(enabled);
+  if (state.traverseMode) refreshTraverseStock();
+  render();
+}
+
+function setTraverseFeedback(message, duration = 3500) {
+  state.traverseFeedback = message;
+  state.traverseFeedbackExpiresAt = Date.now() + duration;
+  if (traverseFeedbackTimerId) clearTimeout(traverseFeedbackTimerId);
+  traverseFeedbackTimerId = window.setTimeout(() => {
+    traverseFeedbackTimerId = 0;
+    state.traverseFeedback = "";
+    state.traverseFeedbackExpiresAt = 0;
+    render();
+  }, duration);
 }
 
 function loadPreferences() {
@@ -2722,6 +2812,74 @@ function drawGrid(width, height) {
   drawGridLines(topLeft, bottomRight, majorStep, colors.gridMajor, 1.25);
 }
 
+function traverseTilePolygon(tileId) {
+  const bounds = tileBounds(tileId);
+  if (!bounds || bounds.z !== TRAVERSE_CONFIG.dataZoom) return null;
+  return [
+    projectLatLng(bounds.north, bounds.west),
+    projectLatLng(bounds.north, bounds.east),
+    projectLatLng(bounds.south, bounds.east),
+    projectLatLng(bounds.south, bounds.west)
+  ].map(worldToScreen);
+}
+
+function drawTraversePolygon(points, options = {}) {
+  if (!points || points.length !== 4) return;
+  const center = points.reduce((sum, point) => ({
+    x: sum.x + point.x / points.length,
+    y: sum.y + point.y / points.length
+  }), { x: 0, y: 0 });
+  const scale = Number.isFinite(options.scale) ? options.scale : 1;
+  const scaled = points.map((point) => ({
+    x: center.x + (point.x - center.x) * scale,
+    y: center.y + (point.y - center.y) * scale
+  }));
+
+  context.beginPath();
+  context.moveTo(scaled[0].x, scaled[0].y);
+  for (const point of scaled.slice(1)) context.lineTo(point.x, point.y);
+  context.closePath();
+  if (options.fill) context.fill();
+  if (options.stroke) context.stroke();
+}
+
+function drawTraverseTiles() {
+  if (!state.traverseMode || !state.traverseLog) return;
+  const colors = canvasPalette();
+  for (const [tileId, tile] of Object.entries(state.traverseLog.tiles)) {
+    const polygon = traverseTilePolygon(tileId);
+    if (!polygon) continue;
+    const level = traverseLevelForCount(tile.count);
+    context.save();
+    context.fillStyle = colors.traverseFill;
+    context.globalAlpha = Math.min(0.7, 0.16 + Math.min(level.level, 8) * 0.06);
+    drawTraversePolygon(polygon, { fill: true });
+    context.globalAlpha = 0.72;
+    context.strokeStyle = colors.traverseFill;
+    context.lineWidth = 1.25;
+    for (let ring = 0; ring < Math.min(3, Math.max(1, level.level)); ring += 1) {
+      drawTraversePolygon(polygon, { stroke: true, scale: 1 - ring * 0.1 });
+    }
+    context.restore();
+  }
+
+  const currentGeo = state.currentGeo;
+  const currentTileId = currentGeo ? tileIdFromGeo(currentGeo) : null;
+  const preview = currentTileId ? traverseTilePolygon(currentTileId) : null;
+  if (!preview) return;
+  context.save();
+  context.fillStyle = colors.traverseFill;
+  context.globalAlpha = 0.06;
+  drawTraversePolygon(preview, { fill: true });
+  context.globalAlpha = 0.56;
+  context.strokeStyle = colors.traverseFill;
+  context.lineWidth = 1.2;
+  context.setLineDash([4, 4]);
+  drawTraversePolygon(preview, { stroke: true });
+  context.setLineDash([]);
+  context.restore();
+}
+
 function drawGridLines(topLeft, bottomRight, step, color, lineWidth) {
   const minX = Math.floor(topLeft.x / step) * step;
   const maxX = Math.ceil(bottomRight.x / step) * step;
@@ -3400,6 +3558,7 @@ function draw() {
   const size = canvasSize();
   context.clearRect(0, 0, size.width, size.height);
   drawGrid(size.width, size.height);
+  drawTraverseTiles();
   drawLinks();
   drawLineDragPreview();
   drawRouteResult();
@@ -3458,6 +3617,7 @@ function render() {
   renderMobileOverview();
   renderSelectionInfo();
   renderStatus();
+  renderTraverseActionButton();
   renderWebVersion();
   renderActionButtons();
   renderPointInfoDialog();
@@ -3763,7 +3923,160 @@ function renderStatus() {
     return;
   }
 
-  elements.statusLine.value = t("status.grid") + " " + formatDistance(chooseGridStep());
+  const gridStatus = t("status.grid") + " " + formatDistance(chooseGridStep());
+  elements.statusLine.value = state.traverseMode
+    ? `${gridStatus} · ${traverseSummaryText()}`
+    : gridStatus;
+}
+
+function traverseSummaryText() {
+  const tiles = Object.entries(state.traverseLog?.tiles ?? {});
+  const area = tiles.reduce((total, [tileId]) => total + tileAreaSquareMeters(tileId), 0);
+  const formattedArea = area >= 10_000
+    ? `${(area / 1_000_000).toFixed(2)} km²`
+    : `${Math.round(area)} m²`;
+  return t("traverse.summary")
+    .replace("{tiles}", String(tiles.length))
+    .replace("{area}", formattedArea);
+}
+
+function traverseCurrentLocationOffscreen() {
+  const current = currentLocationPoint();
+  if (!current) return false;
+  const screen = worldToScreen(current);
+  const size = canvasSize();
+  return screen.x < 0 || screen.y < 0 || screen.x > size.width || screen.y > size.height;
+}
+
+function renderTraverseActionButton() {
+  const button = elements.traverseActionButton;
+  if (!button) return;
+  button.hidden = !state.traverseMode;
+  if (!state.traverseMode) return;
+
+  refreshTraverseStock();
+  const amount = Math.max(0, Math.floor(Number(state.traverseLog?.stock?.amount) || 0));
+  const feedbackActive = state.traverseFeedback && Date.now() < state.traverseFeedbackExpiresAt;
+  const centerRequired = amount > 0 && !feedbackActive && traverseCurrentLocationOffscreen();
+  const value = feedbackActive
+    ? state.traverseFeedback
+    : centerRequired
+      ? t("traverse.center")
+      : `${amount} / ${TRAVERSE_CONFIG.stockCap}`;
+  elements.traverseActionLabel.textContent = t("action.traverse");
+  elements.traverseActionValue.textContent = value;
+  button.disabled = state.traverseBusy || amount <= 0;
+  button.classList.toggle("is-centering", centerRequired && amount > 0 && !state.traverseBusy);
+  button.setAttribute("aria-label", feedbackActive
+    ? `${t("action.traverse")} ${value}`
+    : t("traverse.stockLabel").replace("{amount}", String(amount)).replace("{cap}", String(TRAVERSE_CONFIG.stockCap)));
+  button.title = amount <= 0
+    ? t("traverse.stockEmpty")
+    : centerRequired
+      ? t("traverse.center")
+      : t("action.traverse");
+}
+
+function centerForTraverse() {
+  const current = currentLocationPoint();
+  if (!current) return false;
+  if (state.gpsEnabled && "geolocation" in navigator) {
+    centerAndFollowCurrentLocation();
+    return true;
+  }
+  setProjectionCenterGeo(pointGeo(current));
+  const centeredCurrent = currentLocationPoint();
+  if (centeredCurrent) {
+    state.viewport.x = centeredCurrent.x;
+    state.viewport.y = centeredCurrent.y;
+  }
+  render();
+  return true;
+}
+
+function traverseActionPressed() {
+  if (!state.traverseMode || state.traverseBusy) return;
+  refreshTraverseStock();
+  if ((state.traverseLog?.stock?.amount ?? 0) <= 0) {
+    setTraverseFeedback(t("traverse.stockEmpty"));
+    render();
+    return;
+  }
+  if (traverseCurrentLocationOffscreen()) {
+    centerForTraverse();
+    return;
+  }
+  void performTraverseAction();
+}
+
+function performTraverseAction() {
+  if (!state.traverseMode || state.traverseBusy) return;
+  if (!navigator.geolocation?.getCurrentPosition) {
+    setTraverseFeedback(t("traverse.gpsUnavailable"));
+    render();
+    return;
+  }
+  refreshTraverseStock();
+  if ((state.traverseLog?.stock?.amount ?? 0) <= 0) {
+    setTraverseFeedback(t("traverse.stockEmpty"));
+    render();
+    return;
+  }
+
+  state.traverseBusy = true;
+  render();
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      const accuracy = Number(position.coords?.accuracy);
+      if (!Number.isFinite(accuracy) || accuracy > TRAVERSE_CONFIG.accuracyThresholdMeters) {
+        state.traverseBusy = false;
+        setTraverseFeedback(t("traverse.accuracyError"));
+        render();
+        return;
+      }
+
+      const geo = normalizeGeo({
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy
+      });
+      const tileId = tileIdFromGeo(geo);
+      if (!tileId || !state.traverseLog) {
+        state.traverseBusy = false;
+        setTraverseFeedback(t("traverse.gpsUnavailable"));
+        render();
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const tile = state.traverseLog.tiles[tileId] ?? {
+        count: 0,
+        firstAt: now,
+        lastAt: now
+      };
+      tile.count += 1;
+      tile.firstAt ||= now;
+      tile.lastAt = now;
+      state.traverseLog.tiles[tileId] = tile;
+      state.traverseLog.stock.amount = Math.max(0, state.traverseLog.stock.amount - 1);
+      state.currentGeo = geo;
+      state.lastLocationUpdateAt = Date.now();
+      state.lastLocationError = null;
+      persistTraverseLog();
+      const progress = traverseLevelForCount(tile.count);
+      state.traverseBusy = false;
+      setTraverseFeedback(t("traverse.progress")
+        .replace("{count}", String(progress.remaining))
+        .replace("{level}", String(progress.nextLevel)));
+      render();
+    },
+    () => {
+      state.traverseBusy = false;
+      setTraverseFeedback(t("traverse.gpsUnavailable"));
+      render();
+    },
+    geolocationOptions()
+  );
 }
 
 function renderActionButtons() {
@@ -6649,7 +6962,7 @@ function renderCloudAuthControls() {
     elements.cloudPasswordPanelTitle.textContent = passwordRecoveryActive
       ? cloudText("パスワードの再設定", "Reset your password")
       : signupPasswordSetupActive
-        ? cloudText("GRID NAME登録が完了しました。パスワードを設定してください", "GRID NAME saved. Set your password")
+        ? cloudText("表示名を保存しました。パスワードを設定してください", "Display name saved. Set your password")
       : cloudText("招待ユーザーのパスワード設定（初回のみ）", "Set your password (first time only)");
   }
   if (elements.cloudSetPasswordButton) elements.cloudSetPasswordButton.disabled = busy || !signedIn;
@@ -6688,8 +7001,8 @@ function renderCloudTesterStatus() {
     elements.cloudTesterSignupButton.hidden = !state.cloud.testerActive;
     elements.cloudTesterSignupButton.disabled = !state.cloud.testerActive || state.cloud.busy || state.cloud.authBusy;
     elements.cloudTesterSignupButton.textContent = cloudText(
-      "テスター向けサインアップ",
-      "Tester sign-up"
+      "個別IDを作成",
+      "Create individual ID"
     );
   }
 }
@@ -6710,12 +7023,12 @@ function renderCloudTesterSignupDialog() {
     elements.cloudTesterSignupCompletePanel.hidden = !complete;
   }
   if (elements.cloudTesterSignupCompleteTitle) {
-    elements.cloudTesterSignupCompleteTitle.textContent = cloudText("登録が完了しました", "Registration complete");
+    elements.cloudTesterSignupCompleteTitle.textContent = cloudText("設定が完了しました", "Setup complete");
   }
   if (elements.cloudTesterSignupCompleteMessage) {
     elements.cloudTesterSignupCompleteMessage.textContent = cloudText(
-      "GRID NAMEとパスワードを設定しました。次回から通常のログイン設定でログインできます。",
-      "Your GRID NAME and password are ready. You can sign in normally next time."
+      "表示名とパスワードを設定しました。次回から通常のログイン設定でログインできます。",
+      "Your display name and password are ready. You can sign in normally next time."
     );
   }
   if (elements.cloudTesterSignupCompleteCloseButton) {
@@ -6914,7 +7227,7 @@ async function submitTesterSignup() {
   const gridName = elements.cloudTesterSignupGridName?.value.trim() || "";
   const email = elements.cloudTesterSignupEmail?.value.trim() || "";
   if (!gridName || !email) {
-    setCloudTesterSignupStatus(cloudText("GRID NAMEとメールアドレスを入力してください", "Enter a GRID NAME and email address"), { error: true });
+    setCloudTesterSignupStatus(cloudText("表示名とメールアドレスを入力してください", "Enter a display name and email address"), { error: true });
     return;
   }
   if (gridName.length > 32) {
@@ -6922,19 +7235,19 @@ async function submitTesterSignup() {
     return;
   }
   state.cloud.authBusy = true;
-  setCloudProgress(0, 1, cloudText("登録情報を送信中…", "Sending sign-up information…"));
-  setCloudTesterSignupStatus(cloudText("確認メールを送信しています…", "Sending confirmation email…"));
+  setCloudProgress(0, 1, cloudText("アカウント設定を送信中…", "Sending account setup information…"));
+  setCloudTesterSignupStatus(cloudText("アカウント設定メールを送信しています…", "Sending account setup email…"));
   renderCloudAuthControls();
   renderCloudTesterStatus();
   try {
     const result = await cloudClientFromInputs().testSignup({ email, gridName });
     markPendingCloudSignup(true);
     setCloudTesterSignupStatus(result?.status === "invited"
-      ? cloudText("登録メールを送信しました。メールのリンクを開いてください", "Invitation sent. Open the link to continue")
+      ? cloudText("アカウント設定メールを送信しました。メールのリンクを開いてください", "Account setup email sent. Open the link to continue")
       : cloudText("送信しました", "Sent"));
-    setCloudProgress(1, 1, cloudText("登録メールを送信しました", "Invitation sent"));
+    setCloudProgress(1, 1, cloudText("アカウント設定メールを送信しました", "Account setup email sent"));
   } catch (error) {
-    setCloudTesterSignupStatus(error?.message || cloudText("サインアップに失敗しました", "Sign-up failed"), { error: true });
+    setCloudTesterSignupStatus(error?.message || cloudText("アカウント設定に失敗しました", "Account setup failed"), { error: true });
   } finally {
     state.cloud.authBusy = false;
     clearCloudProgress();
@@ -11418,6 +11731,19 @@ function incomingGridAtlasPresetName() {
   return new URLSearchParams(window.location.search).get(GRIDATLAS_PRESET_PARAMETER) || "";
 }
 
+function incomingTraverseModeEnabled() {
+  const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
+  const hashValue = new URLSearchParams(hash).get(TRAVERSE_URL_PARAMETER);
+  const queryValue = new URLSearchParams(window.location.search).get(TRAVERSE_URL_PARAMETER);
+  return [hashValue, queryValue].some((value) => value === "1" || value === "true");
+}
+
+function applyTraverseModeFromUrl() {
+  if (incomingTraverseModeEnabled()) {
+    state.traverseMode = true;
+  }
+}
+
 function publicGridAtlasPresetUrl(name) {
   if (!PUBLIC_PRESET_NAME_PATTERN.test(name)) {
     throw new GridAtlasImportError("紹介用プリセット名が不正です");
@@ -11802,6 +12128,9 @@ function bindEvents() {
   elements.settingsGpsEnabled.addEventListener("change", () => {
     void setGpsEnabled(elements.settingsGpsEnabled.checked);
   });
+  elements.settingsTraverseMode.addEventListener("change", () => {
+    setTraverseMode(elements.settingsTraverseMode.checked);
+  });
   elements.systemUpdateButton.addEventListener("click", () => void requestSystemUpdate());
   elements.cloudSignUpButton?.addEventListener("click", () => void signUpCloud());
   elements.cloudSignInButton?.addEventListener("click", () => void signInCloud());
@@ -12050,6 +12379,7 @@ function bindEvents() {
     if (event.target === elements.pointListPreviewDialog) elements.pointListPreviewDialog.close("cancel");
   });
   elements.useLocationButton.addEventListener("click", useCurrentLocation);
+  elements.traverseActionButton.addEventListener("click", traverseActionPressed);
   elements.zoomInButton.addEventListener("click", () => zoomAtStage({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 1));
   elements.zoomOutButton.addEventListener("click", () => zoomAtStage({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, -1));
   elements.fitButton.addEventListener("click", fitToPoints);
@@ -12221,7 +12551,9 @@ function bindEvents() {
 
 loadTheme();
 loadWorkspace();
+loadTraverseLog();
 loadPreferences();
+applyTraverseModeFromUrl();
 loadCloudSettings();
 moveCloudAuthPanelToDialog();
 moveCloudPasswordPanelToAuth();
