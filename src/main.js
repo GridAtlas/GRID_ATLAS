@@ -74,7 +74,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1360";
+const WEB_VERSION = "0.1370";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -312,6 +312,7 @@ const elements = {
   barrierDetailShape: document.querySelector("#barrierDetailShape"),
   barrierDetailBeauty: document.querySelector("#barrierDetailBeauty"),
   barrierDetailScale: document.querySelector("#barrierDetailScale"),
+  barrierShareButton: document.querySelector("#barrierShareButton"),
   selectionHeading: document.querySelector("#selectionHeading"),
   detailPhoto: document.querySelector("#detailPhoto"),
   detailTitleLabel: document.querySelector("#detailTitleLabel"),
@@ -1030,6 +1031,11 @@ const TRANSLATIONS = {
     ,"barrier.scoreShape": "形状係数"
     ,"barrier.scoreBeauty": "美しさ係数"
     ,"barrier.scoreScale": "規模係数"
+    ,"barrier.share": "画像を共有"
+    ,"barrier.shared": "結界画像を共有しました"
+    ,"barrier.downloaded": "結界画像をPNG保存しました"
+    ,"barrier.shareFailed": "結界画像の作成に失敗しました"
+    ,"barrier.shareText": "GRID ATLAS「{name}」｜{rank} {power}力 #GRIDATLAS #結界"
   },
   en: {
     "settings.title": "Settings",
@@ -1442,6 +1448,11 @@ const TRANSLATIONS = {
     ,"barrier.scoreShape": "Shape factor"
     ,"barrier.scoreBeauty": "Beauty factor"
     ,"barrier.scoreScale": "Scale factor"
+    ,"barrier.share": "Share image"
+    ,"barrier.shared": "Barrier image shared"
+    ,"barrier.downloaded": "Barrier image saved as PNG"
+    ,"barrier.shareFailed": "Could not create the barrier image"
+    ,"barrier.shareText": "GRID ATLAS \"{name}\" | {rank} {power} power #GRIDATLAS #Barrier"
   }
 };
 
@@ -2688,6 +2699,195 @@ function safeFilenamePart(value) {
     .replace(/[\\/:*?"<>|]+/g, "-")
     .replace(/\s+/g, "-")
     .slice(0, 60) || "list";
+}
+
+function cssColorVariable(name, fallback) {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
+function barrierShareColors() {
+  const palette = canvasPalette();
+  return {
+    background: cssColorVariable("--canvas-bg", "#fbf7fb"),
+    surface: cssColorVariable("--surface", "#fffafd"),
+    surfaceStrong: cssColorVariable("--surface-strong", "#f2e9f5"),
+    line: cssColorVariable("--line", "#decfe2"),
+    text: cssColorVariable("--text", "#433a49"),
+    muted: cssColorVariable("--muted", "#7c6c83"),
+    accent: palette.traverseFill,
+    accentStrong: cssColorVariable("--accent-strong", palette.selected)
+  };
+}
+
+function barrierShareGeometry(score) {
+  const barrier = state.traverseLog?.barriers?.[score?.barrierId];
+  if (!barrier) return [];
+  return (barrier.vertices || [])
+    .map((stoneId) => state.traverseLog?.stones?.[stoneId])
+    .filter(Boolean)
+    .map((stone) => ({
+      geo: tileCenterGeo(stone.tile),
+      count: Math.max(0, Number(stone.count) || 0)
+    }))
+    .filter((vertex) => vertex.geo);
+}
+
+function canvasToPngBlob(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("PNG export failed")), "image/png");
+  });
+}
+
+async function renderBarrierShareImage(score) {
+  const geometry = barrierShareGeometry(score);
+  if (geometry.length < 3) throw new Error("Barrier geometry unavailable");
+
+  const width = 1200;
+  const height = 900;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Canvas unavailable");
+
+  const colors = barrierShareColors();
+  context.fillStyle = colors.background;
+  context.fillRect(0, 0, width, height);
+  context.strokeStyle = colors.line;
+  context.lineWidth = 2;
+  context.strokeRect(32, 32, width - 64, height - 64);
+
+  const title = score.name || t("barrier.defaultName");
+  context.fillStyle = colors.muted;
+  context.font = "700 22px system-ui, sans-serif";
+  context.fillText("GRID ATLAS / 結界", 82, 86);
+  context.fillStyle = colors.text;
+  context.font = "800 42px system-ui, sans-serif";
+  context.fillText(title.slice(0, 24), 82, 136);
+
+  const originLat = geometry.reduce((sum, vertex) => sum + vertex.geo.lat, 0) / geometry.length;
+  const originLng = geometry.reduce((sum, vertex) => sum + vertex.geo.lng, 0) / geometry.length;
+  const local = geometry.map((vertex) => ({
+    x: (vertex.geo.lng - originLng) * Math.cos(originLat * Math.PI / 180),
+    y: originLat - vertex.geo.lat,
+    count: vertex.count
+  }));
+  const minX = Math.min(...local.map((point) => point.x));
+  const maxX = Math.max(...local.map((point) => point.x));
+  const minY = Math.min(...local.map((point) => point.y));
+  const maxY = Math.max(...local.map((point) => point.y));
+  const rangeX = Math.max(maxX - minX, 0.000001);
+  const rangeY = Math.max(maxY - minY, 0.000001);
+  const mapLeft = 120;
+  const mapTop = 184;
+  const mapWidth = 720;
+  const mapHeight = 470;
+  const mapPoints = local.map((point) => ({
+    x: mapLeft + ((point.x - minX) / rangeX) * mapWidth,
+    y: mapTop + ((point.y - minY) / rangeY) * mapHeight,
+    count: point.count
+  }));
+
+  context.beginPath();
+  context.moveTo(mapPoints[0].x, mapPoints[0].y);
+  for (const point of mapPoints.slice(1)) context.lineTo(point.x, point.y);
+  context.closePath();
+  context.fillStyle = colors.accent;
+  context.globalAlpha = 0.2;
+  context.fill();
+  context.globalAlpha = 1;
+  context.strokeStyle = colors.accent;
+  context.lineWidth = 8;
+  context.lineJoin = "round";
+  context.stroke();
+
+  for (const point of mapPoints) {
+    context.beginPath();
+    context.fillStyle = colors.surface;
+    context.strokeStyle = colors.accentStrong;
+    context.lineWidth = 5;
+    context.arc(point.x, point.y, 18, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+    context.fillStyle = colors.text;
+    context.font = "800 18px ui-monospace, SFMono-Regular, Consolas, monospace";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(String(point.count), point.x, point.y);
+  }
+  context.textAlign = "left";
+  context.textBaseline = "alphabetic";
+
+  const cardLeft = 890;
+  const cardTop = 184;
+  const cardWidth = 220;
+  const cardHeight = 118;
+  const stats = [
+    [t("barrier.scoreTitle"), `${formatScoreValue(score.power)} 力`],
+    [t("barrier.scoreArea"), `${formatAreaValue(score.areaKm2)} km²`],
+    [t("barrier.scoreStones"), String(score.stoneCount)]
+  ];
+  stats.forEach(([label, value], index) => {
+    const top = cardTop + index * (cardHeight + 18);
+    context.fillStyle = colors.surface;
+    context.fillRect(cardLeft, top, cardWidth, cardHeight);
+    context.strokeStyle = colors.line;
+    context.lineWidth = 2;
+    context.strokeRect(cardLeft, top, cardWidth, cardHeight);
+    context.fillStyle = colors.muted;
+    context.font = "700 18px system-ui, sans-serif";
+    context.fillText(label, cardLeft + 22, top + 34);
+    context.fillStyle = colors.text;
+    context.font = "800 30px system-ui, sans-serif";
+    context.fillText(value, cardLeft + 22, top + 82);
+  });
+
+  context.fillStyle = colors.accentStrong;
+  context.font = "800 32px system-ui, sans-serif";
+  context.fillText(`${score.rank.name}（${score.rank.reading}）`, 120, 720);
+  context.fillStyle = colors.muted;
+  context.font = "600 18px system-ui, sans-serif";
+  context.fillText(`${t("barrier.scoreShape")} ${formatFactor(score.shapeCoefficient)}  /  ${t("barrier.scoreBeauty")} ${formatFactor(score.beautyCoefficient)}`, 120, 758);
+  context.fillText("gridatlas.github.io/GRID_ATLAS/", 120, 824);
+  context.textAlign = "right";
+  context.fillText("#GRIDATLAS  #結界", 1080, 824);
+
+  return canvasToPngBlob(canvas);
+}
+
+async function shareSelectedBarrierImage() {
+  const score = state.selectedBarrierId ? scoreBarrier(state.traverseLog, state.selectedBarrierId) : null;
+  if (!score) {
+    setShareFeedback(t("barrier.shareFailed"), { error: true });
+    return;
+  }
+
+  try {
+    const blob = await renderBarrierShareImage(score);
+    const file = new File([blob], `grid-atlas-kekkai-${safeFilenamePart(score.name || t("barrier.defaultName"))}.png`, { type: "image/png" });
+    const canShareFile = typeof navigator.share === "function"
+      && (!navigator.canShare || navigator.canShare({ files: [file] }));
+    if (canShareFile) {
+      try {
+        const shareText = t("barrier.shareText")
+          .replace("{name}", score.name || t("barrier.defaultName"))
+          .replace("{rank}", score.rank.name)
+          .replace("{power}", formatScoreValue(score.power));
+        await navigator.share({ files: [file], title: `GRID ATLAS — ${score.name || t("barrier.defaultName")}`, text: shareText });
+        setShareFeedback(t("barrier.shared"));
+        return;
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+        console.warn("GRID ATLAS barrier image share failed; falling back to download", error);
+      }
+    }
+    downloadGridAtlasFile(file);
+    setShareFeedback(t("barrier.downloaded"));
+  } catch (error) {
+    console.warn("GRID ATLAS barrier image export failed", error);
+    setShareFeedback(t("barrier.shareFailed"), { error: true });
+  }
 }
 
 function syncProjectedPoint(point) {
@@ -5272,6 +5472,7 @@ function renderBarrierDetails() {
     ? scoreBarrier(state.traverseLog, state.selectedBarrierId)
     : null;
   panel.hidden = !score;
+  if (elements.barrierShareButton) elements.barrierShareButton.disabled = !score;
   if (!score) return false;
   elements.barrierDetailTitle.textContent = score.name || t("barrier.defaultName");
   elements.barrierDetailRank.textContent = `${score.rank.name}（${score.rank.reading}）`;
@@ -12543,6 +12744,9 @@ function bindEvents() {
     }
   });
   elements.actionLinkButton.addEventListener("click", handleLinkAction);
+  elements.barrierShareButton?.addEventListener("click", () => {
+    void shareSelectedBarrierImage();
+  });
   elements.actionAnalyzeButton.addEventListener("click", openSelectionAnalysis);
   elements.actionRegisterButton.addEventListener("click", submitPendingPoint);
   elements.closePointRegistrationButton.addEventListener("click", closePointRegistration);

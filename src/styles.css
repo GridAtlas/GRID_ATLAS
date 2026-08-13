@@ -1402,6 +1402,10 @@ textarea {
   font-weight: 800;
   text-align: right;
 }
+
+.barrier-share-actions {
+  margin-top: 14px;
+}
 .target-actions {
   display: grid;
   gap: 8px;
