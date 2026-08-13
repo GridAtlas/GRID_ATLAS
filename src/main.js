@@ -57,7 +57,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1264";
+const WEB_VERSION = "0.1265";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -686,11 +686,12 @@ const TRANSLATIONS = {
     "analysis.noSelection": "2本の線分、または閉じた線分群を選択してください",
     "analysis.lineHint": "選択した2本の有限線分が交差する点の角度を表示します。",
     "analysis.polygonHint": "選択した線分の接続順をそのまま閉路として測定します。",
-    "analysis.measurementDeclaration": "対象: {shape}",
+    "analysis.measurementDeclaration": "図形: {shape}",
     "analysis.measurementBasis": "{shape} · 内角 {angle} · 対角÷辺 {ratio}",
-    "analysis.shapeStatus": "{selfIntersection}",
-    "analysis.selfIntersection": "自己交差あり",
-    "analysis.noSelfIntersection": "自己交差なし",
+    "analysis.figure": "図形",
+    "analysis.selfIntersectionLabel": "自己交差",
+    "analysis.selfIntersectionYes": "あり",
+    "analysis.selfIntersectionNo": "なし",
     "analysis.shapeClosed": "閉じた線分群",
     "analysis.shapeOpen": "閉じた線分群として測定できません",
     "analysis.shapeOpenHint": "3本以上の選択線が、各地点で2本ずつ接続する閉路になっている必要があります。",
@@ -1038,11 +1039,12 @@ const TRANSLATIONS = {
     "analysis.noSelection": "Select two segments or a closed set of segments",
     "analysis.lineHint": "Shows the angle where the two selected finite segments cross.",
     "analysis.polygonHint": "Measures the selected segments as the closed walk they form, without reordering them.",
-    "analysis.measurementDeclaration": "Target: {shape}",
+    "analysis.measurementDeclaration": "Figure: {shape}",
     "analysis.measurementBasis": "{shape} · interior angle {angle} · diagonal/side {ratio}",
-    "analysis.shapeStatus": "{selfIntersection}",
-    "analysis.selfIntersection": "self-intersecting",
-    "analysis.noSelfIntersection": "not self-intersecting",
+    "analysis.figure": "Figure",
+    "analysis.selfIntersectionLabel": "Self-intersection",
+    "analysis.selfIntersectionYes": "Yes",
+    "analysis.selfIntersectionNo": "No",
     "analysis.shapeClosed": "closed segment set",
     "analysis.shapeOpen": "Cannot measure as a closed segment set",
     "analysis.shapeOpenHint": "Three or more selected segments must form a cycle with exactly two connections at each point.",
@@ -4172,13 +4174,13 @@ function selectionAnalysisText(target) {
 
   const shape = polygonName(result.n, result.k, result.selfIntersections);
   const referenceShape = idealPolygonName(result.n, result.k);
-  const selfIntersection = result.selfIntersections > 0 ? t("analysis.selfIntersection") : t("analysis.noSelfIntersection");
+  const selfIntersection = result.selfIntersections > 0 ? t("analysis.selfIntersectionYes") : t("analysis.selfIntersectionNo");
   return [
     `GRID ATLAS — ${t("analysis.polygonTitle")}`,
     t("analysis.measurementDeclaration").replace("{shape}", shape),
-    t("analysis.shapeStatus")
-      .replace("{selfIntersection}", selfIntersection),
     `${t("analysis.generalTitle")}`,
+    `${t("analysis.figure")}: ${shape}`,
+    `${t("analysis.selfIntersectionLabel")}: ${selfIntersection}`,
     `${t("analysis.perimeter")}: ${formatDistance(result.perimeter)}`,
     `${t("analysis.area")}: ${formatArea(result.area)}`,
     `${t("analysis.vertexCount")}: ${result.vertexCount}`,
@@ -4239,18 +4241,12 @@ function renderPolygonAnalysisDialog(target) {
 
   const shape = polygonName(result.n, result.k, result.selfIntersections);
   const referenceShape = idealPolygonName(result.n, result.k);
-  const selfIntersection = result.selfIntersections > 0 ? t("analysis.selfIntersection") : t("analysis.noSelfIntersection");
-  appendAnalysisText(elements.analysisDialogContent, "div", "analysis-measurement-declaration", t("analysis.measurementDeclaration").replace("{shape}", shape));
-  appendAnalysisText(
-    elements.analysisDialogContent,
-    "div",
-    "analysis-shape-status",
-    t("analysis.shapeStatus")
-      .replace("{selfIntersection}", selfIntersection)
-  );
+  const selfIntersection = result.selfIntersections > 0 ? t("analysis.selfIntersectionYes") : t("analysis.selfIntersectionNo");
   appendAnalysisText(elements.analysisDialogContent, "h3", "analysis-section-title", t("analysis.generalTitle"));
   const generalMetrics = document.createElement("div");
   generalMetrics.className = "analysis-metric-grid analysis-general-metrics";
+  appendAnalysisMetric(generalMetrics, t("analysis.figure"), shape);
+  appendAnalysisMetric(generalMetrics, t("analysis.selfIntersectionLabel"), selfIntersection);
   appendAnalysisMetric(generalMetrics, t("analysis.perimeter"), formatDistance(result.perimeter));
   appendAnalysisMetric(generalMetrics, t("analysis.area"), formatArea(result.area));
   appendAnalysisMetric(generalMetrics, t("analysis.vertexCount"), String(result.vertexCount));

@@ -2606,27 +2606,10 @@ textarea {
   border-top: 1px solid var(--line);
 }
 
-.analysis-measurement-declaration {
-  color: var(--text);
-  font-size: 17px;
-  font-weight: 850;
-  line-height: 1.25;
-}
-
-.analysis-shape-status,
-.analysis-measurement-counts,
 .analysis-measurement-basis {
   color: var(--muted);
   font-size: 11px;
   line-height: 1.45;
-}
-
-.analysis-shape-status {
-  width: fit-content;
-  padding: 3px 8px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface-strong);
 }
 
 .analysis-measurement-basis {
