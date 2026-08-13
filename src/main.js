@@ -57,7 +57,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1247";
+const WEB_VERSION = "0.1248";
 const MOBILE_EMPTY_VALUE = "-";
 const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
@@ -158,6 +158,9 @@ const elements = {
   cloudDialog: document.querySelector("#cloudDialog"),
   closeCloudButton: document.querySelector("#closeCloudButton"),
   cloudDialogBody: document.querySelector("#cloudDialogBody"),
+  cloudTesterSignupDialog: document.querySelector("#cloudTesterSignupDialog"),
+  closeCloudTesterSignupButton: document.querySelector("#closeCloudTesterSignupButton"),
+  cloudTesterSignupDialogBody: document.querySelector("#cloudTesterSignupDialogBody"),
   settingsThemeSelect: document.querySelector("#settingsThemeSelect"),
   settingsLanguageSelect: document.querySelector("#settingsLanguageSelect"),
   settingsUnitSelect: document.querySelector("#settingsUnitSelect"),
@@ -1377,8 +1380,17 @@ function moveCloudAuthPanelToDialog() {
   if (elements.cloudAuthPanel.parentElement !== elements.cloudDialogBody) {
     elements.cloudDialogBody.append(elements.cloudAuthPanel);
   }
-  if (elements.cloudAccessCodeSection?.parentElement !== elements.cloudDialogBody) {
-    elements.cloudDialogBody.append(elements.cloudAccessCodeSection);
+}
+
+function moveCloudPasswordPanelToAuth() {
+  if (elements.cloudPasswordPanel && elements.cloudAuthPanel && elements.cloudPasswordPanel.parentElement !== elements.cloudAuthPanel) {
+    elements.cloudAuthPanel.append(elements.cloudPasswordPanel);
+  }
+}
+
+function moveCloudPasswordPanelToTesterDialog() {
+  if (elements.cloudPasswordPanel && elements.cloudTesterSignupDialogBody && elements.cloudPasswordPanel.parentElement !== elements.cloudTesterSignupDialogBody) {
+    elements.cloudTesterSignupDialogBody.append(elements.cloudPasswordPanel);
   }
 }
 
@@ -1386,6 +1398,7 @@ function setCloudDialogOpen(open) {
   if (!elements.cloudDialog) return;
   if (open) {
     moveCloudAuthPanelToDialog();
+    moveCloudPasswordPanelToAuth();
     setSettingsMenuOpen(false);
     if (!elements.cloudDialog.open) elements.cloudDialog.showModal();
     return;
@@ -6364,9 +6377,15 @@ function setCloudTesterSignupStatus(message, options = {}) {
 }
 
 function setCloudTesterSignupPanelOpen(open) {
-  if (!elements.cloudTesterSignupPanel) return;
-  elements.cloudTesterSignupPanel.hidden = !open;
-  if (open) elements.cloudTesterSignupGridName?.focus();
+  if (!elements.cloudTesterSignupDialog) return;
+  if (open) {
+    moveCloudPasswordPanelToTesterDialog();
+    setSettingsMenuOpen(false);
+    if (!elements.cloudTesterSignupDialog.open) elements.cloudTesterSignupDialog.showModal();
+    elements.cloudTesterSignupGridName?.focus();
+    return;
+  }
+  if (elements.cloudTesterSignupDialog.open) elements.cloudTesterSignupDialog.close();
 }
 
 function applyCloudAuthSession(session, options = {}) {
@@ -6458,7 +6477,9 @@ async function initializeCloudAuth() {
     const { data, error } = await state.cloud.authClient.auth.getSession();
     if (error) throw error;
     applyCloudAuthSession(data.session, { refresh: Boolean(data.session), forceRefresh: true });
-    if (["invite", "recovery", "signup", "magiclink"].includes(authUrlState.type)) {
+    if (authUrlState.type === "signup") {
+      setCloudTesterSignupPanelOpen(true);
+    } else if (["invite", "recovery", "magiclink"].includes(authUrlState.type)) {
       setCloudDialogOpen(true);
     }
     if (data.session && authUrlState.type === "recovery") {
@@ -11370,6 +11391,10 @@ function bindEvents() {
     setCloudTesterSignupStatus("");
   });
   elements.cloudTesterSignupSubmitButton?.addEventListener("click", () => void submitTesterSignup());
+  elements.closeCloudTesterSignupButton?.addEventListener("click", () => setCloudTesterSignupPanelOpen(false));
+  elements.cloudTesterSignupDialog?.addEventListener("click", (event) => {
+    if (event.target === elements.cloudTesterSignupDialog) setCloudTesterSignupPanelOpen(false);
+  });
   elements.cloudAccessToken?.addEventListener("input", () => {
     state.cloud.testerCode = elements.cloudAccessToken.value.trim();
     state.cloud.testerActive = false;
@@ -11755,6 +11780,7 @@ loadWorkspace();
 loadPreferences();
 loadCloudSettings();
 moveCloudAuthPanelToDialog();
+moveCloudPasswordPanelToAuth();
 registerGridAtlasFileLaunchHandler();
 bindEvents();
 void initializeCloudAuth();
