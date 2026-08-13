@@ -35,6 +35,7 @@ import {
   appendBarrierEvent,
   createBarrierLog,
   grantBarrierStock,
+  normalizeGuardian,
   registerBarrier,
   sanitizeBarrierLog,
   stoneIdFromTile,
@@ -54,6 +55,7 @@ const LANGUAGE_KEY = "grid-atlas-language";
 const DISTANCE_UNIT_KEY = "grid-atlas-distance-unit";
 const ROUTE_RETURN_KEY = "grid-atlas-route-return";
 const MAP_PROVIDER_KEY = "grid-atlas-map-provider";
+const GUARDIAN_LABEL_IN_IMAGE_KEY = "grid-atlas-guardian-label-in-image";
 const POINT_INFO_MAP_RETURN_KEY = "grid-atlas-point-info-map-return";
 const MAP_PROVIDER_GOOGLE = "google";
 const MAP_PROVIDER_APPLE = "apple";
@@ -75,7 +77,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1380";
+const WEB_VERSION = "0.1391";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -204,6 +206,7 @@ const elements = {
   settingsUnitSelect: document.querySelector("#settingsUnitSelect"),
   settingsGpsEnabled: document.querySelector("#settingsGpsEnabled"),
   settingsTraverseMode: document.querySelector("#settingsTraverseMode"),
+  settingsGuardianLabelInImage: document.querySelector("#settingsGuardianLabelInImage"),
   settingsMapProviderSelect: document.querySelector("#settingsMapProviderSelect"),
   systemUpdateButton: document.querySelector("#systemUpdateButton"),
   systemUpdateStatus: document.querySelector("#systemUpdateStatus"),
@@ -313,6 +316,10 @@ const elements = {
   barrierDetailShape: document.querySelector("#barrierDetailShape"),
   barrierDetailBeauty: document.querySelector("#barrierDetailBeauty"),
   barrierDetailScale: document.querySelector("#barrierDetailScale"),
+  barrierGuardianSummary: document.querySelector("#barrierGuardianSummary"),
+  barrierGuardianSetButton: document.querySelector("#barrierGuardianSetButton"),
+  barrierGuardianLabelButton: document.querySelector("#barrierGuardianLabelButton"),
+  barrierGuardianRemoveButton: document.querySelector("#barrierGuardianRemoveButton"),
   barrierShareButton: document.querySelector("#barrierShareButton"),
   selectionHeading: document.querySelector("#selectionHeading"),
   detailPhoto: document.querySelector("#detailPhoto"),
@@ -476,6 +483,8 @@ const state = {
   traverseLog: null,
   barrierSelection: [],
   selectedBarrierId: null,
+  guardianPlacementMode: false,
+  guardianLabelInImage: BARRIER_CONFIG.guardianLabelInImage,
   traverseFeedback: "",
   traverseFeedbackExpiresAt: 0,
   traverseBusy: false,
@@ -630,6 +639,7 @@ const TRANSLATIONS = {
     "settings.units": "距離単位",
     "settings.gps": "GPS機能を使用",
     "settings.traverseMode": "結界モード",
+    "settings.guardianLabelInImage": "共有画像に守護点ラベルを表示",
     "settings.mapProvider": "地図サービス",
     "settings.mapGoogle": "Googleマップ",
     "settings.mapApple": "Appleマップ",
@@ -681,6 +691,7 @@ const TRANSLATIONS = {
     "action.barrier": "結界を張る",
 
     "action.cancel": "キャンセル",
+    "action.done": "決定",
     "action.apply": "適用",
     "action.copyToList": "コピー",
     "action.moveToList": "移動",
@@ -1032,6 +1043,18 @@ const TRANSLATIONS = {
     ,"barrier.scoreShape": "形状係数"
     ,"barrier.scoreBeauty": "美しさ係数"
     ,"barrier.scoreScale": "規模係数"
+    ,"barrier.guardianTitle": "守護点"
+    ,"barrier.guardianUnset": "未設定（重心を基準に計算）"
+    ,"barrier.guardianSet": "守護点を地図で指定"
+    ,"barrier.guardianChangeLabel": "ラベルを変更"
+    ,"barrier.guardianRemove": "守護点を削除"
+    ,"barrier.guardianPlacementHint": "地図上の守る場所をタップしてください"
+    ,"barrier.guardianPlaced": "守護点を設定しました"
+    ,"barrier.guardianUpdated": "守護点ラベルを更新しました"
+    ,"barrier.guardianRemoved": "守護点を削除しました"
+    ,"barrier.guardianLabel": "守護点ラベル"
+    ,"barrier.guardianDefaultLabel": ""
+    ,"barrier.guardianRemoveConfirm": "この結界の守護点を削除しますか？"
     ,"barrier.share": "画像を共有"
     ,"barrier.shared": "結界画像を共有しました"
     ,"barrier.downloaded": "結界画像をPNG保存しました"
@@ -1047,6 +1070,7 @@ const TRANSLATIONS = {
     "settings.units": "Distance Unit",
     "settings.gps": "Use GPS",
     "settings.traverseMode": "Barrier mode",
+    "settings.guardianLabelInImage": "Show guardian label in shared image",
     "settings.mapProvider": "Map service",
     "settings.mapGoogle": "Google Maps",
     "settings.mapApple": "Apple Maps",
@@ -1098,6 +1122,7 @@ const TRANSLATIONS = {
     "action.barrier": "Create barrier",
 
     "action.cancel": "Cancel",
+    "action.done": "Done",
     "action.apply": "Apply",
     "action.copyToList": "Copy",
     "action.moveToList": "Move",
@@ -1449,6 +1474,18 @@ const TRANSLATIONS = {
     ,"barrier.scoreShape": "Shape factor"
     ,"barrier.scoreBeauty": "Beauty factor"
     ,"barrier.scoreScale": "Scale factor"
+    ,"barrier.guardianTitle": "Guardian point"
+    ,"barrier.guardianUnset": "Not set (uses the centroid)"
+    ,"barrier.guardianSet": "Choose guardian on map"
+    ,"barrier.guardianChangeLabel": "Change label"
+    ,"barrier.guardianRemove": "Remove guardian"
+    ,"barrier.guardianPlacementHint": "Tap the place to protect on the map"
+    ,"barrier.guardianPlaced": "Guardian point set"
+    ,"barrier.guardianUpdated": "Guardian label updated"
+    ,"barrier.guardianRemoved": "Guardian point removed"
+    ,"barrier.guardianLabel": "Guardian label"
+    ,"barrier.guardianDefaultLabel": ""
+    ,"barrier.guardianRemoveConfirm": "Remove this barrier's guardian point?"
     ,"barrier.share": "Share image"
     ,"barrier.shared": "Barrier image shared"
     ,"barrier.downloaded": "Barrier image saved as PNG"
@@ -1578,6 +1615,7 @@ function syncSettingsControls() {
   elements.settingsUnitSelect.value = state.distanceUnit;
   elements.settingsGpsEnabled.checked = state.gpsEnabled;
   elements.settingsTraverseMode.checked = state.traverseMode;
+  if (elements.settingsGuardianLabelInImage) elements.settingsGuardianLabelInImage.checked = state.guardianLabelInImage;
   elements.settingsMapProviderSelect.value = state.mapProvider;
   elements.routeReturnToStart.checked = state.routeReturnToStart;
 }
@@ -1624,6 +1662,7 @@ function setTraverseMode(enabled) {
   state.traverseMode = Boolean(enabled);
   state.barrierSelection = [];
   state.selectedBarrierId = null;
+  state.guardianPlacementMode = false;
   clearSelection({ render: false });
   if (!state.traverseMode) closeTraverseActionDialog();
   if (state.traverseMode) refreshTraverseStock();
@@ -1647,12 +1686,14 @@ function loadPreferences() {
   let unit = METRIC_UNIT;
   let returnToStart = true;
   let gpsEnabled = false;
+  let guardianLabelInImage = BARRIER_CONFIG.guardianLabelInImage;
   let mapProvider = defaultMapProvider();
   try {
     language = localStorage.getItem(LANGUAGE_KEY) === EN_LANGUAGE ? EN_LANGUAGE : JA_LANGUAGE;
     unit = localStorage.getItem(DISTANCE_UNIT_KEY) === IMPERIAL_UNIT ? IMPERIAL_UNIT : METRIC_UNIT;
     returnToStart = localStorage.getItem(ROUTE_RETURN_KEY) === "true";
     gpsEnabled = localStorage.getItem(GPS_ENABLED_KEY) === "true";
+    guardianLabelInImage = localStorage.getItem(GUARDIAN_LABEL_IN_IMAGE_KEY) === "true";
     const savedMapProvider = localStorage.getItem(MAP_PROVIDER_KEY);
     if (savedMapProvider === MAP_PROVIDER_APPLE || savedMapProvider === MAP_PROVIDER_GOOGLE) {
       mapProvider = savedMapProvider;
@@ -1664,6 +1705,7 @@ function loadPreferences() {
   setRouteReturnToStart(returnToStart, { persist: false });
   setMapProvider(mapProvider, { persist: false });
   state.gpsEnabled = gpsEnabled;
+  state.guardianLabelInImage = guardianLabelInImage;
 }
 
 function setSettingsMenuOpen(open) {
@@ -2766,6 +2808,11 @@ async function renderBarrierShareImage(score) {
   context.fillStyle = colors.text;
   context.font = "800 42px system-ui, sans-serif";
   context.fillText(title.slice(0, 24), 82, 136);
+  if (state.guardianLabelInImage && score.guardian?.label) {
+    context.fillStyle = colors.muted;
+    context.font = "600 18px system-ui, sans-serif";
+    context.fillText(`${t("barrier.guardianTitle")}: ${score.guardian.label.slice(0, 40)}`, 82, 166);
+  }
 
   const originLat = geometry.reduce((sum, vertex) => sum + vertex.geo.lat, 0) / geometry.length;
   const originLng = geometry.reduce((sum, vertex) => sum + vertex.geo.lng, 0) / geometry.length;
@@ -3152,6 +3199,7 @@ function drawTraverseTiles() {
   }
 
   drawTraverseBarriers();
+  drawTraverseGuardians();
 
   const currentGeo = state.currentGeo;
   const currentTileId = currentGeo ? tileIdFromGeo(currentGeo) : null;
@@ -3208,6 +3256,37 @@ function drawTraverseBarriers() {
     context.lineWidth = selected ? 4 : 2.5;
     context.stroke();
     context.restore();
+  }
+}
+
+function drawTraverseGuardians() {
+  const colors = canvasPalette();
+  for (const [barrierId, barrier] of Object.entries(state.traverseLog?.barriers || {})) {
+    const guardian = barrier?.guardian;
+    if (!guardian) continue;
+    const projected = projectLatLng(guardian.lat, guardian.lng);
+    if (!projected) continue;
+    const point = worldToScreen(projected);
+    const selected = barrierId === state.selectedBarrierId;
+    context.save();
+    context.translate(point.x, point.y);
+    context.rotate(Math.PI / 4);
+    context.fillStyle = colors.badgeStartFill || colors.selected;
+    context.strokeStyle = colors.pointBaseStroke;
+    context.lineWidth = selected ? 3 : 2;
+    context.globalAlpha = selected ? 1 : 0.8;
+    context.fillRect(-7, -7, 14, 14);
+    context.strokeRect(-7, -7, 14, 14);
+    context.restore();
+    if (selected && guardian.label) {
+      context.save();
+      context.fillStyle = colors.text || colors.selected;
+      context.font = "700 12px system-ui, sans-serif";
+      context.textAlign = "left";
+      context.textBaseline = "bottom";
+      context.fillText(guardian.label.slice(0, 24), point.x + 10, point.y - 8);
+      context.restore();
+    }
   }
 }
 
@@ -4121,6 +4200,7 @@ function renderSelectionInfo() {
 
 function selectionInfoText() {
   if (state.traverseMode) {
+    if (state.guardianPlacementMode) return t("barrier.guardianPlacementHint");
     if (state.selectedBarrierId) {
       const score = scoreBarrier(state.traverseLog, state.selectedBarrierId);
       if (score) return `${score.name || t("barrier.defaultName")} | ${score.rank.name} ${formatScoreValue(score.power)}`;
@@ -5495,6 +5575,12 @@ function renderBarrierDetails() {
     : null;
   panel.hidden = !score;
   if (elements.barrierShareButton) elements.barrierShareButton.disabled = !score;
+  if (elements.barrierGuardianSetButton) {
+    elements.barrierGuardianSetButton.hidden = !score || Boolean(score.guardian);
+    elements.barrierGuardianSetButton.disabled = !score || !BARRIER_CONFIG.guardianEnabled || state.guardianPlacementMode;
+  }
+  if (elements.barrierGuardianLabelButton) elements.barrierGuardianLabelButton.hidden = !score || !score.guardian;
+  if (elements.barrierGuardianRemoveButton) elements.barrierGuardianRemoveButton.hidden = !score || !score.guardian;
   if (!score) return false;
   elements.barrierDetailTitle.textContent = score.name || t("barrier.defaultName");
   elements.barrierDetailRank.textContent = `${score.rank.name}（${score.rank.reading}）`;
@@ -5505,7 +5591,86 @@ function renderBarrierDetails() {
   elements.barrierDetailShape.textContent = formatFactor(score.shapeCoefficient);
   elements.barrierDetailBeauty.textContent = formatFactor(score.beautyCoefficient);
   elements.barrierDetailScale.textContent = formatFactor(score.scaleCoefficient);
+  if (elements.barrierGuardianSummary) {
+    elements.barrierGuardianSummary.textContent = score.guardian
+      ? `${score.guardian.label || t("barrier.guardianUnset")} · ${score.guardian.lat.toFixed(5)}, ${score.guardian.lng.toFixed(5)}`
+      : t("barrier.guardianUnset");
+  }
   return true;
+}
+
+function beginGuardianPlacement() {
+  if (!BARRIER_CONFIG.guardianEnabled || !state.traverseMode || !state.selectedBarrierId) return;
+  state.guardianPlacementMode = true;
+  render();
+}
+
+async function placeGuardianAtScreen(screenPoint) {
+  const barrierId = state.selectedBarrierId;
+  const barrier = barrierId ? state.traverseLog?.barriers?.[barrierId] : null;
+  if (!barrier || barrier.guardian) return;
+  const geo = unprojectWorld(screenToWorld(screenPoint));
+  if (!Number.isFinite(Number(geo?.lat)) || !Number.isFinite(Number(geo?.lng))) return;
+  state.guardianPlacementMode = false;
+  render();
+  const input = await requestTextInput({
+    title: t("barrier.guardianTitle"),
+    message: t("barrier.guardianPlacementHint"),
+    label: t("barrier.guardianLabel"),
+    defaultValue: t("barrier.guardianDefaultLabel"),
+    submitLabel: t("action.done"),
+    maxLength: 120
+  });
+  if (input === null) {
+    render();
+    return;
+  }
+  const now = new Date().toISOString();
+  const guardian = normalizeGuardian({ lat: geo.lat, lng: geo.lng, label: input.value.trim(), placedAt: now }, now);
+  if (!guardian) return;
+  barrier.guardian = guardian;
+  appendBarrierEvent(state.traverseLog, { type: "guardian-placed", at: now, barrierId, guardian });
+  persistTraverseLog();
+  showAppToast(t("barrier.guardianPlaced"));
+  render();
+}
+
+async function changeSelectedGuardianLabel() {
+  const barrierId = state.selectedBarrierId;
+  const barrier = barrierId ? state.traverseLog?.barriers?.[barrierId] : null;
+  if (!barrier?.guardian) return;
+  const input = await requestTextInput({
+    title: t("barrier.guardianChangeLabel"),
+    label: t("barrier.guardianLabel"),
+    defaultValue: barrier.guardian.label,
+    submitLabel: t("action.done"),
+    maxLength: 120
+  });
+  if (input === null) return;
+  const now = new Date().toISOString();
+  barrier.guardian.label = input.value.trim().slice(0, 120);
+  appendBarrierEvent(state.traverseLog, { type: "guardian-label-updated", at: now, barrierId, label: barrier.guardian.label });
+  persistTraverseLog();
+  showAppToast(t("barrier.guardianUpdated"));
+  render();
+}
+
+async function removeSelectedGuardian() {
+  const barrierId = state.selectedBarrierId;
+  const barrier = barrierId ? state.traverseLog?.barriers?.[barrierId] : null;
+  if (!barrier?.guardian) return;
+  const confirmed = await requestConfirm({
+    title: t("barrier.guardianRemove"),
+    message: t("barrier.guardianRemoveConfirm"),
+    confirmLabel: t("barrier.guardianRemove"),
+    danger: true
+  });
+  if (!confirmed) return;
+  barrier.guardian = null;
+  appendBarrierEvent(state.traverseLog, { type: "guardian-removed", at: new Date().toISOString(), barrierId });
+  persistTraverseLog();
+  showAppToast(t("barrier.guardianRemoved"));
+  render();
 }
 
 function formatScoreValue(value) {
@@ -9628,6 +9793,10 @@ function findNearestLoadedObservation(screenPoint) {
 
 function handleCanvasClick(screenPoint) {
   if (state.traverseMode) {
+    if (state.guardianPlacementMode) {
+      void placeGuardianAtScreen(screenPoint);
+      return;
+    }
     const barrierStone = findNearestBarrierStone(screenPoint);
     if (barrierStone) {
       state.selectedBarrierId = null;
@@ -12711,6 +12880,12 @@ function bindEvents() {
   elements.settingsTraverseMode.addEventListener("change", () => {
     setTraverseMode(elements.settingsTraverseMode.checked);
   });
+  elements.settingsGuardianLabelInImage?.addEventListener("change", () => {
+    state.guardianLabelInImage = elements.settingsGuardianLabelInImage.checked;
+    try {
+      localStorage.setItem(GUARDIAN_LABEL_IN_IMAGE_KEY, String(state.guardianLabelInImage));
+    } catch {}
+  });
   elements.systemUpdateButton.addEventListener("click", () => void requestSystemUpdate());
   elements.cloudSignUpButton?.addEventListener("click", () => void signUpCloud());
   elements.cloudSignInButton?.addEventListener("click", () => void signInCloud());
@@ -12768,6 +12943,13 @@ function bindEvents() {
   elements.actionLinkButton.addEventListener("click", handleLinkAction);
   elements.barrierShareButton?.addEventListener("click", () => {
     void shareSelectedBarrierImage();
+  });
+  elements.barrierGuardianSetButton?.addEventListener("click", beginGuardianPlacement);
+  elements.barrierGuardianLabelButton?.addEventListener("click", () => {
+    void changeSelectedGuardianLabel();
+  });
+  elements.barrierGuardianRemoveButton?.addEventListener("click", () => {
+    void removeSelectedGuardian();
   });
   elements.actionAnalyzeButton.addEventListener("click", openSelectionAnalysis);
   elements.actionRegisterButton.addEventListener("click", submitPendingPoint);

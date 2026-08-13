@@ -6,6 +6,7 @@ import {
   createBarrierLog,
   grantBarrierStock,
   replayBarrierEvents,
+  normalizeGuardian,
   registerBarrier,
   sanitizeBarrierLog,
   stoneIdFromTile,
@@ -103,6 +104,28 @@ describe("barrier data helpers", () => {
     expect(log.stock.amount).toBe(BARRIER_CONFIG.stockCap);
   });
 
+  it("normalizes an optional fixed guardian point on a barrier", () => {
+    const log = createBarrierLog();
+    const vertices = ["18/232798/103246", "18/232799/103246", "18/232800/103246"].map(stoneIdFromTile);
+    vertices.forEach((stoneId, index) => {
+      log.stones[stoneId] = {
+        tile: `18/${232798 + index}/103246`,
+        lat: null,
+        lng: null,
+        count: 1,
+        firstAt: "2026-08-13T00:00:00Z",
+        lastAt: "2026-08-13T00:00:00Z"
+      };
+    });
+    registerBarrier(log, {
+      id: "guarded",
+      name: "守護付き",
+      vertices,
+      guardian: { lat: 35.681, lng: 139.767, label: "皇居", placedAt: "2026-08-13T01:00:00Z" }
+    });
+    expect(log.barriers.guarded.guardian).toMatchObject({ lat: 35.681, lng: 139.767, label: "皇居" });
+  });
+
   it("provides bounds for drawing a barrier tile", () => {
     const bounds = tileBounds("18/232798/103246");
     expect(bounds.east).toBeGreaterThan(bounds.west);
@@ -163,5 +186,19 @@ describe("barrier data helpers", () => {
     const { log } = sanitizeBarrierLog(raw, Date.parse("2026-08-14T12:00:00Z"));
     expect(log.stones[stoneId]).toMatchObject({ tile, count: 2 });
     expect(log.events).toHaveLength(2);
+  });
+
+  it("replays guardian placement, label changes, and removal", () => {
+    const vertices = ["a", "b", "c"];
+    const events = [
+      { type: "barrier-created", at: "2026-08-13T09:00:00Z", barrierId: "barrier-1", name: "守護", vertices },
+      { type: "guardian-placed", at: "2026-08-13T09:01:00Z", barrierId: "barrier-1", guardian: { lat: 35, lng: 139, label: "最初", placedAt: "2026-08-13T09:01:00Z" } },
+      { type: "guardian-label-updated", at: "2026-08-13T09:02:00Z", barrierId: "barrier-1", label: "変更後" }
+    ];
+    const replayed = replayBarrierEvents(events);
+    expect(replayed.barriers["barrier-1"].guardian).toMatchObject({ lat: 35, lng: 139, label: "変更後" });
+    expect(normalizeGuardian({ lat: 91, lng: 139 })).toBeNull();
+    const removed = replayBarrierEvents([...events, { type: "guardian-removed", at: "2026-08-13T09:03:00Z", barrierId: "barrier-1" }]);
+    expect(removed.barriers["barrier-1"].guardian).toBeNull();
   });
 });

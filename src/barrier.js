@@ -4,7 +4,9 @@ export const BARRIER_CONFIG = Object.freeze({
   dataZoom: 18,
   dailyGrant: 3,
   stockCap: 20,
-  accuracyThresholdMeters: 100
+  accuracyThresholdMeters: 100,
+  guardianEnabled: true,
+  guardianLabelInImage: false
 });
 
 export const BARRIER_LOG_SCHEMA_VERSION = 2;
@@ -114,14 +116,16 @@ export function registerBarrier(log, barrier) {
   log.barriers[barrier.id] = {
     name: typeof barrier.name === "string" ? barrier.name : "",
     vertices: [...barrier.vertices],
-    createdAt: typeof barrier.createdAt === "string" ? barrier.createdAt : new Date().toISOString()
+    createdAt: typeof barrier.createdAt === "string" ? barrier.createdAt : new Date().toISOString(),
+    guardian: normalizeGuardian(barrier.guardian, barrier.createdAt)
   };
   appendBarrierEvent(log, {
     type: "barrier-created",
     at: log.barriers[barrier.id].createdAt,
     barrierId: barrier.id,
     name: log.barriers[barrier.id].name,
-    vertices: [...log.barriers[barrier.id].vertices]
+    vertices: [...log.barriers[barrier.id].vertices],
+    guardian: log.barriers[barrier.id].guardian
   });
   return { ok: true, barrier: log.barriers[barrier.id] };
 }
@@ -133,6 +137,25 @@ export function appendBarrierEvent(log, event) {
   if (!normalized) return null;
   log.events.push(normalized);
   return normalized;
+}
+
+export function normalizeGuardian(rawGuardian, fallbackAt = Date.now()) {
+  if (!rawGuardian || typeof rawGuardian !== "object") return null;
+  const lat = Number(rawGuardian.lat);
+  const lng = Number(rawGuardian.lng);
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) return null;
+  const fallback = typeof fallbackAt === "string" && Number.isFinite(Date.parse(fallbackAt))
+    ? fallbackAt
+    : new Date(fallbackAt).toISOString();
+  const placedAt = typeof rawGuardian.placedAt === "string" && Number.isFinite(Date.parse(rawGuardian.placedAt))
+    ? rawGuardian.placedAt
+    : fallback;
+  return {
+    lat,
+    lng,
+    label: typeof rawGuardian.label === "string" ? rawGuardian.label.slice(0, 120) : "",
+    placedAt
+  };
 }
 
 export function replayBarrierEvents(events) {
@@ -159,8 +182,21 @@ export function replayBarrierEvents(events) {
       barriers[event.barrierId] = {
         name: typeof event.name === "string" ? event.name : "",
         vertices: Array.isArray(event.vertices) ? [...event.vertices] : [],
-        createdAt: event.at
+        createdAt: event.at,
+        guardian: normalizeGuardian(event.guardian, event.at)
       };
+      continue;
+    }
+    if (event.type === "guardian-placed" && typeof event.barrierId === "string") {
+      if (barriers[event.barrierId]) barriers[event.barrierId].guardian = normalizeGuardian(event.guardian, event.at);
+      continue;
+    }
+    if (event.type === "guardian-label-updated" && typeof event.barrierId === "string") {
+      if (barriers[event.barrierId]?.guardian) barriers[event.barrierId].guardian.label = typeof event.label === "string" ? event.label.slice(0, 120) : "";
+      continue;
+    }
+    if (event.type === "guardian-removed" && typeof event.barrierId === "string") {
+      if (barriers[event.barrierId]) barriers[event.barrierId].guardian = null;
       continue;
     }
     if (!event.tile || !event.stoneId) continue;
@@ -316,8 +352,22 @@ function normalizeEvent(event, now, fallbackId = "") {
       at,
       barrierId: String(event.barrierId),
       name: typeof event.name === "string" ? event.name : "",
-      vertices
+      vertices,
+      guardian: normalizeGuardian(event.guardian, at)
     };
+  }
+  if (event.type === "guardian-placed") {
+    const guardian = normalizeGuardian(event.guardian, at);
+    if (!event.barrierId || !guardian) return null;
+    return { id, type: event.type, at, barrierId: String(event.barrierId), guardian };
+  }
+  if (event.type === "guardian-label-updated") {
+    if (!event.barrierId) return null;
+    return { id, type: event.type, at, barrierId: String(event.barrierId), label: typeof event.label === "string" ? event.label.slice(0, 120) : "" };
+  }
+  if (event.type === "guardian-removed") {
+    if (!event.barrierId) return null;
+    return { id, type: event.type, at, barrierId: String(event.barrierId) };
   }
   if (![
     "stone-placed",
@@ -360,7 +410,8 @@ function normalizeSnapshotBarriers(rawBarriers, now) {
     return [[barrierId, {
       name: typeof barrier.name === "string" ? barrier.name : "",
       vertices,
-      createdAt
+      createdAt,
+      guardian: normalizeGuardian(barrier.guardian, createdAt)
     }]];
   }));
 }
@@ -374,7 +425,8 @@ function createMigrationSnapshotEvent(stones, barriers, now) {
     barriers: Object.fromEntries(Object.entries(barriers).map(([barrierId, barrier]) => [barrierId, {
       name: barrier.name,
       vertices: [...barrier.vertices],
-      createdAt: barrier.createdAt
+      createdAt: barrier.createdAt,
+      guardian: barrier.guardian
     }]))
   };
 }
@@ -394,7 +446,8 @@ function normalizeBarriers(rawBarriers, stones, now) {
     barriers[barrierId] = {
       name: typeof rawBarrier.name === "string" ? rawBarrier.name : "",
       vertices,
-      createdAt
+      createdAt,
+      guardian: normalizeGuardian(rawBarrier.guardian, createdAt)
     };
     vertices.forEach((stoneId) => usedStoneIds.add(stoneId));
   }

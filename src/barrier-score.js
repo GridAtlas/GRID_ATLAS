@@ -1,7 +1,10 @@
+import { BARRIER_CONFIG } from "./barrier.js";
+
 export const BARRIER_SCORE_CONFIG = Object.freeze({
   earthRadiusKm: 6371.0088,
-  beautyTolerance: 0.05,
-  beautyDecayRange: 0.25,
+  beautyMin: 0.5,
+  beautyMax: 3,
+  beautyGamma: 1,
   shapeCoefficients: Object.freeze({
     triangle: 1,
     quadrilateral: 1.2,
@@ -25,7 +28,8 @@ export function scoreBarrier(log, barrierId, config = BARRIER_SCORE_CONFIG) {
   const areaKm2 = sphericalPolygonAreaKm2(geos, config.earthRadiusKm);
   const selfIntersecting = polygonSelfIntersects(geos);
   const shape = shapeCoefficient(geos.length, selfIntersecting, config.shapeCoefficients);
-  const beauty = beautyCoefficient(geos, config);
+  const guardian = BARRIER_CONFIG.guardianEnabled ? barrier.guardian : null;
+  const beauty = beautyCoefficient(geos, config, guardian);
   const scale = 1 + Math.sqrt(Math.max(0, areaKm2)) / 10;
   const stoneCount = stones.reduce((sum, stone) => sum + Math.max(0, Number(stone.count) || 0), 0);
   const power = stoneCount * shape * beauty * scale;
@@ -42,6 +46,7 @@ export function scoreBarrier(log, barrierId, config = BARRIER_SCORE_CONFIG) {
     power,
     density,
     selfIntersecting,
+    guardian: guardian || null,
     rank: rankForScore(power, config)
   };
 }
@@ -56,18 +61,29 @@ export function sphericalPolygonAreaKm2(geos, earthRadiusKm = BARRIER_SCORE_CONF
   return Math.abs(signedArea) * earthRadiusKm ** 2;
 }
 
-export function beautyCoefficient(geos, config = BARRIER_SCORE_CONFIG) {
-  if (!Array.isArray(geos) || geos.length < 3) return 0.5;
-  const centroid = normalizedVector(geos.map(unitVector).reduce(addVector, { x: 0, y: 0, z: 0 }));
-  const radii = geos.map((geo) => angularDistance(centroid, unitVector(geo)));
-  const radialQuality = qualityFromRelativeSpread(radii, config);
-  const angles = geos.map((geo, index) => interiorAngle(
-    unitVector(geo),
-    unitVector(geos[(index + geos.length - 1) % geos.length]),
-    unitVector(geos[(index + 1) % geos.length])
-  ));
-  const angleQuality = qualityFromRelativeSpread(angles, config);
-  return 0.5 + 2.5 * ((radialQuality + angleQuality) / 2);
+export function beautyCoefficient(geos, config = BARRIER_SCORE_CONFIG, guardian = null) {
+  const minimum = Number.isFinite(Number(config.beautyMin)) ? Number(config.beautyMin) : 0.5;
+  const maximum = Number.isFinite(Number(config.beautyMax)) ? Number(config.beautyMax) : 3;
+  const gamma = Math.max(0.0001, Number(config.beautyGamma) || 1);
+  if (!Array.isArray(geos) || geos.length < 3) return minimum;
+  const base = validGeo(guardian) ? guardian : centroidGeo(geos);
+  const polar = geos.map((geo) => polarCoordinates(base, geo));
+  const radii = polar.map((point) => point.distanceMeters);
+  const radialMean = radii.reduce((sum, value) => sum + value, 0) / radii.length;
+  const radialVariance = radii.reduce((sum, value) => sum + (value - radialMean) ** 2, 0) / radii.length;
+  const radialCv = radialMean > 0 ? Math.sqrt(radialVariance) / radialMean : 0;
+  const radialQuality = clamp01(1 - radialCv);
+  const angles = polar.map((point) => point.bearing).sort((a, b) => a - b);
+  const gaps = angles.map((angle, index) => {
+    const next = angles[(index + 1) % angles.length];
+    return (next - angle + 360) % 360;
+  });
+  const ideal = 360 / geos.length;
+  const error = gaps.reduce((sum, gap) => sum + Math.abs(gap - ideal), 0);
+  const maxError = 720 * (geos.length - 1) / geos.length;
+  const angularQuality = clamp01(maxError > 0 ? 1 - error / maxError : 0);
+  const combinedQuality = Math.max(0, radialQuality * angularQuality) ** gamma;
+  return minimum + (maximum - minimum) * combinedQuality;
 }
 
 export function shapeCoefficient(vertexCount, selfIntersecting, coefficients = BARRIER_SCORE_CONFIG.shapeCoefficients) {
@@ -93,13 +109,36 @@ export function rankForScore(score, config = BARRIER_SCORE_CONFIG) {
   };
 }
 
-function qualityFromRelativeSpread(values, config) {
-  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
-  if (!Number.isFinite(mean) || mean <= 1e-12) return 1;
-  const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
-  const relativeSpread = Math.sqrt(variance) / mean;
-  if (relativeSpread <= config.beautyTolerance) return 1;
-  return Math.max(0, 1 - (relativeSpread - config.beautyTolerance) / config.beautyDecayRange);
+function validGeo(geo) {
+  return Number.isFinite(Number(geo?.lat)) && Number.isFinite(Number(geo?.lng));
+}
+
+function centroidGeo(geos) {
+  const centroid = normalizedVector(geos.map(unitVector).reduce(addVector, { x: 0, y: 0, z: 0 }));
+  return {
+    lat: Math.atan2(centroid.z, Math.hypot(centroid.x, centroid.y)) * 180 / Math.PI,
+    lng: Math.atan2(centroid.y, centroid.x) * 180 / Math.PI
+  };
+}
+
+function polarCoordinates(origin, target) {
+  const earthRadiusMeters = BARRIER_SCORE_CONFIG.earthRadiusKm * 1000;
+  const originLat = Number(origin.lat) * Math.PI / 180;
+  const targetLat = Number(target.lat) * Math.PI / 180;
+  const deltaLat = targetLat - originLat;
+  const deltaLng = (Number(target.lng) - Number(origin.lng)) * Math.PI / 180;
+  const haversine = Math.sin(deltaLat / 2) ** 2
+    + Math.cos(originLat) * Math.cos(targetLat) * Math.sin(deltaLng / 2) ** 2;
+  const distanceMeters = 2 * earthRadiusMeters * Math.atan2(Math.sqrt(haversine), Math.sqrt(Math.max(0, 1 - haversine)));
+  const y = Math.sin(deltaLng) * Math.cos(targetLat);
+  const x = Math.cos(originLat) * Math.sin(targetLat)
+    - Math.sin(originLat) * Math.cos(targetLat) * Math.cos(deltaLng);
+  const bearing = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  return { distanceMeters, bearing };
+}
+
+function clamp01(value) {
+  return Math.max(0, Math.min(1, Number(value) || 0));
 }
 
 function tileCenterGeo(tileId) {

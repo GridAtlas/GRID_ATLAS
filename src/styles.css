@@ -1406,6 +1406,30 @@ textarea {
 .barrier-share-actions {
   margin-top: 14px;
 }
+
+.barrier-guardian-section {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.barrier-guardian-heading {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.barrier-guardian-summary {
+  min-height: 20px;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.barrier-guardian-actions {
+  margin-top: 2px;
+}
 .target-actions {
   display: grid;
   gap: 8px;
