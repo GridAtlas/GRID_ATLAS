@@ -116,7 +116,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1961";
+const WEB_VERSION = "0.1962";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -2367,18 +2367,20 @@ async function requestTraverseModeToggle() {
     confirmLabel: t(nextMode ? "traverse.modeOnConfirm" : "traverse.modeOffConfirm"),
     danger: false
   });
-  pendingTraverseModeToggle = null;
   if (!confirmed) {
+    pendingTraverseModeToggle = null;
     syncSettingsControls();
     return;
   }
+  // The confirm-button handler may already have applied this transition for
+  // touch browsers. Keep the async continuation as a fallback only.
+  if (pendingTraverseModeToggle === null) {
+    syncTraverseModeUi();
+    return;
+  }
+  pendingTraverseModeToggle = null;
   setTraverseMode(nextMode);
   syncSettingsControls();
-  if (nextMode) {
-    setMobilePage("map");
-    setMobileGridPage("grid");
-    renderTraverseActionButton();
-  }
 }
 
 function setTraverseFeedback(message, duration = 3500) {
@@ -14849,8 +14851,13 @@ function bindEvents() {
   const finishConfirmDialog = (value) => {
     const resolve = pendingConfirmResolve;
     pendingConfirmResolve = null;
+    const nextTraverseMode = pendingTraverseModeToggle;
     pendingTraverseModeToggle = null;
     if (elements.confirmDialog.open) elements.confirmDialog.close(value);
+    if (value === "confirm" && nextTraverseMode !== null) {
+      setTraverseMode(nextTraverseMode);
+      syncSettingsControls();
+    }
     resolve?.(value);
   };
   elements.confirmDialogConfirmButton.addEventListener("click", (event) => {
