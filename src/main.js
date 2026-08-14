@@ -116,7 +116,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1964";
+const WEB_VERSION = "0.1968";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -3974,6 +3974,7 @@ function drawTraverseStones() {
 
 function drawTraverseTiles() {
   if (!state.traverseMode || !state.traverseLog) return;
+  const colors = canvasPalette();
   drawTraverseStones();
   drawTraverseBarriers();
   drawTraverseGuardians();
@@ -5033,6 +5034,7 @@ function setMobilePage(name) {
   }
 
   syncMobileGridTabSelection();
+  renderTraverseActionButton();
 
   if (mapActive) {
     scheduleCanvasResize();
@@ -5058,6 +5060,11 @@ function syncMobileGridTabSelection() {
   }
 }
 
+function isTraverseGridSurfaceActive() {
+  return !mobilePageUiActive()
+    || (state.mobilePage === "map" && state.mobileGridPage === "grid");
+}
+
 function setMobileGridPage(name) {
   const pageName = validMobileGridPageName(name) ? name : "grid";
   state.mobileGridPage = pageName;
@@ -5066,6 +5073,7 @@ function setMobileGridPage(name) {
   for (const panel of elements.mobileGridPanels) {
     panel.classList.toggle("is-mobile-grid-active", panel.dataset.mobileGridPanel === pageName);
   }
+  renderTraverseActionButton();
 
   if (pageName === "grid") {
     scheduleCanvasResize();
@@ -5309,12 +5317,13 @@ function ensureTraverseActionButtonPlacement() {
 
 function syncTraverseModeUi() {
   const enabled = Boolean(state.traverseMode);
+  const visible = enabled && isTraverseGridSurfaceActive();
   const button = elements.traverseActionButton;
   if (button) {
-    button.hidden = !enabled;
-    button.style.display = enabled ? "inline-flex" : "";
-    button.style.visibility = enabled ? "visible" : "";
-    button.setAttribute("aria-hidden", String(!enabled));
+    button.hidden = !visible;
+    button.style.display = visible ? "inline-flex" : "none";
+    button.style.visibility = visible ? "visible" : "hidden";
+    button.setAttribute("aria-hidden", String(!visible));
   }
   document.documentElement.classList.toggle("is-traverse-mode", enabled);
 }
@@ -5322,8 +5331,12 @@ function syncTraverseModeUi() {
 function renderTraverseActionButton() {
   const button = elements.traverseActionButton;
   if (!button) return;
-  button.hidden = !state.traverseMode;
-  if (!state.traverseMode) {
+  const visible = state.traverseMode && isTraverseGridSurfaceActive();
+  button.hidden = !visible;
+  button.style.display = visible ? "inline-flex" : "none";
+  button.style.visibility = visible ? "visible" : "hidden";
+  button.setAttribute("aria-hidden", String(!visible));
+  if (!visible) {
     button.disabled = false;
     button.classList.remove("is-dragon-eye-active", "is-placement-view-active");
     return;
@@ -5443,7 +5456,7 @@ function fitBarrierPlacementView() {
 
   const centerGeo = geographicCenter(geos.map((geo) => ({ geo })));
   if (centerGeo) setProjectionCenterGeo(centerGeo);
-  const projected = geos.map(projectGeo);
+  const projected = geos.map((geo) => projectGeo(geo));
   const size = canvasSize();
   const minX = Math.min(...projected.map((point) => point.x));
   const maxX = Math.max(...projected.map((point) => point.x));
@@ -5463,6 +5476,10 @@ function fitBarrierPlacementView() {
 
 function enterBarrierPlacementView() {
   if (!state.traverseMode || state.traverseBusy) return;
+  if (!isTraverseGridSurfaceActive()) {
+    setMobilePage("map");
+    setMobileGridPage("grid");
+  }
   closeTraverseActionDialog();
   resetBarrierLinkState();
   resetDragonEyeState();
@@ -15011,7 +15028,13 @@ function bindEvents() {
   });
   elements.zoomInButton.addEventListener("click", () => zoomAtStage({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 1));
   elements.zoomOutButton.addEventListener("click", () => zoomAtStage({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, -1));
-  elements.fitButton.addEventListener("click", fitToPoints);
+  elements.fitButton.addEventListener("click", () => {
+    if (state.barrierPlacementView) {
+      fitBarrierPlacementView();
+      return;
+    }
+    fitToPoints();
+  });
   elements.originButton.addEventListener("click", centerAndFollowCurrentLocation);
   elements.routeStartSelect.addEventListener("change", () => void setRouteStart(elements.routeStartSelect.value));
   elements.routeReturnToStart.addEventListener("change", () => {

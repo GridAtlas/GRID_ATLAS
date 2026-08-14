@@ -1132,7 +1132,7 @@ button {
   user-select: none;
 }
 
-html.is-traverse-mode .traverse-action-button {
+html.is-traverse-mode .traverse-action-button:not([hidden]) {
   display: inline-flex !important;
   visibility: visible !important;
   opacity: 1 !important;
