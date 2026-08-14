@@ -118,7 +118,7 @@ describe("barrier evaluation", () => {
   });
 
   it("uses only lifetime output for player rank and keeps peak display data", () => {
-    expect(BARRIER_EVALUATION_CONFIG.kekkaishiLifetimeThresholds).toEqual([0, 100, 1000, 5000, 20000, 100000, 500000]);
+    expect(BARRIER_EVALUATION_CONFIG.kekkaishiLifetimeThresholds).toEqual([0, 800, 8000, 40000, 160000, 800000, 4000000, 20000000, 100000000]);
     expect(BARRIER_EVALUATION_CONFIG).not.toHaveProperty("kekkaishiPeakThresholds");
     expect(BARRIER_EVALUATION_CONFIG).not.toHaveProperty("kekkaishiSustainDays");
     const status = { lifetimeOutput: BARRIER_EVALUATION_CONFIG.kekkaishiLifetimeThresholds[2], peakAverage: 0, dailyHistory: [5] };
@@ -126,7 +126,7 @@ describe("barrier evaluation", () => {
     status.peakAverage = 100000;
     expect(rankForKekkaishi(status).name).toBe("D");
     expect(recentAverage(status)).toBeCloseTo(5 / BARRIER_EVALUATION_CONFIG.windowDays);
-    expect(BARRIER_EVALUATION_CONFIG.kekkaishiRankNames).toHaveLength(7);
+    expect(BARRIER_EVALUATION_CONFIG.kekkaishiRankNames).toHaveLength(9);
   });
 
   it("allows E rank on the first evaluated day when lifetime threshold is met", () => {

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   BARRIER_SCORE_CONFIG,
+  barrierFitsSightRadius,
   beautyCoefficient,
+  effectiveBeautyTolerance,
+  geoDistanceKm,
   nonZeroPolygonAreaKm2,
   rankForScore,
   scoreBarrier,
@@ -123,9 +126,38 @@ describe("barrier score helpers", () => {
     expect(beautyCoefficient(regular)).toBeGreaterThan(beautyCoefficient(uneven));
   });
 
+  it("uses a latitude- and zoom-aware tile tolerance floor", () => {
+    const small = effectiveBeautyTolerance({ lat: 35, lng: 139 }, 500, {
+      ...BARRIER_SCORE_CONFIG,
+      beautyTolerance: 0.05,
+      beautyToleranceTiles: 1,
+      dataZoom: 18
+    });
+    const large = effectiveBeautyTolerance({ lat: 35, lng: 139 }, 10000, BARRIER_SCORE_CONFIG);
+    expect(small).toBeGreaterThan(0.05);
+    expect(large).toBeCloseTo(0.05, 6);
+    expect(effectiveBeautyTolerance({ lat: 26, lng: 127 }, 500, BARRIER_SCORE_CONFIG))
+      .toBeGreaterThan(effectiveBeautyTolerance({ lat: 43, lng: 141 }, 500, BARRIER_SCORE_CONFIG));
+  });
+
+  it("keeps sight radius validation separate from scoring", () => {
+    const center = { lat: 35, lng: 139 };
+    const within = [0, 120, 240].map((bearing) => destinationGeo(center, 0.8, bearing));
+    const outside = [0, 120, 240].map((bearing) => destinationGeo(center, 1.2, bearing));
+    expect(barrierFitsSightRadius(within, 0).ok).toBe(true);
+    expect(barrierFitsSightRadius(outside, 0).ok).toBe(false);
+    expect(geoDistanceKm(center, within[0])).toBeCloseTo(0.8, 2);
+  });
+
+  it("supports seven/eight vertices and the octagram coefficient", () => {
+    expect(shapeCoefficient(7, false)).toBe(2.1);
+    expect(shapeCoefficient(8, false)).toBe(2.4);
+    expect(shapeCoefficient(8, true)).toBe(4);
+  });
+
   it("uses rank thresholds from configuration", () => {
     expect(rankForScore(0).name).toBe("標");
-    expect(rankForScore(BARRIER_SCORE_CONFIG.rankThresholds.at(-1)).name).toBe("神域");
+    expect(rankForScore(BARRIER_SCORE_CONFIG.rankThresholds.at(-1)).name).toBe("天域");
   });
 
   it("uses the saturating scale coefficient reference values", () => {
@@ -152,29 +184,32 @@ describe("barrier score helpers", () => {
     expect(shapeCoefficient(5, true)).toBe(3);
   });
 
-  it("keeps the pentagram above every creatable convex polygon", () => {
-    const polygonMetrics = Array.from({ length: BARRIER_CONFIG.maxVertices - 2 }, (_, index) => {
+  it("keeps the pentagram above every pre-SS convex polygon", () => {
+    const polygonMetrics = Array.from({ length: 6 - 2 }, (_, index) => {
       const vertexCount = index + 3;
       return vertexCount * BARRIER_CONFIG.stoneCapVertex * shapeCoefficient(vertexCount, false);
     });
     const pentagramMetric = 5 * BARRIER_CONFIG.stoneCapVertex * shapeCoefficient(5, true);
     expect(pentagramMetric).toBeGreaterThan(Math.max(...polygonMetrics));
+    expect(8 * BARRIER_CONFIG.stoneCapVertex * shapeCoefficient(8, false)).toBeGreaterThan(pentagramMetric);
   });
 
-  it("keeps shiniki reachable only through the pentagram upper bound", () => {
-    const shiniki = BARRIER_EVALUATION_CONFIG.powerThresholds.at(-1);
-    const upperBound = (vertexCount, selfIntersecting = false) => (
+  it("keeps shiniki gated and teniki reachable through the octagram upper bound", () => {
+    const shiniki = BARRIER_EVALUATION_CONFIG.powerThresholds.at(-2);
+    const teniki = BARRIER_EVALUATION_CONFIG.powerThresholds.at(-1);
+    const upperBound = (vertexCount, selfIntersecting = false, stoneCap = BARRIER_CONFIG.stoneCapVertex) => (
       vertexCount
-      * BARRIER_CONFIG.stoneCapVertex
+      * stoneCap
       * shapeCoefficient(vertexCount, selfIntersecting)
       * BARRIER_SCORE_CONFIG.beautyMax
       * BARRIER_SCORE_CONFIG.scaleL0
     );
     expect(upperBound(5, true)).toBeGreaterThan(shiniki);
-    for (let vertexCount = 3; vertexCount <= BARRIER_CONFIG.maxVertices; vertexCount += 1) {
+    for (let vertexCount = 3; vertexCount <= 6; vertexCount += 1) {
       expect(upperBound(vertexCount)).toBeLessThan(shiniki);
     }
     expect(upperBound(5, true)).toBeGreaterThanOrEqual(shiniki * 1.2);
+    expect(upperBound(8, true, 300)).toBeGreaterThanOrEqual(teniki * 1.2);
   });
 
   it("scores each barrier independently from its stones", () => {

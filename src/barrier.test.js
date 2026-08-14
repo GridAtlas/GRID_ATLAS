@@ -7,8 +7,11 @@ import {
   grantBarrierStock,
   replayBarrierEvents,
   normalizeGuardian,
+  maxVerticesForRank,
   registerBarrier,
+  ryumyakuScatterForRank,
   sanitizeBarrierLog,
+  sightRadiusKmForRank,
   stoneIdFromTile,
   tileBounds,
   tileIdFromGeo,
@@ -108,6 +111,16 @@ describe("barrier data helpers", () => {
     expect(validateBarrierVertices(log, vertices.slice(0, 3))).toEqual({ ok: true });
     expect(validateBarrierVertices(log, vertices.slice(0, BARRIER_CONFIG.maxVertices))).toEqual({ ok: true });
     expect(validateBarrierVertices(log, vertices)).toMatchObject({ ok: false, reason: "too-many", maxVertices: BARRIER_CONFIG.maxVertices });
+  });
+
+  it("exposes monotonic rank gates for vertices, sight, and Dragon Eye scatter", () => {
+    expect(BARRIER_CONFIG.maxVertices).toBe(8);
+    expect(maxVerticesForRank(0)).toBe(3);
+    expect(maxVerticesForRank(8)).toBe(8);
+    expect(sightRadiusKmForRank(0)).toBe(1);
+    expect(sightRadiusKmForRank(8)).toBe(300);
+    expect(ryumyakuScatterForRank(0)).toBeCloseTo(0.15);
+    expect(ryumyakuScatterForRank(8)).toBeCloseTo(0.05);
   });
 
   it("grants one stone at 12:00, 20:00, and 04:00 in local time", () => {

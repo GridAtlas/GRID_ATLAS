@@ -36,6 +36,7 @@ import {
   createBarrierLog,
   grantBarrierStock,
   normalizeGuardian,
+  maxVerticesForRank,
   registerBarrier,
   sanitizeBarrierLog,
   stoneCapFor,
@@ -45,9 +46,11 @@ import {
   tileCenterGeo,
   tileBounds,
   tileIdFromGeo,
+  ryumyakuScatterForRank,
+  sightRadiusKmForRank,
   validateBarrierVertices
 } from "./barrier.js?v=1";
-import { scoreBarrier } from "./barrier-score.js?v=1";
+import { barrierFitsSightRadius, polygonSelfIntersects, scoreBarrier } from "./barrier-score.js?v=1";
 import {
   BARRIER_EVALUATION_CONFIG,
   createKekkaishiStatus,
@@ -84,17 +87,12 @@ const DRAGON_EYE_SHAPES = Object.freeze({
   square: Object.freeze({ sides: 4, rotation: Math.PI / 4, glyph: "□", ja: "正方形", en: "Square" }),
   diamond: Object.freeze({ sides: 4, rotation: 0, glyph: "◇", ja: "ひし形", en: "Diamond" }),
   pentagon: Object.freeze({ sides: 5, rotation: -Math.PI / 2, glyph: "⬠", ja: "正五角形", en: "Regular pentagon" }),
-  hexagon: Object.freeze({ sides: 6, rotation: 0, glyph: "⬡", ja: "正六角形", en: "Regular hexagon" })
+  hexagon: Object.freeze({ sides: 6, rotation: 0, glyph: "⬡", ja: "正六角形", en: "Regular hexagon" }),
+  heptagon: Object.freeze({ sides: 7, rotation: -Math.PI / 2, glyph: "７", ja: "正七角形", en: "Regular heptagon" }),
+  octagon: Object.freeze({ sides: 8, rotation: Math.PI / 8, glyph: "８", ja: "正八角形", en: "Regular octagon" }),
+  pentagram: Object.freeze({ sides: 5, rotation: -Math.PI / 2, glyph: "✦", ja: "五芒星", en: "Pentagram", linkPattern: "pentagram" }),
+  octagram: Object.freeze({ sides: 8, rotation: Math.PI / 8, glyph: "✳", ja: "八芒星", en: "Octagram", linkPattern: "octagram" })
 });
-const DRAGON_EYE_RANK_CONFIG = Object.freeze([
-  Object.freeze({ precision: 0.80, maxAreaGridUnits: 9, shapes: Object.freeze(["triangle"]) }),
-  Object.freeze({ precision: 0.84, maxAreaGridUnits: 16, shapes: Object.freeze(["triangle", "square"]) }),
-  Object.freeze({ precision: 0.88, maxAreaGridUnits: 25, shapes: Object.freeze(["triangle", "square", "diamond"]) }),
-  Object.freeze({ precision: 0.92, maxAreaGridUnits: 36, shapes: Object.freeze(["triangle", "square", "diamond", "pentagon"]) }),
-  Object.freeze({ precision: 0.95, maxAreaGridUnits: 64, shapes: Object.freeze(["triangle", "square", "diamond", "pentagon", "hexagon"]) }),
-  Object.freeze({ precision: 0.98, maxAreaGridUnits: 100, shapes: Object.freeze(["triangle", "square", "diamond", "pentagon", "hexagon"]) }),
-  Object.freeze({ precision: 1, maxAreaGridUnits: 169, shapes: Object.freeze(["triangle", "square", "diamond", "pentagon", "hexagon"]) })
-]);
 
 const CLOUD_ACCESS_TOKEN_KEY = "grid-atlas-cloud-access-token";
 const CLOUD_PASSWORD_SETUP_KEY_PREFIX = "grid-atlas-cloud-password-set:";
@@ -106,7 +104,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1748";
+const WEB_VERSION = "0.1848";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -572,8 +570,11 @@ const state = {
     shape: null,
     center: null,
     radius: 0,
-    precision: 0,
-    rankName: null
+    rotation: 0,
+    scatter: 0,
+    rankIndex: 0,
+    rankName: null,
+    sightRadiusKm: 0
   },
   editingPointId: null,
   pendingGeo: null,
@@ -1123,7 +1124,9 @@ const TRANSLATIONS = {
     "dragonEye.open": "龍脈眼",
     "dragonEye.title": "龍脈眼の形を選択",
     "dragonEye.message": "形を選ぶとグリッド上で移動・拡縮できます。",
-    "dragonEye.rankInfo": "{rank}級 · 頂点精度 {precision}% · 最大面積 {area}マス",
+      "dragonEye.rankInfo": "{rank}級 · 見通し半径 {radius} · ばらつき {scatter}% · 回転 {rotation}",
+      "dragonEye.rotationOn": "解放",
+      "dragonEye.rotationLocked": "E級で解放",
     "dragonEye.locked": "{shape}は{rank}級で解放",
     "dragonEye.confirm": "龍脈眼を確定",
     "dragonEye.cancel": "解除",
@@ -1131,7 +1134,11 @@ const TRANSLATIONS = {
     "dragonEye.square": "正方形",
     "dragonEye.diamond": "ひし形",
     "dragonEye.pentagon": "正五角形",
-    "dragonEye.hexagon": "正六角形",
+      "dragonEye.hexagon": "正六角形",
+      "dragonEye.heptagon": "正七角形",
+      "dragonEye.octagon": "正八角形",
+      "dragonEye.pentagram": "五芒星",
+      "dragonEye.octagram": "八芒星",
     "dragonEye.placed": "龍脈眼を{count}地点として保存しました",
     "traverse.modeOnTitle": "結界モードに切り替えますか？",
     "traverse.modeOffTitle": "結界モードを終了しますか？",
@@ -1167,6 +1174,9 @@ const TRANSLATIONS = {
     "barrier.created": "結界を張りました",
     "barrier.tooFew": "結界には3つ以上の結界石が必要です",
     "barrier.tooMany": "結界の頂点は{max}つまでです",
+    "barrier.rankVertexLimit": "この段位ではこれ以上の頂点を結べません",
+    "barrier.sightExceeded": "見通しの限界（半径{radius}）を超えています。頂点 {vertices} を確認してください",
+    "barrier.crossLinkLocked": "交差結びは{rank}級で解放されます",
     "barrier.stoneUsed": "他の結界で使用済みの結界石が含まれています",
     "barrier.missingStone": "選択した結界石を確認できません",
     "barrier.selection": "結界石を{count}個選択中"
@@ -1214,6 +1224,8 @@ const TRANSLATIONS = {
     ,"kekkaishi.dailyPower": "現在の日次発動力"
     ,"kekkaishi.progressDays": "現在のペースであと{days}日"
     ,"kekkaishi.noDailyPower": "結界を張ると進みます"
+    ,"kekkaishi.unlocks": "解放: 見通し半径{radius} / 1辺目安{edges} / 最大{vertices}頂点 / 石上限{stones} / 龍脈眼ばらつき{scatter}%"
+    ,"kekkaishi.nextUnlocks": "次に解放: 見通し半径{radius} / 1辺目安{edges} / 最大{vertices}頂点 / 石上限{stones} / 龍脈眼ばらつき{scatter}%"
     ,"kekkaishi.rankMax": "最高ランク"
     ,"kekkaishi.share": "ステータスを共有"
     ,"kekkaishi.shared": "ステータス画像を共有しました"
@@ -1622,7 +1634,9 @@ const TRANSLATIONS = {
     "dragonEye.open": "Dragon eye",
     "dragonEye.title": "Choose a Dragon Eye shape",
     "dragonEye.message": "Choose a shape, then drag or pinch it on the grid.",
-    "dragonEye.rankInfo": "Rank {rank} · vertex precision {precision}% · max area {area} grid cells",
+      "dragonEye.rankInfo": "Rank {rank} · sight radius {radius} · scatter {scatter}% · rotation {rotation}",
+      "dragonEye.rotationOn": "unlocked",
+      "dragonEye.rotationLocked": "unlocks at E",
     "dragonEye.locked": "{shape} unlocks at rank {rank}",
     "dragonEye.confirm": "Place Dragon Eye",
     "dragonEye.cancel": "Cancel",
@@ -1630,7 +1644,11 @@ const TRANSLATIONS = {
     "dragonEye.square": "Square",
     "dragonEye.diamond": "Diamond",
     "dragonEye.pentagon": "Regular pentagon",
-    "dragonEye.hexagon": "Regular hexagon",
+      "dragonEye.hexagon": "Regular hexagon",
+      "dragonEye.heptagon": "Regular heptagon",
+      "dragonEye.octagon": "Regular octagon",
+      "dragonEye.pentagram": "Pentagram",
+      "dragonEye.octagram": "Octagram",
     "dragonEye.placed": "Saved the Dragon Eye as {count} points",
     "traverse.modeOnTitle": "Switch to barrier mode?",
     "traverse.modeOffTitle": "Exit barrier mode?",
@@ -1666,6 +1684,9 @@ const TRANSLATIONS = {
     "barrier.created": "Barrier created",
     "barrier.tooFew": "A barrier needs at least three stones",
     "barrier.tooMany": "A barrier can have at most {max} vertices",
+    "barrier.rankVertexLimit": "This rank cannot bind any more vertices",
+    "barrier.sightExceeded": "The sight limit (radius {radius}) is exceeded. Check vertices {vertices}",
+    "barrier.crossLinkLocked": "Cross-linking unlocks at rank {rank}",
     "barrier.stoneUsed": "One or more selected stones already belong to another barrier",
     "barrier.missingStone": "The selected barrier stone could not be found",
     "barrier.selection": "{count} barrier stone(s) selected"
@@ -1713,6 +1734,8 @@ const TRANSLATIONS = {
     ,"kekkaishi.dailyPower": "Current daily power"
     ,"kekkaishi.progressDays": "At this pace: {days} more days"
     ,"kekkaishi.noDailyPower": "Create a barrier to make progress"
+    ,"kekkaishi.unlocks": "Unlocked: sight radius {radius} / edge guide {edges} / max {vertices} vertices / stone cap {stones} / Dragon Eye scatter {scatter}%"
+    ,"kekkaishi.nextUnlocks": "Next unlock: sight radius {radius} / edge guide {edges} / max {vertices} vertices / stone cap {stones} / Dragon Eye scatter {scatter}%"
     ,"kekkaishi.rankMax": "Maximum rank"
     ,"kekkaishi.share": "Share status"
     ,"kekkaishi.shared": "Status image shared"
@@ -1932,7 +1955,7 @@ function currentTraverseActionContext() {
   const currentTile = state.currentGeo ? tileIdFromGeo(state.currentGeo) : null;
   const stoneId = currentTile ? stoneIdFromTile(currentTile) : null;
   const stone = stoneId ? state.traverseLog?.stones?.[stoneId] : null;
-  const stoneCap = stoneId ? stoneCapFor(state.traverseLog, stoneId) : null;
+  const stoneCap = stoneId ? stoneCapFor(state.traverseLog, stoneId, currentKekkaishiRankInfo().rank.index) : null;
   return {
     amount: Math.max(0, Math.floor(Number(state.traverseLog?.stock?.amount) || 0)),
     currentTile,
@@ -2028,8 +2051,11 @@ function resetDragonEyeState() {
   state.dragonEye.shape = null;
   state.dragonEye.center = null;
   state.dragonEye.radius = 0;
-  state.dragonEye.precision = 0;
+  state.dragonEye.rotation = 0;
+  state.dragonEye.scatter = 0;
+  state.dragonEye.rankIndex = 0;
   state.dragonEye.rankName = null;
+  state.dragonEye.sightRadiusKm = 0;
   state.pointer.pinch = null;
   if (state.pointer.drag?.dragonEye) state.pointer.drag.dragonEye = false;
   renderDragonEyeControls();
@@ -2038,8 +2064,34 @@ function resetDragonEyeState() {
 function dragonEyeRankInfo() {
   const status = state.traverseLog?.kekkaishi || createKekkaishiStatus();
   const rank = rankForKekkaishi(status);
-  const config = DRAGON_EYE_RANK_CONFIG[Math.min(rank.index, DRAGON_EYE_RANK_CONFIG.length - 1)] || DRAGON_EYE_RANK_CONFIG[0];
-  return { rank, ...config };
+  const rankIndex = rank.index;
+  const shapes = ["triangle"];
+  if (rankIndex >= 2) shapes.push("square", "diamond");
+  if (rankIndex >= 3) shapes.push("pentagon");
+  if (rankIndex >= 4) shapes.push("hexagon");
+  if (rankIndex >= 6) shapes.push("pentagram");
+  if (rankIndex >= 7) shapes.push("heptagon", "octagon");
+  if (rankIndex >= 8) shapes.push("octagram");
+  return {
+    rank,
+    rankIndex,
+    maxVertices: maxVerticesForRank(rankIndex),
+    sightRadiusKm: sightRadiusKmForRank(rankIndex),
+    scatter: ryumyakuScatterForRank(rankIndex),
+    rotationUnlocked: rankIndex >= BARRIER_CONFIG.rotationFromRank,
+    shapes: Object.freeze([...new Set(shapes)])
+  };
+}
+
+function currentKekkaishiRankInfo() {
+  const status = state.traverseLog?.kekkaishi || createKekkaishiStatus();
+  const rank = rankForKekkaishi(status);
+  return {
+    rank,
+    maxVertices: maxVerticesForRank(rank.index),
+    sightRadiusKm: sightRadiusKmForRank(rank.index),
+    stoneCapVertex: Number(BARRIER_CONFIG.stoneCapVertexByRank[rank.index]) || BARRIER_CONFIG.stoneCapVertex
+  };
 }
 
 function renderDragonEyeShapeOptions() {
@@ -2047,8 +2099,9 @@ function renderDragonEyeShapeOptions() {
   if (elements.dragonEyeAvailability) {
     elements.dragonEyeAvailability.textContent = t("dragonEye.rankInfo")
       .replace("{rank}", info.rank.name)
-      .replace("{precision}", String(Math.round(info.precision * 100)))
-      .replace("{area}", String(info.maxAreaGridUnits));
+      .replace("{radius}", formatBarrierRadius(info.sightRadiusKm))
+      .replace("{scatter}", String(Math.round(info.scatter * 100)))
+      .replace("{rotation}", info.rotationUnlocked ? t("dragonEye.rotationOn") : t("dragonEye.rotationLocked"));
   }
   elements.dragonEyeShapeOptions?.querySelectorAll("[data-dragon-eye-shape]").forEach((option) => {
     const shape = option.dataset.dragonEyeShape;
@@ -2066,17 +2119,15 @@ function dragonEyeDefinition() {
   return DRAGON_EYE_SHAPES[state.dragonEye.shape] || null;
 }
 
-function dragonEyeMaxRadius(definition, maxAreaGridUnits) {
+function dragonEyeMaxRadius(definition, sightRadiusKm) {
   if (!definition) return 0;
-  const step = Math.max(1, chooseGridStep());
-  const areaCoefficient = (definition.sides / 2) * Math.sin((Math.PI * 2) / definition.sides);
-  return Math.sqrt((Math.max(1, maxAreaGridUnits) * step * step) / areaCoefficient);
+  return Math.max(1000, Number(sightRadiusKm) * 1000);
 }
 
 function dragonEyeRadiusBounds() {
   const definition = dragonEyeDefinition();
   const info = dragonEyeRankInfo();
-  const max = dragonEyeMaxRadius(definition, info.maxAreaGridUnits);
+  const max = dragonEyeMaxRadius(definition, info.sightRadiusKm);
   const min = Math.min(max, 24 / Math.max(0.01, state.viewport.scale));
   return { min, max };
 }
@@ -2084,15 +2135,18 @@ function dragonEyeRadiusBounds() {
 function dragonEyeWorldVertices() {
   const definition = dragonEyeDefinition();
   const center = state.dragonEye.center;
-  const radius = Math.min(Number(state.dragonEye.radius), dragonEyeMaxRadius(definition, dragonEyeRankInfo().maxAreaGridUnits));
+  const radius = Math.min(Number(state.dragonEye.radius), dragonEyeMaxRadius(definition, dragonEyeRankInfo().sightRadiusKm));
   if (!definition || !center || !Number.isFinite(radius) || radius <= 0) return [];
-  return Array.from({ length: definition.sides }, (_, index) => {
-    const angle = definition.rotation + (Math.PI * 2 * index) / definition.sides;
+  const baseVertices = Array.from({ length: definition.sides }, (_, index) => {
+    const angle = definition.rotation + state.dragonEye.rotation + (Math.PI * 2 * index) / definition.sides;
     return {
       x: center.x + Math.cos(angle) * radius,
       y: center.y + Math.sin(angle) * radius
     };
   });
+  if (definition.linkPattern === "pentagram") return [0, 2, 4, 1, 3].map((index) => baseVertices[index]);
+  if (definition.linkPattern === "octagram") return [0, 3, 6, 1, 4, 7, 2, 5].map((index) => baseVertices[index]);
+  return baseVertices;
 }
 
 function dragonEyeScreenVertices() {
@@ -2115,7 +2169,7 @@ function beginDragonEye(shape) {
   }
   const size = canvasSize();
   const definition = DRAGON_EYE_SHAPES[shape];
-  const maxRadius = dragonEyeMaxRadius(definition, rankInfo.maxAreaGridUnits);
+  const maxRadius = dragonEyeMaxRadius(definition, rankInfo.sightRadiusKm);
   const minRadius = Math.min(maxRadius, 24 / Math.max(0.01, state.viewport.scale));
   state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
   state.zoomStage = null;
@@ -2124,8 +2178,11 @@ function beginDragonEye(shape) {
     shape,
     center: screenToWorld({ x: size.width / 2, y: size.height / 2 }),
     radius: Math.min(maxRadius, Math.max(minRadius, Math.min(size.width, size.height) * 0.24 / Math.max(0.01, state.viewport.scale))),
-    precision: rankInfo.precision,
-    rankName: rankInfo.rank.name
+    rotation: 0,
+    scatter: rankInfo.scatter,
+    rankIndex: rankInfo.rankIndex,
+    rankName: rankInfo.rank.name,
+    sightRadiusKm: rankInfo.sightRadiusKm
   };
   if (elements.dragonEyeDialog?.open) elements.dragonEyeDialog.close("shape-selected");
   showAppToast(t("dragonEye.message"));
@@ -2144,30 +2201,17 @@ function openDragonEyeDialog() {
 }
 
 function dragonEyePlacementVertex(vertex) {
-  const precision = Math.min(1, Math.max(0.01, Number(state.dragonEye.precision) || dragonEyeRankInfo().precision));
-  if (precision >= 0.999) return vertex;
-  const step = Math.max(1, chooseGridStep());
-  const snapped = {
-    x: Math.round(vertex.x / step) * step,
-    y: Math.round(vertex.y / step) * step
-  };
-  const correction = 1 - precision;
+  const scatter = Math.max(0, Number(state.dragonEye.scatter) || dragonEyeRankInfo().scatter);
+  if (scatter <= 0) return vertex;
+  const vertices = dragonEyeWorldVertices();
+  const center = state.dragonEye.center || vertices.reduce((sum, point) => ({ x: sum.x + point.x / vertices.length, y: sum.y + point.y / vertices.length }), { x: 0, y: 0 });
+  const meanRadius = vertices.reduce((sum, point) => sum + Math.hypot(point.x - center.x, point.y - center.y), 0) / Math.max(1, vertices.length);
+  const angle = Math.random() * Math.PI * 2;
+  const distance = meanRadius * scatter;
   return {
-    x: vertex.x + (snapped.x - vertex.x) * correction,
-    y: vertex.y + (snapped.y - vertex.y) * correction
+    x: vertex.x + Math.cos(angle) * distance,
+    y: vertex.y + Math.sin(angle) * distance
   };
-}
-
-function dragonEyeAreaGridUnits(vertices = dragonEyeWorldVertices()) {
-  if (!Array.isArray(vertices) || vertices.length < 3) return 0;
-  let twiceArea = 0;
-  for (let index = 0; index < vertices.length; index += 1) {
-    const current = vertices[index];
-    const next = vertices[(index + 1) % vertices.length];
-    twiceArea += current.x * next.y - next.x * current.y;
-  }
-  const step = Math.max(1, chooseGridStep());
-  return Math.abs(twiceArea) / 2 / (step * step);
 }
 
 function commitDragonEye() {
@@ -2180,8 +2224,7 @@ function commitDragonEye() {
   const list = createNamedLocalPointList(DRAGON_EYE_LIST_NAME);
   list.visible = true;
   list.updatedAt = now;
-  const precisionPercent = Math.round((Number(state.dragonEye.precision) || dragonEyeRankInfo().precision) * 100);
-  const areaGridUnits = dragonEyeAreaGridUnits(vertices);
+  const scatterPercent = Math.round((Number(state.dragonEye.scatter) || dragonEyeRankInfo().scatter) * 100);
   const createdPoints = placementVertices.map((vertex, index) => {
     const geo = normalizeGeo(unprojectWorld(vertex.x, vertex.y));
     return {
@@ -2189,7 +2232,7 @@ function commitDragonEye() {
       x: vertex.x,
       y: vertex.y,
       title: `龍脈眼 ${definition.glyph} ${index + 1}`,
-      note: `${DRAGON_EYE_LIST_NAME} / ${definition.ja} / ${state.dragonEye.rankName || dragonEyeRankInfo().rank.name}級 / 精度${precisionPercent}% / 面積${areaGridUnits.toFixed(1)}マス`,
+      note: `${DRAGON_EYE_LIST_NAME} / ${definition.ja} / ${state.dragonEye.rankName || dragonEyeRankInfo().rank.name}級 / ばらつき${scatterPercent}% / 半径${formatBarrierRadius(state.dragonEye.sightRadiusKm || dragonEyeRankInfo().sightRadiusKm)}`,
       photo: "",
       photoName: "",
       photoAssetId: "",
@@ -5252,7 +5295,7 @@ function performTraverseStoneAction(action, requestedQuantity = 1) {
       let processed = 0;
       let feedbackAction;
       if (action === "place") {
-        const stoneCap = stoneCapFor(state.traverseLog, stoneId);
+        const stoneCap = stoneCapFor(state.traverseLog, stoneId, currentKekkaishiRankInfo().rank.index);
         const limit = actionQuantityLimit("place", {
           amount: state.traverseLog.stock.amount,
           stone,
@@ -5296,10 +5339,10 @@ function performTraverseStoneAction(action, requestedQuantity = 1) {
         }
         feedbackAction = t("traverse.placeDone");
       } else {
-        const limit = actionQuantityLimit("pick", {
+          const limit = actionQuantityLimit("pick", {
           amount: state.traverseLog.stock.amount,
           stone,
-          stoneCap: stoneCapFor(state.traverseLog, stoneId)
+          stoneCap: stoneCapFor(state.traverseLog, stoneId, currentKekkaishiRankInfo().rank.index)
         });
         if (limit <= 0) {
           state.traverseBusy = false;
@@ -5310,7 +5353,7 @@ function performTraverseStoneAction(action, requestedQuantity = 1) {
         const count = Math.min(quantity, limit);
         for (let index = 0; index < count; index += 1) {
           const now = new Date().toISOString();
-          const isVertex = stoneCapFor(state.traverseLog, stoneId) === BARRIER_CONFIG.stoneCapVertex;
+          const isVertex = stoneCapFor(state.traverseLog, stoneId, currentKekkaishiRankInfo().rank.index) > BARRIER_CONFIG.stoneCapLoose;
           stone.countExact = Math.max(isVertex ? 1 : 0, stoneExactCount(stone) - 1);
           stone.count = stoneDisplayCount(stone);
           stone.lastAt = now;
@@ -6454,7 +6497,7 @@ function renderBarrierDetails() {
       const nextPower = BARRIER_EVALUATION_CONFIG.powerThresholds[nextIndex];
       const progress = state.traverseLog.barriers[score.barrierId]?.rankProgress;
       const activeDays = Number(progress?.activeDays?.[nextIndex]) || 0;
-      const stoneProgress = barrierRankStoneProgress(score, state.traverseLog.barriers[score.barrierId]);
+      const stoneProgress = barrierRankStoneProgress(score, state.traverseLog.barriers[score.barrierId], BARRIER_EVALUATION_CONFIG, currentKekkaishiRankInfo().rank.index);
       const stoneLine = stoneProgress.reachable
         ? t("barrier.rankStones")
           .replace("{count}", String(stoneProgress.missingStoneCount))
@@ -6474,6 +6517,22 @@ function renderBarrierDetails() {
   return true;
 }
 
+function kekkaishiUnlockSummary(rankIndex, key = "kekkaishi.unlocks") {
+  const index = Math.max(0, Math.min(BARRIER_CONFIG.sightRadiusKm.length - 1, Number(rankIndex) || 0));
+  const radius = sightRadiusKmForRank(index);
+  const maxVertices = maxVerticesForRank(index);
+  const edges = Array.from({ length: Math.max(1, maxVertices - 2) }, (_, offset) => {
+    const sides = offset + 3;
+    return `${sides}角${(2 * radius * Math.sin(Math.PI / sides)).toFixed(1)}km`;
+  }).join("・");
+  return t(key)
+    .replace("{radius}", formatBarrierRadius(radius))
+    .replace("{edges}", edges)
+    .replace("{vertices}", String(maxVertices))
+    .replace("{stones}", String(BARRIER_CONFIG.stoneCapVertexByRank[index] || BARRIER_CONFIG.stoneCapVertex))
+    .replace("{scatter}", String(Math.round(ryumyakuScatterForRank(index) * 100)));
+}
+
 function renderKekkaishiStatusDialog() {
   if (!state.traverseLog || !elements.kekkaishiStatusDialog) return;
   const status = state.traverseLog.kekkaishi || createKekkaishiStatus(Date.now(), Object.keys(state.traverseLog.barriers || {}).length);
@@ -6489,14 +6548,14 @@ function renderKekkaishiStatusDialog() {
   if (elements.kekkaishiStatusDailyPower) elements.kekkaishiStatusDailyPower.textContent = `${formatScoreValue(status.lastDailyPower)} 力`;
   if (elements.kekkaishiStatusProgress) {
     if (rank.index >= BARRIER_EVALUATION_CONFIG.kekkaishiRankNames.length - 1) {
-      elements.kekkaishiStatusProgress.textContent = t("kekkaishi.rankMax");
+      elements.kekkaishiStatusProgress.textContent = `${t("kekkaishi.rankMax")}\n${kekkaishiUnlockSummary(rank.index)}`;
     } else {
       const nextIndex = rank.index + 1;
       const remaining = Math.max(0, rank.nextLifetime - rank.lifetime);
       const days = Number(status.lastDailyPower) > 0
         ? t("kekkaishi.progressDays").replace("{days}", String(Math.ceil(remaining / status.lastDailyPower)))
         : t("kekkaishi.noDailyPower");
-      elements.kekkaishiStatusProgress.textContent = `${t("kekkaishi.next")}: ${BARRIER_EVALUATION_CONFIG.kekkaishiRankNames[nextIndex]}\n${t("kekkaishi.progressLifetime")} ${formatScoreValue(rank.lifetime)} / ${formatScoreValue(rank.nextLifetime)} 結界日\n${days}`;
+      elements.kekkaishiStatusProgress.textContent = `${kekkaishiUnlockSummary(rank.index)}\n${t("kekkaishi.next")}: ${BARRIER_EVALUATION_CONFIG.kekkaishiRankNames[nextIndex]}\n${t("kekkaishi.progressLifetime")} ${formatScoreValue(rank.lifetime)} / ${formatScoreValue(rank.nextLifetime)} 結界日\n${days}\n${kekkaishiUnlockSummary(nextIndex, "kekkaishi.nextUnlocks")}`;
     }
   }
 }
@@ -10329,6 +10388,10 @@ function animateBarrierLinkSegment(drag, stoneId) {
   ) return;
   const from = state.barrierLinkPath.at(-1);
   if (!from || from === stoneId) return;
+  if (state.barrierLinkPath.length >= currentKekkaishiRankInfo().maxVertices) {
+    showAppToast(t("barrier.rankVertexLimit"), { duration: 1600 });
+    return;
+  }
   clearBarrierLinkCandidateTimer(drag);
   state.barrierLinkPendingStoneId = null;
   state.barrierLinkAnimation = {
@@ -10364,6 +10427,15 @@ function scheduleBarrierLinkCandidate(drag, stoneId) {
     drag.barrierLinkClosing = true;
     state.barrierLinkCandidateStoneId = stoneId;
     state.barrierLinkPendingStoneId = null;
+    draw();
+    return;
+  }
+  if (state.barrierLinkPath.length >= currentKekkaishiRankInfo().maxVertices) {
+    clearBarrierLinkCandidateTimer(drag);
+    drag.barrierLinkPendingStoneId = null;
+    state.barrierLinkPendingStoneId = null;
+    state.barrierLinkCandidateStoneId = null;
+    showAppToast(t("barrier.rankVertexLimit"), { duration: 1600 });
     draw();
     return;
   }
@@ -10493,6 +10565,10 @@ function pointInPolygon(point, polygon) {
 
 function toggleBarrierStoneSelection(stoneId) {
   if (!state.traverseLog?.stones?.[stoneId]) return;
+  if (!state.barrierSelection.includes(stoneId) && state.barrierSelection.length >= currentKekkaishiRankInfo().maxVertices) {
+    showAppToast(t("barrier.rankVertexLimit"), { duration: 1600 });
+    return;
+  }
   state.barrierSelection = state.barrierSelection.includes(stoneId)
     ? state.barrierSelection.filter((id) => id !== stoneId)
     : [...state.barrierSelection, stoneId];
@@ -10667,6 +10743,11 @@ function formatDistance(distance) {
   return `${Math.round(distance / 1000).toLocaleString(localeName())} km`;
 }
 
+function formatBarrierRadius(radiusKm) {
+  const value = Math.max(0, Number(radiusKm) || 0);
+  return `${value.toFixed(1)} km`;
+}
+
 function localeName() {
   return activeLanguage() === EN_LANGUAGE ? "en-US" : "ja-JP";
 }
@@ -10691,16 +10772,41 @@ function formatMonth(value) {
 
 async function createBarrierFromSelection() {
   const vertices = [...state.barrierSelection];
-  const validation = validateBarrierVertices(state.traverseLog, vertices);
+  const rankInfo = currentKekkaishiRankInfo();
+  const validation = validateBarrierVertices(state.traverseLog, vertices, { maxVertices: rankInfo.maxVertices });
   if (!validation.ok) {
     const message = validation.reason === "too-many"
-      ? t("barrier.tooMany").replace("{max}", String(BARRIER_CONFIG.maxVertices))
+      ? t("barrier.tooMany").replace("{max}", String(validation.maxVertices || rankInfo.maxVertices))
       : validation.reason === "used"
       ? t("barrier.stoneUsed")
       : validation.reason === "missing"
         ? t("barrier.missingStone")
         : t("barrier.tooFew");
     showAppToast(message, { error: true });
+    return;
+  }
+
+  const geos = vertices.map((stoneId) => tileCenterGeo(state.traverseLog.stones[stoneId]?.tile)).filter(Boolean);
+  const sight = barrierFitsSightRadius(geos, rankInfo.rank.index);
+  if (!sight.ok) {
+    const exceeded = sight.exceeded.map((entry) => `#${entry.index + 1}`).join(", ");
+    showAppToast(t("barrier.sightExceeded")
+      .replace("{radius}", formatBarrierRadius(sight.radiusKm))
+      .replace("{vertices}", exceeded), { error: true });
+    return;
+  }
+  const selfIntersecting = polygonSelfIntersects(geos);
+  const linkPattern = selfIntersecting && vertices.length === 5
+    ? "pentagram"
+    : selfIntersecting && vertices.length === 8
+      ? "octagram"
+      : "adjacent";
+  if (linkPattern === "pentagram" && rankInfo.rank.index < BARRIER_CONFIG.crossLinkFromRank) {
+    showAppToast(t("barrier.crossLinkLocked").replace("{rank}", "S"), { error: true });
+    return;
+  }
+  if (linkPattern === "octagram" && rankInfo.rank.index < 8) {
+    showAppToast(t("barrier.crossLinkLocked").replace("{rank}", "SSS"), { error: true });
     return;
   }
 
@@ -10721,11 +10827,13 @@ async function createBarrierFromSelection() {
     id: barrierId,
     name,
     vertices,
+    maxVertices: rankInfo.maxVertices,
+    linkPattern,
     createdAt: new Date().toISOString()
   });
   if (!result.ok) {
     const message = result.reason === "too-many"
-      ? t("barrier.tooMany").replace("{max}", String(BARRIER_CONFIG.maxVertices))
+      ? t("barrier.tooMany").replace("{max}", String(rankInfo.maxVertices))
       : result.reason === "used" ? t("barrier.stoneUsed") : t("barrier.missingStone");
     showAppToast(message, { error: true });
     render();
@@ -11515,6 +11623,10 @@ function pointerMidpoint(a, b) {
   };
 }
 
+function pointerAngle(a, b) {
+  return Math.atan2(b.y - a.y, b.x - a.x);
+}
+
 function startDragGesture(pointerId, point, options = {}) {
   const barrierLinkMode = state.traverseMode && state.barrierLinkingMode;
   if (state.dragonEye.active && isInsideDragonEye(point)) {
@@ -11757,13 +11869,15 @@ function startPinchGesture() {
     startMidpoint: midpoint,
     startWorld: screenToWorld(midpoint),
     startScale: state.viewport.scale,
+    startAngle: pointerAngle(first, second),
     moved: false,
     dragonEye: Boolean(
       state.dragonEye.active
       && isInsideDragonEye(first)
       && isInsideDragonEye(second)
     ),
-    startDragonEyeRadius: Number(state.dragonEye.radius) || 0
+    startDragonEyeRadius: Number(state.dragonEye.radius) || 0,
+    startDragonEyeRotation: Number(state.dragonEye.rotation) || 0
   };
 }
 
@@ -11797,6 +11911,14 @@ function updatePinchGesture() {
       maxRadius,
       Math.max(minRadius, pinch.startDragonEyeRadius * (distance / pinch.startDistance))
     );
+    const rankInfo = dragonEyeRankInfo();
+    if (rankInfo.rotationUnlocked) {
+      const currentAngle = pointerAngle(first, second);
+      let delta = currentAngle - pinch.startAngle;
+      if (delta > Math.PI) delta -= Math.PI * 2;
+      if (delta < -Math.PI) delta += Math.PI * 2;
+      state.dragonEye.rotation = pinch.startDragonEyeRotation + delta;
+    }
     draw();
     return;
   }

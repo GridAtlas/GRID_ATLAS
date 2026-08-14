@@ -5,13 +5,12 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const BARRIER_EVALUATION_CONFIG = Object.freeze({
   windowDays: BARRIER_CONFIG.windowDays,
-  // Shiniki remains 16× the prior tier: with maxVertices=6, only a cultivated pentagram can reach it.
-  powerThresholds: Object.freeze([0, 25, 100, 400, 1600, 6400, 102400]),
-  daysRequired: Object.freeze([0, 7, 30, 90, 180, 365, 730]),
-  rankNames: Object.freeze(["標", "注連", "垣", "結界", "霊域", "聖域", "神域"]),
-  rankReadings: Object.freeze(["しるべ", "しめ", "かき", "けっかい", "れいいき", "せいいき", "しんいき"]),
-  kekkaishiLifetimeThresholds: Object.freeze([0, 100, 1000, 5000, 20000, 100000, 500000]),
-  kekkaishiRankNames: Object.freeze(["F", "E", "D", "C", "B", "A", "S"])
+  powerThresholds: Object.freeze([0, 25, 100, 400, 1600, 6400, 102400, 409600]),
+  daysRequired: Object.freeze([0, 7, 30, 90, 180, 365, 730, 1095]),
+  rankNames: Object.freeze(["標", "注連", "垣", "結界", "霊域", "聖域", "神域", "天域"]),
+  rankReadings: Object.freeze(["しるべ", "しめ", "かき", "けっかい", "れいいき", "せいいき", "しんいき", "てんいき"]),
+  kekkaishiLifetimeThresholds: Object.freeze([0, 800, 8000, 40000, 160000, 800000, 4000000, 20000000, 100000000]),
+  kekkaishiRankNames: Object.freeze(["F", "E", "D", "C", "B", "A", "S", "SS", "SSS"])
 });
 
 export function createKekkaishiStatus(now = Date.now(), barrierCount = 0, config = BARRIER_EVALUATION_CONFIG) {
@@ -104,11 +103,20 @@ export function evaluationSettingsSnapshot(config = BARRIER_EVALUATION_CONFIG) {
     scaleL0: Number(BARRIER_SCORE_CONFIG.scaleL0),
     stoneCapVertex: Number(BARRIER_CONFIG.stoneCapVertex),
     dailyGrant: Number(BARRIER_CONFIG.dailyGrant),
-    maxVertices: Number(BARRIER_CONFIG.maxVertices)
+    maxVertices: Number(BARRIER_CONFIG.maxVertices),
+    maxVerticesByRank: [...BARRIER_CONFIG.maxVerticesByRank],
+    sightRadiusKm: [...BARRIER_CONFIG.sightRadiusKm],
+    crossLinkFromRank: Number(BARRIER_CONFIG.crossLinkFromRank),
+    stoneCapVertexByRank: [...BARRIER_CONFIG.stoneCapVertexByRank],
+    ryumyakuScatter: [...BARRIER_CONFIG.ryumyakuScatter],
+    rotationFromRank: Number(BARRIER_CONFIG.rotationFromRank),
+    beautyTolerance: Number(BARRIER_SCORE_CONFIG.beautyTolerance),
+    beautyToleranceTiles: Number(BARRIER_SCORE_CONFIG.beautyToleranceTiles),
+    beautyGamma: Number(BARRIER_SCORE_CONFIG.beautyGamma)
   };
 }
 
-export function barrierRankStoneProgress(score, barrier, config = BARRIER_EVALUATION_CONFIG) {
+export function barrierRankStoneProgress(score, barrier, config = BARRIER_EVALUATION_CONFIG, rankIndex = 0) {
   const nextIndex = Math.min(
     Number(score?.rank?.index) + 1,
     config.powerThresholds.length - 1
@@ -123,7 +131,9 @@ export function barrierRankStoneProgress(score, barrier, config = BARRIER_EVALUA
   const nextPower = Number(config.powerThresholds[nextIndex]) || 0;
   const requiredStoneCount = coefficient > 0 ? Math.ceil(nextPower / coefficient) : Number.POSITIVE_INFINITY;
   const currentStoneCount = Math.max(0, Number(score.stoneCount) || 0);
-  const maxStoneCount = Math.max(0, Number(barrier?.vertices?.length) || 0) * Math.max(0, Number(BARRIER_CONFIG.stoneCapVertex) || 0);
+  const capIndex = Math.max(0, Math.min(BARRIER_CONFIG.stoneCapVertexByRank.length - 1, Math.floor(Number(rankIndex) || 0)));
+  const stoneCap = Number(BARRIER_CONFIG.stoneCapVertexByRank[capIndex]) || BARRIER_CONFIG.stoneCapVertex;
+  const maxStoneCount = Math.max(0, Number(barrier?.vertices?.length) || 0) * Math.max(0, stoneCap);
   const maxPower = maxStoneCount * coefficient;
   return {
     max: false,
@@ -241,7 +251,16 @@ function evaluationSettingsSnapshotFromEvent(event) {
     scaleL0: Number(event.scaleL0),
     stoneCapVertex: Number(event.stoneCapVertex),
     dailyGrant: Number(event.dailyGrant),
-    maxVertices: Number(event.maxVertices)
+    maxVertices: Number(event.maxVertices),
+    maxVerticesByRank: Array.isArray(event.maxVerticesByRank) ? [...event.maxVerticesByRank] : [],
+    sightRadiusKm: Array.isArray(event.sightRadiusKm) ? [...event.sightRadiusKm] : [],
+    crossLinkFromRank: Number(event.crossLinkFromRank),
+    stoneCapVertexByRank: Array.isArray(event.stoneCapVertexByRank) ? [...event.stoneCapVertexByRank] : [],
+    ryumyakuScatter: Array.isArray(event.ryumyakuScatter) ? [...event.ryumyakuScatter] : [],
+    rotationFromRank: Number(event.rotationFromRank),
+    beautyTolerance: Number(event.beautyTolerance),
+    beautyToleranceTiles: Number(event.beautyToleranceTiles),
+    beautyGamma: Number(event.beautyGamma)
   };
 }
 

@@ -2,12 +2,18 @@ const STOCK_GRANT_HOURS = Object.freeze([4, 12, 20]);
 
 export const BARRIER_CONFIG = Object.freeze({
   dataZoom: 18,
-  maxVertices: 6,
+  maxVertices: 8,
+  maxVerticesByRank: Object.freeze([3, 3, 4, 5, 6, 6, 6, 8, 8]),
+  sightRadiusKm: Object.freeze([1, 2, 4, 8, 16, 40, 120, 200, 300]),
+  crossLinkFromRank: 6,
   dailyGrant: 3,
   stockGrantHours: STOCK_GRANT_HOURS,
   stockCap: 20,
   stoneCapVertex: 100,
+  stoneCapVertexByRank: Object.freeze([100, 100, 100, 100, 100, 100, 100, 200, 300]),
   stoneCapLoose: 20,
+  ryumyakuScatter: Object.freeze([0.15, 0.13, 0.11, 0.09, 0.07, 0.06, 0.05, 0.05, 0.05]),
+  rotationFromRank: 1,
   windowDays: 90,
   weatherRate: 0.001,
   accuracyThresholdMeters: 100,
@@ -122,12 +128,16 @@ function barrierStockGrantTimes(afterAt, throughAt) {
   return grantTimes.sort((left, right) => left - right);
 }
 
-export function validateBarrierVertices(log, vertices) {
+export function validateBarrierVertices(log, vertices, options = {}) {
   if (!Array.isArray(vertices) || vertices.length < 3) {
     return { ok: false, reason: "too-few" };
   }
-  if (vertices.length > BARRIER_CONFIG.maxVertices) {
-    return { ok: false, reason: "too-many", maxVertices: BARRIER_CONFIG.maxVertices };
+  const maxVertices = Math.min(
+    BARRIER_CONFIG.maxVertices,
+    Math.max(3, Number(options.maxVertices) || BARRIER_CONFIG.maxVertices)
+  );
+  if (vertices.length > maxVertices) {
+    return { ok: false, reason: "too-many", maxVertices };
   }
   if (new Set(vertices).size !== vertices.length) {
     return { ok: false, reason: "duplicate" };
@@ -143,9 +153,26 @@ export function validateBarrierVertices(log, vertices) {
   return { ok: true };
 }
 
-export function stoneCapFor(log, stoneId) {
+export function stoneCapFor(log, stoneId, rankIndex = 0) {
   const isVertex = Object.values(log?.barriers || {}).some((barrier) => barrier?.vertices?.includes(stoneId));
-  return isVertex ? BARRIER_CONFIG.stoneCapVertex : BARRIER_CONFIG.stoneCapLoose;
+  if (!isVertex) return BARRIER_CONFIG.stoneCapLoose;
+  const index = Math.max(0, Math.min(BARRIER_CONFIG.stoneCapVertexByRank.length - 1, Math.floor(Number(rankIndex) || 0)));
+  return Number(BARRIER_CONFIG.stoneCapVertexByRank[index]) || BARRIER_CONFIG.stoneCapVertex;
+}
+
+export function maxVerticesForRank(rankIndex = 0) {
+  const index = Math.max(0, Math.min(BARRIER_CONFIG.maxVerticesByRank.length - 1, Math.floor(Number(rankIndex) || 0)));
+  return Number(BARRIER_CONFIG.maxVerticesByRank[index]) || BARRIER_CONFIG.maxVertices;
+}
+
+export function sightRadiusKmForRank(rankIndex = 0) {
+  const index = Math.max(0, Math.min(BARRIER_CONFIG.sightRadiusKm.length - 1, Math.floor(Number(rankIndex) || 0)));
+  return Number(BARRIER_CONFIG.sightRadiusKm[index]) || BARRIER_CONFIG.sightRadiusKm[0];
+}
+
+export function ryumyakuScatterForRank(rankIndex = 0) {
+  const index = Math.max(0, Math.min(BARRIER_CONFIG.ryumyakuScatter.length - 1, Math.floor(Number(rankIndex) || 0)));
+  return Number(BARRIER_CONFIG.ryumyakuScatter[index]) || BARRIER_CONFIG.ryumyakuScatter[0];
 }
 
 export function stoneExactCount(stone) {
@@ -158,7 +185,7 @@ export function stoneDisplayCount(stone) {
 }
 
 export function registerBarrier(log, barrier) {
-  const validation = validateBarrierVertices(log, barrier?.vertices);
+  const validation = validateBarrierVertices(log, barrier?.vertices, { maxVertices: barrier?.maxVertices });
   if (!validation.ok) return validation;
   if (!barrier?.id || typeof barrier.id !== "string") {
     return { ok: false, reason: "missing-id" };
@@ -168,6 +195,7 @@ export function registerBarrier(log, barrier) {
   log.barriers[barrier.id] = {
     name: typeof barrier.name === "string" ? barrier.name : "",
     vertices: [...barrier.vertices],
+    linkPattern: typeof barrier.linkPattern === "string" ? barrier.linkPattern : "adjacent",
     createdAt,
     guardian: normalizeGuardian(barrier.guardian, createdAt),
     rankProgress
@@ -181,6 +209,7 @@ export function registerBarrier(log, barrier) {
     barrierId: barrier.id,
     name: log.barriers[barrier.id].name,
     vertices: [...log.barriers[barrier.id].vertices],
+    linkPattern: log.barriers[barrier.id].linkPattern,
     guardian: log.barriers[barrier.id].guardian,
     rankProgress: log.barriers[barrier.id].rankProgress
   });
@@ -216,7 +245,7 @@ export function normalizeGuardian(rawGuardian, fallbackAt = Date.now()) {
 }
 
 function normalizeRankProgress(rawProgress) {
-  const activeDays = Array.from({ length: 7 }, (_, index) => Math.max(0, Number(rawProgress?.activeDays?.[index]) || 0));
+  const activeDays = Array.from({ length: 8 }, (_, index) => Math.max(0, Number(rawProgress?.activeDays?.[index]) || 0));
   return {
     activeDays,
     lastPower: rawProgress && rawProgress.lastPower !== null && rawProgress.lastPower !== undefined
@@ -240,6 +269,7 @@ export function replayBarrierEvents(events) {
         if (barrier && typeof barrier === "object") barriers[barrierId] = {
           name: typeof barrier.name === "string" ? barrier.name : "",
           vertices: Array.isArray(barrier.vertices) ? [...barrier.vertices] : [],
+          linkPattern: typeof barrier.linkPattern === "string" ? barrier.linkPattern : "adjacent",
           createdAt: typeof barrier.createdAt === "string" ? barrier.createdAt : event.at,
           guardian: normalizeGuardian(barrier.guardian, event.at),
           rankProgress: normalizeRankProgress(barrier.rankProgress)
@@ -251,6 +281,7 @@ export function replayBarrierEvents(events) {
       barriers[event.barrierId] = {
         name: typeof event.name === "string" ? event.name : "",
         vertices: Array.isArray(event.vertices) ? [...event.vertices] : [],
+        linkPattern: typeof event.linkPattern === "string" ? event.linkPattern : "adjacent",
         createdAt: event.at,
         guardian: normalizeGuardian(event.guardian, event.at),
         rankProgress: normalizeRankProgress(event.rankProgress)
@@ -431,6 +462,7 @@ function normalizeEvent(event, now, fallbackId = "") {
       barrierId: String(event.barrierId),
       name: typeof event.name === "string" ? event.name : "",
       vertices,
+      linkPattern: typeof event.linkPattern === "string" ? event.linkPattern : "adjacent",
       guardian: normalizeGuardian(event.guardian, at),
       rankProgress: normalizeRankProgress(event.rankProgress)
     };
@@ -478,7 +510,16 @@ function normalizeEvent(event, now, fallbackId = "") {
       scaleL0: Number(event.scaleL0),
       stoneCapVertex: Number(event.stoneCapVertex),
       dailyGrant: Number(event.dailyGrant),
-      maxVertices: Number(event.maxVertices)
+      maxVertices: Number(event.maxVertices),
+      maxVerticesByRank: Array.isArray(event.maxVerticesByRank) ? event.maxVerticesByRank.map((value) => Number(value)) : [],
+      sightRadiusKm: Array.isArray(event.sightRadiusKm) ? event.sightRadiusKm.map((value) => Number(value)) : [],
+      crossLinkFromRank: Number(event.crossLinkFromRank),
+      stoneCapVertexByRank: Array.isArray(event.stoneCapVertexByRank) ? event.stoneCapVertexByRank.map((value) => Number(value)) : [],
+      ryumyakuScatter: Array.isArray(event.ryumyakuScatter) ? event.ryumyakuScatter.map((value) => Number(value)) : [],
+      rotationFromRank: Number(event.rotationFromRank),
+      beautyTolerance: Number(event.beautyTolerance),
+      beautyToleranceTiles: Number(event.beautyToleranceTiles),
+      beautyGamma: Number(event.beautyGamma)
     };
   }
   const stoneEventTypes = new Set(["stone-placed", "stone-picked", "stone-weathered"]);
@@ -523,6 +564,7 @@ function normalizeSnapshotBarriers(rawBarriers, now) {
     return [[barrierId, {
       name: typeof barrier.name === "string" ? barrier.name : "",
       vertices,
+      linkPattern: typeof barrier.linkPattern === "string" ? barrier.linkPattern : "adjacent",
       createdAt,
       guardian: normalizeGuardian(barrier.guardian, createdAt),
       rankProgress: normalizeRankProgress(barrier.rankProgress)
@@ -539,6 +581,7 @@ function createMigrationSnapshotEvent(stones, barriers, now) {
     barriers: Object.fromEntries(Object.entries(barriers).map(([barrierId, barrier]) => [barrierId, {
       name: barrier.name,
       vertices: [...barrier.vertices],
+      linkPattern: typeof barrier.linkPattern === "string" ? barrier.linkPattern : "adjacent",
       createdAt: barrier.createdAt,
       guardian: barrier.guardian,
       rankProgress: barrier.rankProgress
@@ -561,6 +604,7 @@ function normalizeBarriers(rawBarriers, stones, now) {
     barriers[barrierId] = {
       name: typeof rawBarrier.name === "string" ? rawBarrier.name : "",
       vertices,
+      linkPattern: typeof rawBarrier.linkPattern === "string" ? rawBarrier.linkPattern : "adjacent",
       createdAt,
       guardian: normalizeGuardian(rawBarrier.guardian, createdAt),
       rankProgress: normalizeRankProgress(rawBarrier.rankProgress)

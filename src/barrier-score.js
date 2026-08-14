@@ -2,22 +2,28 @@ import { BARRIER_CONFIG, stoneDisplayCount } from "./barrier.js";
 
 export const BARRIER_SCORE_CONFIG = Object.freeze({
   earthRadiusKm: 6371.0088,
+  dataZoom: BARRIER_CONFIG.dataZoom,
   beautyMin: 0.5,
   // The shiniki threshold is designed around this upper bound and SCALE_L0.
   beautyMax: 3,
-  beautyGamma: 1,
+  beautyTolerance: 0.05,
+  beautyToleranceTiles: 1,
+  beautyGamma: 3,
   scaleL0: 30,
   shapeCoefficients: Object.freeze({
     triangle: 1,
     quadrilateral: 1.2,
     pentagon: 1.5,
     hexagon: 1.8,
+    heptagon: 2.1,
+    octagon: 2.4,
     star: 3,
+    octagram: 4,
     other: 1.8
   }),
-  rankNames: Object.freeze(["標", "注連", "垣", "結界", "霊域", "聖域", "神域"]),
-  rankReadings: Object.freeze(["しるべ", "しめ", "かき", "けっかい", "れいいき", "せいいき", "しんいき"]),
-  rankThresholds: Object.freeze([0, 25, 100, 400, 1600, 6400, 102400])
+  rankNames: Object.freeze(["標", "注連", "垣", "結界", "霊域", "聖域", "神域", "天域"]),
+  rankReadings: Object.freeze(["しるべ", "しめ", "かき", "けっかい", "れいいき", "せいいき", "しんいき", "てんいき"]),
+  rankThresholds: Object.freeze([0, 25, 100, 400, 1600, 6400, 102400, 409600])
 });
 
 export function scoreBarrier(log, barrierId, config = BARRIER_SCORE_CONFIG) {
@@ -31,7 +37,7 @@ export function scoreBarrier(log, barrierId, config = BARRIER_SCORE_CONFIG) {
   const areaKm2 = selfIntersecting
     ? nonZeroPolygonAreaKm2(geos, config.earthRadiusKm)
     : sphericalPolygonAreaKm2(geos, config.earthRadiusKm);
-  const shape = shapeCoefficient(geos.length, selfIntersecting, config.shapeCoefficients);
+  const shape = shapeCoefficient(geos.length, selfIntersecting, config.shapeCoefficients, barrier.linkPattern);
   const guardian = BARRIER_CONFIG.guardianEnabled ? barrier.guardian : null;
   const beauty = beautyCoefficient(geos, config, guardian);
   const scale = scaleCoefficient(areaKm2, config);
@@ -286,8 +292,13 @@ export function beautyCoefficient(geos, config = BARRIER_SCORE_CONFIG, guardian 
   const polar = geos.map((geo) => polarCoordinates(base, geo));
   const radii = polar.map((point) => point.distanceMeters);
   const radialMean = radii.reduce((sum, value) => sum + value, 0) / radii.length;
+  const tolerance = effectiveBeautyTolerance(base, radialMean, config);
   const radialVariance = radii.reduce((sum, value) => sum + (value - radialMean) ** 2, 0) / radii.length;
-  const radialCv = radialMean > 0 ? Math.sqrt(radialVariance) / radialMean : 0;
+  const radialResidualVariance = radii.reduce((sum, value) => {
+    const residual = Math.max(0, Math.abs(value - radialMean) - tolerance * radialMean);
+    return sum + residual ** 2;
+  }, 0) / radii.length;
+  const radialCv = radialMean > 0 ? Math.sqrt(radialResidualVariance) / radialMean : 0;
   const radialQuality = clamp01(1 - radialCv);
   const angles = polar.map((point) => point.bearing).sort((a, b) => a - b);
   const gaps = angles.map((angle, index) => {
@@ -295,19 +306,25 @@ export function beautyCoefficient(geos, config = BARRIER_SCORE_CONFIG, guardian 
     return (next - angle + 360) % 360;
   });
   const ideal = 360 / geos.length;
-  const error = gaps.reduce((sum, gap) => sum + Math.abs(gap - ideal), 0);
+  const angularToleranceDegrees = tolerance * 180 / Math.PI;
+  const error = gaps.reduce((sum, gap) => sum + Math.max(0, Math.abs(gap - ideal) - angularToleranceDegrees), 0);
   const maxError = 720 * (geos.length - 1) / geos.length;
   const angularQuality = clamp01(maxError > 0 ? 1 - error / maxError : 0);
   const combinedQuality = Math.max(0, radialQuality * angularQuality) ** gamma;
   return minimum + (maximum - minimum) * combinedQuality;
 }
 
-export function shapeCoefficient(vertexCount, selfIntersecting, coefficients = BARRIER_SCORE_CONFIG.shapeCoefficients) {
+export function shapeCoefficient(vertexCount, selfIntersecting, coefficients = BARRIER_SCORE_CONFIG.shapeCoefficients, linkPattern = "adjacent") {
+  if (selfIntersecting && vertexCount === 5 && linkPattern === "pentagram") return coefficients.star;
+  if (selfIntersecting && vertexCount === 8 && linkPattern === "octagram") return coefficients.octagram;
   if (selfIntersecting && vertexCount === 5) return coefficients.star;
+  if (selfIntersecting && vertexCount === 8) return coefficients.octagram;
   if (vertexCount === 3) return coefficients.triangle;
   if (vertexCount === 4) return coefficients.quadrilateral;
   if (vertexCount === 5) return coefficients.pentagon;
   if (vertexCount === 6) return coefficients.hexagon;
+  if (vertexCount === 7) return coefficients.heptagon;
+  if (vertexCount === 8) return coefficients.octagon;
   // Defensive-only fallback for corrupt or future data outside maxVertices.
   // New barriers cannot reach this scoring path while maxVertices is 6.
   console.warn("GRID ATLAS shape coefficient fallback", { vertexCount });
@@ -358,6 +375,54 @@ function polarCoordinates(origin, target) {
 
 function clamp01(value) {
   return Math.max(0, Math.min(1, Number(value) || 0));
+}
+
+export function tileEdgeMetersAtLatitude(latitude, dataZoom = BARRIER_SCORE_CONFIG.dataZoom) {
+  const zoom = Math.max(0, Number(dataZoom) || 0);
+  return 40075017 * Math.cos(Number(latitude) * Math.PI / 180) / (2 ** zoom);
+}
+
+export function effectiveBeautyTolerance(base, radialMeanMeters, config = BARRIER_SCORE_CONFIG) {
+  const relative = Math.max(0, Number(config.beautyTolerance) || 0.05);
+  const tileCount = Math.max(0, Number(config.beautyToleranceTiles) || 0);
+  const edge = tileEdgeMetersAtLatitude(base?.lat, config.dataZoom ?? BARRIER_SCORE_CONFIG.dataZoom);
+  const tileRatio = radialMeanMeters > 0 ? tileCount * edge / radialMeanMeters : 0;
+  return Math.max(relative, tileRatio);
+}
+
+export function geoDistanceKm(first, second, earthRadiusKm = BARRIER_SCORE_CONFIG.earthRadiusKm) {
+  if (!validGeo(first) || !validGeo(second)) return Number.POSITIVE_INFINITY;
+  const lat1 = Number(first.lat) * Math.PI / 180;
+  const lat2 = Number(second.lat) * Math.PI / 180;
+  const dLat = lat2 - lat1;
+  const dLng = (Number(second.lng) - Number(first.lng)) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * earthRadiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)));
+}
+
+export function sightRadiusForRank(rankIndex = 0, config = BARRIER_CONFIG) {
+  const index = Math.max(0, Math.min(config.sightRadiusKm.length - 1, Math.floor(Number(rankIndex) || 0)));
+  return Number(config.sightRadiusKm[index]) || config.sightRadiusKm[0];
+}
+
+export function barrierReferenceGeo(geos) {
+  if (!Array.isArray(geos) || geos.length === 0) return null;
+  return centroidGeo(geos);
+}
+
+export function barrierFitsSightRadius(geos, rankIndex = 0, config = BARRIER_CONFIG) {
+  const reference = barrierReferenceGeo(geos);
+  if (!reference) return { ok: false, reason: "invalid-reference" };
+  const radiusKm = sightRadiusForRank(rankIndex, config);
+  const distances = geos.map((geo, index) => ({ index, distanceKm: geoDistanceKm(reference, geo) }));
+  const exceeded = distances.filter((entry) => entry.distanceKm > radiusKm + 1e-9);
+  return {
+    ok: exceeded.length === 0,
+    radiusKm,
+    reference,
+    distances,
+    exceeded
+  };
 }
 
 function tileCenterGeo(tileId) {
@@ -422,7 +487,7 @@ function interiorAngle(vertex, previous, next) {
   return Math.acos(Math.max(-1, Math.min(1, dot(previousTangent, nextTangent))));
 }
 
-function polygonSelfIntersects(geos) {
+export function polygonSelfIntersects(geos) {
   const centroid = normalizedVector(geos.map(unitVector).reduce(addVector, { x: 0, y: 0, z: 0 }));
   const points = geos.map((geo) => {
     const vector = unitVector(geo);
