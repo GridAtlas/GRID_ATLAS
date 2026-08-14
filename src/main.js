@@ -116,7 +116,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1943";
+const WEB_VERSION = "0.1953";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -259,6 +259,7 @@ const elements = {
   traverseQuantityConfirmButton: document.querySelector("#traverseQuantityConfirmButton"),
   editionBadge: document.querySelector("#editionBadge"),
   webVersionBadge: document.querySelector("#webVersionBadge"),
+  traverseModeBadge: document.querySelector("#traverseModeBadge"),
   settingsMenu: document.querySelector("#settingsMenu"),
   settingsMenuButton: document.querySelector("#settingsMenuButton"),
   openGridAtlasButton: document.querySelector("#openGridAtlasButton"),
@@ -2343,6 +2344,7 @@ function setTraverseMode(enabled) {
     refreshTraverseStock();
   }
   render();
+  syncTraverseModeUi();
 }
 
 async function requestTraverseModeToggle() {
@@ -4881,6 +4883,7 @@ function render() {
   renderSelectionInfo();
   renderStatus();
   renderTraverseActionButton();
+  syncTraverseModeUi();
   renderDragonEyeControls();
   renderWebVersion();
   renderActionButtons();
@@ -5257,6 +5260,20 @@ function renderStatus() {
   elements.statusLine.value = formatDistance(chooseGridStep());
 }
 
+function syncTraverseModeUi() {
+  const enabled = Boolean(state.traverseMode);
+  const button = elements.traverseActionButton;
+  if (button) {
+    button.hidden = !enabled;
+    button.setAttribute("aria-hidden", String(!enabled));
+  }
+  if (elements.traverseModeBadge) {
+    elements.traverseModeBadge.hidden = !enabled;
+    elements.traverseModeBadge.textContent = enabled ? "結界モード ON" : "";
+  }
+  document.documentElement.classList.toggle("is-traverse-mode", enabled);
+}
+
 function renderTraverseActionButton() {
   const button = elements.traverseActionButton;
   if (!button) return;
@@ -5583,7 +5600,7 @@ function renderActionButtons() {
   const hasPendingPoint = validGeo(state.pendingGeo);
   const pointIds = selectedPointIds();
   const visiblePointCount = new Set(visibleSelectablePoints().map((point) => point.id)).size;
-  const displayableListEntries = storageListEntries().filter((entry) => entry.local || entry.preview);
+  const displayableListEntries = storageListEntries().filter((entry) => entry.local || entry.preview || entry.cloud);
   const visibleListCount = displayableListEntries.filter((entry) => storageListIsVisible(entry)).length;
   const hiddenListCount = displayableListEntries.length - visibleListCount;
   const canInvertSelection = !state.editingPointId
@@ -5622,10 +5639,10 @@ function renderActionButtons() {
   elements.actionMapButton.disabled = !mapCandidate;
   elements.actionInvertButton.disabled = !canInvertSelection;
   for (const button of elements.selectAllListButtons) {
-    button.disabled = hiddenListCount === 0 || state.cloud.busy || state.cloud.authPending;
+    button.disabled = hiddenListCount === 0;
   }
   for (const button of elements.clearAllListButtons) {
-    button.disabled = visibleListCount === 0 || state.cloud.busy || state.cloud.authPending;
+    button.disabled = visibleListCount === 0;
   }
   elements.actionMapButton.title = mapCandidate?.isPending
     ? "仮ポイントを地図で開く"
@@ -10459,21 +10476,17 @@ function clearSelection(options = {}) {
 }
 
 function setAllStorageListsVisible(visible) {
-  if (state.cloud.authPending || state.cloud.busy) return;
   const entries = storageListEntries();
   let changed = false;
 
   for (const entry of entries) {
-    const list = entry.local ?? entry.preview;
-    if (!list) continue;
-
     if (entry.local && entry.local.visible !== visible) {
       entry.local.visible = visible;
       entry.local.updatedAt = new Date().toISOString();
       changed = true;
     }
 
-    if (!entry.local && entry.cloud) {
+    if (entry.cloud && !entry.local) {
       const cloudId = entry.cloud.id || entry.preview?.cloudId || entry.preview?.id;
       if (cloudId) {
         if (visible) {
