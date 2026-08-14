@@ -1152,6 +1152,86 @@ button {
   letter-spacing: 0.02em;
 }
 
+.dragon-eye-canvas-actions {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+.dragon-eye-canvas-actions button {
+  min-height: 38px;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+
+.dragon-eye-dialog {
+  width: min(420px, calc(100vw - 24px));
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow), var(--brand-glow);
+}
+
+.dragon-eye-dialog::backdrop {
+  background: rgb(0 0 0 / 0.58);
+  backdrop-filter: blur(3px);
+}
+
+.dragon-eye-dialog-form {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.dragon-eye-dialog-message {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.dragon-eye-shape-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dragon-eye-shape-option {
+  display: grid;
+  place-items: center;
+  gap: 5px;
+  min-height: 92px;
+  padding: 10px 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-strong);
+  color: var(--accent-strong);
+}
+
+.dragon-eye-shape-option:hover,
+.dragon-eye-shape-option:focus-visible {
+  border-color: var(--accent-strong);
+  background: var(--active-bg);
+}
+
+.dragon-eye-shape-option > span {
+  font-size: 42px;
+  line-height: 1;
+}
+
+.dragon-eye-shape-option > small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .traverse-action-value {
   position: relative;
   z-index: 1;

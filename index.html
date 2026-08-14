@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=72">
-    <script src="src/main.js?v=374" type="module" defer></script>
+    <script src="src/main.js?v=375" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -254,6 +254,10 @@
               <button id="traverseActionButton" class="traverse-action-button" type="button" hidden>
                 <span id="traverseActionLabel" class="traverse-action-label" data-i18n="traverse.menuTitle">結界操作</span>
               </button>
+              <div id="dragonEyeCanvasActions" class="dragon-eye-canvas-actions" hidden>
+                <button id="dragonEyeCancelButton" class="compact-button" type="button" data-i18n="dragonEye.cancel">解除</button>
+                <button id="dragonEyeConfirmButton" class="primary-button" type="button" data-i18n="dragonEye.confirm">龍脈眼を確定</button>
+              </div>
             </section>
 
             <section class="mobile-content-panel" data-mobile-grid-panel="points" aria-label="地点一覧">
@@ -533,7 +537,24 @@
           <button id="traversePlaceButton" class="primary-button" type="button" data-i18n="traverse.place">置く</button>
           <button id="traversePickButton" type="button" data-i18n="traverse.pick">拾う</button>
           <button id="traverseCreateBarrierButton" type="button" data-i18n="traverse.connect">結界を結ぶ</button>
+          <button id="traverseDragonEyeButton" type="button" data-i18n="dragonEye.open">龍脈眼</button>
           <button id="traverseStatusButton" type="button" data-i18n="traverse.status">ステータス確認</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="dragonEyeDialog" class="dragon-eye-dialog" aria-labelledby="dragonEyeDialogTitle" tabindex="-1">
+      <form class="dragon-eye-dialog-form" method="dialog">
+        <div class="traverse-action-dialog-heading">
+          <h2 id="dragonEyeDialogTitle" data-i18n="dragonEye.title" tabindex="-1">龍脈眼の形を選択</h2>
+          <button class="share-link-close" type="submit" value="cancel" aria-label="閉じる" title="閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
+        </div>
+        <p class="dragon-eye-dialog-message" data-i18n="dragonEye.message">形を選ぶとグリッド上で移動・拡縮できます。</p>
+        <div id="dragonEyeShapeOptions" class="dragon-eye-shape-options" role="listbox" aria-label="龍脈眼の形">
+          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="triangle" aria-label="正三角形"><span aria-hidden="true">△</span><small data-i18n="dragonEye.triangle">正三角形</small></button>
+          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="square" aria-label="正方形"><span aria-hidden="true">□</span><small data-i18n="dragonEye.square">正方形</small></button>
+          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="diamond" aria-label="ひし形"><span aria-hidden="true">◇</span><small data-i18n="dragonEye.diamond">ひし形</small></button>
+          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="pentagon" aria-label="正五角形"><span aria-hidden="true">⬠</span><small data-i18n="dragonEye.pentagon">正五角形</small></button>
+          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="hexagon" aria-label="正六角形"><span aria-hidden="true">⬡</span><small data-i18n="dragonEye.hexagon">正六角形</small></button>
         </div>
       </form>
     </dialog>

@@ -78,6 +78,14 @@ const GPS_ENABLED_KEY = "grid-atlas-gps-enabled";
 const BARRIER_LOG_KEY = "grid-atlas-barrier-log-v1";
 const LEGACY_TRAVERSE_LOG_KEY = "grid-atlas-traverse-log-v1";
 const TRAVERSE_URL_PARAMETER = "traverse";
+const DRAGON_EYE_LIST_NAME = "結界モード龍脈眼";
+const DRAGON_EYE_SHAPES = Object.freeze({
+  triangle: Object.freeze({ sides: 3, rotation: -Math.PI / 2, glyph: "△", ja: "正三角形", en: "Equilateral triangle" }),
+  square: Object.freeze({ sides: 4, rotation: Math.PI / 4, glyph: "□", ja: "正方形", en: "Square" }),
+  diamond: Object.freeze({ sides: 4, rotation: 0, glyph: "◇", ja: "ひし形", en: "Diamond" }),
+  pentagon: Object.freeze({ sides: 5, rotation: -Math.PI / 2, glyph: "⬠", ja: "正五角形", en: "Regular pentagon" }),
+  hexagon: Object.freeze({ sides: 6, rotation: 0, glyph: "⬡", ja: "正六角形", en: "Regular hexagon" })
+});
 
 const CLOUD_ACCESS_TOKEN_KEY = "grid-atlas-cloud-access-token";
 const CLOUD_PASSWORD_SETUP_KEY_PREFIX = "grid-atlas-cloud-password-set:";
@@ -89,7 +97,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1715";
+const WEB_VERSION = "0.1725";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -203,6 +211,12 @@ const elements = {
   actionMapButton: document.querySelector("#actionMapButton"),
   traverseActionButton: document.querySelector("#traverseActionButton"),
   traverseActionLabel: document.querySelector("#traverseActionLabel"),
+  dragonEyeCanvasActions: document.querySelector("#dragonEyeCanvasActions"),
+  dragonEyeConfirmButton: document.querySelector("#dragonEyeConfirmButton"),
+  dragonEyeCancelButton: document.querySelector("#dragonEyeCancelButton"),
+  dragonEyeDialog: document.querySelector("#dragonEyeDialog"),
+  dragonEyeShapeOptions: document.querySelector("#dragonEyeShapeOptions"),
+  traverseDragonEyeButton: document.querySelector("#traverseDragonEyeButton"),
   traverseActionDialog: document.querySelector("#traverseActionDialog"),
   traverseActionDialogTitle: document.querySelector("#traverseActionDialogTitle"),
   traversePlaceButton: document.querySelector("#traversePlaceButton"),
@@ -543,6 +557,12 @@ const state = {
   traverseFeedback: "",
   traverseFeedbackExpiresAt: 0,
   traverseBusy: false,
+  dragonEye: {
+    active: false,
+    shape: null,
+    center: null,
+    radius: 0
+  },
   editingPointId: null,
   pendingGeo: null,
   gpsEnabled: false,
@@ -1088,6 +1108,17 @@ const TRANSLATIONS = {
     "traverse.connect": "結界を結ぶ",
     "traverse.status": "ステータス確認",
     "traverse.menuTitle": "結界操作",
+    "dragonEye.open": "龍脈眼",
+    "dragonEye.title": "龍脈眼の形を選択",
+    "dragonEye.message": "形を選ぶとグリッド上で移動・拡縮できます。",
+    "dragonEye.confirm": "龍脈眼を確定",
+    "dragonEye.cancel": "解除",
+    "dragonEye.triangle": "正三角形",
+    "dragonEye.square": "正方形",
+    "dragonEye.diamond": "ひし形",
+    "dragonEye.pentagon": "正五角形",
+    "dragonEye.hexagon": "正六角形",
+    "dragonEye.placed": "龍脈眼を{count}地点として保存しました",
     "traverse.modeOnTitle": "結界モードに切り替えますか？",
     "traverse.modeOffTitle": "結界モードを終了しますか？",
     "traverse.modeOnMessage": "結界石の操作が有効になります。",
@@ -1574,6 +1605,17 @@ const TRANSLATIONS = {
     "traverse.connect": "Bind barrier",
     "traverse.status": "Check status",
     "traverse.menuTitle": "Barrier operation",
+    "dragonEye.open": "Dragon eye",
+    "dragonEye.title": "Choose a Dragon Eye shape",
+    "dragonEye.message": "Choose a shape, then drag or pinch it on the grid.",
+    "dragonEye.confirm": "Place Dragon Eye",
+    "dragonEye.cancel": "Cancel",
+    "dragonEye.triangle": "Equilateral triangle",
+    "dragonEye.square": "Square",
+    "dragonEye.diamond": "Diamond",
+    "dragonEye.pentagon": "Regular pentagon",
+    "dragonEye.hexagon": "Regular hexagon",
+    "dragonEye.placed": "Saved the Dragon Eye as {count} points",
     "traverse.modeOnTitle": "Switch to barrier mode?",
     "traverse.modeOffTitle": "Exit barrier mode?",
     "traverse.modeOnMessage": "Barrier stone controls will be enabled.",
@@ -1965,6 +2007,102 @@ function resetBarrierLinkState() {
   canvas?.classList.remove("is-barrier-linking");
 }
 
+function resetDragonEyeState() {
+  state.dragonEye.active = false;
+  state.dragonEye.shape = null;
+  state.dragonEye.center = null;
+  state.dragonEye.radius = 0;
+  state.pointer.pinch = null;
+  if (state.pointer.drag?.dragonEye) state.pointer.drag.dragonEye = false;
+  renderDragonEyeControls();
+}
+
+function dragonEyeDefinition() {
+  return DRAGON_EYE_SHAPES[state.dragonEye.shape] || null;
+}
+
+function dragonEyeWorldVertices() {
+  const definition = dragonEyeDefinition();
+  const center = state.dragonEye.center;
+  const radius = Number(state.dragonEye.radius);
+  if (!definition || !center || !Number.isFinite(radius) || radius <= 0) return [];
+  return Array.from({ length: definition.sides }, (_, index) => {
+    const angle = definition.rotation + (Math.PI * 2 * index) / definition.sides;
+    return {
+      x: center.x + Math.cos(angle) * radius,
+      y: center.y + Math.sin(angle) * radius
+    };
+  });
+}
+
+function dragonEyeScreenVertices() {
+  return dragonEyeWorldVertices().map(worldToScreen);
+}
+
+function beginDragonEye(shape) {
+  if (!state.traverseMode || state.traverseBusy || !DRAGON_EYE_SHAPES[shape]) return;
+  const size = canvasSize();
+  state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
+  state.zoomStage = null;
+  state.dragonEye = {
+    active: true,
+    shape,
+    center: screenToWorld({ x: size.width / 2, y: size.height / 2 }),
+    radius: Math.max(40, Math.min(size.width, size.height) * 0.24 / Math.max(0.01, state.viewport.scale))
+  };
+  if (elements.dragonEyeDialog?.open) elements.dragonEyeDialog.close("shape-selected");
+  showAppToast(t("dragonEye.message"));
+  render();
+}
+
+function openDragonEyeDialog() {
+  if (!state.traverseMode || state.traverseBusy || !elements.dragonEyeDialog) return;
+  if (!elements.traverseActionDialog?.open && !elements.dragonEyeDialog.open) {
+    elements.dragonEyeDialog.showModal();
+  } else if (!elements.dragonEyeDialog.open) {
+    elements.traverseActionDialog?.close("dragon-eye");
+    elements.dragonEyeDialog.showModal();
+  }
+}
+
+function commitDragonEye() {
+  const vertices = dragonEyeWorldVertices();
+  const definition = dragonEyeDefinition();
+  if (!state.dragonEye.active || vertices.length < 3 || !definition) return;
+
+  const now = new Date().toISOString();
+  const list = createNamedLocalPointList(DRAGON_EYE_LIST_NAME);
+  list.visible = true;
+  list.updatedAt = now;
+  const createdPoints = vertices.map((vertex, index) => {
+    const geo = normalizeGeo(unprojectWorld(vertex.x, vertex.y));
+    return {
+      id: createId(),
+      x: vertex.x,
+      y: vertex.y,
+      title: `龍脈眼 ${definition.glyph} ${index + 1}`,
+      note: `${DRAGON_EYE_LIST_NAME} / ${definition.ja}`,
+      photo: "",
+      photoName: "",
+      photoAssetId: "",
+      gridAtlas: null,
+      geo,
+      createdAt: now,
+      updatedAt: now
+    };
+  });
+  list.points.push(...createdPoints);
+  state.activePointListId = list.id;
+  state.selection = createdPoints.map((point) => ({ type: "point", id: point.id }));
+  state.selectedPointId = createdPoints[0]?.id || null;
+  state.selectedLinkId = null;
+  resetDragonEyeState();
+  refreshVisiblePoints();
+  persistWorkspace();
+  showAppToast(t("dragonEye.placed").replace("{count}", String(createdPoints.length)));
+  render();
+}
+
 function beginBarrierLinking() {
   if (!state.traverseMode || state.traverseBusy) return;
   if (availableBarrierStoneIds().length < 3) {
@@ -1984,6 +2122,7 @@ function beginBarrierLinking() {
 function setTraverseMode(enabled) {
   state.traverseMode = Boolean(enabled) && state.cloud.testerActive === true;
   resetBarrierLinkState();
+  resetDragonEyeState();
   state.barrierSelection = [];
   state.selectedBarrierId = null;
   state.guardianPlacementMode = false;
@@ -3592,6 +3731,23 @@ function drawTraverseTiles() {
   context.restore();
 }
 
+function drawDragonEyePreview() {
+  if (!state.dragonEye.active) return;
+  const vertices = dragonEyeScreenVertices();
+  if (vertices.length < 3) return;
+  const colors = canvasPalette();
+  context.save();
+  context.globalCompositeOperation = "screen";
+  context.globalAlpha = 0.18;
+  context.fillStyle = colors.selected || "#c76cff";
+  context.beginPath();
+  context.moveTo(vertices[0].x, vertices[0].y);
+  for (const vertex of vertices.slice(1)) context.lineTo(vertex.x, vertex.y);
+  context.closePath();
+  context.fill();
+  context.restore();
+}
+
 function barrierStoneScreenCenter(stoneId) {
   const stone = state.traverseLog?.stones?.[stoneId];
   const geo = stone ? tileCenterGeo(stone.tile) : null;
@@ -4425,6 +4581,7 @@ function draw() {
   context.clearRect(0, 0, size.width, size.height);
   drawGrid(size.width, size.height);
   drawTraverseTiles();
+  drawDragonEyePreview();
   drawBarrierLinkGesture();
   drawLinks();
   drawLineDragPreview();
@@ -4487,6 +4644,7 @@ function render() {
   renderSelectionInfo();
   renderStatus();
   renderTraverseActionButton();
+  renderDragonEyeControls();
   renderWebVersion();
   renderActionButtons();
   renderPointInfoDialog();
@@ -4876,6 +5034,13 @@ function renderTraverseActionButton() {
   button.title = t("traverse.menuTitle");
 }
 
+function renderDragonEyeControls() {
+  const active = Boolean(state.traverseMode && state.dragonEye.active);
+  if (elements.dragonEyeCanvasActions) elements.dragonEyeCanvasActions.hidden = !active;
+  if (elements.dragonEyeConfirmButton) elements.dragonEyeConfirmButton.disabled = !active;
+  if (elements.dragonEyeCancelButton) elements.dragonEyeCancelButton.disabled = !active;
+}
+
 function renderTraverseActionDialog() {
   if (!elements.traverseActionDialog) return;
   refreshTraverseStock();
@@ -4910,6 +5075,10 @@ function renderTraverseActionDialog() {
     elements.traverseCreateBarrierButton.title = enoughStones
       ? t("traverse.connect")
       : t("barrier.tooFew");
+  }
+  if (elements.traverseDragonEyeButton) {
+    elements.traverseDragonEyeButton.textContent = t("dragonEye.open");
+    elements.traverseDragonEyeButton.disabled = state.traverseBusy || state.dragonEye.active;
   }
   if (elements.traverseStatusButton) {
     elements.traverseStatusButton.textContent = t("traverse.status");
@@ -11228,6 +11397,18 @@ function pointerMidpoint(a, b) {
 
 function startDragGesture(pointerId, point, options = {}) {
   const barrierLinkMode = state.traverseMode && state.barrierLinkingMode;
+  if (state.dragonEye.active) {
+    state.pointer.drag = {
+      id: pointerId,
+      start: point,
+      last: point,
+      moved: Boolean(options.moved),
+      dragonEye: true,
+      dragonEyeCenter: state.dragonEye.center ? { ...state.dragonEye.center } : null,
+      dragonEyeStartWorld: screenToWorld(point)
+    };
+    return;
+  }
   const barrierOrigin = barrierLinkMode && !options.moved ? findNearestBarrierStone(point) : null;
   const longPressPoint = options.moved ? null : findNearestPoint(point);
   const longPressLink = options.moved || longPressPoint ? null : findNearestLink(point);
@@ -11252,7 +11433,8 @@ function startDragGesture(pointerId, point, options = {}) {
     barrierLinkPendingStoneId: null,
     barrierLinkCandidateStoneId: null,
     barrierLinkCandidateTimerId: null,
-    barrierLinkClosing: false
+    barrierLinkClosing: false,
+    dragonEye: false
   };
   state.pointer.drag = drag;
 
@@ -11455,7 +11637,9 @@ function startPinchGesture() {
     startMidpoint: midpoint,
     startWorld: screenToWorld(midpoint),
     startScale: state.viewport.scale,
-    moved: false
+    moved: false,
+    dragonEye: Boolean(state.dragonEye.active),
+    startDragonEyeRadius: Number(state.dragonEye.radius) || 0
   };
 }
 
@@ -11480,6 +11664,17 @@ function updatePinchGesture() {
   }
 
   if (!pinch.moved) {
+    return;
+  }
+
+  if (pinch.dragonEye && state.dragonEye.active) {
+    const minRadius = 40 / Math.max(0.01, state.viewport.scale);
+    const maxRadius = Math.max(minRadius, 900 / Math.max(0.01, state.viewport.scale));
+    state.dragonEye.radius = Math.min(
+      maxRadius,
+      Math.max(minRadius, pinch.startDragonEyeRadius * (distance / pinch.startDistance))
+    );
+    draw();
     return;
   }
 
@@ -11508,6 +11703,7 @@ function removePointer(event, options = {}) {
     && drag
     && drag.id === event.pointerId
     && !drag.moved
+    && !drag.dragonEye
     && !state.pointer.pinch;
 
   state.pointer.active.delete(event.pointerId);
@@ -11534,6 +11730,12 @@ function removePointer(event, options = {}) {
   if (drag?.barrierLink) {
     state.pointer.drag = null;
     finishBarrierLinkGesture(drag, point, allowTap);
+    return;
+  }
+
+  if (drag?.dragonEye) {
+    state.pointer.drag = null;
+    render();
     return;
   }
 
@@ -14093,6 +14295,19 @@ function bindEvents() {
     closeTraverseActionDialog();
     beginBarrierLinking();
   });
+  elements.traverseDragonEyeButton?.addEventListener("click", () => {
+    openDragonEyeDialog();
+  });
+  elements.dragonEyeShapeOptions?.addEventListener("click", (event) => {
+    const option = event.target.closest("[data-dragon-eye-shape]");
+    if (!option) return;
+    beginDragonEye(option.dataset.dragonEyeShape);
+  });
+  elements.dragonEyeConfirmButton?.addEventListener("click", commitDragonEye);
+  elements.dragonEyeCancelButton?.addEventListener("click", () => {
+    resetDragonEyeState();
+    render();
+  });
   elements.traverseStatusButton?.addEventListener("click", () => {
     closeTraverseActionDialog();
     openKekkaishiStatusDialog();
@@ -14103,6 +14318,9 @@ function bindEvents() {
   elements.traverseQuantityConfirmButton?.addEventListener("click", confirmTraverseQuantity);
   elements.traverseActionDialog.addEventListener("click", (event) => {
     if (event.target === elements.traverseActionDialog) closeTraverseActionDialog();
+  });
+  elements.dragonEyeDialog?.addEventListener("click", (event) => {
+    if (event.target === elements.dragonEyeDialog) elements.dragonEyeDialog.close("cancel");
   });
   elements.traverseQuantityDialog?.addEventListener("click", (event) => {
     if (event.target === elements.traverseQuantityDialog) closeTraverseQuantityDialog();
@@ -14199,6 +14417,21 @@ function bindEvents() {
 
     const dx = point.x - drag.start.x;
     const dy = point.y - drag.start.y;
+
+    if (drag.dragonEye) {
+      event.preventDefault();
+      if (Math.hypot(dx, dy) > POINTER_MOVE_THRESHOLD) drag.moved = true;
+      if (drag.moved && drag.dragonEyeCenter && drag.dragonEyeStartWorld) {
+        const currentWorld = screenToWorld(point);
+        state.dragonEye.center = {
+          x: drag.dragonEyeCenter.x + currentWorld.x - drag.dragonEyeStartWorld.x,
+          y: drag.dragonEyeCenter.y + currentWorld.y - drag.dragonEyeStartWorld.y
+        };
+        draw();
+      }
+      drag.last = point;
+      return;
+    }
 
     if (drag.barrierLink) {
       if (!drag.barrierLinkStarted) {
