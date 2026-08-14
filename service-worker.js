@@ -1,9 +1,9 @@
-const CACHE_NAME = "grid-atlas-static-v413";
+const CACHE_NAME = "grid-atlas-static-v414";
 const STATIC_ASSETS = [
   "./",
   "./index.html",
-  "./src/styles.css?v=72",
-  "./src/main.js?v=405",
+  "./src/styles.css?v=73",
+  "./src/main.js?v=406",
   "./src/barrier.js?v=1",
   "./src/barrier-score.js?v=1",
   "./src/barrier-evaluation.js?v=1",
@@ -46,7 +46,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, event.request.mode === "navigate" ? { cache: "no-store" } : undefined)
       .then((response) => {
         const copy = response.clone();
         event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy)));

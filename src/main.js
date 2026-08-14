@@ -116,7 +116,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1953";
+const WEB_VERSION = "0.1954";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -5263,6 +5263,22 @@ function renderStatus() {
 function syncTraverseModeUi() {
   const enabled = Boolean(state.traverseMode);
   const button = elements.traverseActionButton;
+  const mapContent = document.querySelector(".map-content");
+  if (button && mapContent && button.parentElement !== mapContent) {
+    mapContent.append(button);
+  }
+  if (!elements.traverseModeBadge) {
+    const badge = document.createElement("span");
+    badge.id = "traverseModeBadge";
+    badge.className = "traverse-mode-badge";
+    badge.setAttribute("aria-live", "polite");
+    if (elements.webVersionBadge?.parentElement) {
+      elements.webVersionBadge.after(badge);
+    } else {
+      document.querySelector(".brand")?.append(badge);
+    }
+    elements.traverseModeBadge = badge;
+  }
   if (button) {
     button.hidden = !enabled;
     button.setAttribute("aria-hidden", String(!enabled));
