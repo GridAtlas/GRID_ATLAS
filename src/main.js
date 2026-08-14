@@ -89,7 +89,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1713";
+const WEB_VERSION = "0.1715";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -108,7 +108,7 @@ const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
 const BARRIER_TILE_MIN_SCREEN_SIZE = POINT_RADIUS * 2 + 8;
 const BARRIER_LINK_LONG_PRESS_MS = 500;
-const GRID_MODE_LONG_PRESS_MS = 2000;
+const GRID_MODE_LONG_PRESS_MS = 1500;
 const BARRIER_LINK_DWELL_MS = 500;
 const BARRIER_LINK_SEGMENT_MS = 460;
 const BARRIER_LINK_COMPLETION_MS = 1100;

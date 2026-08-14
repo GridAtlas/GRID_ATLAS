@@ -1107,7 +1107,7 @@ button {
 .traverse-action-button {
   position: absolute;
   left: 50%;
-  bottom: max(14px, env(safe-area-inset-bottom));
+  bottom: 14px;
   z-index: 10;
   display: inline-flex;
   align-items: center;
@@ -1115,13 +1115,14 @@ button {
   gap: 4px;
   width: auto;
   min-width: 0;
-  min-height: 32px;
-  padding: 0 12px;
-  border: 1px solid var(--accent);
-  border-radius: 999px;
-  background: var(--active-bg);
-  color: var(--accent-strong);
-  box-shadow: var(--shadow), 0 0 0 1px rgb(255 255 255 / 0.08);
+  min-height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 0;
+  background: rgb(242 138 46 / 0.3);
+  color: #ffd7aa;
+  box-shadow: none;
+  clip-path: polygon(12% 0, 88% 0, 100% 50%, 88% 100%, 12% 100%, 0 50%);
   transform: translateX(-50%);
   white-space: nowrap;
   pointer-events: auto;
@@ -1135,7 +1136,7 @@ button {
 
 .traverse-action-button:hover:not(:disabled),
 .traverse-action-button.is-centering {
-  background: var(--active-bg);
+  background: rgb(242 138 46 / 0.38);
 }
 
 .traverse-action-button:disabled {
@@ -1146,7 +1147,7 @@ button {
 .traverse-action-label {
   position: relative;
   z-index: 1;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 900;
   letter-spacing: 0.02em;
 }
@@ -1375,8 +1376,8 @@ button {
 }
 
 :root[data-theme="retro"] .traverse-action-button {
-  color: var(--accent-strong);
-  box-shadow: var(--shadow), 0 0 14px rgb(44 255 100 / 0.26);
+  color: #ffd7aa;
+  box-shadow: none;
 }
 
 canvas.is-barrier-linking {
@@ -1977,7 +1978,7 @@ textarea {
   min-height: 32px;
   padding: 0 8px;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 800;
 }
 
