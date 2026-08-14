@@ -116,7 +116,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1960";
+const WEB_VERSION = "0.1961";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -2345,6 +2345,12 @@ function setTraverseMode(enabled) {
   }
   render();
   syncTraverseModeUi();
+  const settledMode = state.traverseMode;
+  window.requestAnimationFrame(() => {
+    if (state.traverseMode !== settledMode) return;
+    renderTraverseActionButton();
+    syncTraverseModeUi();
+  });
 }
 
 async function requestTraverseModeToggle() {
