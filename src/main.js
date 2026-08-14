@@ -116,7 +116,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1938";
+const WEB_VERSION = "0.1940";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -526,6 +526,7 @@ const state = {
     testerError: "",
     canUseMine: false,
     authBusy: false,
+    authPending: false,
     busy: false,
     apiUrl: "",
     lists: [],
@@ -5617,10 +5618,10 @@ function renderActionButtons() {
   elements.actionMapButton.disabled = !mapCandidate;
   elements.actionInvertButton.disabled = !canInvertSelection;
   for (const button of elements.selectAllListButtons) {
-    button.disabled = hiddenListCount === 0 || state.cloud.busy;
+    button.disabled = hiddenListCount === 0 || state.cloud.busy || state.cloud.authPending;
   }
   for (const button of elements.clearAllListButtons) {
-    button.disabled = visibleListCount === 0 || state.cloud.busy;
+    button.disabled = visibleListCount === 0 || state.cloud.busy || state.cloud.authPending;
   }
   elements.actionMapButton.title = mapCandidate?.isPending
     ? "仮ポイントを地図で開く"
@@ -9031,9 +9032,30 @@ async function setCloudPassword() {
 async function initializeCloudAuth() {
   const config = cloudAuthConfig();
   state.cloud.authConfigured = Boolean(config.url && config.publishableKey);
-  state.cloud.authClient = await createCloudAuthClient();
+  state.cloud.authPending = state.cloud.authConfigured;
+  if (state.cloud.authPending) {
+    setCloudProgress(0, 1, cloudText("クラウド接続を確認中", "Checking cloud connection"));
+    renderStorageLists();
+    renderActionButtons();
+  }
+  try {
+    state.cloud.authClient = await createCloudAuthClient();
+  } catch (error) {
+    state.cloud.authPending = false;
+    clearCloudProgress();
+    setCloudAuthStatus(error?.message || cloudText("クラウド接続を確認できません", "Could not check the cloud connection"), { error: true });
+    renderStorageLists();
+    renderActionButtons();
+    return;
+  }
   renderCloudAuthControls();
-  if (!state.cloud.authClient) return;
+  if (!state.cloud.authClient) {
+    state.cloud.authPending = false;
+    clearCloudProgress();
+    renderStorageLists();
+    renderActionButtons();
+    return;
+  }
 
   const authUrlState = cloudAuthUrlState();
   state.cloud.passwordRecoveryActive = authUrlState.type === "recovery";
@@ -9087,6 +9109,11 @@ async function initializeCloudAuth() {
     if (!data.session && state.cloud.connected) void refreshCloudLists({ quiet: true });
   } catch (error) {
     setCloudAuthStatus(error?.message || cloudText("認証状態を確認できません", "Could not check authentication"), { error: true });
+  } finally {
+    state.cloud.authPending = false;
+    if (!state.cloud.busy) clearCloudProgress();
+    renderStorageLists();
+    renderActionButtons();
   }
 }
 
@@ -9278,6 +9305,7 @@ function setCloudBusy(busy) {
   state.cloud.busy = Boolean(busy);
   if (!busy) clearCloudProgress();
   renderStorageLists();
+  renderActionButtons();
 }
 
 function syncCloudControls() {
@@ -9332,6 +9360,7 @@ function disconnectCloud() {
 }
 async function refreshCloudLists(options = {}) {
   setCloudBusy(true);
+  setCloudProgress(0, 3, cloudText("クラウドのリスト一覧を確認中", "Checking cloud lists"));
   try {
     const client = cloudClientFromInputs();
     const response = await client.listLists();
@@ -9348,6 +9377,7 @@ async function refreshCloudLists(options = {}) {
     state.cloud.listOrder = state.cloud.lists.map((list) => list.id);
     repairLocalCloudIdCollisions();
 
+    setCloudProgress(1, 3, cloudText("クラウドリストの内容を読み込み中", "Loading cloud list contents"));
     const details = await Promise.all(state.cloud.lists.map((list) => client.getList(list.id)));
     state.cloud.pointLists = await Promise.all(details.map(async (result) => {
       const list = cloudPayloadToPointList(result.list, {
@@ -9358,6 +9388,7 @@ async function refreshCloudLists(options = {}) {
       });
       return hydrateCloudPointListAssets(list, client);
     }));
+    setCloudProgress(2, 3, cloudText("クラウドリストを表示する準備中", "Preparing cloud lists for display"));
     applyCloudListOrder();
     repairLocalCloudPointIdCollisions();
     ensureActivePointListVisible();
@@ -9368,6 +9399,7 @@ async function refreshCloudLists(options = {}) {
     syncProjectedCoordinates();
     state.cloud.connected = true;
     state.cloud.lastFetchedAt = Date.now();
+    setCloudProgress(3, 3, cloudText("クラウドリストを読み込みました", "Cloud lists loaded"));
     if (options.quiet !== true && state.cloud.canUseMine) {
       setCloudStatus(cloudText(
         `${state.cloud.lists.length}件のマイリスト（クラウド）を読み込みました`,
@@ -10406,6 +10438,7 @@ function clearSelection(options = {}) {
 }
 
 function setAllStorageListsVisible(visible) {
+  if (state.cloud.authPending || state.cloud.busy) return;
   const entries = storageListEntries();
   let changed = false;
 
@@ -14743,13 +14776,19 @@ function bindEvents() {
   // iOS Safari can close a method="dialog" form without preserving the
   // submit button's returnValue. Close explicitly so mode confirmation is
   // not interpreted as cancellation on Safari.
+  const finishConfirmDialog = (value) => {
+    const resolve = pendingConfirmResolve;
+    pendingConfirmResolve = null;
+    if (elements.confirmDialog.open) elements.confirmDialog.close(value);
+    resolve?.(value);
+  };
   elements.confirmDialogConfirmButton.addEventListener("click", (event) => {
     event.preventDefault();
-    elements.confirmDialog.close("confirm");
+    finishConfirmDialog("confirm");
   });
   elements.confirmDialogCancelButton.addEventListener("click", (event) => {
     event.preventDefault();
-    elements.confirmDialog.close("cancel");
+    finishConfirmDialog("cancel");
   });
   elements.confirmDialog.addEventListener("click", (event) => {
     if (event.target === elements.confirmDialog) elements.confirmDialog.close("cancel");
