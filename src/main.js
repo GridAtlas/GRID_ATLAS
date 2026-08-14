@@ -116,7 +116,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1954";
+const WEB_VERSION = "0.1955";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -5064,6 +5064,7 @@ function startGridModeLongPress(event) {
 }
 
 function finishGridModeLongPress(event) {
+  if (event.type === "pointerleave" && event.pointerType !== "mouse") return;
   if (gridModePressPointerId !== null && event.pointerId !== gridModePressPointerId) return;
   if (gridModePressTimerId) window.clearTimeout(gridModePressTimerId);
   gridModePressTimerId = 0;
@@ -5284,8 +5285,9 @@ function syncTraverseModeUi() {
     button.setAttribute("aria-hidden", String(!enabled));
   }
   if (elements.traverseModeBadge) {
-    elements.traverseModeBadge.hidden = !enabled;
-    elements.traverseModeBadge.textContent = enabled ? "結界モード ON" : "";
+    elements.traverseModeBadge.hidden = false;
+    elements.traverseModeBadge.textContent = enabled ? "結界モード ON" : "通常モード";
+    elements.traverseModeBadge.classList.toggle("is-active", enabled);
   }
   document.documentElement.classList.toggle("is-traverse-mode", enabled);
 }
