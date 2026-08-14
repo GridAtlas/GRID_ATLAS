@@ -116,7 +116,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1958";
+const WEB_VERSION = "0.1959";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -9107,10 +9107,14 @@ async function initializeCloudAuth() {
   state.cloud.passwordRecoveryActive = authUrlState.type === "recovery";
   state.cloud.signupPasswordSetupActive = authUrlState.type === "signup";
 
-  state.cloud.authClient.auth.onAuthStateChange((_event, session) => {
+  state.cloud.authClient.auth.onAuthStateChange((event, session) => {
     // Supabase warns against calling other async auth methods directly from
     // this callback. Defer the UI/cloud refresh until the auth lock is free.
-    queueMicrotask(() => applyCloudAuthSession(session, { forceRefresh: true }));
+    const refreshLists = event === "SIGNED_IN";
+    queueMicrotask(() => applyCloudAuthSession(session, {
+      refresh: refreshLists,
+      forceRefresh: refreshLists
+    }));
   });
   try {
     if (authUrlState.code) {
