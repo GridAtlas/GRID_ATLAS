@@ -116,7 +116,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1956";
+const WEB_VERSION = "0.1957";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -9486,8 +9486,7 @@ async function requestCloudRefresh() {
 }
 
 function maybeAutoRefreshCloudLists() {
-  const listManagementVisible = !mobilePageUiActive()
-    || state.mobilePage === "data"
+  const listManagementVisible = state.mobilePage === "data"
     || (state.mobilePage === "map" && state.mobileGridPage === "lists");
   if (!listManagementVisible || document.visibilityState !== "visible" || !state.cloud.connected || state.cloud.busy) return;
   const now = Date.now();
