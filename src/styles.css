@@ -1151,6 +1151,12 @@ button {
   user-select: none;
 }
 
+html.is-traverse-mode .traverse-action-button {
+  display: inline-flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
 .traverse-action-button::before {
   display: none;
 }

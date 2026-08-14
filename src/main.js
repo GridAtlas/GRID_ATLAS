@@ -116,7 +116,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1957";
+const WEB_VERSION = "0.1958";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -2348,6 +2348,10 @@ function setTraverseMode(enabled) {
 }
 
 async function requestTraverseModeToggle() {
+  // The mode state is authoritative. Repair the visible badge before
+  // calculating the next mode so a stale cached label cannot contradict the
+  // confirmation dialog.
+  syncTraverseModeUi();
   const nextMode = !state.traverseMode;
   pendingTraverseModeToggle = nextMode;
   const confirmed = await requestConfirm({
@@ -5057,6 +5061,7 @@ function startGridModeLongPress(event) {
     gridModePressTimerId = 0;
     gridModeLongPressTriggered = true;
     gridModeSuppressClick = true;
+    syncTraverseModeUi();
     setMobilePage("map");
     setMobileGridPage("grid");
     void requestTraverseModeToggle();
@@ -5282,6 +5287,8 @@ function syncTraverseModeUi() {
   }
   if (button) {
     button.hidden = !enabled;
+    button.style.display = enabled ? "inline-flex" : "";
+    button.style.visibility = enabled ? "visible" : "";
     button.setAttribute("aria-hidden", String(!enabled));
   }
   if (elements.traverseModeBadge) {
@@ -14833,18 +14840,8 @@ function bindEvents() {
   const finishConfirmDialog = (value) => {
     const resolve = pendingConfirmResolve;
     pendingConfirmResolve = null;
-    const nextTraverseMode = pendingTraverseModeToggle;
     pendingTraverseModeToggle = null;
     if (elements.confirmDialog.open) elements.confirmDialog.close(value);
-    if (value === "confirm" && nextTraverseMode !== null) {
-      setTraverseMode(nextTraverseMode);
-      syncSettingsControls();
-      if (nextTraverseMode) {
-        setMobilePage("map");
-        setMobileGridPage("grid");
-        renderTraverseActionButton();
-      }
-    }
     resolve?.(value);
   };
   elements.confirmDialogConfirmButton.addEventListener("click", (event) => {
