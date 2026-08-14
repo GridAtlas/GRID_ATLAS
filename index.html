@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=72">
-    <script src="src/main.js?v=385" type="module" defer></script>
+    <script src="src/main.js?v=390" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -275,6 +275,8 @@
                 <p class="storage-list-drag-hint" data-i18n="storage.dragHint">リストをタップするとグリッド表示をオン／オフできます。長押しすると地点一覧を表示します。少し長押ししてからドラッグすると、リストを移動できます。</p>
                 <div class="list-management-actions">
                   <button class="compact-button" type="button" data-new-point-list><svg class="ui-icon" aria-hidden="true"><use href="#icon-plus"></use></svg><span data-i18n="list.new">新規</span></button>
+                  <button class="compact-button" type="button" data-select-all-points data-i18n="list.selectAll" data-i18n-title="list.selectAllTitle">全選択</button>
+                  <button class="compact-button" type="button" data-clear-all-points data-i18n="list.clearAll" data-i18n-title="list.clearAllTitle">全解除</button>
                 </div>
               </div>
               <div id="mobilePointListItems" class="storage-list-items" data-storage-list-items></div>
@@ -460,6 +462,8 @@
               <p class="storage-list-drag-hint" data-i18n="storage.dragHint">リストをタップするとグリッド表示をオン／オフできます。長押しすると地点一覧を表示します。少し長押ししてからドラッグすると、リストを移動できます。</p>
               <div class="list-management-actions">
                 <button class="compact-button" type="button" data-new-point-list><svg class="ui-icon" aria-hidden="true"><use href="#icon-plus"></use></svg><span data-i18n="list.new">新規</span></button>
+                <button class="compact-button" type="button" data-select-all-points data-i18n="list.selectAll" data-i18n-title="list.selectAllTitle">全選択</button>
+                <button class="compact-button" type="button" data-clear-all-points data-i18n="list.clearAll" data-i18n-title="list.clearAllTitle">全解除</button>
               </div>
             </div>
             <div id="pointListItems" class="storage-list-items" data-storage-list-items></div>
@@ -534,12 +538,13 @@
             <div><span data-i18n="traverse.locationsShort">箇所</span><strong id="traverseLocationValue">0</strong></div>
           </div>
         </section>
-        <div class="traverse-action-dialog-actions">
-          <button id="traversePlaceButton" class="primary-button" type="button" data-i18n="traverse.place">置く</button>
-          <button id="traversePickButton" type="button" data-i18n="traverse.pick">拾う</button>
-          <button id="traverseCreateBarrierButton" type="button" data-i18n="traverse.connect">結界を結ぶ</button>
-          <button id="traverseDragonEyeButton" type="button" data-i18n="dragonEye.open">龍脈眼</button>
-          <button id="traverseStatusButton" type="button" data-i18n="traverse.status">ステータス確認</button>
+          <div class="traverse-action-dialog-actions">
+            <button id="traversePlaceButton" class="primary-button" type="button" data-i18n="traverse.place">置く</button>
+            <button id="traversePickButton" type="button" data-i18n="traverse.pick">拾う</button>
+            <button id="traversePlacementViewButton" type="button" data-i18n="traverse.placementView">配置をみる</button>
+            <button id="traverseCreateBarrierButton" type="button" data-i18n="traverse.connect">結界を結ぶ</button>
+            <button id="traverseDragonEyeButton" type="button" data-i18n="dragonEye.open">龍脈眼</button>
+            <button id="traverseStatusButton" type="button" data-i18n="traverse.status">ステータス確認</button>
         </div>
       </form>
     </dialog>
@@ -593,8 +598,8 @@
           <strong id="kekkaishiStatusRank">F</strong>
         </div>
         <dl class="kekkaishi-status-list kekkaishi-status-card">
-          <div><dt data-i18n="kekkaishi.lifetime">累積結界力</dt><dd id="kekkaishiStatusLifetime"></dd></div>
-          <div><dt data-i18n="kekkaishi.dailyPower">現在の日次発動力</dt><dd id="kekkaishiStatusDailyPower"></dd></div>
+          <div><dt data-i18n="kekkaishi.lifetime">累積結界霊量</dt><dd id="kekkaishiStatusLifetime"></dd></div>
+          <div><dt data-i18n="kekkaishi.dailyPower">前日の結界霊量</dt><dd id="kekkaishiStatusDailyPower"></dd></div>
           <div><dt data-i18n="kekkaishi.peak">ピーク平均</dt><dd id="kekkaishiStatusPeak"></dd></div>
           <div><dt data-i18n="kekkaishi.recent">直近平均</dt><dd id="kekkaishiStatusRecent"></dd></div>
           <div><dt data-i18n="kekkaishi.ratio">ピーク比</dt><dd id="kekkaishiStatusRatio"></dd></div>

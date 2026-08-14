@@ -117,7 +117,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1888";
+const WEB_VERSION = "0.1929";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -243,6 +243,7 @@ const elements = {
   traverseActionDialogTitle: document.querySelector("#traverseActionDialogTitle"),
   traversePlaceButton: document.querySelector("#traversePlaceButton"),
   traversePickButton: document.querySelector("#traversePickButton"),
+  traversePlacementViewButton: document.querySelector("#traversePlacementViewButton"),
   traverseCreateBarrierButton: document.querySelector("#traverseCreateBarrierButton"),
   traverseStatusButton: document.querySelector("#traverseStatusButton"),
   traverseStockValue: document.querySelector("#traverseStockValue"),
@@ -443,6 +444,8 @@ const elements = {
   routeSummary: document.querySelector("#routeSummary"),
   routeList: document.querySelector("#routeList"),
   newPointListButtons: Array.from(document.querySelectorAll("[data-new-point-list]")),
+  selectAllPointButtons: Array.from(document.querySelectorAll("[data-select-all-points]")),
+  clearAllPointButtons: Array.from(document.querySelectorAll("[data-clear-all-points]")),
 
   pointImportFile: document.querySelector("#pointImportFile"),
   storageListContainers: Array.from(document.querySelectorAll("[data-storage-list-items]")),
@@ -507,6 +510,7 @@ const state = {
   pointLists: [],
   activePointListId: DEFAULT_POINT_LIST_ID,
   favoriteListIds: new Set(),
+  storageListSectionCollapsed: {},
   pointDestinationListId: null,
 
   pointTransferDestinationListId: "",
@@ -575,6 +579,7 @@ const state = {
   traverseLog: null,
   barrierSelection: [],
   selectedBarrierId: null,
+  barrierPlacementView: false,
   barrierLinkingMode: false,
   barrierLinkPath: [],
   barrierLinkCandidateStoneId: null,
@@ -636,10 +641,7 @@ let pointSubmitInFlight = null;
 let activeStorageListDrag = null;
 let activePointIndexDrag = null;
 let traverseFeedbackTimerId = 0;
-let traversePressTimerId = 0;
-let traversePressPointerId = null;
-let traverseLongPressTriggered = false;
-let traverseSuppressClick = false;
+let reopenTraverseActionMenuAfterStatus = false;
 let gridModePressTimerId = 0;
 let gridModePressPointerId = null;
 let gridModePressTab = null;
@@ -1035,7 +1037,7 @@ const TRANSLATIONS = {
     "cloud.save": "マイリスト（クラウド）として保存",
     "cloud.delete": "マイリスト（クラウド）から削除",
     "cloud.empty": "マイリスト（クラウド）なし",
-    "storage.notice": "テスターは、端末内・マイリスト（クラウド）・テスター共有リストの間でリストを移動またはコピーできます。",
+    "storage.notice": "テスターは、端末内・マイリスト（クラウド）・共有リスト（テスター間実験）の間でリストを移動またはコピーできます。",
     "storage.location": "保存場所",
     "storage.device": "端末",
     "storage.cloud": "クラウド",
@@ -1060,8 +1062,12 @@ const TRANSLATIONS = {
     "storage.dragImportedDestination": "インポートリストはコピー先・移動先にできません。",
     "storage.targetMineDevice": "マイリスト（端末内）",
     "storage.targetMineCloud": "マイリスト（クラウド）",
-    "storage.targetTesterShared": "テスター共有リスト",
+    "storage.targetTesterShared": "共有リスト（テスター間実験）",
     "list.new": "新規",
+    "list.selectAll": "全選択",
+    "list.selectAllTitle": "表示中の地点をすべて選択",
+    "list.clearAll": "全解除",
+    "list.clearAllTitle": "選択をすべて解除",
     "list.newPrompt": "新しいリストの名前",
     "list.created": "新しいリストを作成し、登録先にしました",
     "list.active": "地点登録先",
@@ -1109,7 +1115,7 @@ const TRANSLATIONS = {
     "list.movedPoints": "「{name}」へ{count}地点を移動しました",
     "list.section.mineDevice": "マイリスト（端末内）",
     "list.section.mineCloud": "マイリスト（クラウド）",
-    "list.section.testerShared": "テスター共有リスト",
+    "list.section.testerShared": "共有リスト（テスター間実験）",
     "list.section.imported": "インポートリスト",
 
     "list.none": "リストなし",
@@ -1142,6 +1148,8 @@ const TRANSLATIONS = {
     "traverse.progress": "結界石を{action}ました",
     "traverse.place": "結界石を置く",
     "traverse.pick": "結界石を拾う",
+    "traverse.placementView": "配置をみる",
+    "traverse.placementViewExit": "結界メニューへ戻る",
     "traverse.connect": "結界を結ぶ",
     "traverse.status": "ステータス確認",
     "traverse.menuTitle": "結界操作",
@@ -1240,7 +1248,7 @@ const TRANSLATIONS = {
     ,"kekkaishi.title": "結界師ステータス"
     ,"kekkaishi.rank": "結界師ランク"
     ,"kekkaishi.achievedDays": "（{days}日で到達）"
-    ,"kekkaishi.lifetime": "累積結界力"
+    ,"kekkaishi.lifetime": "累積結界霊量"
     ,"kekkaishi.peak": "ピーク平均"
     ,"kekkaishi.recent": "直近平均"
     ,"kekkaishi.ratio": "ピーク比"
@@ -1257,7 +1265,7 @@ const TRANSLATIONS = {
     ,"kekkaishi.scatter": "龍脈眼ばらつき"
     ,"kekkaishi.edgeGuide": "1辺目安"
     ,"kekkaishi.progressLifetime": "累積"
-    ,"kekkaishi.dailyPower": "現在の日次発動力"
+    ,"kekkaishi.dailyPower": "前日の結界霊量"
     ,"kekkaishi.progressDays": "現在のペースであと{days}日"
     ,"kekkaishi.noDailyPower": "結界を張ると進みます"
     ,"kekkaishi.unlocks": "解放: 見通し半径{radius} / 結べる形{shapes} / 1辺目安{edges} / 最大{vertices}頂点 / 石上限{stones} / 龍脈眼ばらつき{scatter}%"
@@ -1557,7 +1565,7 @@ const TRANSLATIONS = {
     "cloud.save": "Save as My List (Cloud)",
     "cloud.delete": "Delete from My Lists (Cloud)",
     "cloud.empty": "No My Lists (Cloud)",
-    "storage.notice": "Testers can move or copy lists between the device, My Lists (Cloud), and Tester Shared Lists.",
+    "storage.notice": "Testers can move or copy lists between the device, My Lists (Cloud), and Shared Lists (Tester Experiment).",
     "storage.location": "Storage",
     "storage.device": "Device",
     "storage.cloud": "Cloud",
@@ -1582,8 +1590,12 @@ const TRANSLATIONS = {
     "storage.dragImportedDestination": "Imported Lists cannot be a copy or move destination.",
     "storage.targetMineDevice": "My Lists (Device)",
     "storage.targetMineCloud": "My Lists (Cloud)",
-    "storage.targetTesterShared": "Tester Shared Lists",
+    "storage.targetTesterShared": "Shared Lists (Tester Experiment)",
     "list.new": "New",
+    "list.selectAll": "Select all",
+    "list.selectAllTitle": "Select all points shown on the grid",
+    "list.clearAll": "Clear all",
+    "list.clearAllTitle": "Clear all selections",
     "list.newPrompt": "Name the new list",
     "list.created": "Created a new list and set it as the destination",
     "list.active": "Destination",
@@ -1631,7 +1643,7 @@ const TRANSLATIONS = {
     "list.movedPoints": "Moved {count} point(s) to “{name}”",
     "list.section.mineDevice": "My Lists (Device)",
     "list.section.mineCloud": "My Lists (Cloud)",
-    "list.section.testerShared": "Tester Shared Lists",
+    "list.section.testerShared": "Shared Lists (Tester Experiment)",
     "list.section.imported": "Imported Lists",
 
     "list.none": "No lists",
@@ -1664,6 +1676,8 @@ const TRANSLATIONS = {
     "traverse.progress": "Barrier stone {action}",
     "traverse.place": "Place barrier stone",
     "traverse.pick": "Pick up barrier stone",
+    "traverse.placementView": "View placement",
+    "traverse.placementViewExit": "Back to barrier menu",
     "traverse.connect": "Bind barrier",
     "traverse.status": "Check status",
     "traverse.menuTitle": "Barrier operation",
@@ -1762,7 +1776,7 @@ const TRANSLATIONS = {
     ,"kekkaishi.title": "Kekkaishi status"
     ,"kekkaishi.rank": "Kekkaishi rank"
     ,"kekkaishi.achievedDays": "({days} days to reach)"
-    ,"kekkaishi.lifetime": "Lifetime barrier power"
+    ,"kekkaishi.lifetime": "Cumulative barrier spirit"
     ,"kekkaishi.peak": "Peak average"
     ,"kekkaishi.recent": "Recent average"
     ,"kekkaishi.ratio": "Peak ratio"
@@ -1779,7 +1793,7 @@ const TRANSLATIONS = {
     ,"kekkaishi.scatter": "Dragon Eye scatter"
     ,"kekkaishi.edgeGuide": "Edge guide"
     ,"kekkaishi.progressLifetime": "Lifetime"
-    ,"kekkaishi.dailyPower": "Current daily power"
+    ,"kekkaishi.dailyPower": "Previous day's barrier spirit"
     ,"kekkaishi.progressDays": "At this pace: {days} more days"
     ,"kekkaishi.noDailyPower": "Create a barrier to make progress"
     ,"kekkaishi.unlocks": "Unlocked: sight radius {radius} / shapes {shapes} / edge guide {edges} / max {vertices} vertices / stone cap {stones} / Dragon Eye scatter {scatter}%"
@@ -2166,10 +2180,10 @@ function renderDragonEyeShapeOptions() {
     option.disabled = !available;
     option.classList.toggle("is-locked", !available);
     option.setAttribute("aria-label", available ? label : t("dragonEye.secret"));
-    if (labelNode) labelNode.textContent = available ? label : t("dragonEye.secret");
+    if (labelNode) labelNode.textContent = available ? label : "";
     option.title = available
       ? label
-      : t("dragonEye.secret");
+      : "";
   });
 }
 
@@ -2309,7 +2323,7 @@ function commitDragonEye() {
   refreshVisiblePoints();
   persistWorkspace();
   showAppToast(t("dragonEye.placed").replace("{count}", String(createdPoints.length)));
-  render();
+  returnToTraverseActionMenu();
 }
 
 function beginBarrierLinking() {
@@ -2330,11 +2344,13 @@ function beginBarrierLinking() {
 
 function setTraverseMode(enabled) {
   state.traverseMode = Boolean(enabled) && state.cloud.testerActive === true;
+  state.barrierPlacementView = false;
   resetBarrierLinkState();
   resetDragonEyeState();
   state.barrierSelection = [];
   state.selectedBarrierId = null;
   state.guardianPlacementMode = false;
+  reopenTraverseActionMenuAfterStatus = false;
   if (!state.traverseMode) closeTraverseActionDialog();
   if (state.traverseMode) {
     if (evaluateBarrierLog(state.traverseLog).changed) persistTraverseLog();
@@ -2527,6 +2543,13 @@ function applyWorkspace(workspace) {
       ? workspace.favoriteListIds.filter((id) => typeof id === "string" && id)
       : []
   );
+  state.storageListSectionCollapsed = workspace.storageListSectionCollapsed
+    && typeof workspace.storageListSectionCollapsed === "object"
+    ? Object.fromEntries(
+      Object.entries(workspace.storageListSectionCollapsed)
+        .filter(([key, collapsed]) => typeof key === "string" && Boolean(collapsed))
+    )
+    : {};
 
   if (Array.isArray(workspace.pointLists)) {
     state.pointLists = workspace.pointLists
@@ -3711,6 +3734,7 @@ function workspaceSnapshot() {
     pointLists,
     activePointListId: state.activePointListId,
     favoriteListIds: [...state.favoriteListIds],
+    storageListSectionCollapsed: { ...state.storageListSectionCollapsed },
     analysisLayer: clonePlain(state.analysisLayer),
     cloudHiddenListIds: [...state.cloud.hiddenListIds],
     testerSharedCloudListIds: [...state.cloud.testerSharedListIds],
@@ -3898,7 +3922,7 @@ function drawTraversePolygon(points, options = {}) {
   if (options.stroke) context.stroke();
 }
 
-function drawTraverseTiles() {
+function drawTraverseStones() {
   if (!state.traverseMode || !state.traverseLog) return;
   const colors = canvasPalette();
   for (const stone of Object.values(state.traverseLog?.stones || {})) {
@@ -3919,7 +3943,11 @@ function drawTraverseTiles() {
       drawTraverseTileCount(polygon, stoneDisplayCount(stone), colors);
     context.restore();
   }
+}
 
+function drawTraverseTiles() {
+  if (!state.traverseMode || !state.traverseLog) return;
+  drawTraverseStones();
   drawTraverseBarriers();
   drawTraverseGuardians();
 
@@ -4789,6 +4817,10 @@ function draw() {
   const size = canvasSize();
   context.clearRect(0, 0, size.width, size.height);
   drawGrid(size.width, size.height);
+  if (state.barrierPlacementView) {
+    drawTraverseStones();
+    return;
+  }
   drawTraverseTiles();
   drawDragonEyePreview();
   drawBarrierLinkGesture();
@@ -5235,11 +5267,18 @@ function renderTraverseActionButton() {
 
   refreshTraverseStock();
   const dragonEyeActive = Boolean(state.dragonEye.active);
-  const buttonLabel = dragonEyeActive ? t("dragonEye.confirm") : t("traverse.menuTitle");
-  const feedbackActive = state.traverseFeedback && Date.now() < state.traverseFeedbackExpiresAt;
+  const buttonLabel = state.barrierPlacementView
+    ? t("traverse.placementViewExit")
+    : dragonEyeActive
+      ? t("dragonEye.confirm")
+      : t("traverse.menuTitle");
+  const feedbackActive = !state.barrierPlacementView
+    && state.traverseFeedback
+    && Date.now() < state.traverseFeedbackExpiresAt;
   elements.traverseActionLabel.textContent = buttonLabel;
-  button.disabled = state.traverseBusy;
+  button.disabled = state.traverseBusy && !state.barrierPlacementView;
   button.classList.toggle("is-dragon-eye-active", dragonEyeActive);
+  button.classList.toggle("is-placement-view-active", state.barrierPlacementView);
   button.setAttribute("aria-label", feedbackActive && !dragonEyeActive
     ? `${buttonLabel} ${state.traverseFeedback}`
     : buttonLabel);
@@ -5287,6 +5326,10 @@ function renderTraverseActionDialog() {
     elements.traversePickButton.textContent = t("traverse.pick");
     elements.traversePickButton.disabled = state.traverseBusy || traverseQuantityLimit("pick") <= 0;
   }
+  if (elements.traversePlacementViewButton) {
+    elements.traversePlacementViewButton.textContent = t("traverse.placementView");
+    elements.traversePlacementViewButton.disabled = state.traverseBusy;
+  }
   if (elements.traverseCreateBarrierButton) {
     const enoughStones = availableBarrierStoneIds().length >= 3;
     elements.traverseCreateBarrierButton.textContent = t("traverse.connect");
@@ -5315,18 +5358,74 @@ function closeTraverseActionDialog() {
   if (elements.traverseActionDialog?.open) elements.traverseActionDialog.close("cancel");
 }
 
+function returnToTraverseActionMenu() {
+  if (!state.traverseMode || state.traverseBusy) return;
+  render();
+  openTraverseActionDialog();
+}
+
+function fitBarrierPlacementView() {
+  syncCanvasSize();
+  pauseLocationFollowForManualView();
+  state.zoomStage = null;
+  const geos = Object.values(state.traverseLog?.stones || {})
+    .filter((stone) => stoneDisplayCount(stone) > 0)
+    .map((stone) => tileCenterGeo(stone.tile))
+    .filter(validGeo);
+  if (geos.length === 0) {
+    render();
+    return;
+  }
+
+  const centerGeo = geographicCenter(geos.map((geo) => ({ geo })));
+  if (centerGeo) setProjectionCenterGeo(centerGeo);
+  const projected = geos.map(projectGeo);
+  const size = canvasSize();
+  const minX = Math.min(...projected.map((point) => point.x));
+  const maxX = Math.max(...projected.map((point) => point.x));
+  const minY = Math.min(...projected.map((point) => point.y));
+  const maxY = Math.max(...projected.map((point) => point.y));
+  const padding = Math.min(110, Math.max(34, Math.min(size.width, size.height) * 0.16));
+  const availableWidth = Math.max(64, size.width - padding * 2);
+  const availableHeight = Math.max(64, size.height - padding * 2);
+  const spanX = Math.max(60, maxX - minX);
+  const spanY = Math.max(60, maxY - minY);
+
+  state.viewport.x = (minX + maxX) / 2;
+  state.viewport.y = (minY + maxY) / 2;
+  state.viewport.scale = clampScale(Math.min(availableWidth / spanX, availableHeight / spanY));
+  render();
+}
+
+function enterBarrierPlacementView() {
+  if (!state.traverseMode || state.traverseBusy) return;
+  closeTraverseActionDialog();
+  resetBarrierLinkState();
+  resetDragonEyeState();
+  state.barrierPlacementView = true;
+  fitBarrierPlacementView();
+}
+
+function exitBarrierPlacementView() {
+  if (!state.barrierPlacementView) return;
+  state.barrierPlacementView = false;
+  state.pointer.drag = null;
+  render();
+  openTraverseActionDialog();
+}
+
 function performTraverseStoneAction(action, requestedQuantity = 1) {
   if (!state.traverseMode || state.traverseBusy || !state.traverseLog) return;
   if (!navigator.geolocation?.getCurrentPosition) {
     setTraverseFeedback(t("traverse.gpsUnavailable"));
-    render();
+    returnToTraverseActionMenu();
     return;
   }
   refreshTraverseStock();
   const quantity = Math.max(1, Math.floor(Number(requestedQuantity) || 1));
   if (action === "place" && (state.traverseLog.stock?.amount ?? 0) <= 0) {
     setTraverseFeedback(t("traverse.stockEmpty"));
-    render();
+    returnToTraverseActionMenu();
     return;
   }
 
@@ -5338,7 +5437,7 @@ function performTraverseStoneAction(action, requestedQuantity = 1) {
       if (!Number.isFinite(accuracy) || accuracy > BARRIER_CONFIG.accuracyThresholdMeters) {
         state.traverseBusy = false;
         setTraverseFeedback(t("traverse.accuracyError"));
-        render();
+        returnToTraverseActionMenu();
         return;
       }
 
@@ -5351,7 +5450,7 @@ function performTraverseStoneAction(action, requestedQuantity = 1) {
       if (!tileId) {
         state.traverseBusy = false;
         setTraverseFeedback(t("traverse.gpsUnavailable"));
-        render();
+        returnToTraverseActionMenu();
         return;
       }
 
@@ -5369,7 +5468,7 @@ function performTraverseStoneAction(action, requestedQuantity = 1) {
         if (limit <= 0) {
           state.traverseBusy = false;
           setTraverseFeedback(t("traverse.capReached"));
-          render();
+          returnToTraverseActionMenu();
           return;
         }
         const count = Math.min(quantity, limit);
@@ -5412,7 +5511,7 @@ function performTraverseStoneAction(action, requestedQuantity = 1) {
         if (limit <= 0) {
           state.traverseBusy = false;
           setTraverseFeedback(stone ? t("traverse.stockFull") : t("traverse.noStone"));
-          render();
+          returnToTraverseActionMenu();
           return;
         }
         const count = Math.min(quantity, limit);
@@ -5445,15 +5544,17 @@ function performTraverseStoneAction(action, requestedQuantity = 1) {
       state.lastLocationError = null;
       persistTraverseLog();
       state.traverseBusy = false;
-      setTraverseFeedback(t("traverse.bulkDone")
+      const completionMessage = t("traverse.bulkDone")
         .replace("{count}", String(processed))
-        .replace("{action}", feedbackAction));
-      render();
+        .replace("{action}", feedbackAction);
+      setTraverseFeedback(completionMessage);
+      showAppToast(completionMessage);
+      returnToTraverseActionMenu();
     },
     () => {
       state.traverseBusy = false;
       setTraverseFeedback(t("traverse.gpsUnavailable"));
-      render();
+      returnToTraverseActionMenu();
     },
     geolocationOptions()
   );
@@ -5464,52 +5565,22 @@ function barrierIdForStone(log, stoneId) {
     .find(([, barrier]) => Array.isArray(barrier?.vertices) && barrier.vertices.includes(stoneId))?.[0] || null;
 }
 
-function startTraverseLongPress(event) {
-  if (!state.traverseMode || state.traverseBusy || state.dragonEye.active) return;
-  if (event.pointerType === "mouse" && event.button !== 0) return;
-  traversePressPointerId = event.pointerId;
-  traverseLongPressTriggered = false;
-  if (traversePressTimerId) clearTimeout(traversePressTimerId);
-  event.preventDefault();
-  traversePressTimerId = window.setTimeout(() => {
-    traversePressTimerId = 0;
-    traverseLongPressTriggered = true;
-    traverseSuppressClick = true;
-    openTraverseActionDialog();
-  }, 550);
-}
-
-function finishTraverseLongPress(event) {
-  if (traversePressPointerId !== null && event.pointerId !== traversePressPointerId) return;
-  if (traversePressTimerId) clearTimeout(traversePressTimerId);
-  traversePressTimerId = 0;
-  traversePressPointerId = null;
-  if (traverseLongPressTriggered) event.preventDefault();
-  traverseLongPressTriggered = false;
-}
-
-function handleTraverseActionClick(event) {
+function handleTraverseActionClick() {
+  if (state.barrierPlacementView) {
+    exitBarrierPlacementView();
+    return;
+  }
   if (state.dragonEye.active) {
-    if (traverseSuppressClick) {
-      traverseSuppressClick = false;
-      event.preventDefault();
-      return;
-    }
     commitDragonEye();
     return;
   }
-  if (traverseSuppressClick) {
-    traverseSuppressClick = false;
-    event.preventDefault();
-    return;
-  }
-  if (event.detail === 0) openTraverseActionDialog();
+  openTraverseActionDialog();
 }
 
 function renderActionButtons() {
   const hasPendingPoint = validGeo(state.pendingGeo);
   const pointIds = selectedPointIds();
-  const visiblePointCount = visibleSelectablePoints().length;
+  const visiblePointCount = new Set(visibleSelectablePoints().map((point) => point.id)).size;
   const canInvertSelection = !state.editingPointId
     && !hasPendingPoint
     && visiblePointCount > 0;
@@ -5545,6 +5616,12 @@ function renderActionButtons() {
   elements.actionShareSelectedButton.disabled = shareableSelectedPointCount === 0;
   elements.actionMapButton.disabled = !mapCandidate;
   elements.actionInvertButton.disabled = !canInvertSelection;
+  for (const button of elements.selectAllPointButtons) {
+    button.disabled = visiblePointCount === 0 || state.cloud.busy;
+  }
+  for (const button of elements.clearAllPointButtons) {
+    button.disabled = state.selection.length === 0 && !hasPendingPoint && barrierSelectionCount === 0;
+  }
   elements.actionMapButton.title = mapCandidate?.isPending
     ? "仮ポイントを地図で開く"
     : mapCandidate
@@ -6684,12 +6761,12 @@ function renderKekkaishiStatusDialog() {
   if (elements.kekkaishiStatusRank) {
     elements.kekkaishiStatusRank.textContent = `${rank.name}${achievedDays === null ? "" : ` ${t("kekkaishi.achievedDays").replace("{days}", String(achievedDays))}`}`;
   }
-  if (elements.kekkaishiStatusLifetime) elements.kekkaishiStatusLifetime.textContent = `${formatScoreValue(rank.lifetime)} 結界日`;
-  if (elements.kekkaishiStatusPeak) elements.kekkaishiStatusPeak.textContent = `${formatScoreValue(rank.peak)} 力${status.peakAchievedAt ? `（${formatMonth(status.peakAchievedAt)}）` : ""}`;
-  if (elements.kekkaishiStatusRecent) elements.kekkaishiStatusRecent.textContent = `${formatScoreValue(recent)} 力`;
+  if (elements.kekkaishiStatusLifetime) elements.kekkaishiStatusLifetime.textContent = `${formatScoreValue(rank.lifetime)} Pt`;
+  if (elements.kekkaishiStatusPeak) elements.kekkaishiStatusPeak.textContent = `${formatScoreValue(rank.peak)} Pt${status.peakAchievedAt ? `（${formatMonth(status.peakAchievedAt)}）` : ""}`;
+  if (elements.kekkaishiStatusRecent) elements.kekkaishiStatusRecent.textContent = `${formatScoreValue(recent)} Pt`;
   if (elements.kekkaishiStatusRatio) elements.kekkaishiStatusRatio.textContent = peakRatio === null ? "—" : `${Math.round(peakRatio * 100)}%`;
   if (elements.kekkaishiStatusCount) elements.kekkaishiStatusCount.textContent = String(Math.max(0, Number(status.kekkaiCreatedCount) || 0));
-  if (elements.kekkaishiStatusDailyPower) elements.kekkaishiStatusDailyPower.textContent = `${formatScoreValue(status.lastDailyPower)} 力`;
+  if (elements.kekkaishiStatusDailyPower) elements.kekkaishiStatusDailyPower.textContent = `${formatScoreValue(status.lastDailyPower)} Pt`;
   if (elements.kekkaishiStatusCurrentRank) elements.kekkaishiStatusCurrentRank.textContent = rank.name;
   renderKekkaishiUnlockDetails(elements.kekkaishiStatusCurrentDetails, rank.index);
   renderKekkaishiShapeCards(elements.kekkaishiStatusCurrentShapes, currentShapes);
@@ -6709,8 +6786,8 @@ function renderKekkaishiStatusDialog() {
   }
   if (elements.kekkaishiStatusProgressValue) {
     elements.kekkaishiStatusProgressValue.textContent = atMaxRank
-      ? `${formatScoreValue(rank.lifetime)} 結界日`
-      : `${formatScoreValue(rank.lifetime)} / ${formatScoreValue(rank.nextLifetime)} 結界日`;
+      ? `${formatScoreValue(rank.lifetime)} Pt`
+      : `${formatScoreValue(rank.lifetime)} / ${formatScoreValue(rank.nextLifetime)} Pt`;
   }
   if (elements.kekkaishiStatusProgressBar) {
     const progress = atMaxRank ? 1 : Math.min(1, Math.max(0, rank.lifetime / Math.max(1, rank.nextLifetime)));
@@ -6766,10 +6843,10 @@ async function renderKekkaishiStatusShareImage() {
   context.font = "700 26px system-ui, sans-serif";
   context.fillText(`${t("kekkaishi.rank")}  ${rank.name}`, 320, 282);
   const stats = [
-    [t("kekkaishi.lifetime"), `${formatScoreValue(rank.lifetime)} 結界日`],
-    [t("kekkaishi.dailyPower"), `${formatScoreValue(status.lastDailyPower)} 力`],
-    [t("kekkaishi.peak"), `${formatScoreValue(rank.peak)} 力`],
-    [t("kekkaishi.recent"), `${formatScoreValue(recent)} 力`],
+    [t("kekkaishi.lifetime"), `${formatScoreValue(rank.lifetime)} Pt`],
+    [t("kekkaishi.dailyPower"), `${formatScoreValue(status.lastDailyPower)} Pt`],
+    [t("kekkaishi.peak"), `${formatScoreValue(rank.peak)} Pt`],
+    [t("kekkaishi.recent"), `${formatScoreValue(recent)} Pt`],
     [t("kekkaishi.createdCount"), String(Math.max(0, Number(status.kekkaiCreatedCount) || 0))]
   ];
   stats.forEach(([label, value], index) => {
@@ -6800,7 +6877,7 @@ async function shareKekkaishiStatus() {
     const canShareFile = typeof navigator.share === "function" && (!navigator.canShare || navigator.canShare({ files: [file] }));
     if (canShareFile) {
       try {
-        await navigator.share({ files: [file], title: t("kekkaishi.title"), text: t("kekkaishi.shareText").replace("{rank}", rank.name).replace("{power}", `${formatScoreValue(rank.lifetime)} 結界日`) });
+        await navigator.share({ files: [file], title: t("kekkaishi.title"), text: t("kekkaishi.shareText").replace("{rank}", rank.name).replace("{power}", `${formatScoreValue(rank.lifetime)} Pt`) });
         setShareFeedback(t("kekkaishi.shared"));
         return;
       } catch (error) {
@@ -8590,14 +8667,18 @@ function storageListSectionKey(entry) {
 }
 
 function createStorageListSection(section, entries) {
-  const wrapper = document.createElement("section");
+  const wrapper = document.createElement("details");
   wrapper.className = "storage-list-section";
   wrapper.dataset.storageListSection = section.key;
   wrapper.setAttribute("aria-label", t(section.label));
+  wrapper.open = !Boolean(state.storageListSectionCollapsed[section.key]);
 
+  const summary = document.createElement("summary");
+  summary.className = "storage-list-section-summary";
   const heading = document.createElement("h3");
   heading.className = "storage-list-section-title";
   heading.textContent = t(section.label);
+  summary.append(heading);
 
   const items = document.createElement("div");
   items.className = "storage-list-section-items";
@@ -8612,7 +8693,15 @@ function createStorageListSection(section, entries) {
     }
   }
 
-  wrapper.append(heading, items);
+  wrapper.append(summary, items);
+  wrapper.addEventListener("toggle", () => {
+    if (wrapper.open) {
+      delete state.storageListSectionCollapsed[section.key];
+    } else {
+      state.storageListSectionCollapsed[section.key] = true;
+    }
+    persistWorkspace();
+  });
   return wrapper;
 }
 
@@ -9445,8 +9534,8 @@ async function moveListToCloud(storageId, options = {}) {
   }
   if (completed) {
     await refreshCloudLists({ quiet: true });
-    const targetLabel = targetScope === "testerShared" ? "テスター共有リスト" : "マイリスト（クラウド）";
-    const targetLabelEn = targetScope === "testerShared" ? "Tester Shared Lists" : "My Lists (Cloud)";
+    const targetLabel = targetScope === "testerShared" ? "共有リスト（テスター間実験）" : "マイリスト（クラウド）";
+    const targetLabelEn = targetScope === "testerShared" ? "Shared Lists (Tester Experiment)" : "My Lists (Cloud)";
     setCloudStatus(options.copy === true
       ? cloudText(`${targetLabel}へコピーしました`, `Copied to ${targetLabelEn}`)
       : cloudText(`${targetLabel}へ移動しました`, `Moved to ${targetLabelEn}`));
@@ -9514,8 +9603,8 @@ async function moveCloudListToCloud(storageId, targetScope, options = {}) {
     setCloudStatus(cloudDeleteFailed
       ? cloudText("コピー先を作成しましたが、元の共有先を削除できませんでした。", "The destination was created, but the source could not be deleted.")
       : options.copy === true
-      ? cloudText(`${targetScope === "testerShared" ? "テスター共有リスト" : "マイリスト（クラウド）"}へコピーしました`, `Copied to ${targetScope === "testerShared" ? "Tester Shared Lists" : "My Lists (Cloud)"}`)
-      : cloudText(`${targetScope === "testerShared" ? "テスター共有リスト" : "マイリスト（クラウド）"}へ移動しました`, `Moved to ${targetScope === "testerShared" ? "Tester Shared Lists" : "My Lists (Cloud)"}`),
+      ? cloudText(`${targetScope === "testerShared" ? "共有リスト（テスター間実験）" : "マイリスト（クラウド）"}へコピーしました`, `Copied to ${targetScope === "testerShared" ? "Shared Lists (Tester Experiment)" : "My Lists (Cloud)"}`)
+      : cloudText(`${targetScope === "testerShared" ? "共有リスト（テスター間実験）" : "マイリスト（クラウド）"}へ移動しました`, `Moved to ${targetScope === "testerShared" ? "Shared Lists (Tester Experiment)" : "My Lists (Cloud)"}`),
       { error: cloudDeleteFailed });
   }
   return completed;
@@ -10297,6 +10386,17 @@ function invertVisiblePointSelection() {
   setSelection([...nonPointSelection, ...nextPointSelection]);
 }
 
+function selectAllVisiblePoints() {
+  const visiblePointIds = [...new Set(visibleSelectablePoints().map((point) => point.id).filter(Boolean))];
+  if (visiblePointIds.length === 0) return;
+
+  state.mode = "inspect";
+  setSelection([
+    ...state.selection.filter((entry) => entry.type !== "point"),
+    ...visiblePointIds.map((id) => ({ type: "point", id }))
+  ]);
+}
+
 function clearSelection(options = {}) {
   state.mode = "inspect";
   state.selection = [];
@@ -11012,7 +11112,7 @@ async function createBarrierFromSelection() {
   state.selectedBarrierId = barrierId;
   persistTraverseLog();
   showAppToast(t("barrier.created"));
-  render();
+  returnToTraverseActionMenu();
 }
 
 function handleLinkAction() {
@@ -11797,6 +11897,22 @@ function pointerAngle(a, b) {
 }
 
 function startDragGesture(pointerId, point, options = {}) {
+  if (state.barrierPlacementView) {
+    state.pointer.drag = {
+      id: pointerId,
+      start: point,
+      last: point,
+      viewportX: state.viewport.x,
+      viewportY: state.viewport.y,
+      moved: Boolean(options.moved),
+      barrierPlacementView: true,
+      longPressed: false,
+      longPressTimerId: null,
+      lineDragReadyTimerId: null,
+      lineDrag: null
+    };
+    return;
+  }
   const barrierLinkMode = state.traverseMode && state.barrierLinkingMode;
   if (state.dragonEye.active && isInsideDragonEye(point)) {
     state.pointer.drag = {
@@ -12144,6 +12260,11 @@ function removePointer(event, options = {}) {
   if (drag?.barrierLink) {
     state.pointer.drag = null;
     finishBarrierLinkGesture(drag, point, allowTap);
+    return;
+  }
+
+  if (drag?.barrierPlacementView) {
+    state.pointer.drag = null;
     return;
   }
 
@@ -14428,6 +14549,11 @@ function bindEvents() {
   elements.kekkaishiStatusDialog?.addEventListener("click", (event) => {
     if (event.target === elements.kekkaishiStatusDialog) elements.kekkaishiStatusDialog.close("cancel");
   });
+  elements.kekkaishiStatusDialog?.addEventListener("close", () => {
+    if (!reopenTraverseActionMenuAfterStatus) return;
+    reopenTraverseActionMenuAfterStatus = false;
+    returnToTraverseActionMenu();
+  });
   elements.systemUpdateButton.addEventListener("click", () => void requestSystemUpdate());
   elements.cloudSignUpButton?.addEventListener("click", () => void signUpCloud());
   elements.cloudSignInButton?.addEventListener("click", () => void signInCloud());
@@ -14691,10 +14817,6 @@ function bindEvents() {
     if (event.target === elements.pointListPreviewDialog) elements.pointListPreviewDialog.close("cancel");
   });
   elements.useLocationButton.addEventListener("click", useCurrentLocation);
-  elements.traverseActionButton.addEventListener("pointerdown", startTraverseLongPress);
-  elements.traverseActionButton.addEventListener("pointerup", finishTraverseLongPress);
-  elements.traverseActionButton.addEventListener("pointercancel", finishTraverseLongPress);
-  elements.traverseActionButton.addEventListener("pointerleave", finishTraverseLongPress);
   elements.traverseActionButton.addEventListener("contextmenu", (event) => event.preventDefault());
   elements.traverseActionButton.addEventListener("click", handleTraverseActionClick);
   elements.traversePlaceButton.addEventListener("click", () => {
@@ -14705,6 +14827,7 @@ function bindEvents() {
     closeTraverseActionDialog();
     openTraverseQuantityDialog("pick");
   });
+  elements.traversePlacementViewButton?.addEventListener("click", enterBarrierPlacementView);
   elements.traverseCreateBarrierButton.addEventListener("click", () => {
     closeTraverseActionDialog();
     beginBarrierLinking();
@@ -14723,12 +14846,16 @@ function bindEvents() {
     render();
   });
   elements.traverseStatusButton?.addEventListener("click", () => {
+    reopenTraverseActionMenuAfterStatus = true;
     closeTraverseActionDialog();
     openKekkaishiStatusDialog();
   });
   elements.traverseQuantityDecreaseButton?.addEventListener("click", () => adjustTraverseQuantity(-1));
   elements.traverseQuantityIncreaseButton?.addEventListener("click", () => adjustTraverseQuantity(1));
-  elements.traverseQuantityCancelButton?.addEventListener("click", closeTraverseQuantityDialog);
+  elements.traverseQuantityCancelButton?.addEventListener("click", () => {
+    closeTraverseQuantityDialog();
+    returnToTraverseActionMenu();
+  });
   elements.traverseQuantityConfirmButton?.addEventListener("click", confirmTraverseQuantity);
   elements.traverseActionDialog.addEventListener("click", (event) => {
     if (event.target === elements.traverseActionDialog) closeTraverseActionDialog();
@@ -14737,7 +14864,10 @@ function bindEvents() {
     if (event.target === elements.dragonEyeDialog) elements.dragonEyeDialog.close("cancel");
   });
   elements.traverseQuantityDialog?.addEventListener("click", (event) => {
-    if (event.target === elements.traverseQuantityDialog) closeTraverseQuantityDialog();
+    if (event.target === elements.traverseQuantityDialog) {
+      closeTraverseQuantityDialog();
+      returnToTraverseActionMenu();
+    }
   });
   elements.zoomInButton.addEventListener("click", () => zoomAtStage({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 1));
   elements.zoomOutButton.addEventListener("click", () => zoomAtStage({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, -1));
@@ -14757,6 +14887,12 @@ function bindEvents() {
   elements.deletePointButton.addEventListener("click", deleteSelectedPoint);
   for (const button of elements.newPointListButtons) {
     button.addEventListener("click", () => void createNewPointList());
+  }
+  for (const button of elements.selectAllPointButtons) {
+    button.addEventListener("click", selectAllVisiblePoints);
+  }
+  for (const button of elements.clearAllPointButtons) {
+    button.addEventListener("click", () => clearSelection());
   }
 
   elements.pointImportFile.addEventListener("change", async () => {
@@ -14784,6 +14920,9 @@ function bindEvents() {
   }
 
   canvas.addEventListener("pointerdown", (event) => {
+    if (state.barrierPlacementView) {
+      event.preventDefault();
+    }
     if (event.button === 2 && !mobilePageUiActive()) {
       event.preventDefault();
       clearSelection();
