@@ -116,7 +116,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1959";
+const WEB_VERSION = "0.1960";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -5089,6 +5089,9 @@ function handleMobileGridTabClick(tab, event) {
   if (tab.closest(".sidebar")) {
     setMobilePage("map");
   }
+  if (tab.dataset.mobileGridPage === "lists") {
+    maybeRefreshCloudListsForListPage();
+  }
 }
 
 function renderMobileGridTabs() {
@@ -9107,14 +9110,12 @@ async function initializeCloudAuth() {
   state.cloud.passwordRecoveryActive = authUrlState.type === "recovery";
   state.cloud.signupPasswordSetupActive = authUrlState.type === "signup";
 
-  state.cloud.authClient.auth.onAuthStateChange((event, session) => {
+  state.cloud.authClient.auth.onAuthStateChange((_event, session) => {
     // Supabase warns against calling other async auth methods directly from
-    // this callback. Defer the UI/cloud refresh until the auth lock is free.
-    const refreshLists = event === "SIGNED_IN";
-    queueMicrotask(() => applyCloudAuthSession(session, {
-      refresh: refreshLists,
-      forceRefresh: refreshLists
-    }));
+    // this callback. Defer session state updates until the auth lock is free.
+    // List loading is handled by explicit sign-in/startup/list-page actions;
+    // token refresh and app resume must not load lists.
+    queueMicrotask(() => applyCloudAuthSession(session, { refresh: false }));
   });
   try {
     if (authUrlState.code) {
@@ -9496,7 +9497,7 @@ async function requestCloudRefresh() {
   await refreshCloudLists();
 }
 
-function maybeAutoRefreshCloudLists() {
+function maybeRefreshCloudListsForListPage() {
   const listManagementVisible = state.mobilePage === "data"
     || (state.mobilePage === "map" && state.mobileGridPage === "lists");
   if (!listManagementVisible || document.visibilityState !== "visible" || !state.cloud.connected || state.cloud.busy) return;
@@ -14690,8 +14691,6 @@ function bindEvents() {
     if (wasTraverseMode) render();
     else syncSettingsControls();
   });
-  document.addEventListener("visibilitychange", maybeAutoRefreshCloudLists);
-  window.addEventListener("focus", maybeAutoRefreshCloudLists);
   document.addEventListener("click", () => setSettingsMenuOpen(false));
   const closeEditMenusOutside = (event) => {
     const menu = event.target instanceof Element
@@ -15027,6 +15026,9 @@ function bindEvents() {
     tab.addEventListener("click", () => {
       setMobilePage(tab.dataset.mobilePage);
       setSettingsMenuOpen(false);
+      if (tab.dataset.mobilePage === "data") {
+        maybeRefreshCloudListsForListPage();
+      }
     });
   }
   for (const tab of elements.mobileGridTabs) {
