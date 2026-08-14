@@ -87,13 +87,13 @@ const DRAGON_EYE_SHAPES = Object.freeze({
   hexagon: Object.freeze({ sides: 6, rotation: 0, glyph: "⬡", ja: "正六角形", en: "Regular hexagon" })
 });
 const DRAGON_EYE_RANK_CONFIG = Object.freeze([
-  Object.freeze({ precision: 0.80, shapes: Object.freeze(["triangle"]) }),
-  Object.freeze({ precision: 0.84, shapes: Object.freeze(["triangle", "square"]) }),
-  Object.freeze({ precision: 0.88, shapes: Object.freeze(["triangle", "square", "diamond"]) }),
-  Object.freeze({ precision: 0.92, shapes: Object.freeze(["triangle", "square", "diamond", "pentagon"]) }),
-  Object.freeze({ precision: 0.95, shapes: Object.freeze(["triangle", "square", "diamond", "pentagon", "hexagon"]) }),
-  Object.freeze({ precision: 0.98, shapes: Object.freeze(["triangle", "square", "diamond", "pentagon", "hexagon"]) }),
-  Object.freeze({ precision: 1, shapes: Object.freeze(["triangle", "square", "diamond", "pentagon", "hexagon"]) })
+  Object.freeze({ precision: 0.80, maxAreaGridUnits: 9, shapes: Object.freeze(["triangle"]) }),
+  Object.freeze({ precision: 0.84, maxAreaGridUnits: 16, shapes: Object.freeze(["triangle", "square"]) }),
+  Object.freeze({ precision: 0.88, maxAreaGridUnits: 25, shapes: Object.freeze(["triangle", "square", "diamond"]) }),
+  Object.freeze({ precision: 0.92, maxAreaGridUnits: 36, shapes: Object.freeze(["triangle", "square", "diamond", "pentagon"]) }),
+  Object.freeze({ precision: 0.95, maxAreaGridUnits: 64, shapes: Object.freeze(["triangle", "square", "diamond", "pentagon", "hexagon"]) }),
+  Object.freeze({ precision: 0.98, maxAreaGridUnits: 100, shapes: Object.freeze(["triangle", "square", "diamond", "pentagon", "hexagon"]) }),
+  Object.freeze({ precision: 1, maxAreaGridUnits: 169, shapes: Object.freeze(["triangle", "square", "diamond", "pentagon", "hexagon"]) })
 ]);
 
 const CLOUD_ACCESS_TOKEN_KEY = "grid-atlas-cloud-access-token";
@@ -106,7 +106,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1737";
+const WEB_VERSION = "0.1747";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -917,6 +917,7 @@ const TRANSLATIONS = {
     "analysis.comparisonTitle": "比較基準",
     "analysis.reference": "参考値",
     "analysis.referenceScore": "参考整い度",
+    "analysis.dragonEyeSkillCap": "龍脈眼の精度補正上限 {score} / 100",
     "analysis.copy": "結果をコピー",
     "analysis.copied": "分析結果をコピーしました",
     "analysis.copyFailed": "コピーできませんでした",
@@ -1123,7 +1124,7 @@ const TRANSLATIONS = {
     "dragonEye.open": "龍脈眼",
     "dragonEye.title": "龍脈眼の形を選択",
     "dragonEye.message": "形を選ぶとグリッド上で移動・拡縮できます。",
-    "dragonEye.rankInfo": "{rank}級 · 頂点精度 {precision}%",
+    "dragonEye.rankInfo": "{rank}級 · 頂点精度 {precision}% · 最大面積 {area}マス",
     "dragonEye.locked": "{shape}は{rank}級で解放",
     "dragonEye.confirm": "龍脈眼を確定",
     "dragonEye.cancel": "解除",
@@ -1416,6 +1417,7 @@ const TRANSLATIONS = {
     "analysis.comparisonTitle": "Comparison baseline",
     "analysis.reference": "Reference",
     "analysis.referenceScore": "Reference fit",
+    "analysis.dragonEyeSkillCap": "Dragon Eye precision ceiling {score} / 100",
     "analysis.copy": "Copy result",
     "analysis.copied": "Analysis result copied",
     "analysis.copyFailed": "Could not copy the result",
@@ -1622,7 +1624,7 @@ const TRANSLATIONS = {
     "dragonEye.open": "Dragon eye",
     "dragonEye.title": "Choose a Dragon Eye shape",
     "dragonEye.message": "Choose a shape, then drag or pinch it on the grid.",
-    "dragonEye.rankInfo": "Rank {rank} · vertex precision {precision}%",
+    "dragonEye.rankInfo": "Rank {rank} · vertex precision {precision}% · max area {area} grid cells",
     "dragonEye.locked": "{shape} unlocks at rank {rank}",
     "dragonEye.confirm": "Place Dragon Eye",
     "dragonEye.cancel": "Cancel",
@@ -2047,7 +2049,8 @@ function renderDragonEyeShapeOptions() {
   if (elements.dragonEyeAvailability) {
     elements.dragonEyeAvailability.textContent = t("dragonEye.rankInfo")
       .replace("{rank}", info.rank.name)
-      .replace("{precision}", String(Math.round(info.precision * 100)));
+      .replace("{precision}", String(Math.round(info.precision * 100)))
+      .replace("{area}", String(info.maxAreaGridUnits));
   }
   elements.dragonEyeShapeOptions?.querySelectorAll("[data-dragon-eye-shape]").forEach((option) => {
     const shape = option.dataset.dragonEyeShape;
@@ -2065,10 +2068,25 @@ function dragonEyeDefinition() {
   return DRAGON_EYE_SHAPES[state.dragonEye.shape] || null;
 }
 
+function dragonEyeMaxRadius(definition, maxAreaGridUnits) {
+  if (!definition) return 0;
+  const step = Math.max(1, chooseGridStep());
+  const areaCoefficient = (definition.sides / 2) * Math.sin((Math.PI * 2) / definition.sides);
+  return Math.sqrt((Math.max(1, maxAreaGridUnits) * step * step) / areaCoefficient);
+}
+
+function dragonEyeRadiusBounds() {
+  const definition = dragonEyeDefinition();
+  const info = dragonEyeRankInfo();
+  const max = dragonEyeMaxRadius(definition, info.maxAreaGridUnits);
+  const min = Math.min(max, 24 / Math.max(0.01, state.viewport.scale));
+  return { min, max };
+}
+
 function dragonEyeWorldVertices() {
   const definition = dragonEyeDefinition();
   const center = state.dragonEye.center;
-  const radius = Number(state.dragonEye.radius);
+  const radius = Math.min(Number(state.dragonEye.radius), dragonEyeMaxRadius(definition, dragonEyeRankInfo().maxAreaGridUnits));
   if (!definition || !center || !Number.isFinite(radius) || radius <= 0) return [];
   return Array.from({ length: definition.sides }, (_, index) => {
     const angle = definition.rotation + (Math.PI * 2 * index) / definition.sides;
@@ -2098,13 +2116,16 @@ function beginDragonEye(shape) {
     return;
   }
   const size = canvasSize();
+  const definition = DRAGON_EYE_SHAPES[shape];
+  const maxRadius = dragonEyeMaxRadius(definition, rankInfo.maxAreaGridUnits);
+  const minRadius = Math.min(maxRadius, 24 / Math.max(0.01, state.viewport.scale));
   state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
   state.zoomStage = null;
   state.dragonEye = {
     active: true,
     shape,
     center: screenToWorld({ x: size.width / 2, y: size.height / 2 }),
-    radius: Math.max(40, Math.min(size.width, size.height) * 0.24 / Math.max(0.01, state.viewport.scale)),
+    radius: Math.min(maxRadius, Math.max(minRadius, Math.min(size.width, size.height) * 0.24 / Math.max(0.01, state.viewport.scale))),
     precision: rankInfo.precision,
     rankName: rankInfo.rank.name
   };
@@ -2139,6 +2160,18 @@ function dragonEyePlacementVertex(vertex) {
   };
 }
 
+function dragonEyeAreaGridUnits(vertices = dragonEyeWorldVertices()) {
+  if (!Array.isArray(vertices) || vertices.length < 3) return 0;
+  let twiceArea = 0;
+  for (let index = 0; index < vertices.length; index += 1) {
+    const current = vertices[index];
+    const next = vertices[(index + 1) % vertices.length];
+    twiceArea += current.x * next.y - next.x * current.y;
+  }
+  const step = Math.max(1, chooseGridStep());
+  return Math.abs(twiceArea) / 2 / (step * step);
+}
+
 function commitDragonEye() {
   const vertices = dragonEyeWorldVertices();
   const definition = dragonEyeDefinition();
@@ -2150,6 +2183,7 @@ function commitDragonEye() {
   list.visible = true;
   list.updatedAt = now;
   const precisionPercent = Math.round((Number(state.dragonEye.precision) || dragonEyeRankInfo().precision) * 100);
+  const areaGridUnits = dragonEyeAreaGridUnits(vertices);
   const createdPoints = placementVertices.map((vertex, index) => {
     const geo = normalizeGeo(unprojectWorld(vertex.x, vertex.y));
     return {
@@ -2157,7 +2191,7 @@ function commitDragonEye() {
       x: vertex.x,
       y: vertex.y,
       title: `龍脈眼 ${definition.glyph} ${index + 1}`,
-      note: `${DRAGON_EYE_LIST_NAME} / ${definition.ja} / ${state.dragonEye.rankName || dragonEyeRankInfo().rank.name}級 / 精度${precisionPercent}%`,
+      note: `${DRAGON_EYE_LIST_NAME} / ${definition.ja} / ${state.dragonEye.rankName || dragonEyeRankInfo().rank.name}級 / 精度${precisionPercent}% / 面積${areaGridUnits.toFixed(1)}マス`,
       photo: "",
       photoName: "",
       photoAssetId: "",
@@ -6034,6 +6068,7 @@ function selectionAnalysisText(target) {
     `${t("analysis.maxAngleDeviation")}: ${formatAngle(result.maxAngleDeviation)} (${formatPercent(result.maxAngleDeviationPercent)})`,
     `${t("analysis.angleDeviationRate")}: ${formatPercent(result.maxAngleDeviationPercent)}`,
     `${t("analysis.referenceScore")}: ${Math.round(result.referenceScore)} / 100`,
+    ...(Number.isFinite(result.referenceScoreCeiling) ? [t("analysis.dragonEyeSkillCap").replace("{score}", String(Math.round(result.referenceScoreCeiling)))] : []),
     `${t("analysis.comparisonTitle")}`,
     t("analysis.measurementBasis")
       .replace("{shape}", referenceShape)
@@ -6115,6 +6150,14 @@ function renderPolygonAnalysisDialog(target) {
   appendAnalysisText(reference, "span", "", t("analysis.referenceScore"));
   appendAnalysisText(reference, "strong", "", `${Math.round(result.referenceScore)} / 100`);
   elements.analysisDialogContent.append(reference);
+  if (Number.isFinite(result.referenceScoreCeiling)) {
+    appendAnalysisText(
+      elements.analysisDialogContent,
+      "p",
+      "analysis-dialog-hint",
+      t("analysis.dragonEyeSkillCap").replace("{score}", String(Math.round(result.referenceScoreCeiling)))
+    );
+  }
 
   appendAnalysisText(elements.analysisDialogContent, "h4", "analysis-subsection-title", t("analysis.comparisonTitle"));
   appendAnalysisText(
@@ -11760,8 +11803,7 @@ function updatePinchGesture() {
   }
 
   if (pinch.dragonEye && state.dragonEye.active) {
-    const minRadius = 40 / Math.max(0.01, state.viewport.scale);
-    const maxRadius = Math.max(minRadius, 900 / Math.max(0.01, state.viewport.scale));
+    const { min: minRadius, max: maxRadius } = dragonEyeRadiusBounds();
     state.dragonEye.radius = Math.min(
       maxRadius,
       Math.max(minRadius, pinch.startDragonEyeRadius * (distance / pinch.startDistance))
