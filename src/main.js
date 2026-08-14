@@ -116,7 +116,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1934";
+const WEB_VERSION = "0.1935";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -2320,6 +2320,13 @@ function beginBarrierLinking() {
 
 function setTraverseMode(enabled) {
   state.traverseMode = Boolean(enabled);
+  if (state.traverseMode) {
+    // The action button lives inside the grid panel on mobile. Keep the
+    // confirmation flow intact, but always return to that panel after the
+    // user confirms the mode change so the button cannot remain off-screen.
+    setMobilePage("map");
+    setMobileGridPage("grid");
+  }
   state.barrierPlacementView = false;
   resetBarrierLinkState();
   resetDragonEyeState();
