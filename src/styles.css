@@ -1118,7 +1118,7 @@ button {
   padding: 0 28px;
   border: 2px solid #f28a2e;
   border-radius: 0;
-  background: rgb(242 138 46 / 0.12);
+  background: rgb(242 138 46 / 0.16);
   color: #b95712;
   box-shadow: var(--shadow), 0 0 0 3px rgb(242 138 46 / 0.12);
   clip-path: polygon(8% 0, 92% 0, 100% 50%, 92% 100%, 8% 100%, 0 50%);
@@ -1194,6 +1194,72 @@ button {
 .traverse-action-dialog-heading h2 {
   margin: 0;
   font-size: 18px;
+}
+
+.traverse-action-dialog-status {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgb(242 138 46 / 0.55);
+  border-radius: 10px;
+  background: rgb(242 138 46 / 0.08);
+}
+
+.traverse-action-dialog-status h3 {
+  margin: 0;
+  color: var(--accent-strong);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+}
+
+.traverse-stone-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.traverse-stone-status-grid div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 7px;
+  border: 1px solid rgb(242 138 46 / 0.38);
+  border-radius: 7px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.traverse-stone-status-grid span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.traverse-stone-status-grid strong {
+  color: #b95712;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.traverse-quantity-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.traverse-quantity-control input {
+  width: 92px;
+  min-height: 38px;
+  padding: 5px 8px;
+  border: 1px solid rgb(242 138 46 / 0.6);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 800;
+  text-align: center;
 }
 
 .traverse-action-dialog-actions {

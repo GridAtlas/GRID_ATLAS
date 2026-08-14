@@ -89,7 +89,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1682";
+const WEB_VERSION = "0.1692";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -202,13 +202,16 @@ const elements = {
   actionMapButton: document.querySelector("#actionMapButton"),
   traverseActionButton: document.querySelector("#traverseActionButton"),
   traverseActionLabel: document.querySelector("#traverseActionLabel"),
-  traverseActionValue: document.querySelector("#traverseActionValue"),
   traverseActionDialog: document.querySelector("#traverseActionDialog"),
   traverseActionDialogTitle: document.querySelector("#traverseActionDialogTitle"),
   traversePlaceButton: document.querySelector("#traversePlaceButton"),
   traversePickButton: document.querySelector("#traversePickButton"),
   traverseCreateBarrierButton: document.querySelector("#traverseCreateBarrierButton"),
   traverseStatusButton: document.querySelector("#traverseStatusButton"),
+  traverseStockValue: document.querySelector("#traverseStockValue"),
+  traverseInstalledValue: document.querySelector("#traverseInstalledValue"),
+  traverseLocationValue: document.querySelector("#traverseLocationValue"),
+  traverseQuantityInput: document.querySelector("#traverseQuantityInput"),
   editionBadge: document.querySelector("#editionBadge"),
   webVersionBadge: document.querySelector("#webVersionBadge"),
   settingsMenu: document.querySelector("#settingsMenu"),
@@ -1070,6 +1073,12 @@ const TRANSLATIONS = {
     "traverse.status": "ステータス確認",
     "traverse.menuTitle": "結界操作",
     "traverse.summary": "手持ち{stock}個 / 設置済{installed}個 / {locations}箇所",
+    "traverse.stoneStatus": "結界石の状況",
+    "traverse.stockShort": "手持ち",
+    "traverse.installedShort": "設置済み",
+    "traverse.locationsShort": "箇所",
+    "traverse.quantityLabel": "操作する個数",
+    "traverse.bulkDone": "結界石を{count}個{action}ました",
     "traverse.linkReady": "起点の結界石を長押ししてください",
     "traverse.linkOriginSelected": "起点を選択しました。次の結界石へドラッグしてください",
     "traverse.linkReturnHint": "起点に戻って指を離すと結界が完成します",
@@ -1540,6 +1549,12 @@ const TRANSLATIONS = {
     "traverse.status": "Check status",
     "traverse.menuTitle": "Barrier operation",
     "traverse.summary": "Hand {stock} / placed {installed} / {locations} locations",
+    "traverse.stoneStatus": "Barrier stone status",
+    "traverse.stockShort": "Hand",
+    "traverse.installedShort": "Placed",
+    "traverse.locationsShort": "Locations",
+    "traverse.quantityLabel": "Quantity",
+    "traverse.bulkDone": "{count} barrier stone(s) {action}",
     "traverse.linkReady": "Long-press an origin barrier stone",
     "traverse.linkOriginSelected": "Origin selected. Drag to the next barrier stone",
     "traverse.linkReturnHint": "Return to the origin and release to complete the barrier",
@@ -1806,6 +1821,17 @@ function availableBarrierStoneIds() {
   return installedBarrierStoneEntries()
     .map(([stoneId]) => stoneId)
     .filter((stoneId) => !used.has(stoneId));
+}
+
+function actionQuantityLimit(action, options = {}) {
+  const amount = Math.max(0, Math.floor(Number(options.amount) || 0));
+  const count = stoneDisplayCount(options.stone);
+  if (action === "place") {
+    const cap = options.stoneCap ?? BARRIER_CONFIG.stoneCapLoose;
+    return Math.max(0, Math.min(amount, cap - count));
+  }
+  const stockRoom = Math.max(0, BARRIER_CONFIG.stockCap - amount);
+  return options.stone && count > 0 ? Math.max(0, Math.min(count, stockRoom)) : 0;
 }
 
 function resetBarrierLinkState() {
@@ -3325,8 +3351,11 @@ function drawGrid(width, height) {
   const bottomRight = screenToWorld({ x: width, y: height });
 
   const colors = canvasPalette();
-  const gridMinor = state.traverseMode ? "rgb(242 138 46 / 0.2)" : colors.gridMinor;
-  const gridMajor = state.traverseMode ? "rgb(242 138 46 / 0.48)" : colors.gridMajor;
+  const barrierLinkVisualActive = state.barrierLinkPath.length > 0
+    || Boolean(state.barrierLinkAnimation)
+    || Boolean(state.barrierLinkCompletion);
+  const gridMinor = barrierLinkVisualActive ? "rgb(242 138 46 / 0.2)" : colors.gridMinor;
+  const gridMajor = barrierLinkVisualActive ? "rgb(242 138 46 / 0.48)" : colors.gridMajor;
   drawGridLines(topLeft, bottomRight, minorStep, gridMinor, 1);
   drawGridLines(topLeft, bottomRight, majorStep, gridMajor, 1.25);
 }
@@ -4657,22 +4686,12 @@ function renderTraverseActionButton() {
   if (!state.traverseMode) return;
 
   refreshTraverseStock();
-  const amount = Math.max(0, Math.floor(Number(state.traverseLog?.stock?.amount) || 0));
-  const installed = installedBarrierStoneEntries().reduce((total, [, stone]) => total + stoneDisplayCount(stone), 0);
-  const locations = installedBarrierStoneEntries().length;
   const feedbackActive = state.traverseFeedback && Date.now() < state.traverseFeedbackExpiresAt;
-  const value = feedbackActive
-    ? state.traverseFeedback
-    : `(${t("traverse.summary")
-      .replace("{stock}", String(amount))
-      .replace("{installed}", String(installed))
-      .replace("{locations}", String(locations))})`;
   elements.traverseActionLabel.textContent = t("traverse.menuTitle");
-  elements.traverseActionValue.textContent = value;
   button.disabled = state.traverseBusy;
   button.setAttribute("aria-label", feedbackActive
-    ? `${t("traverse.menuTitle")} ${value}`
-    : `${t("traverse.menuTitle")} ${value}`);
+    ? `${t("traverse.menuTitle")} ${state.traverseFeedback}`
+    : t("traverse.menuTitle"));
   button.title = t("traverse.menuTitle");
 }
 
@@ -4685,15 +4704,36 @@ function renderTraverseActionDialog() {
   const currentStone = currentStoneId ? state.traverseLog?.stones?.[currentStoneId] : null;
   const currentCap = currentStoneId ? stoneCapFor(state.traverseLog, currentStoneId) : null;
   const currentTileAtCap = currentCap !== null && stoneDisplayCount(currentStone) >= currentCap;
+  const installedEntries = installedBarrierStoneEntries();
+  const installed = installedEntries.reduce((total, [, stone]) => total + stoneDisplayCount(stone), 0);
+  const placeLimit = actionQuantityLimit("place", {
+    amount,
+    stone: currentStone,
+    stoneCap: currentCap
+  });
+  const pickLimit = actionQuantityLimit("pick", {
+    amount: state.traverseLog?.stock?.amount,
+    stone: currentStone,
+    stoneCap: currentCap
+  });
+  if (elements.traverseStockValue) elements.traverseStockValue.textContent = String(amount);
+  if (elements.traverseInstalledValue) elements.traverseInstalledValue.textContent = String(installed);
+  if (elements.traverseLocationValue) elements.traverseLocationValue.textContent = String(installedEntries.length);
+  if (elements.traverseQuantityInput) {
+    const currentQuantity = Math.max(1, Math.floor(Number(elements.traverseQuantityInput.value) || 1));
+    const maxQuantity = Math.max(1, placeLimit, pickLimit);
+    elements.traverseQuantityInput.max = String(maxQuantity);
+    elements.traverseQuantityInput.value = String(Math.min(currentQuantity, maxQuantity));
+  }
   if (elements.traverseActionDialogTitle) elements.traverseActionDialogTitle.textContent = t("traverse.menuTitle");
   if (elements.traversePlaceButton) {
     elements.traversePlaceButton.textContent = t("traverse.place");
-    elements.traversePlaceButton.disabled = state.traverseBusy || amount <= 0 || currentTileAtCap;
+    elements.traversePlaceButton.disabled = state.traverseBusy || placeLimit <= 0 || currentTileAtCap;
     elements.traversePlaceButton.title = currentTileAtCap ? t("traverse.capReached") : "";
   }
   if (elements.traversePickButton) {
     elements.traversePickButton.textContent = t("traverse.pick");
-    elements.traversePickButton.disabled = state.traverseBusy;
+    elements.traversePickButton.disabled = state.traverseBusy || pickLimit <= 0;
   }
   if (elements.traverseCreateBarrierButton) {
     const enoughStones = availableBarrierStoneIds().length >= 3;
@@ -4719,7 +4759,7 @@ function closeTraverseActionDialog() {
   if (elements.traverseActionDialog?.open) elements.traverseActionDialog.close("cancel");
 }
 
-function performTraverseStoneAction(action) {
+function performTraverseStoneAction(action, requestedQuantity = 1) {
   if (!state.traverseMode || state.traverseBusy || !state.traverseLog) return;
   if (!navigator.geolocation?.getCurrentPosition) {
     setTraverseFeedback(t("traverse.gpsUnavailable"));
@@ -4727,6 +4767,7 @@ function performTraverseStoneAction(action) {
     return;
   }
   refreshTraverseStock();
+  const quantity = Math.max(1, Math.floor(Number(requestedQuantity) || 1));
   if (action === "place" && (state.traverseLog.stock?.amount ?? 0) <= 0) {
     setTraverseFeedback(t("traverse.stockEmpty"));
     render();
@@ -4758,73 +4799,89 @@ function performTraverseStoneAction(action) {
         return;
       }
 
-      const now = new Date().toISOString();
       const stoneId = stoneIdFromTile(tileId);
-      const stone = stoneId ? state.traverseLog.stones[stoneId] : null;
+      let stone = stoneId ? state.traverseLog.stones[stoneId] : null;
+      let processed = 0;
       let feedbackAction;
       if (action === "place") {
         const stoneCap = stoneCapFor(state.traverseLog, stoneId);
-        if (stoneDisplayCount(stone) >= stoneCap) {
+        const limit = actionQuantityLimit("place", {
+          amount: state.traverseLog.stock.amount,
+          stone,
+          stoneCap
+        });
+        if (limit <= 0) {
           state.traverseBusy = false;
           setTraverseFeedback(t("traverse.capReached"));
           render();
           return;
         }
-        const nextStone = stone ?? {
-          tile: tileId,
-          lat: null,
-          lng: null,
-          countExact: 0,
-          count: 0,
-          firstAt: now,
-          lastAt: now
-        };
-        nextStone.countExact = stoneExactCount(nextStone) + 1;
-        nextStone.count = stoneDisplayCount(nextStone);
-        nextStone.firstAt ||= now;
-        nextStone.lastAt = now;
-        state.traverseLog.stones[stoneId] = nextStone;
-        state.traverseLog.stock.amount = Math.max(0, state.traverseLog.stock.amount - 1);
-        appendBarrierEvent(state.traverseLog, {
-          type: "stone-placed",
-          at: now,
-          tile: tileId,
-          stoneId,
-          barrierId: barrierIdForStone(state.traverseLog, stoneId),
-          amount: 1,
-          countExact: nextStone.countExact
-        });
+        const count = Math.min(quantity, limit);
+        for (let index = 0; index < count; index += 1) {
+          const now = new Date().toISOString();
+          const nextStone = stone ?? {
+            tile: tileId,
+            lat: null,
+            lng: null,
+            countExact: 0,
+            count: 0,
+            firstAt: now,
+            lastAt: now
+          };
+          nextStone.countExact = stoneExactCount(nextStone) + 1;
+          nextStone.count = stoneDisplayCount(nextStone);
+          nextStone.firstAt ||= now;
+          nextStone.lastAt = now;
+          state.traverseLog.stones[stoneId] = nextStone;
+          stone = nextStone;
+          state.traverseLog.stock.amount = Math.max(0, state.traverseLog.stock.amount - 1);
+          appendBarrierEvent(state.traverseLog, {
+            type: "stone-placed",
+            at: now,
+            tile: tileId,
+            stoneId,
+            barrierId: barrierIdForStone(state.traverseLog, stoneId),
+            amount: 1,
+            countExact: nextStone.countExact
+          });
+          processed += 1;
+        }
         feedbackAction = t("traverse.placeDone");
       } else {
-        if (!stone || stoneDisplayCount(stone) < 1) {
-          state.traverseBusy = false;
-          setTraverseFeedback(t("traverse.noStone"));
-          render();
-          return;
-        }
-        if (state.traverseLog.stock.amount >= BARRIER_CONFIG.stockCap) {
-          state.traverseBusy = false;
-          setTraverseFeedback(t("traverse.stockFull"));
-          render();
-          return;
-        }
-        const isVertex = stoneCapFor(state.traverseLog, stoneId) === BARRIER_CONFIG.stoneCapVertex;
-        stone.countExact = Math.max(isVertex ? 1 : 0, stoneExactCount(stone) - 1);
-        stone.count = stoneDisplayCount(stone);
-        stone.lastAt = now;
-        if (stone.countExact <= 0) {
-          delete state.traverseLog.stones[stoneId];
-        }
-        state.traverseLog.stock.amount = Math.min(BARRIER_CONFIG.stockCap, state.traverseLog.stock.amount + 1);
-        appendBarrierEvent(state.traverseLog, {
-          type: "stone-picked",
-          at: now,
-          tile: tileId,
-          stoneId,
-          barrierId: barrierIdForStone(state.traverseLog, stoneId),
-          amount: 1,
-          countExact: stone.countExact
+        const limit = actionQuantityLimit("pick", {
+          amount: state.traverseLog.stock.amount,
+          stone,
+          stoneCap: stoneCapFor(state.traverseLog, stoneId)
         });
+        if (limit <= 0) {
+          state.traverseBusy = false;
+          setTraverseFeedback(stone ? t("traverse.stockFull") : t("traverse.noStone"));
+          render();
+          return;
+        }
+        const count = Math.min(quantity, limit);
+        for (let index = 0; index < count; index += 1) {
+          const now = new Date().toISOString();
+          const isVertex = stoneCapFor(state.traverseLog, stoneId) === BARRIER_CONFIG.stoneCapVertex;
+          stone.countExact = Math.max(isVertex ? 1 : 0, stoneExactCount(stone) - 1);
+          stone.count = stoneDisplayCount(stone);
+          stone.lastAt = now;
+          if (stone.countExact <= 0) {
+            delete state.traverseLog.stones[stoneId];
+          }
+          state.traverseLog.stock.amount = Math.min(BARRIER_CONFIG.stockCap, state.traverseLog.stock.amount + 1);
+          appendBarrierEvent(state.traverseLog, {
+            type: "stone-picked",
+            at: now,
+            tile: tileId,
+            stoneId,
+            barrierId: barrierIdForStone(state.traverseLog, stoneId),
+            amount: 1,
+            countExact: stone.countExact
+          });
+          processed += 1;
+          if (stone.countExact <= 0) break;
+        }
         feedbackAction = t("traverse.pickDone");
       }
       state.currentGeo = geo;
@@ -4832,7 +4889,9 @@ function performTraverseStoneAction(action) {
       state.lastLocationError = null;
       persistTraverseLog();
       state.traverseBusy = false;
-      setTraverseFeedback(t("traverse.progress").replace("{action}", feedbackAction));
+      setTraverseFeedback(t("traverse.bulkDone")
+        .replace("{count}", String(processed))
+        .replace("{action}", feedbackAction));
       render();
     },
     () => {
@@ -13855,12 +13914,14 @@ function bindEvents() {
   elements.traverseActionButton.addEventListener("contextmenu", (event) => event.preventDefault());
   elements.traverseActionButton.addEventListener("click", handleTraverseActionClick);
   elements.traversePlaceButton.addEventListener("click", () => {
+    const quantity = Math.max(1, Math.floor(Number(elements.traverseQuantityInput?.value) || 1));
     closeTraverseActionDialog();
-    void performTraverseStoneAction("place");
+    void performTraverseStoneAction("place", quantity);
   });
   elements.traversePickButton.addEventListener("click", () => {
+    const quantity = Math.max(1, Math.floor(Number(elements.traverseQuantityInput?.value) || 1));
     closeTraverseActionDialog();
-    void performTraverseStoneAction("pick");
+    void performTraverseStoneAction("pick", quantity);
   });
   elements.traverseCreateBarrierButton.addEventListener("click", () => {
     closeTraverseActionDialog();
