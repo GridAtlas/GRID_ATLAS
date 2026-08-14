@@ -97,7 +97,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1725";
+const WEB_VERSION = "0.1726";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -2037,6 +2037,12 @@ function dragonEyeWorldVertices() {
 
 function dragonEyeScreenVertices() {
   return dragonEyeWorldVertices().map(worldToScreen);
+}
+
+function isInsideDragonEye(screenPoint) {
+  if (!state.dragonEye.active) return false;
+  const vertices = dragonEyeScreenVertices();
+  return vertices.length >= 3 && pointInPolygon(screenPoint, vertices);
 }
 
 function beginDragonEye(shape) {
@@ -11397,7 +11403,7 @@ function pointerMidpoint(a, b) {
 
 function startDragGesture(pointerId, point, options = {}) {
   const barrierLinkMode = state.traverseMode && state.barrierLinkingMode;
-  if (state.dragonEye.active) {
+  if (state.dragonEye.active && isInsideDragonEye(point)) {
     state.pointer.drag = {
       id: pointerId,
       start: point,
@@ -11638,7 +11644,11 @@ function startPinchGesture() {
     startWorld: screenToWorld(midpoint),
     startScale: state.viewport.scale,
     moved: false,
-    dragonEye: Boolean(state.dragonEye.active),
+    dragonEye: Boolean(
+      state.dragonEye.active
+      && isInsideDragonEye(first)
+      && isInsideDragonEye(second)
+    ),
     startDragonEyeRadius: Number(state.dragonEye.radius) || 0
   };
 }
