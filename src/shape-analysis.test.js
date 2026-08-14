@@ -91,27 +91,6 @@ describe("shape analysis", () => {
     expect(result.referenceScore).toBeCloseTo(84.9, 1);
   });
 
-  it("caps Dragon Eye regularity by its recorded precision", () => {
-    const points = Array.from({ length: 3 }, (_, index) => {
-      const angle = -Math.PI / 2 + (index * Math.PI * 2) / 3;
-      return {
-        id: `dragon-eye-${index}`,
-        x: Math.cos(angle),
-        y: Math.sin(angle),
-        note: "結界モード龍脈眼 / 正三角形 / F級 / 精度80%"
-      };
-    });
-    const result = analyzeSegmentShape([
-      { a: points[0], b: points[1] },
-      { a: points[1], b: points[2] },
-      { a: points[2], b: points[0] }
-    ]);
-
-    expect(result.referenceScoreRaw).toBeCloseTo(100, 6);
-    expect(result.referenceScoreCeiling).toBeCloseTo(88, 6);
-    expect(result.referenceScore).toBeCloseTo(88, 6);
-  });
-
   it("keeps the reference fit independent from polygon or star traversal", () => {
     const points = [
       [34.4601, 134.8525],

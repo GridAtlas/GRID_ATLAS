@@ -129,11 +129,6 @@ export function analyzeSegmentShape(segments) {
   const sideScore = clamp(100 * (1 - sideRangePercent / 25), 0, 100);
   const area = selfIntersections === 0 ? polygonArea(points) : null;
   const regularityDeviationPercent = regularityPercent(points, k);
-  const dragonEyePrecision = dragonEyePrecisionFromPoints(points);
-  const referenceScoreRaw = 100 / (1 + regularityDeviationPercent / 20);
-  const referenceScoreCeiling = dragonEyePrecision === null
-    ? null
-    : 40 + dragonEyePrecision * 60;
 
   return {
     valid: true,
@@ -160,12 +155,7 @@ export function analyzeSegmentShape(segments) {
     idealDiagonalToSide,
     sideScore,
     angleScore,
-    referenceScore: referenceScoreCeiling === null
-      ? referenceScoreRaw
-      : Math.min(referenceScoreRaw, referenceScoreCeiling),
-    referenceScoreRaw,
-    referenceScoreCeiling,
-    dragonEyePrecision
+    referenceScore: 100 / (1 + regularityDeviationPercent / 20)
   };
 }
 
@@ -466,18 +456,6 @@ function regularityPercent(points, k) {
   return bestResidual * 100;
 }
 
-function dragonEyePrecisionFromPoints(points) {
-  const notes = points.map((point) => String(point.note || ""));
-  if (notes.length === 0 || notes.some((note) => !note.includes("結界モード龍脈眼"))) return null;
-  const values = notes
-    .map((note) => note.match(/精度\s*(\d+(?:\.\d+)?)%/u)?.[1])
-    .filter((value) => value !== undefined)
-    .map(Number)
-    .filter((value) => Number.isFinite(value));
-  if (values.length === 0) return 0.8;
-  return Math.min(1, Math.max(0, values.reduce((sum, value) => sum + value, 0) / values.length / 100));
-}
-
 function polygonArea(points) {
   let twiceArea = 0;
   for (let index = 0; index < points.length; index += 1) {
@@ -563,7 +541,6 @@ function pointXY(point) {
       id: point.id,
       title: point.title,
       geo: point.geo,
-      note: point.note,
       endpointKey: point.endpointKey || point.key
     };
   }

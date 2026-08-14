@@ -106,7 +106,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1747";
+const WEB_VERSION = "0.1748";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -917,7 +917,6 @@ const TRANSLATIONS = {
     "analysis.comparisonTitle": "比較基準",
     "analysis.reference": "参考値",
     "analysis.referenceScore": "参考整い度",
-    "analysis.dragonEyeSkillCap": "龍脈眼の精度補正上限 {score} / 100",
     "analysis.copy": "結果をコピー",
     "analysis.copied": "分析結果をコピーしました",
     "analysis.copyFailed": "コピーできませんでした",
@@ -1417,7 +1416,6 @@ const TRANSLATIONS = {
     "analysis.comparisonTitle": "Comparison baseline",
     "analysis.reference": "Reference",
     "analysis.referenceScore": "Reference fit",
-    "analysis.dragonEyeSkillCap": "Dragon Eye precision ceiling {score} / 100",
     "analysis.copy": "Copy result",
     "analysis.copied": "Analysis result copied",
     "analysis.copyFailed": "Could not copy the result",
@@ -6068,7 +6066,6 @@ function selectionAnalysisText(target) {
     `${t("analysis.maxAngleDeviation")}: ${formatAngle(result.maxAngleDeviation)} (${formatPercent(result.maxAngleDeviationPercent)})`,
     `${t("analysis.angleDeviationRate")}: ${formatPercent(result.maxAngleDeviationPercent)}`,
     `${t("analysis.referenceScore")}: ${Math.round(result.referenceScore)} / 100`,
-    ...(Number.isFinite(result.referenceScoreCeiling) ? [t("analysis.dragonEyeSkillCap").replace("{score}", String(Math.round(result.referenceScoreCeiling)))] : []),
     `${t("analysis.comparisonTitle")}`,
     t("analysis.measurementBasis")
       .replace("{shape}", referenceShape)
@@ -6150,14 +6147,6 @@ function renderPolygonAnalysisDialog(target) {
   appendAnalysisText(reference, "span", "", t("analysis.referenceScore"));
   appendAnalysisText(reference, "strong", "", `${Math.round(result.referenceScore)} / 100`);
   elements.analysisDialogContent.append(reference);
-  if (Number.isFinite(result.referenceScoreCeiling)) {
-    appendAnalysisText(
-      elements.analysisDialogContent,
-      "p",
-      "analysis-dialog-hint",
-      t("analysis.dragonEyeSkillCap").replace("{score}", String(Math.round(result.referenceScoreCeiling)))
-    );
-  }
 
   appendAnalysisText(elements.analysisDialogContent, "h4", "analysis-subsection-title", t("analysis.comparisonTitle"));
   appendAnalysisText(
