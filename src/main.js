@@ -116,7 +116,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1962";
+const WEB_VERSION = "0.1964";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -259,7 +259,6 @@ const elements = {
   traverseQuantityConfirmButton: document.querySelector("#traverseQuantityConfirmButton"),
   editionBadge: document.querySelector("#editionBadge"),
   webVersionBadge: document.querySelector("#webVersionBadge"),
-  traverseModeBadge: document.querySelector("#traverseModeBadge"),
   settingsMenu: document.querySelector("#settingsMenu"),
   settingsMenuButton: document.querySelector("#settingsMenuButton"),
   openGridAtlasButton: document.querySelector("#openGridAtlasButton"),
@@ -2322,6 +2321,25 @@ function beginBarrierLinking() {
   render();
 }
 
+function applyTraverseModeToggle(enabled) {
+  const nextMode = Boolean(enabled);
+  if (state.traverseMode !== nextMode) {
+    setTraverseMode(nextMode);
+  } else if (nextMode) {
+    // A native dialog can resolve its promise and close event in a different
+    // order on touch browsers. Re-apply the mobile surface even when the
+    // mode flag was already set by the confirm-button handler.
+    setMobilePage("map");
+    setMobileGridPage("grid");
+    renderTraverseActionButton();
+    syncTraverseModeUi();
+  } else {
+    renderTraverseActionButton();
+    syncTraverseModeUi();
+  }
+  syncSettingsControls();
+}
+
 function setTraverseMode(enabled) {
   state.traverseMode = Boolean(enabled);
   if (state.traverseMode) {
@@ -2343,6 +2361,10 @@ function setTraverseMode(enabled) {
     if (evaluateBarrierLog(state.traverseLog).changed) persistTraverseLog();
     refreshTraverseStock();
   }
+  // Set the mode surface before the full render as well as after it. This
+  // keeps the action button visible if a touch browser delays or interrupts
+  // the surrounding render while the confirmation dialog is closing.
+  syncTraverseModeUi();
   render();
   syncTraverseModeUi();
   const settledMode = state.traverseMode;
@@ -2372,15 +2394,11 @@ async function requestTraverseModeToggle() {
     syncSettingsControls();
     return;
   }
-  // The confirm-button handler may already have applied this transition for
-  // touch browsers. Keep the async continuation as a fallback only.
-  if (pendingTraverseModeToggle === null) {
-    syncTraverseModeUi();
-    return;
-  }
   pendingTraverseModeToggle = null;
-  setTraverseMode(nextMode);
-  syncSettingsControls();
+  // The confirm-button handler may already have applied this transition for
+  // touch browsers. Applying it again is intentional and idempotent: it
+  // repairs the visible surface after the dialog has fully settled.
+  applyTraverseModeToggle(nextMode);
 }
 
 function setTraverseFeedback(message, duration = 3500) {
@@ -4876,6 +4894,10 @@ function drawRangeSelection() {
 }
 
 function render() {
+  // Keep the barrier control authoritative even when a cloud/tester list
+  // refresh causes additional rendering work below it.
+  renderTraverseActionButton();
+  syncTraverseModeUi();
   refreshVisiblePoints();
   pruneHiddenPointReferences();
   normalizeSelection();
@@ -5277,35 +5299,22 @@ function renderStatus() {
   elements.statusLine.value = formatDistance(chooseGridStep());
 }
 
-function syncTraverseModeUi() {
-  const enabled = Boolean(state.traverseMode);
+function ensureTraverseActionButtonPlacement() {
   const button = elements.traverseActionButton;
   const mapContent = document.querySelector(".map-content");
   if (button && mapContent && button.parentElement !== mapContent) {
     mapContent.append(button);
   }
-  if (!elements.traverseModeBadge) {
-    const badge = document.createElement("span");
-    badge.id = "traverseModeBadge";
-    badge.className = "traverse-mode-badge";
-    badge.setAttribute("aria-live", "polite");
-    if (elements.webVersionBadge?.parentElement) {
-      elements.webVersionBadge.after(badge);
-    } else {
-      document.querySelector(".brand")?.append(badge);
-    }
-    elements.traverseModeBadge = badge;
-  }
+}
+
+function syncTraverseModeUi() {
+  const enabled = Boolean(state.traverseMode);
+  const button = elements.traverseActionButton;
   if (button) {
     button.hidden = !enabled;
     button.style.display = enabled ? "inline-flex" : "";
     button.style.visibility = enabled ? "visible" : "";
     button.setAttribute("aria-hidden", String(!enabled));
-  }
-  if (elements.traverseModeBadge) {
-    elements.traverseModeBadge.hidden = false;
-    elements.traverseModeBadge.textContent = enabled ? "結界モード ON" : "通常モード";
-    elements.traverseModeBadge.classList.toggle("is-active", enabled);
   }
   document.documentElement.classList.toggle("is-traverse-mode", enabled);
 }
@@ -14855,8 +14864,7 @@ function bindEvents() {
     pendingTraverseModeToggle = null;
     if (elements.confirmDialog.open) elements.confirmDialog.close(value);
     if (value === "confirm" && nextTraverseMode !== null) {
-      setTraverseMode(nextTraverseMode);
-      syncSettingsControls();
+      applyTraverseModeToggle(nextTraverseMode);
     }
     resolve?.(value);
   };
@@ -15223,6 +15231,7 @@ loadPreferences();
 loadCloudSettings();
 moveCloudAuthPanelToDialog();
 moveCloudPasswordPanelToAuth();
+ensureTraverseActionButtonPlacement();
 registerGridAtlasFileLaunchHandler();
 bindEvents();
 void initializeCloudAuth();
