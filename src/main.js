@@ -95,6 +95,18 @@ const DRAGON_EYE_SHAPES = Object.freeze({
   octagram: Object.freeze({ sides: 8, rotation: Math.PI / 8, glyph: "✳", ja: "八芒星", en: "Octagram", linkPattern: "octagram" })
 });
 
+const DRAGON_EYE_SHAPE_PREVIEW_POINTS = Object.freeze({
+  triangle: "50,10 91,84 9,84",
+  square: "17,17 83,17 83,83 17,83",
+  diamond: "50,10 90,50 50,90 10,50",
+  pentagon: "50,9 89,38 74,86 26,86 11,38",
+  hexagon: "50,9 86,30 86,70 50,91 14,70 14,30",
+  heptagon: "50,8 89,30 80,76 50,92 20,76 11,30",
+  octagon: "30,10 70,10 90,30 90,70 70,90 30,90 10,70 10,30",
+  pentagram: "50,8 60,36 90,36 66,53 76,83 50,64 24,83 34,53 10,36 40,36",
+  octagram: "50,7 58,31 72,13 68,38 93,31 71,50 93,69 68,62 72,87 58,69 50,93 42,69 28,87 32,62 7,69 29,50 7,31 32,38 28,13 42,31"
+});
+
 const CLOUD_ACCESS_TOKEN_KEY = "grid-atlas-cloud-access-token";
 const CLOUD_PASSWORD_SETUP_KEY_PREFIX = "grid-atlas-cloud-password-set:";
 const CLOUD_SIGNUP_PENDING_KEY = "grid-atlas-cloud-signup-pending";
@@ -105,7 +117,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1868";
+const WEB_VERSION = "0.1888";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -377,6 +389,16 @@ const elements = {
   kekkaishiStatusRecent: document.querySelector("#kekkaishiStatusRecent"),
   kekkaishiStatusRatio: document.querySelector("#kekkaishiStatusRatio"),
   kekkaishiStatusCount: document.querySelector("#kekkaishiStatusCount"),
+  kekkaishiStatusCurrentRank: document.querySelector("#kekkaishiStatusCurrentRank"),
+  kekkaishiStatusCurrentDetails: document.querySelector("#kekkaishiStatusCurrentDetails"),
+  kekkaishiStatusCurrentShapes: document.querySelector("#kekkaishiStatusCurrentShapes"),
+  kekkaishiStatusNextShapesPanel: document.querySelector("#kekkaishiStatusNextShapesPanel"),
+  kekkaishiStatusNextRank: document.querySelector("#kekkaishiStatusNextRank"),
+  kekkaishiStatusNextDetails: document.querySelector("#kekkaishiStatusNextDetails"),
+  kekkaishiStatusNextShapes: document.querySelector("#kekkaishiStatusNextShapes"),
+  kekkaishiStatusProgressNextRank: document.querySelector("#kekkaishiStatusProgressNextRank"),
+  kekkaishiStatusProgressValue: document.querySelector("#kekkaishiStatusProgressValue"),
+  kekkaishiStatusProgressBar: document.querySelector("#kekkaishiStatusProgressBar"),
   kekkaishiStatusProgress: document.querySelector("#kekkaishiStatusProgress"),
   closeKekkaishiStatusButton: document.querySelector("#closeKekkaishiStatusButton"),
   shareKekkaishiStatusButton: document.querySelector("#shareKekkaishiStatusButton"),
@@ -1130,7 +1152,6 @@ const TRANSLATIONS = {
     "dragonEye.sightLimit": "見通しの限界（半径{radius}）",
       "dragonEye.rotationOn": "解放",
       "dragonEye.rotationLocked": "E級で解放",
-    "dragonEye.locked": "{shape}は{rank}級で解放",
     "dragonEye.confirm": "龍脈眼を確定",
     "dragonEye.cancel": "解除",
     "dragonEye.triangle": "正三角形",
@@ -1142,6 +1163,7 @@ const TRANSLATIONS = {
       "dragonEye.octagon": "正八角形",
       "dragonEye.pentagram": "五芒星",
       "dragonEye.octagram": "八芒星",
+      "dragonEye.secret": "シークレット",
     "dragonEye.placed": "龍脈眼を{count}地点として保存しました",
     "traverse.modeOnTitle": "結界モードに切り替えますか？",
     "traverse.modeOffTitle": "結界モードを終了しますか？",
@@ -1224,6 +1246,16 @@ const TRANSLATIONS = {
     ,"kekkaishi.ratio": "ピーク比"
     ,"kekkaishi.createdCount": "作成した結界"
     ,"kekkaishi.next": "次のランクまで"
+    ,"kekkaishi.shapesTitle": "図形と能力"
+    ,"kekkaishi.shapesHint": "現在使える図形と、次のクラスで追加される図形。"
+    ,"kekkaishi.currentShapes": "現在解放"
+    ,"kekkaishi.nextShapes": "次のクラスで解放"
+    ,"kekkaishi.progressTitle": "次のクラスまで"
+    ,"kekkaishi.sightRadius": "見通し半径"
+    ,"kekkaishi.maxVertices": "最大頂点"
+    ,"kekkaishi.stoneCap": "石上限"
+    ,"kekkaishi.scatter": "龍脈眼ばらつき"
+    ,"kekkaishi.edgeGuide": "1辺目安"
     ,"kekkaishi.progressLifetime": "累積"
     ,"kekkaishi.dailyPower": "現在の日次発動力"
     ,"kekkaishi.progressDays": "現在のペースであと{days}日"
@@ -1642,7 +1674,6 @@ const TRANSLATIONS = {
     "dragonEye.sightLimit": "Sight limit (radius {radius})",
       "dragonEye.rotationOn": "unlocked",
       "dragonEye.rotationLocked": "unlocks at E",
-    "dragonEye.locked": "{shape} unlocks at rank {rank}",
     "dragonEye.confirm": "Place Dragon Eye",
     "dragonEye.cancel": "Cancel",
     "dragonEye.triangle": "Equilateral triangle",
@@ -1654,6 +1685,7 @@ const TRANSLATIONS = {
       "dragonEye.octagon": "Regular octagon",
       "dragonEye.pentagram": "Pentagram",
       "dragonEye.octagram": "Octagram",
+      "dragonEye.secret": "SECRET",
     "dragonEye.placed": "Saved the Dragon Eye as {count} points",
     "traverse.modeOnTitle": "Switch to barrier mode?",
     "traverse.modeOffTitle": "Exit barrier mode?",
@@ -1736,6 +1768,16 @@ const TRANSLATIONS = {
     ,"kekkaishi.ratio": "Peak ratio"
     ,"kekkaishi.createdCount": "Barriers created"
     ,"kekkaishi.next": "To the next rank"
+    ,"kekkaishi.shapesTitle": "Shapes and abilities"
+    ,"kekkaishi.shapesHint": "Available shapes and the shapes added by the next class."
+    ,"kekkaishi.currentShapes": "Unlocked now"
+    ,"kekkaishi.nextShapes": "Unlocked by next class"
+    ,"kekkaishi.progressTitle": "To the next class"
+    ,"kekkaishi.sightRadius": "Sight radius"
+    ,"kekkaishi.maxVertices": "Max vertices"
+    ,"kekkaishi.stoneCap": "Stone cap"
+    ,"kekkaishi.scatter": "Dragon Eye scatter"
+    ,"kekkaishi.edgeGuide": "Edge guide"
     ,"kekkaishi.progressLifetime": "Lifetime"
     ,"kekkaishi.dailyPower": "Current daily power"
     ,"kekkaishi.progressDays": "At this pace: {days} more days"
@@ -2067,10 +2109,7 @@ function resetDragonEyeState() {
   renderDragonEyeControls();
 }
 
-function dragonEyeRankInfo() {
-  const status = state.traverseLog?.kekkaishi || createKekkaishiStatus();
-  const rank = rankForKekkaishi(status);
-  const rankIndex = rank.index;
+function dragonEyeShapesForRank(rankIndex) {
   const maxVertices = maxVerticesForRank(rankIndex);
   const shapes = ["triangle"];
   if (maxVertices >= 4) shapes.push("square", "diamond");
@@ -2080,6 +2119,14 @@ function dragonEyeRankInfo() {
   if (maxVertices >= 8) shapes.push("octagon");
   if (rankIndex >= BARRIER_CONFIG.crossLinkFromRank && maxVertices >= 5) shapes.push("pentagram");
   if (rankIndex >= BARRIER_CONFIG.maxVerticesByRank.length - 1 && maxVertices >= 8) shapes.push("octagram");
+  return Object.freeze([...new Set(shapes)]);
+}
+
+function dragonEyeRankInfo() {
+  const status = state.traverseLog?.kekkaishi || createKekkaishiStatus();
+  const rank = rankForKekkaishi(status);
+  const rankIndex = rank.index;
+  const maxVertices = maxVerticesForRank(rankIndex);
   return {
     rank,
     rankIndex,
@@ -2087,7 +2134,7 @@ function dragonEyeRankInfo() {
     sightRadiusKm: sightRadiusKmForRank(rankIndex),
     scatter: ryumyakuScatterForRank(rankIndex),
     rotationUnlocked: rankIndex >= BARRIER_CONFIG.rotationFromRank,
-    shapes: Object.freeze([...new Set(shapes)])
+    shapes: dragonEyeShapesForRank(rankIndex)
   };
 }
 
@@ -2115,11 +2162,14 @@ function renderDragonEyeShapeOptions() {
     const shape = option.dataset.dragonEyeShape;
     const available = info.shapes.includes(shape);
     const label = t(`dragonEye.${shape}`);
+    const labelNode = option.querySelector("[data-dragon-eye-label]");
     option.disabled = !available;
     option.classList.toggle("is-locked", !available);
+    option.setAttribute("aria-label", available ? label : t("dragonEye.secret"));
+    if (labelNode) labelNode.textContent = available ? label : t("dragonEye.secret");
     option.title = available
       ? label
-      : t("dragonEye.locked").replace("{shape}", label).replace("{rank}", info.rank.name);
+      : t("dragonEye.secret");
   });
 }
 
@@ -2171,7 +2221,7 @@ function beginDragonEye(shape) {
   if (!state.traverseMode || state.traverseBusy || !DRAGON_EYE_SHAPES[shape]) return;
   const rankInfo = dragonEyeRankInfo();
   if (!rankInfo.shapes.includes(shape)) {
-    showAppToast(t("dragonEye.locked").replace("{shape}", DRAGON_EYE_SHAPES[shape].ja).replace("{rank}", rankInfo.rank.name), { error: true });
+    showAppToast(t("dragonEye.secret"), { error: true });
     renderDragonEyeShapeOptions();
     return;
   }
@@ -6563,6 +6613,60 @@ function barrierShapeSummary(rankIndex) {
   return glyphs.join(" ");
 }
 
+function renderKekkaishiUnlockDetails(container, rankIndex) {
+  if (!container) return;
+  const index = Math.max(0, Math.min(BARRIER_CONFIG.sightRadiusKm.length - 1, Number(rankIndex) || 0));
+  const radius = sightRadiusKmForRank(index);
+  const maxVertices = maxVerticesForRank(index);
+  const edges = Array.from({ length: Math.max(1, maxVertices - 2) }, (_, offset) => {
+    const sides = offset + 3;
+    return `${sides}角${(2 * radius * Math.sin(Math.PI / sides)).toFixed(1)}km`;
+  }).join("・");
+  const details = [
+    [t("kekkaishi.sightRadius"), formatBarrierRadius(radius)],
+    [t("kekkaishi.maxVertices"), `${maxVertices}`],
+    [t("kekkaishi.stoneCap"), `${BARRIER_CONFIG.stoneCapVertexByRank[index] || BARRIER_CONFIG.stoneCapVertex}`],
+    [t("kekkaishi.scatter"), `${Math.round(ryumyakuScatterForRank(index) * 100)}%`],
+    [t("kekkaishi.edgeGuide"), edges]
+  ];
+  container.replaceChildren();
+  for (const [label, value] of details) {
+    const item = document.createElement("div");
+    const labelNode = document.createElement("span");
+    const valueNode = document.createElement("strong");
+    labelNode.textContent = label;
+    valueNode.textContent = value;
+    item.append(labelNode, valueNode);
+    container.append(item);
+  }
+}
+
+function renderKekkaishiShapeCards(container, shapes, locked = false) {
+  if (!container) return;
+  container.replaceChildren();
+  for (const shape of shapes) {
+    const card = document.createElement("div");
+    card.className = `kekkaishi-status-shape-card${locked ? " is-locked" : ""}`;
+    card.setAttribute("role", "img");
+    card.setAttribute("aria-label", t(`dragonEye.${shape}`));
+
+    const preview = document.createElement("span");
+    preview.className = "kekkaishi-status-shape-preview";
+    preview.setAttribute("aria-hidden", "true");
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 100 100");
+    const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    polygon.setAttribute("points", DRAGON_EYE_SHAPE_PREVIEW_POINTS[shape] || "");
+    svg.append(polygon);
+    preview.append(svg);
+
+    const label = document.createElement("small");
+    label.textContent = t(`dragonEye.${shape}`);
+    card.append(preview, label);
+    container.append(card);
+  }
+}
+
 function renderKekkaishiStatusDialog() {
   if (!state.traverseLog || !elements.kekkaishiStatusDialog) return;
   const status = state.traverseLog.kekkaishi || createKekkaishiStatus(Date.now(), Object.keys(state.traverseLog.barriers || {}).length);
@@ -6570,6 +6674,13 @@ function renderKekkaishiStatusDialog() {
   const recent = recentAverage(status);
   const peakRatio = rank.peak > 0 ? recent / rank.peak : null;
   const achievedDays = rank.index > 0 ? rankAchievementDays(status, rank.index) : null;
+  const maxRankIndex = BARRIER_EVALUATION_CONFIG.kekkaishiRankNames.length - 1;
+  const atMaxRank = rank.index >= maxRankIndex;
+  const currentShapes = dragonEyeShapesForRank(rank.index);
+  const nextIndex = Math.min(rank.index + 1, maxRankIndex);
+  const nextShapes = atMaxRank
+    ? []
+    : dragonEyeShapesForRank(nextIndex).filter((shape) => !currentShapes.includes(shape));
   if (elements.kekkaishiStatusRank) {
     elements.kekkaishiStatusRank.textContent = `${rank.name}${achievedDays === null ? "" : ` ${t("kekkaishi.achievedDays").replace("{days}", String(achievedDays))}`}`;
   }
@@ -6579,16 +6690,41 @@ function renderKekkaishiStatusDialog() {
   if (elements.kekkaishiStatusRatio) elements.kekkaishiStatusRatio.textContent = peakRatio === null ? "—" : `${Math.round(peakRatio * 100)}%`;
   if (elements.kekkaishiStatusCount) elements.kekkaishiStatusCount.textContent = String(Math.max(0, Number(status.kekkaiCreatedCount) || 0));
   if (elements.kekkaishiStatusDailyPower) elements.kekkaishiStatusDailyPower.textContent = `${formatScoreValue(status.lastDailyPower)} 力`;
+  if (elements.kekkaishiStatusCurrentRank) elements.kekkaishiStatusCurrentRank.textContent = rank.name;
+  renderKekkaishiUnlockDetails(elements.kekkaishiStatusCurrentDetails, rank.index);
+  renderKekkaishiShapeCards(elements.kekkaishiStatusCurrentShapes, currentShapes);
+  if (elements.kekkaishiStatusNextShapesPanel) elements.kekkaishiStatusNextShapesPanel.hidden = nextShapes.length === 0;
+  if (nextShapes.length > 0) {
+    if (elements.kekkaishiStatusNextRank) elements.kekkaishiStatusNextRank.textContent = BARRIER_EVALUATION_CONFIG.kekkaishiRankNames[nextIndex];
+    renderKekkaishiUnlockDetails(elements.kekkaishiStatusNextDetails, nextIndex);
+    renderKekkaishiShapeCards(elements.kekkaishiStatusNextShapes, nextShapes, true);
+  } else {
+    elements.kekkaishiStatusNextDetails?.replaceChildren();
+    elements.kekkaishiStatusNextShapes?.replaceChildren();
+  }
+  if (elements.kekkaishiStatusProgressNextRank) {
+    elements.kekkaishiStatusProgressNextRank.textContent = atMaxRank
+      ? t("kekkaishi.rankMax")
+      : BARRIER_EVALUATION_CONFIG.kekkaishiRankNames[nextIndex];
+  }
+  if (elements.kekkaishiStatusProgressValue) {
+    elements.kekkaishiStatusProgressValue.textContent = atMaxRank
+      ? `${formatScoreValue(rank.lifetime)} 結界日`
+      : `${formatScoreValue(rank.lifetime)} / ${formatScoreValue(rank.nextLifetime)} 結界日`;
+  }
+  if (elements.kekkaishiStatusProgressBar) {
+    const progress = atMaxRank ? 1 : Math.min(1, Math.max(0, rank.lifetime / Math.max(1, rank.nextLifetime)));
+    elements.kekkaishiStatusProgressBar.style.width = `${Math.round(progress * 100)}%`;
+  }
   if (elements.kekkaishiStatusProgress) {
-    if (rank.index >= BARRIER_EVALUATION_CONFIG.kekkaishiRankNames.length - 1) {
-      elements.kekkaishiStatusProgress.textContent = `${t("kekkaishi.rankMax")}\n${kekkaishiUnlockSummary(rank.index)}`;
+    if (atMaxRank) {
+      elements.kekkaishiStatusProgress.textContent = t("kekkaishi.rankMax");
     } else {
-      const nextIndex = rank.index + 1;
       const remaining = Math.max(0, rank.nextLifetime - rank.lifetime);
       const days = Number(status.lastDailyPower) > 0
         ? t("kekkaishi.progressDays").replace("{days}", String(Math.ceil(remaining / status.lastDailyPower)))
         : t("kekkaishi.noDailyPower");
-      elements.kekkaishiStatusProgress.textContent = `${kekkaishiUnlockSummary(rank.index)}\n${t("kekkaishi.next")}: ${BARRIER_EVALUATION_CONFIG.kekkaishiRankNames[nextIndex]}\n${t("kekkaishi.progressLifetime")} ${formatScoreValue(rank.lifetime)} / ${formatScoreValue(rank.nextLifetime)} 結界日\n${days}\n${kekkaishiUnlockSummary(nextIndex, "kekkaishi.nextUnlocks")}`;
+      elements.kekkaishiStatusProgress.textContent = days;
     }
   }
 }
