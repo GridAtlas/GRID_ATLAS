@@ -1223,6 +1223,13 @@ button {
   font-size: 13px;
 }
 
+.dragon-eye-availability {
+  margin: -4px 0 0;
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .dragon-eye-shape-options {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1245,6 +1252,19 @@ button {
 .dragon-eye-shape-option:focus-visible {
   border-color: var(--accent-strong);
   background: var(--active-bg);
+}
+
+.dragon-eye-shape-option:disabled,
+.dragon-eye-shape-option.is-locked {
+  cursor: not-allowed;
+  filter: grayscale(0.75);
+  opacity: 0.42;
+}
+
+.dragon-eye-shape-option:disabled:hover,
+.dragon-eye-shape-option.is-locked:hover {
+  border-color: var(--line);
+  background: var(--surface-strong);
 }
 
 .dragon-eye-shape-option > span {
