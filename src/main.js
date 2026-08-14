@@ -117,7 +117,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1929";
+const WEB_VERSION = "0.1930";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -2368,12 +2368,17 @@ async function requestTraverseModeToggle() {
     confirmLabel: t(nextMode ? "traverse.modeOnConfirm" : "traverse.modeOffConfirm"),
     danger: false
   });
-  if (!confirmed) return;
+  if (!confirmed) {
+    syncSettingsControls();
+    return;
+  }
   if (nextMode && state.cloud.testerActive !== true) {
     showAppToast(t("traverse.modeUnavailable"), { error: true });
+    syncSettingsControls();
     return;
   }
   setTraverseMode(nextMode);
+  syncSettingsControls();
 }
 
 function setTraverseFeedback(message, duration = 3500) {
@@ -2452,7 +2457,9 @@ function setCloudDialogOpen(open) {
 }
 
 function toggleSettingsMenu() {
-  setSettingsMenuOpen(elements.settingsPanel.hidden);
+  const open = elements.settingsPanel.hidden;
+  if (open) syncSettingsControls();
+  setSettingsMenuOpen(open);
 }
 function currentTheme() {
   const theme = document.documentElement.dataset.theme;
@@ -5262,8 +5269,17 @@ function renderStatus() {
 function renderTraverseActionButton() {
   const button = elements.traverseActionButton;
   if (!button) return;
-  button.hidden = !state.traverseMode;
-  if (!state.traverseMode) return;
+  const testerCanUseBarrier = state.cloud.testerActive === true;
+  button.hidden = !state.traverseMode && !testerCanUseBarrier;
+  if (!state.traverseMode) {
+    const modeLabel = t("settings.traverseMode");
+    elements.traverseActionLabel.textContent = modeLabel;
+    button.disabled = state.cloud.busy;
+    button.classList.remove("is-dragon-eye-active", "is-placement-view-active");
+    button.setAttribute("aria-label", modeLabel);
+    button.title = modeLabel;
+    return;
+  }
 
   refreshTraverseStock();
   const dragonEyeActive = Boolean(state.dragonEye.active);
@@ -5566,6 +5582,10 @@ function barrierIdForStone(log, stoneId) {
 }
 
 function handleTraverseActionClick() {
+  if (!state.traverseMode) {
+    void requestTraverseModeToggle();
+    return;
+  }
   if (state.barrierPlacementView) {
     exitBarrierPlacementView();
     return;
