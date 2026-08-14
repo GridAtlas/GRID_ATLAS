@@ -4,7 +4,8 @@ export const BARRIER_SCORE_CONFIG = Object.freeze({
   earthRadiusKm: 6371.0088,
   dataZoom: BARRIER_CONFIG.dataZoom,
   beautyMin: 0.5,
-  // The shiniki threshold is designed around this upper bound and SCALE_L0.
+  // The shiniki threshold remains 102,400; rank gates now determine which
+  // shapes and sight radii can actually approach it.
   beautyMax: 3,
   beautyTolerance: 0.05,
   beautyToleranceTiles: 1,
@@ -326,7 +327,7 @@ export function shapeCoefficient(vertexCount, selfIntersecting, coefficients = B
   if (vertexCount === 7) return coefficients.heptagon;
   if (vertexCount === 8) return coefficients.octagon;
   // Defensive-only fallback for corrupt or future data outside maxVertices.
-  // New barriers cannot reach this scoring path while maxVertices is 6.
+  // New barriers cannot reach this scoring path while maxVertices is 8.
   console.warn("GRID ATLAS shape coefficient fallback", { vertexCount });
   return coefficients.other;
 }
@@ -405,13 +406,14 @@ export function sightRadiusForRank(rankIndex = 0, config = BARRIER_CONFIG) {
   return Number(config.sightRadiusKm[index]) || config.sightRadiusKm[0];
 }
 
-export function barrierReferenceGeo(geos) {
+export function barrierReferenceGeo(geos, guardian = null) {
   if (!Array.isArray(geos) || geos.length === 0) return null;
+  if (validGeo(guardian)) return { lat: Number(guardian.lat), lng: Number(guardian.lng) };
   return centroidGeo(geos);
 }
 
-export function barrierFitsSightRadius(geos, rankIndex = 0, config = BARRIER_CONFIG) {
-  const reference = barrierReferenceGeo(geos);
+export function barrierFitsSightRadius(geos, rankIndex = 0, config = BARRIER_CONFIG, guardian = null) {
+  const reference = barrierReferenceGeo(geos, guardian);
   if (!reference) return { ok: false, reason: "invalid-reference" };
   const radiusKm = sightRadiusForRank(rankIndex, config);
   const distances = geos.map((geo, index) => ({ index, distanceKm: geoDistanceKm(reference, geo) }));

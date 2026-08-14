@@ -1196,6 +1196,13 @@ button {
   touch-action: manipulation;
 }
 
+.dragon-eye-canvas-limit {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .dragon-eye-dialog {
   width: min(420px, calc(100vw - 24px));
   padding: 0;

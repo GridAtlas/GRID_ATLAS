@@ -174,6 +174,21 @@ describe("barrier evaluation", () => {
     expect(settingsEvents.at(-1)).toMatchObject(evaluationSettingsSnapshot(changedConfig));
   });
 
+  it("records the complete shape coefficient table with evaluation settings", () => {
+    const snapshot = evaluationSettingsSnapshot();
+    expect(snapshot.shapeCoefficients).toMatchObject({
+      heptagon: 2.1,
+      octagon: 2.4,
+      star: 3,
+      octagram: 4
+    });
+    const log = triangleLog();
+    evaluateBarrierLog(log, Date.parse("2026-08-02T00:00:00Z"));
+    expect(log.events.find((event) => event.type === "evaluation-settings")).toMatchObject({
+      shapeCoefficients: snapshot.shapeCoefficients
+    });
+  });
+
   it("zero-fills short histories and uses a fixed 90-day average", () => {
     const status = normalizeKekkaishiStatus({ dailyHistory: [10, 20], peakAverage: 0 }, Date.parse("2026-08-14T00:00:00Z"));
     expect(status.dailyHistory).toHaveLength(BARRIER_EVALUATION_CONFIG.windowDays);

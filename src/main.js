@@ -104,7 +104,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1848";
+const WEB_VERSION = "0.1858";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -219,6 +219,7 @@ const elements = {
   traverseActionButton: document.querySelector("#traverseActionButton"),
   traverseActionLabel: document.querySelector("#traverseActionLabel"),
   dragonEyeCanvasActions: document.querySelector("#dragonEyeCanvasActions"),
+  dragonEyeCanvasLimit: document.querySelector("#dragonEyeCanvasLimit"),
   dragonEyeConfirmButton: document.querySelector("#dragonEyeConfirmButton"),
   dragonEyeCancelButton: document.querySelector("#dragonEyeCancelButton"),
   dragonEyeDialog: document.querySelector("#dragonEyeDialog"),
@@ -1124,7 +1125,8 @@ const TRANSLATIONS = {
     "dragonEye.open": "龍脈眼",
     "dragonEye.title": "龍脈眼の形を選択",
     "dragonEye.message": "形を選ぶとグリッド上で移動・拡縮できます。",
-      "dragonEye.rankInfo": "{rank}級 · 見通し半径 {radius} · ばらつき {scatter}% · 回転 {rotation}",
+    "dragonEye.rankInfo": "{rank}級 · 見通し半径 {radius} · ばらつき {scatter}% · 回転 {rotation}",
+    "dragonEye.sightLimit": "見通しの限界（半径{radius}）",
       "dragonEye.rotationOn": "解放",
       "dragonEye.rotationLocked": "E級で解放",
     "dragonEye.locked": "{shape}は{rank}級で解放",
@@ -1224,8 +1226,8 @@ const TRANSLATIONS = {
     ,"kekkaishi.dailyPower": "現在の日次発動力"
     ,"kekkaishi.progressDays": "現在のペースであと{days}日"
     ,"kekkaishi.noDailyPower": "結界を張ると進みます"
-    ,"kekkaishi.unlocks": "解放: 見通し半径{radius} / 1辺目安{edges} / 最大{vertices}頂点 / 石上限{stones} / 龍脈眼ばらつき{scatter}%"
-    ,"kekkaishi.nextUnlocks": "次に解放: 見通し半径{radius} / 1辺目安{edges} / 最大{vertices}頂点 / 石上限{stones} / 龍脈眼ばらつき{scatter}%"
+    ,"kekkaishi.unlocks": "解放: 見通し半径{radius} / 結べる形{shapes} / 1辺目安{edges} / 最大{vertices}頂点 / 石上限{stones} / 龍脈眼ばらつき{scatter}%"
+    ,"kekkaishi.nextUnlocks": "次に解放: 見通し半径{radius} / 結べる形{shapes} / 1辺目安{edges} / 最大{vertices}頂点 / 石上限{stones} / 龍脈眼ばらつき{scatter}%"
     ,"kekkaishi.rankMax": "最高ランク"
     ,"kekkaishi.share": "ステータスを共有"
     ,"kekkaishi.shared": "ステータス画像を共有しました"
@@ -1634,7 +1636,8 @@ const TRANSLATIONS = {
     "dragonEye.open": "Dragon eye",
     "dragonEye.title": "Choose a Dragon Eye shape",
     "dragonEye.message": "Choose a shape, then drag or pinch it on the grid.",
-      "dragonEye.rankInfo": "Rank {rank} · sight radius {radius} · scatter {scatter}% · rotation {rotation}",
+    "dragonEye.rankInfo": "Rank {rank} · sight radius {radius} · scatter {scatter}% · rotation {rotation}",
+    "dragonEye.sightLimit": "Sight limit (radius {radius})",
       "dragonEye.rotationOn": "unlocked",
       "dragonEye.rotationLocked": "unlocks at E",
     "dragonEye.locked": "{shape} unlocks at rank {rank}",
@@ -1734,8 +1737,8 @@ const TRANSLATIONS = {
     ,"kekkaishi.dailyPower": "Current daily power"
     ,"kekkaishi.progressDays": "At this pace: {days} more days"
     ,"kekkaishi.noDailyPower": "Create a barrier to make progress"
-    ,"kekkaishi.unlocks": "Unlocked: sight radius {radius} / edge guide {edges} / max {vertices} vertices / stone cap {stones} / Dragon Eye scatter {scatter}%"
-    ,"kekkaishi.nextUnlocks": "Next unlock: sight radius {radius} / edge guide {edges} / max {vertices} vertices / stone cap {stones} / Dragon Eye scatter {scatter}%"
+    ,"kekkaishi.unlocks": "Unlocked: sight radius {radius} / shapes {shapes} / edge guide {edges} / max {vertices} vertices / stone cap {stones} / Dragon Eye scatter {scatter}%"
+    ,"kekkaishi.nextUnlocks": "Next unlock: sight radius {radius} / shapes {shapes} / edge guide {edges} / max {vertices} vertices / stone cap {stones} / Dragon Eye scatter {scatter}%"
     ,"kekkaishi.rankMax": "Maximum rank"
     ,"kekkaishi.share": "Share status"
     ,"kekkaishi.shared": "Status image shared"
@@ -2065,17 +2068,19 @@ function dragonEyeRankInfo() {
   const status = state.traverseLog?.kekkaishi || createKekkaishiStatus();
   const rank = rankForKekkaishi(status);
   const rankIndex = rank.index;
+  const maxVertices = maxVerticesForRank(rankIndex);
   const shapes = ["triangle"];
-  if (rankIndex >= 2) shapes.push("square", "diamond");
-  if (rankIndex >= 3) shapes.push("pentagon");
-  if (rankIndex >= 4) shapes.push("hexagon");
-  if (rankIndex >= 6) shapes.push("pentagram");
-  if (rankIndex >= 7) shapes.push("heptagon", "octagon");
-  if (rankIndex >= 8) shapes.push("octagram");
+  if (maxVertices >= 4) shapes.push("square", "diamond");
+  if (maxVertices >= 5) shapes.push("pentagon");
+  if (maxVertices >= 6) shapes.push("hexagon");
+  if (maxVertices >= 7) shapes.push("heptagon");
+  if (maxVertices >= 8) shapes.push("octagon");
+  if (rankIndex >= BARRIER_CONFIG.crossLinkFromRank && maxVertices >= 5) shapes.push("pentagram");
+  if (rankIndex >= BARRIER_CONFIG.maxVerticesByRank.length - 1 && maxVertices >= 8) shapes.push("octagram");
   return {
     rank,
     rankIndex,
-    maxVertices: maxVerticesForRank(rankIndex),
+    maxVertices,
     sightRadiusKm: sightRadiusKmForRank(rankIndex),
     scatter: ryumyakuScatterForRank(rankIndex),
     rotationUnlocked: rankIndex >= BARRIER_CONFIG.rotationFromRank,
@@ -5191,6 +5196,13 @@ function renderTraverseActionButton() {
 function renderDragonEyeControls() {
   const active = Boolean(state.traverseMode && state.dragonEye.active);
   if (elements.dragonEyeCanvasActions) elements.dragonEyeCanvasActions.hidden = !active;
+  if (elements.dragonEyeCanvasLimit) {
+    const info = dragonEyeRankInfo();
+    elements.dragonEyeCanvasLimit.hidden = !active;
+    elements.dragonEyeCanvasLimit.textContent = active
+      ? t("dragonEye.sightLimit").replace("{radius}", formatBarrierRadius(info.sightRadiusKm))
+      : "";
+  }
   if (elements.dragonEyeConfirmButton) elements.dragonEyeConfirmButton.disabled = !active;
   if (elements.dragonEyeCancelButton) elements.dragonEyeCancelButton.disabled = !active;
 }
@@ -6521,16 +6533,31 @@ function kekkaishiUnlockSummary(rankIndex, key = "kekkaishi.unlocks") {
   const index = Math.max(0, Math.min(BARRIER_CONFIG.sightRadiusKm.length - 1, Number(rankIndex) || 0));
   const radius = sightRadiusKmForRank(index);
   const maxVertices = maxVerticesForRank(index);
+  const shapes = barrierShapeSummary(index);
   const edges = Array.from({ length: Math.max(1, maxVertices - 2) }, (_, offset) => {
     const sides = offset + 3;
     return `${sides}角${(2 * radius * Math.sin(Math.PI / sides)).toFixed(1)}km`;
   }).join("・");
   return t(key)
     .replace("{radius}", formatBarrierRadius(radius))
+    .replace("{shapes}", shapes)
     .replace("{edges}", edges)
     .replace("{vertices}", String(maxVertices))
     .replace("{stones}", String(BARRIER_CONFIG.stoneCapVertexByRank[index] || BARRIER_CONFIG.stoneCapVertex))
     .replace("{scatter}", String(Math.round(ryumyakuScatterForRank(index) * 100)));
+}
+
+function barrierShapeSummary(rankIndex) {
+  const maxVertices = maxVerticesForRank(rankIndex);
+  const glyphs = ["△"];
+  if (maxVertices >= 4) glyphs.push("□");
+  if (maxVertices >= 5) glyphs.push("⬠");
+  if (maxVertices >= 6) glyphs.push("⬡");
+  if (maxVertices >= 7) glyphs.push("7角");
+  if (maxVertices >= 8) glyphs.push("8角");
+  if (rankIndex >= BARRIER_CONFIG.crossLinkFromRank && maxVertices >= 5) glyphs.push("✦");
+  if (rankIndex >= BARRIER_CONFIG.maxVerticesByRank.length - 1 && maxVertices >= 8) glyphs.push("✳");
+  return glyphs.join(" ");
 }
 
 function renderKekkaishiStatusDialog() {

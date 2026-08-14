@@ -508,6 +508,9 @@ function normalizeEvent(event, now, fallbackId = "") {
       kekkaishiLifetimeThresholds: event.kekkaishiLifetimeThresholds.map((value) => Number(value)),
       windowDays: Number(event.windowDays),
       scaleL0: Number(event.scaleL0),
+      shapeCoefficients: event.shapeCoefficients && typeof event.shapeCoefficients === "object"
+        ? { ...event.shapeCoefficients }
+        : {},
       stoneCapVertex: Number(event.stoneCapVertex),
       dailyGrant: Number(event.dailyGrant),
       maxVertices: Number(event.maxVertices),

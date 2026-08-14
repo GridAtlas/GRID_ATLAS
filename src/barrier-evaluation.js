@@ -101,6 +101,7 @@ export function evaluationSettingsSnapshot(config = BARRIER_EVALUATION_CONFIG) {
     kekkaishiLifetimeThresholds: [...config.kekkaishiLifetimeThresholds],
     windowDays: Number(config.windowDays),
     scaleL0: Number(BARRIER_SCORE_CONFIG.scaleL0),
+    shapeCoefficients: { ...BARRIER_SCORE_CONFIG.shapeCoefficients },
     stoneCapVertex: Number(BARRIER_CONFIG.stoneCapVertex),
     dailyGrant: Number(BARRIER_CONFIG.dailyGrant),
     maxVertices: Number(BARRIER_CONFIG.maxVertices),
@@ -249,6 +250,9 @@ function evaluationSettingsSnapshotFromEvent(event) {
     kekkaishiLifetimeThresholds: Array.isArray(event.kekkaishiLifetimeThresholds) ? [...event.kekkaishiLifetimeThresholds] : [],
     windowDays: Number(event.windowDays),
     scaleL0: Number(event.scaleL0),
+    shapeCoefficients: event.shapeCoefficients && typeof event.shapeCoefficients === "object"
+      ? { ...event.shapeCoefficients }
+      : {},
     stoneCapVertex: Number(event.stoneCapVertex),
     dailyGrant: Number(event.dailyGrant),
     maxVertices: Number(event.maxVertices),

@@ -43,6 +43,12 @@ function regularPentagram(radiusKm) {
   return Array.from({ length: 5 }, (_, index) => destinationGeo(center, radiusKm, 90 + index * 144));
 }
 
+function regularOctagram(radiusKm) {
+  const center = { lat: 35, lng: 139 };
+  const outer = Array.from({ length: 8 }, (_, index) => destinationGeo(center, radiusKm, 90 + index * 45));
+  return [0, 3, 6, 1, 4, 7, 2, 5].map((index) => outer[index]);
+}
+
 function relativeDifference(actual, expected) {
   return Math.abs(actual - expected) / expected;
 }
@@ -66,6 +72,14 @@ describe("barrier score helpers", () => {
     const signedArea = 1.4695 * radiusKm ** 2;
     expect(area).toBeLessThan(signedArea);
     expect(area / signedArea).toBeCloseTo(1.1226 / 1.4695, 2);
+  });
+
+  it("uses the non-zero area rule for regular octagrams", () => {
+    const expectedCoefficient = 1.657;
+    for (const radiusKm of [10, 30]) {
+      const area = nonZeroPolygonAreaKm2(regularOctagram(radiusKm));
+      expect(relativeDifference(area, expectedCoefficient * radiusKm ** 2)).toBeLessThan(0.01);
+    }
   });
 
   it("adds both regions of a bow-tie polygon instead of canceling them", () => {
@@ -147,6 +161,14 @@ describe("barrier score helpers", () => {
     expect(barrierFitsSightRadius(within, 0).ok).toBe(true);
     expect(barrierFitsSightRadius(outside, 0).ok).toBe(false);
     expect(geoDistanceKm(center, within[0])).toBeCloseTo(0.8, 2);
+  });
+
+  it("uses a guardian as the sight-radius reference when provided", () => {
+    const guardian = { lat: 35, lng: 139 };
+    const geos = [0, 120, 240].map((bearing) => destinationGeo(guardian, 0.8, bearing));
+    expect(barrierFitsSightRadius(geos, 0, BARRIER_CONFIG, guardian).ok).toBe(true);
+    const farGuardian = destinationGeo(guardian, 1.5, 0);
+    expect(barrierFitsSightRadius(geos, 0, BARRIER_CONFIG, farGuardian).ok).toBe(false);
   });
 
   it("supports seven/eight vertices and the octagram coefficient", () => {
