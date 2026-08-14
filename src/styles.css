@@ -1139,6 +1139,32 @@ button {
   background: rgb(242 138 46 / 0.38);
 }
 
+.traverse-action-button.is-dragon-eye-active {
+  background: rgb(190 104 255 / 0.48);
+  color: #f3dcff;
+  box-shadow: 0 0 10px rgb(190 104 255 / 0.78), 0 0 24px rgb(190 104 255 / 0.42);
+  animation: dragon-eye-action-pulse 1.6s ease-in-out infinite;
+}
+
+.traverse-action-button.is-dragon-eye-active:hover:not(:disabled) {
+  background: rgb(204 126 255 / 0.62);
+}
+
+@keyframes dragon-eye-action-pulse {
+  0%, 100% {
+    filter: brightness(0.96);
+  }
+  50% {
+    filter: brightness(1.22);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .traverse-action-button.is-dragon-eye-active {
+    animation: none;
+  }
+}
+
 .traverse-action-button:disabled {
   cursor: default;
   opacity: 0.48;

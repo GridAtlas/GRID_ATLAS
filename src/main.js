@@ -97,7 +97,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1726";
+const WEB_VERSION = "0.1727";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -5031,13 +5031,16 @@ function renderTraverseActionButton() {
   if (!state.traverseMode) return;
 
   refreshTraverseStock();
+  const dragonEyeActive = Boolean(state.dragonEye.active);
+  const buttonLabel = dragonEyeActive ? t("dragonEye.confirm") : t("traverse.menuTitle");
   const feedbackActive = state.traverseFeedback && Date.now() < state.traverseFeedbackExpiresAt;
-  elements.traverseActionLabel.textContent = t("traverse.menuTitle");
+  elements.traverseActionLabel.textContent = buttonLabel;
   button.disabled = state.traverseBusy;
-  button.setAttribute("aria-label", feedbackActive
-    ? `${t("traverse.menuTitle")} ${state.traverseFeedback}`
-    : t("traverse.menuTitle"));
-  button.title = t("traverse.menuTitle");
+  button.classList.toggle("is-dragon-eye-active", dragonEyeActive);
+  button.setAttribute("aria-label", feedbackActive && !dragonEyeActive
+    ? `${buttonLabel} ${state.traverseFeedback}`
+    : buttonLabel);
+  button.title = buttonLabel;
 }
 
 function renderDragonEyeControls() {
@@ -5252,7 +5255,7 @@ function barrierIdForStone(log, stoneId) {
 }
 
 function startTraverseLongPress(event) {
-  if (!state.traverseMode || state.traverseBusy) return;
+  if (!state.traverseMode || state.traverseBusy || state.dragonEye.active) return;
   if (event.pointerType === "mouse" && event.button !== 0) return;
   traversePressPointerId = event.pointerId;
   traverseLongPressTriggered = false;
@@ -5276,6 +5279,15 @@ function finishTraverseLongPress(event) {
 }
 
 function handleTraverseActionClick(event) {
+  if (state.dragonEye.active) {
+    if (traverseSuppressClick) {
+      traverseSuppressClick = false;
+      event.preventDefault();
+      return;
+    }
+    commitDragonEye();
+    return;
+  }
   if (traverseSuppressClick) {
     traverseSuppressClick = false;
     event.preventDefault();
