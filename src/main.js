@@ -116,7 +116,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1937";
+const WEB_VERSION = "0.1938";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -14739,6 +14739,17 @@ function bindEvents() {
     const resolve = pendingConfirmResolve;
     pendingConfirmResolve = null;
     resolve?.(elements.confirmDialog.returnValue || "cancel");
+  });
+  // iOS Safari can close a method="dialog" form without preserving the
+  // submit button's returnValue. Close explicitly so mode confirmation is
+  // not interpreted as cancellation on Safari.
+  elements.confirmDialogConfirmButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    elements.confirmDialog.close("confirm");
+  });
+  elements.confirmDialogCancelButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    elements.confirmDialog.close("cancel");
   });
   elements.confirmDialog.addEventListener("click", (event) => {
     if (event.target === elements.confirmDialog) elements.confirmDialog.close("cancel");
