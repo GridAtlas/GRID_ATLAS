@@ -116,7 +116,8 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1940";
+const WEB_VERSION = "0.1941";
+let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -9268,6 +9269,10 @@ function setCloudStatus(message, options = {}) {
 }
 function setCloudProgress(completed, total, message) {
   if (!elements.cloudProgress || !elements.cloudProgressPattern || !elements.cloudProgressTitle) return;
+  if (cloudProgressClearTimer !== null) {
+    window.clearTimeout(cloudProgressClearTimer);
+    cloudProgressClearTimer = null;
+  }
   if (!Number.isFinite(total) || total <= 0) {
     elements.cloudProgress.hidden = true;
     return;
@@ -9295,15 +9300,28 @@ function renderCloudLastFetched() {
 }
 
 function clearCloudProgress() {
+  if (cloudProgressClearTimer !== null) {
+    window.clearTimeout(cloudProgressClearTimer);
+    cloudProgressClearTimer = null;
+  }
   if (!elements.cloudProgress) return;
   elements.cloudProgress.hidden = true;
   if (elements.cloudProgressTitle) elements.cloudProgressTitle.textContent = "";
   if (elements.cloudProgressPattern) elements.cloudProgressPattern.textContent = "";
 }
 
+function scheduleCloudProgressClear() {
+  if (!elements.cloudProgress) return;
+  if (cloudProgressClearTimer !== null) window.clearTimeout(cloudProgressClearTimer);
+  cloudProgressClearTimer = window.setTimeout(() => {
+    cloudProgressClearTimer = null;
+    clearCloudProgress();
+  }, 450);
+}
+
 function setCloudBusy(busy) {
   state.cloud.busy = Boolean(busy);
-  if (!busy) clearCloudProgress();
+  if (!busy) scheduleCloudProgressClear();
   renderStorageLists();
   renderActionButtons();
 }
