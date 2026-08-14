@@ -4,11 +4,14 @@ import {
   BARRIER_EVALUATION_CONFIG,
   applyWeathering,
   barrierRankStoneProgress,
+  createKekkaishiStatus,
   evaluationSettingsSnapshot,
   evaluateBarrierLog,
   normalizeKekkaishiStatus,
+  rankAchievementDays,
   rankForKekkaishi,
-  recentAverage
+  recentAverage,
+  recordKekkaishiRankAchievements
 } from "./barrier-evaluation.js";
 
 function triangleLog() {
@@ -132,6 +135,42 @@ describe("barrier evaluation", () => {
   it("allows E rank on the first evaluated day when lifetime threshold is met", () => {
     const lifetime = BARRIER_EVALUATION_CONFIG.kekkaishiLifetimeThresholds[1];
     expect(rankForKekkaishi({ lifetimeOutput: lifetime, peakAverage: 0 }).name).toBe("E");
+  });
+
+  it("records rank achievement timestamps once and never overwrites them", () => {
+    const startedAt = "2026-08-01T00:00:00.000Z";
+    const status = createKekkaishiStatus(Date.parse(startedAt));
+    status.lifetimeOutput = BARRIER_EVALUATION_CONFIG.kekkaishiLifetimeThresholds[3];
+    expect(recordKekkaishiRankAchievements(status, "2026-08-05T00:00:00.000Z")).toBe(true);
+    const first = [...status.rankAchievedAt];
+    expect(first.slice(0, 4).every(Boolean)).toBe(true);
+    expect(first.slice(4).every((value) => value === null)).toBe(true);
+    expect(rankAchievementDays(status, 0)).toBe(0);
+    expect(rankAchievementDays(status, 3)).toBe(4);
+    expect(recordKekkaishiRankAchievements(status, "2026-08-20T00:00:00.000Z")).toBe(false);
+    expect(status.rankAchievedAt).toEqual(first);
+  });
+
+  it("can record multiple rank achievements on the first evaluated day", () => {
+    const status = createKekkaishiStatus(Date.parse("2026-08-01T00:00:00.000Z"));
+    status.lifetimeOutput = BARRIER_EVALUATION_CONFIG.kekkaishiLifetimeThresholds.at(-1);
+    recordKekkaishiRankAchievements(status, "2026-08-02T00:00:00.000Z");
+    expect(status.rankAchievedAt.every(Boolean)).toBe(true);
+    expect(new Set(status.rankAchievedAt).size).toBe(2);
+  });
+
+  it("migrates startedAt from the oldest barrier and preserves existing achievements", () => {
+    const existing = "2026-08-04T00:00:00.000Z";
+    const status = normalizeKekkaishiStatus({
+      lifetimeOutput: BARRIER_EVALUATION_CONFIG.kekkaishiLifetimeThresholds[2],
+      rankAchievedAt: ["2026-08-02T00:00:00.000Z", existing]
+    }, Date.parse("2026-08-20T00:00:00.000Z"), 1, BARRIER_EVALUATION_CONFIG, {
+      old: { createdAt: "2026-08-01T00:00:00.000Z" }
+    });
+    expect(status.startedAt).toBe("2026-08-01T00:00:00.000Z");
+    expect(status.rankAchievedAt[1]).toBe(existing);
+    expect(status.rankAchievedAt).toHaveLength(BARRIER_EVALUATION_CONFIG.kekkaishiRankNames.length);
+    expect(rankAchievementDays(status, 2)).toBeNull();
   });
 
   it("calculates barrier stone progress from the next power threshold", () => {

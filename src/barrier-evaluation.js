@@ -22,11 +22,13 @@ export function createKekkaishiStatus(now = Date.now(), barrierCount = 0, config
     peakAchievedAt: "",
     lastEvaluatedAt: iso,
     lastDailyPower: 0,
-    kekkaiCreatedCount: Math.max(0, Math.floor(Number(barrierCount) || 0))
+    kekkaiCreatedCount: Math.max(0, Math.floor(Number(barrierCount) || 0)),
+    startedAt: iso,
+    rankAchievedAt: Array.from({ length: config.kekkaishiRankNames.length }, (_, index) => index === 0 ? iso : null)
   };
 }
 
-export function normalizeKekkaishiStatus(raw, now = Date.now(), barrierCount = 0, config = BARRIER_EVALUATION_CONFIG) {
+export function normalizeKekkaishiStatus(raw, now = Date.now(), barrierCount = 0, config = BARRIER_EVALUATION_CONFIG, barriers = {}) {
   const fallback = createKekkaishiStatus(now, barrierCount, config);
   if (!raw || typeof raw !== "object") return fallback;
   const parsedLast = Date.parse(raw.lastEvaluatedAt);
@@ -39,6 +41,14 @@ export function normalizeKekkaishiStatus(raw, now = Date.now(), barrierCount = 0
   ];
   const historyAverage = history.reduce((sum, value) => sum + value, 0) / config.windowDays;
   const savedPeak = Math.max(0, Number(raw.peakAverage) || 0);
+  const startedAt = validIso(raw.startedAt)
+    ? new Date(raw.startedAt).toISOString()
+    : oldestBarrierDate(barriers) || fallback.startedAt;
+  const savedAchievements = Array.isArray(raw.rankAchievedAt) ? raw.rankAchievedAt : [];
+  const rankAchievedAt = Array.from({ length: config.kekkaishiRankNames.length }, (_, index) => {
+    if (index === 0) return startedAt;
+    return validIso(savedAchievements[index]) ? new Date(savedAchievements[index]).toISOString() : null;
+  });
   return {
     lifetimeOutput: Math.max(0, Number(raw.lifetimeOutput) || 0),
     dailyHistory: history,
@@ -48,8 +58,49 @@ export function normalizeKekkaishiStatus(raw, now = Date.now(), barrierCount = 0
       : historyAverage > savedPeak ? new Date(now).toISOString() : "",
     lastEvaluatedAt: Number.isFinite(parsedLast) ? new Date(parsedLast).toISOString() : fallback.lastEvaluatedAt,
     lastDailyPower: Math.max(0, Number(raw.lastDailyPower) || 0),
-    kekkaiCreatedCount: Math.max(0, Math.floor(Number(raw.kekkaiCreatedCount) || 0))
+    kekkaiCreatedCount: Math.max(0, Math.floor(Number(raw.kekkaiCreatedCount) || 0)),
+    startedAt,
+    rankAchievedAt
   };
+}
+
+export function recordKekkaishiRankAchievements(status, achievedAt = Date.now(), config = BARRIER_EVALUATION_CONFIG) {
+  if (!status || typeof status !== "object") return false;
+  const normalized = normalizeKekkaishiStatus(status, achievedAt, status.kekkaiCreatedCount, config);
+  const timestamp = new Date(achievedAt).toISOString();
+  let changed = false;
+  if (status.startedAt !== normalized.startedAt) {
+    status.startedAt = normalized.startedAt;
+    changed = true;
+  }
+  if (!Array.isArray(status.rankAchievedAt) || status.rankAchievedAt.length !== normalized.rankAchievedAt.length) {
+    status.rankAchievedAt = [...normalized.rankAchievedAt];
+    changed = true;
+  } else {
+    if (status.rankAchievedAt[0] !== status.startedAt) changed = true;
+    status.rankAchievedAt[0] = status.startedAt;
+    for (let index = 1; index < status.rankAchievedAt.length; index += 1) {
+      if (!validIso(status.rankAchievedAt[index]) && status.rankAchievedAt[index] !== null) {
+        status.rankAchievedAt[index] = null;
+        changed = true;
+      }
+    }
+  }
+  const rank = rankForKekkaishi(status, config);
+  for (let index = 1; index <= rank.index; index += 1) {
+    if (status.rankAchievedAt[index] !== null) continue;
+    status.rankAchievedAt[index] = timestamp;
+    changed = true;
+  }
+  return changed;
+}
+
+export function rankAchievementDays(status, rankIndex, config = BARRIER_EVALUATION_CONFIG) {
+  const index = Math.max(0, Math.min(config.kekkaishiRankNames.length - 1, Math.floor(Number(rankIndex) || 0)));
+  const startedAt = Date.parse(status?.startedAt);
+  const achievedAt = Date.parse(status?.rankAchievedAt?.[index]);
+  if (!Number.isFinite(startedAt) || !Number.isFinite(achievedAt)) return null;
+  return Math.max(0, Math.floor((achievedAt - startedAt) / DAY_MS));
 }
 
 export function rankForActiveDays(activeDays, config = BARRIER_EVALUATION_CONFIG) {
@@ -185,7 +236,7 @@ export function evaluateBarrierLog(log, now = Date.now(), config = BARRIER_EVALU
   if (!log || typeof log !== "object") return { changed: false, days: 0, dailyPower: 0 };
   const barrierCount = Object.keys(log.barriers || {}).length;
   const previousStatus = JSON.stringify(log.kekkaishi);
-  log.kekkaishi = normalizeKekkaishiStatus(log.kekkaishi, now, barrierCount, config);
+  log.kekkaishi = normalizeKekkaishiStatus(log.kekkaishi, now, barrierCount, config, log.barriers);
   const status = log.kekkaishi;
   const lastEvaluatedAt = Date.parse(status.lastEvaluatedAt);
   const statusNormalized = previousStatus !== JSON.stringify(status);
@@ -211,6 +262,7 @@ export function evaluateBarrierLog(log, now = Date.now(), config = BARRIER_EVALU
   }
 
   status.lifetimeOutput += dailyPower * days;
+  recordKekkaishiRankAchievements(status, now, config);
   status.dailyHistory.push(...Array.from({ length: Math.min(days, config.windowDays) }, () => dailyPower));
   status.dailyHistory = status.dailyHistory.slice(-config.windowDays);
   status.lastDailyPower = dailyPower;
@@ -290,4 +342,15 @@ export function resetBarrierRankProgress(barrier, power = 0, now = Date.now()) {
 function barrierIdForStone(log, stoneId) {
   return Object.entries(log?.barriers || {})
     .find(([, barrier]) => Array.isArray(barrier?.vertices) && barrier.vertices.includes(stoneId))?.[0] || null;
+}
+
+function validIso(value) {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
+
+function oldestBarrierDate(barriers) {
+  const dates = Object.values(barriers || {})
+    .map((barrier) => Date.parse(barrier?.createdAt))
+    .filter(Number.isFinite);
+  return dates.length > 0 ? new Date(Math.min(...dates)).toISOString() : null;
 }

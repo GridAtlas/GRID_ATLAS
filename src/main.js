@@ -58,7 +58,8 @@ import {
   barrierRankStoneProgress,
   rankForKekkaishi,
   rankForBarrier,
-  recentAverage
+  recentAverage,
+  rankAchievementDays
 } from "./barrier-evaluation.js?v=1";
 
 const STORAGE_KEY = "grid-atlas-workspace-v2";
@@ -104,7 +105,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1858";
+const WEB_VERSION = "0.1868";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -1216,6 +1217,7 @@ const TRANSLATIONS = {
     ,"barrier.shareText": "GRID ATLAS「{name}」｜{rank} {power}力 #GRIDATLAS #結界"
     ,"kekkaishi.title": "結界師ステータス"
     ,"kekkaishi.rank": "結界師ランク"
+    ,"kekkaishi.achievedDays": "（{days}日で到達）"
     ,"kekkaishi.lifetime": "累積結界力"
     ,"kekkaishi.peak": "ピーク平均"
     ,"kekkaishi.recent": "直近平均"
@@ -1727,6 +1729,7 @@ const TRANSLATIONS = {
     ,"barrier.shareText": "GRID ATLAS \"{name}\" | {rank} {power} power #GRIDATLAS #Barrier"
     ,"kekkaishi.title": "Kekkaishi status"
     ,"kekkaishi.rank": "Kekkaishi rank"
+    ,"kekkaishi.achievedDays": "({days} days to reach)"
     ,"kekkaishi.lifetime": "Lifetime barrier power"
     ,"kekkaishi.peak": "Peak average"
     ,"kekkaishi.recent": "Recent average"
@@ -6566,7 +6569,10 @@ function renderKekkaishiStatusDialog() {
   const rank = rankForKekkaishi(status);
   const recent = recentAverage(status);
   const peakRatio = rank.peak > 0 ? recent / rank.peak : null;
-  if (elements.kekkaishiStatusRank) elements.kekkaishiStatusRank.textContent = rank.name;
+  const achievedDays = rank.index > 0 ? rankAchievementDays(status, rank.index) : null;
+  if (elements.kekkaishiStatusRank) {
+    elements.kekkaishiStatusRank.textContent = `${rank.name}${achievedDays === null ? "" : ` ${t("kekkaishi.achievedDays").replace("{days}", String(achievedDays))}`}`;
+  }
   if (elements.kekkaishiStatusLifetime) elements.kekkaishiStatusLifetime.textContent = `${formatScoreValue(rank.lifetime)} 結界日`;
   if (elements.kekkaishiStatusPeak) elements.kekkaishiStatusPeak.textContent = `${formatScoreValue(rank.peak)} 力${status.peakAchievedAt ? `（${formatMonth(status.peakAchievedAt)}）` : ""}`;
   if (elements.kekkaishiStatusRecent) elements.kekkaishiStatusRecent.textContent = `${formatScoreValue(recent)} 力`;

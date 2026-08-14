@@ -24,6 +24,7 @@ export const BARRIER_CONFIG = Object.freeze({
 export const BARRIER_LOG_SCHEMA_VERSION = 3;
 
 export function createBarrierLog(now = Date.now()) {
+  const startedAt = new Date(now).toISOString();
   return {
     type: "barrier-log",
     schemaVersion: BARRIER_LOG_SCHEMA_VERSION,
@@ -37,7 +38,9 @@ export function createBarrierLog(now = Date.now()) {
       peakAchievedAt: "",
       lastEvaluatedAt: new Date(now).toISOString(),
       lastDailyPower: 0,
-      kekkaiCreatedCount: 0
+      kekkaiCreatedCount: 0,
+      startedAt,
+      rankAchievedAt: [startedAt]
     },
     stock: {
       amount: BARRIER_CONFIG.dailyGrant,
