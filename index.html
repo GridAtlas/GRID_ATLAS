@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=72">
-    <script src="src/main.js?v=392" type="module" defer></script>
+    <script src="src/main.js?v=393" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -116,19 +116,10 @@
                 <input id="settingsGpsEnabled" type="checkbox">
                 <span data-i18n="settings.gps">GPS機能を使用</span>
               </label>
-              <label class="settings-check" data-tester-feature="barrier">
-                <input id="settingsTraverseMode" type="checkbox">
-                <span data-i18n="settings.traverseMode">結界モード</span>
-              </label>
               <label class="settings-check">
                 <input id="settingsGuardianLabelInImage" type="checkbox">
                 <span data-i18n="settings.guardianLabelInImage">共有画像に守護点ラベルを表示</span>
               </label>
-              <div class="settings-nav settings-nav-subtle" data-tester-feature="barrier">
-                <button id="openKekkaishiStatusButton" class="settings-nav-button" type="button" data-i18n="settings.kekkaishiStatus">結界師ステータス</button>
-              </div>
-
-
               <div class="settings-nav settings-nav-subtle">
                 <button id="openGridAtlasButton" class="settings-nav-button" type="button" data-i18n="settings.openGridAtlas">.gridatlasを開く</button>
               </div>

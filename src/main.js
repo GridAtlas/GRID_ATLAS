@@ -81,7 +81,6 @@ const PUBLIC_PRESET_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const GPS_ENABLED_KEY = "grid-atlas-gps-enabled";
 const BARRIER_LOG_KEY = "grid-atlas-barrier-log-v1";
 const LEGACY_TRAVERSE_LOG_KEY = "grid-atlas-traverse-log-v1";
-const TRAVERSE_URL_PARAMETER = "traverse";
 const DRAGON_EYE_LIST_NAME = "結界モード龍脈眼";
 const DRAGON_EYE_SHAPES = Object.freeze({
   triangle: Object.freeze({ sides: 3, rotation: -Math.PI / 2, glyph: "△", ja: "正三角形", en: "Equilateral triangle" }),
@@ -117,7 +116,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1931";
+const WEB_VERSION = "0.1932";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -274,9 +273,7 @@ const elements = {
   settingsLanguageSelect: document.querySelector("#settingsLanguageSelect"),
   settingsUnitSelect: document.querySelector("#settingsUnitSelect"),
   settingsGpsEnabled: document.querySelector("#settingsGpsEnabled"),
-  settingsTraverseMode: document.querySelector("#settingsTraverseMode"),
   settingsGuardianLabelInImage: document.querySelector("#settingsGuardianLabelInImage"),
-  testerBarrierFeatures: Array.from(document.querySelectorAll('[data-tester-feature="barrier"]')),
   settingsMapProviderSelect: document.querySelector("#settingsMapProviderSelect"),
   systemUpdateButton: document.querySelector("#systemUpdateButton"),
   systemUpdateStatus: document.querySelector("#systemUpdateStatus"),
@@ -381,7 +378,6 @@ const elements = {
   barrierDetailRank: document.querySelector("#barrierDetailRank"),
   barrierDetailPower: document.querySelector("#barrierDetailPower"),
   barrierRankProgress: document.querySelector("#barrierRankProgress"),
-  openKekkaishiStatusButton: document.querySelector("#openKekkaishiStatusButton"),
   kekkaishiStatusDialog: document.querySelector("#kekkaishiStatusDialog"),
   kekkaishiStatusRank: document.querySelector("#kekkaishiStatusRank"),
   kekkaishiStatusLifetime: document.querySelector("#kekkaishiStatusLifetime"),
@@ -757,9 +753,7 @@ const TRANSLATIONS = {
     "settings.language": "言語",
     "settings.units": "距離単位",
     "settings.gps": "GPS機能を使用",
-    "settings.traverseMode": "結界モード",
     "settings.guardianLabelInImage": "共有画像に守護点ラベルを表示",
-    "settings.kekkaishiStatus": "結界師ステータス",
     "settings.mapProvider": "地図サービス",
     "settings.mapGoogle": "Googleマップ",
     "settings.mapApple": "Appleマップ",
@@ -1179,7 +1173,6 @@ const TRANSLATIONS = {
     "traverse.modeOffMessage": "通常モードに戻ります。",
     "traverse.modeOnConfirm": "切り替える",
     "traverse.modeOffConfirm": "終了する",
-    "traverse.modeUnavailable": "結界モードを使用する権限がありません",
     "traverse.summary": "手持ち{stock}個 / 設置済{installed}個 / {locations}箇所",
     "traverse.stoneStatus": "結界石の状況",
     "traverse.stockShort": "手持ち",
@@ -1285,9 +1278,7 @@ const TRANSLATIONS = {
     "settings.language": "Language",
     "settings.units": "Distance Unit",
     "settings.gps": "Use GPS",
-    "settings.traverseMode": "Barrier mode",
     "settings.guardianLabelInImage": "Show guardian label in shared image",
-    "settings.kekkaishiStatus": "Kekkaishi status",
     "settings.mapProvider": "Map service",
     "settings.mapGoogle": "Google Maps",
     "settings.mapApple": "Apple Maps",
@@ -1707,7 +1698,6 @@ const TRANSLATIONS = {
     "traverse.modeOffMessage": "The app will return to normal mode.",
     "traverse.modeOnConfirm": "Switch",
     "traverse.modeOffConfirm": "Exit",
-    "traverse.modeUnavailable": "You do not have permission to use barrier mode",
     "traverse.summary": "Hand {stock} / placed {installed} / {locations} locations",
     "traverse.stoneStatus": "Barrier stone status",
     "traverse.stockShort": "Hand",
@@ -1923,27 +1913,13 @@ async function setGpsEnabled(value, options = {}) {
   return true;
 }
 function syncSettingsControls() {
-  enforceBarrierModeAccess();
-  for (const feature of elements.testerBarrierFeatures) feature.hidden = state.cloud.testerActive !== true;
   elements.settingsThemeSelect.value = currentTheme();
   elements.settingsLanguageSelect.value = activeLanguage();
   elements.settingsUnitSelect.value = state.distanceUnit;
   elements.settingsGpsEnabled.checked = state.gpsEnabled;
-  elements.settingsTraverseMode.checked = state.traverseMode;
   if (elements.settingsGuardianLabelInImage) elements.settingsGuardianLabelInImage.checked = state.guardianLabelInImage;
-  if (elements.openKekkaishiStatusButton) elements.openKekkaishiStatusButton.disabled = !state.traverseMode;
   elements.settingsMapProviderSelect.value = state.mapProvider;
   elements.routeReturnToStart.checked = state.routeReturnToStart;
-}
-
-function enforceBarrierModeAccess() {
-  if (state.cloud.testerActive === true || !state.traverseMode) return;
-  state.traverseMode = false;
-  state.barrierSelection = [];
-  state.selectedBarrierId = null;
-  state.guardianPlacementMode = false;
-  clearSelection({ render: false });
-  closeTraverseActionDialog();
 }
 
 function loadTraverseLog() {
@@ -2343,7 +2319,7 @@ function beginBarrierLinking() {
 }
 
 function setTraverseMode(enabled) {
-  state.traverseMode = Boolean(enabled) && state.cloud.testerActive === true;
+  state.traverseMode = Boolean(enabled);
   state.barrierPlacementView = false;
   resetBarrierLinkState();
   resetDragonEyeState();
@@ -2369,11 +2345,6 @@ async function requestTraverseModeToggle() {
     danger: false
   });
   if (!confirmed) {
-    syncSettingsControls();
-    return;
-  }
-  if (nextMode && state.cloud.testerActive !== true) {
-    showAppToast(t("traverse.modeUnavailable"), { error: true });
     syncSettingsControls();
     return;
   }
@@ -4874,7 +4845,6 @@ function drawRangeSelection() {
 }
 
 function render() {
-  enforceBarrierModeAccess();
   refreshVisiblePoints();
   pruneHiddenPointReferences();
   normalizeSelection();
@@ -5271,15 +5241,10 @@ function renderStatus() {
 function renderTraverseActionButton() {
   const button = elements.traverseActionButton;
   if (!button) return;
-  const testerCanUseBarrier = state.cloud.testerActive === true;
-  button.hidden = !state.traverseMode && !testerCanUseBarrier;
+  button.hidden = !state.traverseMode;
   if (!state.traverseMode) {
-    const modeLabel = t("settings.traverseMode");
-    elements.traverseActionLabel.textContent = modeLabel;
-    button.disabled = state.cloud.busy;
+    button.disabled = false;
     button.classList.remove("is-dragon-eye-active", "is-placement-view-active");
-    button.setAttribute("aria-label", modeLabel);
-    button.title = modeLabel;
     return;
   }
 
@@ -5584,10 +5549,6 @@ function barrierIdForStone(log, stoneId) {
 }
 
 function handleTraverseActionClick() {
-  if (!state.traverseMode) {
-    void requestTraverseModeToggle();
-    return;
-  }
   if (state.barrierPlacementView) {
     exitBarrierPlacementView();
     return;
@@ -9364,7 +9325,6 @@ async function refreshCloudLists(options = {}) {
     state.cloud.canUseMine = response.permissions?.mine === true;
     state.cloud.testerActive = response.permissions?.tester === true
       || state.cloud.lists.some((list) => list.scope === "testerShared");
-    if (state.cloud.testerActive) applyTraverseModeFromUrl();
     state.cloud.testerError = state.cloud.testerCode && !state.cloud.testerActive
       ? cloudText("テスター権限を確認できませんでした。コードを確認してください。", "Tester permission could not be confirmed. Check the code.")
       : "";
@@ -14160,19 +14120,6 @@ function incomingGridAtlasPresetName() {
   return new URLSearchParams(window.location.search).get(GRIDATLAS_PRESET_PARAMETER) || "";
 }
 
-function incomingTraverseModeEnabled() {
-  const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
-  const hashValue = new URLSearchParams(hash).get(TRAVERSE_URL_PARAMETER);
-  const queryValue = new URLSearchParams(window.location.search).get(TRAVERSE_URL_PARAMETER);
-  return [hashValue, queryValue].some((value) => value === "1" || value === "true");
-}
-
-function applyTraverseModeFromUrl() {
-  if (state.cloud.testerActive === true && incomingTraverseModeEnabled()) {
-    state.traverseMode = true;
-  }
-}
-
 function publicGridAtlasPresetUrl(name) {
   if (!PUBLIC_PRESET_NAME_PATTERN.test(name)) {
     throw new GridAtlasImportError("紹介用プリセット名が不正です");
@@ -14557,16 +14504,12 @@ function bindEvents() {
   elements.settingsGpsEnabled.addEventListener("change", () => {
     void setGpsEnabled(elements.settingsGpsEnabled.checked);
   });
-  elements.settingsTraverseMode.addEventListener("change", () => {
-    setTraverseMode(elements.settingsTraverseMode.checked);
-  });
   elements.settingsGuardianLabelInImage?.addEventListener("change", () => {
     state.guardianLabelInImage = elements.settingsGuardianLabelInImage.checked;
     try {
       localStorage.setItem(GUARDIAN_LABEL_IN_IMAGE_KEY, String(state.guardianLabelInImage));
     } catch {}
   });
-  elements.openKekkaishiStatusButton?.addEventListener("click", openKekkaishiStatusDialog);
   elements.shareKekkaishiStatusButton?.addEventListener("click", () => void shareKekkaishiStatus());
   elements.kekkaishiStatusDialog?.addEventListener("click", (event) => {
     if (event.target === elements.kekkaishiStatusDialog) elements.kekkaishiStatusDialog.close("cancel");
@@ -14604,7 +14547,6 @@ function bindEvents() {
     state.cloud.testerActive = false;
     state.cloud.testerError = "";
     state.cloud.connected = Boolean(state.cloud.authSession?.access_token);
-    enforceBarrierModeAccess();
     renderStorageLists();
     syncCloudControls();
     if (wasTraverseMode) render();
@@ -15107,7 +15049,6 @@ loadTheme();
 loadWorkspace();
 loadTraverseLog();
 loadPreferences();
-applyTraverseModeFromUrl();
 loadCloudSettings();
 moveCloudAuthPanelToDialog();
 moveCloudPasswordPanelToAuth();
