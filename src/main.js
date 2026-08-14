@@ -116,7 +116,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1933";
+const WEB_VERSION = "0.1934";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -440,8 +440,8 @@ const elements = {
   routeSummary: document.querySelector("#routeSummary"),
   routeList: document.querySelector("#routeList"),
   newPointListButtons: Array.from(document.querySelectorAll("[data-new-point-list]")),
-  selectAllPointButtons: Array.from(document.querySelectorAll("[data-select-all-points]")),
-  clearAllPointButtons: Array.from(document.querySelectorAll("[data-clear-all-points]")),
+  selectAllListButtons: Array.from(document.querySelectorAll("[data-select-all-lists]")),
+  clearAllListButtons: Array.from(document.querySelectorAll("[data-clear-all-lists]")),
 
   pointImportFile: document.querySelector("#pointImportFile"),
   storageListContainers: Array.from(document.querySelectorAll("[data-storage-list-items]")),
@@ -1059,9 +1059,9 @@ const TRANSLATIONS = {
     "storage.targetTesterShared": "共有リスト（テスター間実験）",
     "list.new": "新規",
     "list.selectAll": "全選択",
-    "list.selectAllTitle": "すべての地点を選択",
+    "list.selectAllTitle": "すべてのリストをグリッドに表示",
     "list.clearAll": "全解除",
-    "list.clearAllTitle": "選択をすべて解除",
+    "list.clearAllTitle": "すべてのリストをグリッドから非表示",
     "list.newPrompt": "新しいリストの名前",
     "list.created": "新しいリストを作成し、登録先にしました",
     "list.active": "地点登録先",
@@ -1584,9 +1584,9 @@ const TRANSLATIONS = {
     "storage.targetTesterShared": "Shared Lists (Tester Experiment)",
     "list.new": "New",
     "list.selectAll": "Select all",
-    "list.selectAllTitle": "Select all points in the lists",
+    "list.selectAllTitle": "Show all lists on the grid",
     "list.clearAll": "Clear all",
-    "list.clearAllTitle": "Clear all selections",
+    "list.clearAllTitle": "Hide all lists from the grid",
     "list.newPrompt": "Name the new list",
     "list.created": "Created a new list and set it as the destination",
     "list.active": "Destination",
@@ -2921,20 +2921,6 @@ function visibleCloudPoints() {
 
 function visibleSelectablePoints() {
   return [...state.points, ...visibleCloudPoints()];
-}
-
-function allSelectablePoints() {
-  ensurePointLists();
-  const localPoints = allPointListPoints();
-  const cloudPoints = state.cloud.connected
-    ? state.cloud.pointLists.flatMap((list) => (Array.isArray(list.points) ? list.points : [])).map(syncProjectedPoint).filter(Boolean)
-    : [];
-  const seen = new Set();
-  return [...localPoints, ...cloudPoints].filter((point) => {
-    if (!point?.id || seen.has(point.id)) return false;
-    seen.add(point.id);
-    return true;
-  });
 }
 
 function pointListStorageKey(list) {
@@ -5580,7 +5566,9 @@ function renderActionButtons() {
   const hasPendingPoint = validGeo(state.pendingGeo);
   const pointIds = selectedPointIds();
   const visiblePointCount = new Set(visibleSelectablePoints().map((point) => point.id)).size;
-  const selectablePointCount = allSelectablePoints().length;
+  const displayableListEntries = storageListEntries().filter((entry) => entry.local || entry.preview);
+  const visibleListCount = displayableListEntries.filter((entry) => storageListIsVisible(entry)).length;
+  const hiddenListCount = displayableListEntries.length - visibleListCount;
   const canInvertSelection = !state.editingPointId
     && !hasPendingPoint
     && visiblePointCount > 0;
@@ -5616,11 +5604,11 @@ function renderActionButtons() {
   elements.actionShareSelectedButton.disabled = shareableSelectedPointCount === 0;
   elements.actionMapButton.disabled = !mapCandidate;
   elements.actionInvertButton.disabled = !canInvertSelection;
-  for (const button of elements.selectAllPointButtons) {
-    button.disabled = selectablePointCount === 0 || state.cloud.busy;
+  for (const button of elements.selectAllListButtons) {
+    button.disabled = hiddenListCount === 0 || state.cloud.busy;
   }
-  for (const button of elements.clearAllPointButtons) {
-    button.disabled = state.selection.length === 0 && !hasPendingPoint && barrierSelectionCount === 0;
+  for (const button of elements.clearAllListButtons) {
+    button.disabled = visibleListCount === 0 || state.cloud.busy;
   }
   elements.actionMapButton.title = mapCandidate?.isPending
     ? "仮ポイントを地図で開く"
@@ -10385,17 +10373,6 @@ function invertVisiblePointSelection() {
   setSelection([...nonPointSelection, ...nextPointSelection]);
 }
 
-function selectAllPoints() {
-  const pointIds = allSelectablePoints().map((point) => point.id).filter(Boolean);
-  if (pointIds.length === 0) return;
-
-  state.mode = "inspect";
-  setSelection([
-    ...state.selection.filter((entry) => entry.type !== "point"),
-    ...pointIds.map((id) => ({ type: "point", id }))
-  ]);
-}
-
 function clearSelection(options = {}) {
   state.mode = "inspect";
   state.selection = [];
@@ -10414,6 +10391,40 @@ function clearSelection(options = {}) {
   if (options.render !== false) {
     render();
   }
+}
+
+function setAllStorageListsVisible(visible) {
+  const entries = storageListEntries();
+  let changed = false;
+
+  for (const entry of entries) {
+    const list = entry.local ?? entry.preview;
+    if (!list) continue;
+
+    if (entry.local && entry.local.visible !== visible) {
+      entry.local.visible = visible;
+      entry.local.updatedAt = new Date().toISOString();
+      changed = true;
+    }
+
+    if (!entry.local && entry.cloud) {
+      const cloudId = entry.cloud.id || entry.preview?.cloudId || entry.preview?.id;
+      if (cloudId) {
+        if (visible) {
+          changed = state.cloud.hiddenListIds.delete(cloudId) || changed;
+        } else if (!state.cloud.hiddenListIds.has(cloudId)) {
+          state.cloud.hiddenListIds.add(cloudId);
+          changed = true;
+        }
+      }
+    }
+  }
+
+  if (!changed) return;
+  refreshVisiblePoints();
+  if (!visible) pruneHiddenPointReferences();
+  persistWorkspace();
+  render();
 }
 
 function removeSelectionEntry(type, id) {
@@ -14869,11 +14880,11 @@ function bindEvents() {
   for (const button of elements.newPointListButtons) {
     button.addEventListener("click", () => void createNewPointList());
   }
-  for (const button of elements.selectAllPointButtons) {
-    button.addEventListener("click", selectAllPoints);
+  for (const button of elements.selectAllListButtons) {
+    button.addEventListener("click", () => setAllStorageListsVisible(true));
   }
-  for (const button of elements.clearAllPointButtons) {
-    button.addEventListener("click", () => clearSelection());
+  for (const button of elements.clearAllListButtons) {
+    button.addEventListener("click", () => setAllStorageListsVisible(false));
   }
 
   elements.pointImportFile.addEventListener("change", async () => {

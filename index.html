@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=72">
-    <script src="src/main.js?v=394" type="module" defer></script>
+    <script src="src/main.js?v=395" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -266,8 +266,8 @@
                 <p class="storage-list-drag-hint" data-i18n="storage.dragHint">リストをタップするとグリッド表示をオン／オフできます。長押しすると地点一覧を表示します。少し長押ししてからドラッグすると、リストを移動できます。</p>
                 <div class="list-management-actions">
                   <button class="compact-button" type="button" data-new-point-list><svg class="ui-icon" aria-hidden="true"><use href="#icon-plus"></use></svg><span data-i18n="list.new">新規</span></button>
-                  <button class="compact-button" type="button" data-select-all-points data-i18n="list.selectAll" data-i18n-title="list.selectAllTitle">全選択</button>
-                  <button class="compact-button" type="button" data-clear-all-points data-i18n="list.clearAll" data-i18n-title="list.clearAllTitle">全解除</button>
+                  <button class="compact-button" type="button" data-select-all-lists data-i18n="list.selectAll" data-i18n-title="list.selectAllTitle">全選択</button>
+                  <button class="compact-button" type="button" data-clear-all-lists data-i18n="list.clearAll" data-i18n-title="list.clearAllTitle">全解除</button>
                 </div>
               </div>
               <div id="mobilePointListItems" class="storage-list-items" data-storage-list-items></div>
@@ -453,8 +453,8 @@
               <p class="storage-list-drag-hint" data-i18n="storage.dragHint">リストをタップするとグリッド表示をオン／オフできます。長押しすると地点一覧を表示します。少し長押ししてからドラッグすると、リストを移動できます。</p>
               <div class="list-management-actions">
                 <button class="compact-button" type="button" data-new-point-list><svg class="ui-icon" aria-hidden="true"><use href="#icon-plus"></use></svg><span data-i18n="list.new">新規</span></button>
-                <button class="compact-button" type="button" data-select-all-points data-i18n="list.selectAll" data-i18n-title="list.selectAllTitle">全選択</button>
-                <button class="compact-button" type="button" data-clear-all-points data-i18n="list.clearAll" data-i18n-title="list.clearAllTitle">全解除</button>
+                <button class="compact-button" type="button" data-select-all-lists data-i18n="list.selectAll" data-i18n-title="list.selectAllTitle">全選択</button>
+                <button class="compact-button" type="button" data-clear-all-lists data-i18n="list.clearAll" data-i18n-title="list.clearAllTitle">全解除</button>
               </div>
             </div>
             <div id="pointListItems" class="storage-list-items" data-storage-list-items></div>
