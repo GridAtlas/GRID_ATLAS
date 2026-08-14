@@ -89,7 +89,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1703";
+const WEB_VERSION = "0.1713";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -108,6 +108,7 @@ const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
 const BARRIER_TILE_MIN_SCREEN_SIZE = POINT_RADIUS * 2 + 8;
 const BARRIER_LINK_LONG_PRESS_MS = 500;
+const GRID_MODE_LONG_PRESS_MS = 2000;
 const BARRIER_LINK_DWELL_MS = 500;
 const BARRIER_LINK_SEGMENT_MS = 460;
 const BARRIER_LINK_COMPLETION_MS = 1100;
@@ -582,6 +583,11 @@ let traversePressTimerId = 0;
 let traversePressPointerId = null;
 let traverseLongPressTriggered = false;
 let traverseSuppressClick = false;
+let gridModePressTimerId = 0;
+let gridModePressPointerId = null;
+let gridModePressTab = null;
+let gridModeLongPressTriggered = false;
+let gridModeSuppressClick = false;
 
 Object.defineProperty(state, "links", {
   configurable: true,
@@ -1082,6 +1088,13 @@ const TRANSLATIONS = {
     "traverse.connect": "結界を結ぶ",
     "traverse.status": "ステータス確認",
     "traverse.menuTitle": "結界操作",
+    "traverse.modeOnTitle": "結界モードに切り替えますか？",
+    "traverse.modeOffTitle": "結界モードを終了しますか？",
+    "traverse.modeOnMessage": "結界石の操作が有効になります。",
+    "traverse.modeOffMessage": "通常モードに戻ります。",
+    "traverse.modeOnConfirm": "切り替える",
+    "traverse.modeOffConfirm": "終了する",
+    "traverse.modeUnavailable": "結界モードを使用する権限がありません",
     "traverse.summary": "手持ち{stock}個 / 設置済{installed}個 / {locations}箇所",
     "traverse.stoneStatus": "結界石の状況",
     "traverse.stockShort": "手持ち",
@@ -1561,6 +1574,13 @@ const TRANSLATIONS = {
     "traverse.connect": "Bind barrier",
     "traverse.status": "Check status",
     "traverse.menuTitle": "Barrier operation",
+    "traverse.modeOnTitle": "Switch to barrier mode?",
+    "traverse.modeOffTitle": "Exit barrier mode?",
+    "traverse.modeOnMessage": "Barrier stone controls will be enabled.",
+    "traverse.modeOffMessage": "The app will return to normal mode.",
+    "traverse.modeOnConfirm": "Switch",
+    "traverse.modeOffConfirm": "Exit",
+    "traverse.modeUnavailable": "You do not have permission to use barrier mode",
     "traverse.summary": "Hand {stock} / placed {installed} / {locations} locations",
     "traverse.stoneStatus": "Barrier stone status",
     "traverse.stockShort": "Hand",
@@ -1973,6 +1993,23 @@ function setTraverseMode(enabled) {
     refreshTraverseStock();
   }
   render();
+}
+
+async function requestTraverseModeToggle() {
+  const nextMode = !state.traverseMode;
+  const confirmed = await requestConfirm({
+    title: t(nextMode ? "traverse.modeOnTitle" : "traverse.modeOffTitle"),
+    message: t(nextMode ? "traverse.modeOnMessage" : "traverse.modeOffMessage"),
+    cancelLabel: t("action.cancel"),
+    confirmLabel: t(nextMode ? "traverse.modeOnConfirm" : "traverse.modeOffConfirm"),
+    danger: false
+  });
+  if (!confirmed) return;
+  if (nextMode && state.cloud.testerActive !== true) {
+    showAppToast(t("traverse.modeUnavailable"), { error: true });
+    return;
+  }
+  setTraverseMode(nextMode);
 }
 
 function setTraverseFeedback(message, duration = 3500) {
@@ -4600,6 +4637,51 @@ function setMobileGridPage(name) {
 
   if (pageName === "grid") {
     scheduleCanvasResize();
+  }
+}
+
+function clearGridModeLongPress() {
+  if (gridModePressTimerId) window.clearTimeout(gridModePressTimerId);
+  gridModePressTimerId = 0;
+  gridModePressPointerId = null;
+  gridModePressTab = null;
+  gridModeLongPressTriggered = false;
+}
+
+function startGridModeLongPress(event) {
+  if (event.currentTarget?.dataset.mobileGridPage !== "grid") return;
+  if (event.pointerType === "mouse" && event.button !== 0) return;
+  clearGridModeLongPress();
+  gridModePressPointerId = event.pointerId;
+  gridModePressTab = event.currentTarget;
+  gridModePressTimerId = window.setTimeout(() => {
+    if (!gridModePressTab || gridModePressPointerId !== event.pointerId) return;
+    gridModePressTimerId = 0;
+    gridModeLongPressTriggered = true;
+    gridModeSuppressClick = true;
+    void requestTraverseModeToggle();
+  }, GRID_MODE_LONG_PRESS_MS);
+}
+
+function finishGridModeLongPress(event) {
+  if (gridModePressPointerId !== null && event.pointerId !== gridModePressPointerId) return;
+  if (gridModePressTimerId) window.clearTimeout(gridModePressTimerId);
+  gridModePressTimerId = 0;
+  gridModePressPointerId = null;
+  gridModePressTab = null;
+  if (gridModeLongPressTriggered) event.preventDefault();
+  gridModeLongPressTriggered = false;
+}
+
+function handleMobileGridTabClick(tab, event) {
+  if (tab.dataset.mobileGridPage === "grid" && gridModeSuppressClick) {
+    gridModeSuppressClick = false;
+    event.preventDefault();
+    return;
+  }
+  setMobileGridPage(tab.dataset.mobileGridPage);
+  if (tab.closest(".sidebar")) {
+    setMobilePage("map");
   }
 }
 
@@ -14060,12 +14142,13 @@ function bindEvents() {
     });
   }
   for (const tab of elements.mobileGridTabs) {
-    tab.addEventListener("click", () => {
-      setMobileGridPage(tab.dataset.mobileGridPage);
-      if (tab.closest(".sidebar")) {
-        setMobilePage("map");
-      }
-    });
+    tab.addEventListener("click", (event) => handleMobileGridTabClick(tab, event));
+    if (tab.dataset.mobileGridPage === "grid") {
+      tab.addEventListener("pointerdown", startGridModeLongPress);
+      tab.addEventListener("pointerup", finishGridModeLongPress);
+      tab.addEventListener("pointercancel", finishGridModeLongPress);
+      tab.addEventListener("pointerleave", finishGridModeLongPress);
+    }
   }
 
   canvas.addEventListener("pointerdown", (event) => {

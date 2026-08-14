@@ -1107,22 +1107,21 @@ button {
 .traverse-action-button {
   position: absolute;
   left: 50%;
-  bottom: max(42px, calc(14px + env(safe-area-inset-bottom)));
+  bottom: max(14px, env(safe-area-inset-bottom));
   z-index: 10;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  width: min(180px, calc(100vw - 28px));
+  gap: 4px;
+  width: auto;
   min-width: 0;
-  min-height: 56px;
-  padding: 0 28px;
-  border: 2px solid var(--accent);
-  border-radius: 0;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
   background: var(--active-bg);
   color: var(--accent-strong);
-  box-shadow: var(--shadow), 0 0 0 3px rgb(255 255 255 / 0.12);
-  clip-path: polygon(8% 0, 92% 0, 100% 50%, 92% 100%, 8% 100%, 0 50%);
+  box-shadow: var(--shadow), 0 0 0 1px rgb(255 255 255 / 0.08);
   transform: translateX(-50%);
   white-space: nowrap;
   pointer-events: auto;
@@ -1131,12 +1130,7 @@ button {
 }
 
 .traverse-action-button::before {
-  position: absolute;
-  inset: 5px;
-  border: 1px solid var(--accent);
-  content: "";
-  pointer-events: none;
-  clip-path: polygon(7% 0, 93% 0, 100% 50%, 93% 100%, 7% 100%, 0 50%);
+  display: none;
 }
 
 .traverse-action-button:hover:not(:disabled),
@@ -1152,9 +1146,9 @@ button {
 .traverse-action-label {
   position: relative;
   z-index: 1;
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 900;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 
 .traverse-action-value {
