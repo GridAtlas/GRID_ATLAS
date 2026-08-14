@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=70">
-    <script src="src/main.js?v=367" type="module" defer></script>
+    <script src="src/main.js?v=368" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -252,7 +252,7 @@
               </div>
               <output id="statusLine" class="status-line" aria-live="polite"></output>
               <button id="traverseActionButton" class="traverse-action-button" type="button" hidden>
-                <span id="traverseActionLabel" class="traverse-action-label" data-i18n="action.traverse">結界</span>
+                <span id="traverseActionLabel" class="traverse-action-label" data-i18n="traverse.menuTitle">結界操作</span>
                 <strong id="traverseActionValue" class="traverse-action-value"></strong>
               </button>
             </section>
@@ -519,13 +519,14 @@
     <dialog id="traverseActionDialog" class="traverse-action-dialog" aria-labelledby="traverseActionDialogTitle" tabindex="-1">
       <form class="traverse-action-dialog-form" method="dialog">
         <div class="traverse-action-dialog-heading">
-          <h2 id="traverseActionDialogTitle" data-i18n="traverse.menuTitle" tabindex="-1">結界石</h2>
+          <h2 id="traverseActionDialogTitle" data-i18n="traverse.menuTitle" tabindex="-1">結界操作</h2>
           <button class="share-link-close" type="submit" value="cancel" aria-label="閉じる" title="閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
         </div>
         <div class="traverse-action-dialog-actions">
           <button id="traversePlaceButton" class="primary-button" type="button" data-i18n="traverse.place">置く</button>
           <button id="traversePickButton" type="button" data-i18n="traverse.pick">拾う</button>
-          <button id="traverseCreateBarrierButton" type="button" data-i18n="barrier.createTitle">結界を張る</button>
+          <button id="traverseCreateBarrierButton" type="button" data-i18n="traverse.connect">結界を結ぶ</button>
+          <button id="traverseStatusButton" type="button" data-i18n="traverse.status">ステータス確認</button>
         </div>
       </form>
     </dialog>

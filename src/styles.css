@@ -1112,15 +1112,16 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  min-width: 124px;
-  min-height: 48px;
-  padding: 0 15px;
-  border: 2px solid var(--accent);
-  border-radius: 999px 999px 12px 999px;
-  background: var(--surface-strong);
-  color: var(--accent-strong);
-  box-shadow: var(--shadow), 0 0 0 3px rgb(255 255 255 / 0.12);
+  gap: 8px;
+  min-width: min(320px, calc(100vw - 28px));
+  min-height: 56px;
+  padding: 0 28px;
+  border: 2px solid #f28a2e;
+  border-radius: 0;
+  background: rgb(242 138 46 / 0.12);
+  color: #b95712;
+  box-shadow: var(--shadow), 0 0 0 3px rgb(242 138 46 / 0.12);
+  clip-path: polygon(8% 0, 92% 0, 100% 50%, 92% 100%, 8% 100%, 0 50%);
   transform: translateX(-50%);
   white-space: nowrap;
   pointer-events: auto;
@@ -1128,9 +1129,18 @@ button {
   user-select: none;
 }
 
+.traverse-action-button::before {
+  position: absolute;
+  inset: 5px;
+  border: 1px solid rgb(242 138 46 / 0.78);
+  content: "";
+  pointer-events: none;
+  clip-path: polygon(7% 0, 93% 0, 100% 50%, 93% 100%, 7% 100%, 0 50%);
+}
+
 .traverse-action-button:hover:not(:disabled),
 .traverse-action-button.is-centering {
-  background: var(--active-bg);
+  background: rgb(242 138 46 / 0.22);
 }
 
 .traverse-action-button:disabled {
@@ -1139,13 +1149,17 @@ button {
 }
 
 .traverse-action-label {
-  font-size: 13px;
+  position: relative;
+  z-index: 1;
+  font-size: 14px;
   font-weight: 900;
   letter-spacing: 0.04em;
 }
 
 .traverse-action-value {
-  font-size: 14px;
+  position: relative;
+  z-index: 1;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1186,6 +1200,10 @@ button {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.traverse-action-dialog-actions button {
+  min-height: 48px;
 }
 
 .kekkaishi-status-dialog {
@@ -1256,7 +1274,12 @@ button {
 }
 
 :root[data-theme="retro"] .traverse-action-button {
-  box-shadow: var(--shadow), 0 0 14px rgb(44 255 100 / 0.26);
+  color: #ffb36a;
+  box-shadow: var(--shadow), 0 0 14px rgb(242 138 46 / 0.34);
+}
+
+canvas.is-barrier-linking {
+  cursor: crosshair;
 }
 
 .sidebar {
