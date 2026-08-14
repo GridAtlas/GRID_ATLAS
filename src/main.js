@@ -1059,7 +1059,7 @@ const TRANSLATIONS = {
     "storage.targetTesterShared": "共有リスト（テスター間実験）",
     "list.new": "新規",
     "list.selectAll": "全選択",
-    "list.selectAllTitle": "表示中の地点をすべて選択",
+    "list.selectAllTitle": "すべての地点を選択",
     "list.clearAll": "全解除",
     "list.clearAllTitle": "選択をすべて解除",
     "list.newPrompt": "新しいリストの名前",
@@ -1584,7 +1584,7 @@ const TRANSLATIONS = {
     "storage.targetTesterShared": "Shared Lists (Tester Experiment)",
     "list.new": "New",
     "list.selectAll": "Select all",
-    "list.selectAllTitle": "Select all points shown on the grid",
+    "list.selectAllTitle": "Select all points in the lists",
     "list.clearAll": "Clear all",
     "list.clearAllTitle": "Clear all selections",
     "list.newPrompt": "Name the new list",
@@ -2921,6 +2921,20 @@ function visibleCloudPoints() {
 
 function visibleSelectablePoints() {
   return [...state.points, ...visibleCloudPoints()];
+}
+
+function allSelectablePoints() {
+  ensurePointLists();
+  const localPoints = allPointListPoints();
+  const cloudPoints = state.cloud.connected
+    ? state.cloud.pointLists.flatMap((list) => (Array.isArray(list.points) ? list.points : [])).map(syncProjectedPoint).filter(Boolean)
+    : [];
+  const seen = new Set();
+  return [...localPoints, ...cloudPoints].filter((point) => {
+    if (!point?.id || seen.has(point.id)) return false;
+    seen.add(point.id);
+    return true;
+  });
 }
 
 function pointListStorageKey(list) {
@@ -5037,6 +5051,8 @@ function startGridModeLongPress(event) {
     gridModePressTimerId = 0;
     gridModeLongPressTriggered = true;
     gridModeSuppressClick = true;
+    setMobilePage("map");
+    setMobileGridPage("grid");
     void requestTraverseModeToggle();
   }, GRID_MODE_LONG_PRESS_MS);
 }
@@ -5564,6 +5580,7 @@ function renderActionButtons() {
   const hasPendingPoint = validGeo(state.pendingGeo);
   const pointIds = selectedPointIds();
   const visiblePointCount = new Set(visibleSelectablePoints().map((point) => point.id)).size;
+  const selectablePointCount = allSelectablePoints().length;
   const canInvertSelection = !state.editingPointId
     && !hasPendingPoint
     && visiblePointCount > 0;
@@ -5600,7 +5617,7 @@ function renderActionButtons() {
   elements.actionMapButton.disabled = !mapCandidate;
   elements.actionInvertButton.disabled = !canInvertSelection;
   for (const button of elements.selectAllPointButtons) {
-    button.disabled = visiblePointCount === 0 || state.cloud.busy;
+    button.disabled = selectablePointCount === 0 || state.cloud.busy;
   }
   for (const button of elements.clearAllPointButtons) {
     button.disabled = state.selection.length === 0 && !hasPendingPoint && barrierSelectionCount === 0;
@@ -10368,14 +10385,14 @@ function invertVisiblePointSelection() {
   setSelection([...nonPointSelection, ...nextPointSelection]);
 }
 
-function selectAllVisiblePoints() {
-  const visiblePointIds = [...new Set(visibleSelectablePoints().map((point) => point.id).filter(Boolean))];
-  if (visiblePointIds.length === 0) return;
+function selectAllPoints() {
+  const pointIds = allSelectablePoints().map((point) => point.id).filter(Boolean);
+  if (pointIds.length === 0) return;
 
   state.mode = "inspect";
   setSelection([
     ...state.selection.filter((entry) => entry.type !== "point"),
-    ...visiblePointIds.map((id) => ({ type: "point", id }))
+    ...pointIds.map((id) => ({ type: "point", id }))
   ]);
 }
 
@@ -14853,7 +14870,7 @@ function bindEvents() {
     button.addEventListener("click", () => void createNewPointList());
   }
   for (const button of elements.selectAllPointButtons) {
-    button.addEventListener("click", selectAllVisiblePoints);
+    button.addEventListener("click", selectAllPoints);
   }
   for (const button of elements.clearAllPointButtons) {
     button.addEventListener("click", () => clearSelection());
