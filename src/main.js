@@ -116,7 +116,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1942";
+const WEB_VERSION = "0.1943";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -633,6 +633,7 @@ const state = {
 
 let appToastTimerId = 0;
 let pendingConfirmResolve = null;
+let pendingTraverseModeToggle = null;
 let pendingTextInputResolve = null;
 let pendingTextInputOptions = null;
 let pointSubmitInFlight = null;
@@ -2346,6 +2347,7 @@ function setTraverseMode(enabled) {
 
 async function requestTraverseModeToggle() {
   const nextMode = !state.traverseMode;
+  pendingTraverseModeToggle = nextMode;
   const confirmed = await requestConfirm({
     title: t(nextMode ? "traverse.modeOnTitle" : "traverse.modeOffTitle"),
     message: t(nextMode ? "traverse.modeOnMessage" : "traverse.modeOffMessage"),
@@ -2353,6 +2355,7 @@ async function requestTraverseModeToggle() {
     confirmLabel: t(nextMode ? "traverse.modeOnConfirm" : "traverse.modeOffConfirm"),
     danger: false
   });
+  pendingTraverseModeToggle = null;
   if (!confirmed) {
     syncSettingsControls();
     return;
@@ -14797,7 +14800,18 @@ function bindEvents() {
   const finishConfirmDialog = (value) => {
     const resolve = pendingConfirmResolve;
     pendingConfirmResolve = null;
+    const nextTraverseMode = pendingTraverseModeToggle;
+    pendingTraverseModeToggle = null;
     if (elements.confirmDialog.open) elements.confirmDialog.close(value);
+    if (value === "confirm" && nextTraverseMode !== null) {
+      setTraverseMode(nextTraverseMode);
+      syncSettingsControls();
+      if (nextTraverseMode) {
+        setMobilePage("map");
+        setMobileGridPage("grid");
+        renderTraverseActionButton();
+      }
+    }
     resolve?.(value);
   };
   elements.confirmDialogConfirmButton.addEventListener("click", (event) => {
