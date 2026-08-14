@@ -1116,11 +1116,11 @@ button {
   min-width: min(320px, calc(100vw - 28px));
   min-height: 56px;
   padding: 0 28px;
-  border: 2px solid #f28a2e;
+  border: 2px solid var(--accent);
   border-radius: 0;
-  background: rgb(242 138 46 / 0.16);
-  color: #b95712;
-  box-shadow: var(--shadow), 0 0 0 3px rgb(242 138 46 / 0.12);
+  background: var(--active-bg);
+  color: var(--accent-strong);
+  box-shadow: var(--shadow), 0 0 0 3px rgb(255 255 255 / 0.12);
   clip-path: polygon(8% 0, 92% 0, 100% 50%, 92% 100%, 8% 100%, 0 50%);
   transform: translateX(-50%);
   white-space: nowrap;
@@ -1132,7 +1132,7 @@ button {
 .traverse-action-button::before {
   position: absolute;
   inset: 5px;
-  border: 1px solid rgb(242 138 46 / 0.78);
+  border: 1px solid var(--accent);
   content: "";
   pointer-events: none;
   clip-path: polygon(7% 0, 93% 0, 100% 50%, 93% 100%, 7% 100%, 0 50%);
@@ -1140,7 +1140,7 @@ button {
 
 .traverse-action-button:hover:not(:disabled),
 .traverse-action-button.is-centering {
-  background: rgb(242 138 46 / 0.22);
+  background: var(--active-bg);
 }
 
 .traverse-action-button:disabled {
@@ -1200,9 +1200,9 @@ button {
   display: grid;
   gap: 10px;
   padding: 12px;
-  border: 1px solid rgb(242 138 46 / 0.55);
+  border: 1px solid var(--line-strong);
   border-radius: 10px;
-  background: rgb(242 138 46 / 0.08);
+  background: var(--active-bg);
 }
 
 .traverse-action-dialog-status h3 {
@@ -1223,7 +1223,7 @@ button {
   gap: 3px;
   min-width: 0;
   padding: 8px 7px;
-  border: 1px solid rgb(242 138 46 / 0.38);
+  border: 1px solid var(--line);
   border-radius: 7px;
   background: var(--surface);
   text-align: center;
@@ -1235,31 +1235,71 @@ button {
 }
 
 .traverse-stone-status-grid strong {
-  color: #b95712;
+  color: var(--accent-strong);
   font-size: 18px;
   font-variant-numeric: tabular-nums;
 }
 
-.traverse-quantity-control {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.traverse-quantity-control input {
-  width: 92px;
-  min-height: 38px;
-  padding: 5px 8px;
-  border: 1px solid rgb(242 138 46 / 0.6);
-  border-radius: 7px;
+.traverse-quantity-dialog {
+  width: min(320px, calc(100vw - 24px));
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
   background: var(--surface);
   color: var(--text);
-  font: inherit;
-  font-weight: 800;
-  text-align: center;
+  box-shadow: var(--shadow), var(--brand-glow);
+}
+
+.traverse-quantity-dialog::backdrop {
+  background: rgb(0 0 0 / 0.58);
+  backdrop-filter: blur(3px);
+}
+
+.traverse-quantity-dialog-form {
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+}
+
+.traverse-quantity-dialog-message {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.traverse-quantity-stepper {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 52px;
+  align-items: center;
+  gap: 14px;
+}
+
+.traverse-quantity-stepper-button {
+  min-height: 46px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--active-bg);
+  color: var(--accent-strong);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.traverse-quantity-stepper-button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.traverse-quantity-value {
+  display: grid;
+  place-items: center;
+  min-height: 58px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--surface-strong);
+  color: var(--accent-strong);
+  font-size: 30px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
 }
 
 .traverse-action-dialog-actions {
@@ -1340,8 +1380,8 @@ button {
 }
 
 :root[data-theme="retro"] .traverse-action-button {
-  color: #ffb36a;
-  box-shadow: var(--shadow), 0 0 14px rgb(242 138 46 / 0.34);
+  color: var(--accent-strong);
+  box-shadow: var(--shadow), 0 0 14px rgb(44 255 100 / 0.26);
 }
 
 canvas.is-barrier-linking {

@@ -89,7 +89,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1692";
+const WEB_VERSION = "0.1702";
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
   { value: "#fb8c00", ja: "オレンジ", en: "Orange" },
@@ -211,7 +211,14 @@ const elements = {
   traverseStockValue: document.querySelector("#traverseStockValue"),
   traverseInstalledValue: document.querySelector("#traverseInstalledValue"),
   traverseLocationValue: document.querySelector("#traverseLocationValue"),
-  traverseQuantityInput: document.querySelector("#traverseQuantityInput"),
+  traverseQuantityDialog: document.querySelector("#traverseQuantityDialog"),
+  traverseQuantityDialogTitle: document.querySelector("#traverseQuantityDialogTitle"),
+  traverseQuantityDialogMessage: document.querySelector("#traverseQuantityDialogMessage"),
+  traverseQuantityDecreaseButton: document.querySelector("#traverseQuantityDecreaseButton"),
+  traverseQuantityIncreaseButton: document.querySelector("#traverseQuantityIncreaseButton"),
+  traverseQuantityValue: document.querySelector("#traverseQuantityValue"),
+  traverseQuantityCancelButton: document.querySelector("#traverseQuantityCancelButton"),
+  traverseQuantityConfirmButton: document.querySelector("#traverseQuantityConfirmButton"),
   editionBadge: document.querySelector("#editionBadge"),
   webVersionBadge: document.querySelector("#webVersionBadge"),
   settingsMenu: document.querySelector("#settingsMenu"),
@@ -527,6 +534,9 @@ const state = {
   barrierLinkPendingStoneId: null,
   barrierLinkAnimation: null,
   barrierLinkCompletion: null,
+  traverseQuantityAction: null,
+  traverseQuantity: 1,
+  traverseQuantityMax: 1,
   guardianPlacementMode: false,
   guardianLabelInImage: BARRIER_CONFIG.guardianLabelInImage,
   traverseFeedback: "",
@@ -1077,7 +1087,10 @@ const TRANSLATIONS = {
     "traverse.stockShort": "手持ち",
     "traverse.installedShort": "設置済み",
     "traverse.locationsShort": "箇所",
-    "traverse.quantityLabel": "操作する個数",
+    "traverse.quantityTitle": "個数を選択",
+    "traverse.quantityMessage": "操作する個数を選んでください。",
+    "traverse.quantityDecrease": "1個減らす",
+    "traverse.quantityIncrease": "1個増やす",
     "traverse.bulkDone": "結界石を{count}個{action}ました",
     "traverse.linkReady": "起点の結界石を長押ししてください",
     "traverse.linkOriginSelected": "起点を選択しました。次の結界石へドラッグしてください",
@@ -1553,7 +1566,10 @@ const TRANSLATIONS = {
     "traverse.stockShort": "Hand",
     "traverse.installedShort": "Placed",
     "traverse.locationsShort": "Locations",
-    "traverse.quantityLabel": "Quantity",
+    "traverse.quantityTitle": "Choose quantity",
+    "traverse.quantityMessage": "Choose how many stones to operate.",
+    "traverse.quantityDecrease": "Decrease by one",
+    "traverse.quantityIncrease": "Increase by one",
     "traverse.bulkDone": "{count} barrier stone(s) {action}",
     "traverse.linkReady": "Long-press an origin barrier stone",
     "traverse.linkOriginSelected": "Origin selected. Drag to the next barrier stone",
@@ -1832,6 +1848,89 @@ function actionQuantityLimit(action, options = {}) {
   }
   const stockRoom = Math.max(0, BARRIER_CONFIG.stockCap - amount);
   return options.stone && count > 0 ? Math.max(0, Math.min(count, stockRoom)) : 0;
+}
+
+function currentTraverseActionContext() {
+  const currentTile = state.currentGeo ? tileIdFromGeo(state.currentGeo) : null;
+  const stoneId = currentTile ? stoneIdFromTile(currentTile) : null;
+  const stone = stoneId ? state.traverseLog?.stones?.[stoneId] : null;
+  const stoneCap = stoneId ? stoneCapFor(state.traverseLog, stoneId) : null;
+  return {
+    amount: Math.max(0, Math.floor(Number(state.traverseLog?.stock?.amount) || 0)),
+    currentTile,
+    stoneId,
+    stone,
+    stoneCap
+  };
+}
+
+function traverseQuantityLimit(action) {
+  const context = currentTraverseActionContext();
+  return actionQuantityLimit(action, {
+    amount: context.amount,
+    stone: context.stone,
+    stoneCap: context.stoneCap
+  });
+}
+
+function renderTraverseQuantityDialog() {
+  const action = state.traverseQuantityAction;
+  if (!action) return;
+  const titleKey = action === "place" ? "traverse.place" : "traverse.pick";
+  if (elements.traverseQuantityDialogTitle) elements.traverseQuantityDialogTitle.textContent = t(titleKey);
+  if (elements.traverseQuantityDialogMessage) elements.traverseQuantityDialogMessage.textContent = t("traverse.quantityMessage");
+  if (elements.traverseQuantityValue) elements.traverseQuantityValue.textContent = String(state.traverseQuantity);
+  if (elements.traverseQuantityDecreaseButton) {
+    elements.traverseQuantityDecreaseButton.disabled = state.traverseQuantity <= 1;
+    elements.traverseQuantityDecreaseButton.setAttribute("aria-label", t("traverse.quantityDecrease"));
+  }
+  if (elements.traverseQuantityIncreaseButton) {
+    elements.traverseQuantityIncreaseButton.disabled = state.traverseQuantity >= state.traverseQuantityMax;
+    elements.traverseQuantityIncreaseButton.setAttribute("aria-label", t("traverse.quantityIncrease"));
+  }
+  if (elements.traverseQuantityConfirmButton) {
+    elements.traverseQuantityConfirmButton.disabled = state.traverseQuantityMax < 1;
+  }
+}
+
+function closeTraverseQuantityDialog() {
+  if (elements.traverseQuantityDialog?.open) elements.traverseQuantityDialog.close("cancel");
+  state.traverseQuantityAction = null;
+  state.traverseQuantity = 1;
+  state.traverseQuantityMax = 1;
+}
+
+function openTraverseQuantityDialog(action) {
+  if (!state.traverseMode || state.traverseBusy || !elements.traverseQuantityDialog) return;
+  const max = traverseQuantityLimit(action);
+  if (max < 1) {
+    setTraverseFeedback(action === "place" ? t("traverse.stockEmpty") : t("traverse.noStone"));
+    render();
+    return;
+  }
+  state.traverseQuantityAction = action;
+  state.traverseQuantityMax = max;
+  state.traverseQuantity = 1;
+  renderTraverseQuantityDialog();
+  if (!elements.traverseQuantityDialog.open) elements.traverseQuantityDialog.showModal();
+  elements.traverseQuantityIncreaseButton?.focus();
+}
+
+function adjustTraverseQuantity(delta) {
+  if (!state.traverseQuantityAction) return;
+  state.traverseQuantity = Math.min(
+    state.traverseQuantityMax,
+    Math.max(1, state.traverseQuantity + delta)
+  );
+  renderTraverseQuantityDialog();
+}
+
+function confirmTraverseQuantity() {
+  const action = state.traverseQuantityAction;
+  const quantity = state.traverseQuantity;
+  if (!action || quantity < 1) return;
+  closeTraverseQuantityDialog();
+  void performTraverseStoneAction(action, quantity);
 }
 
 function resetBarrierLinkState() {
@@ -4698,42 +4797,29 @@ function renderTraverseActionButton() {
 function renderTraverseActionDialog() {
   if (!elements.traverseActionDialog) return;
   refreshTraverseStock();
-  const amount = Math.max(0, Math.floor(Number(state.traverseLog?.stock?.amount) || 0));
-  const currentTile = state.currentGeo ? tileIdFromGeo(state.currentGeo) : null;
-  const currentStoneId = currentTile ? stoneIdFromTile(currentTile) : null;
-  const currentStone = currentStoneId ? state.traverseLog?.stones?.[currentStoneId] : null;
-  const currentCap = currentStoneId ? stoneCapFor(state.traverseLog, currentStoneId) : null;
+  const currentContext = currentTraverseActionContext();
+  const { amount, currentTile, currentStoneId, currentStone, currentCap } = {
+    amount: currentContext.amount,
+    currentTile: currentContext.currentTile,
+    currentStoneId: currentContext.stoneId,
+    currentStone: currentContext.stone,
+    currentCap: currentContext.stoneCap
+  };
   const currentTileAtCap = currentCap !== null && stoneDisplayCount(currentStone) >= currentCap;
   const installedEntries = installedBarrierStoneEntries();
   const installed = installedEntries.reduce((total, [, stone]) => total + stoneDisplayCount(stone), 0);
-  const placeLimit = actionQuantityLimit("place", {
-    amount,
-    stone: currentStone,
-    stoneCap: currentCap
-  });
-  const pickLimit = actionQuantityLimit("pick", {
-    amount: state.traverseLog?.stock?.amount,
-    stone: currentStone,
-    stoneCap: currentCap
-  });
   if (elements.traverseStockValue) elements.traverseStockValue.textContent = String(amount);
   if (elements.traverseInstalledValue) elements.traverseInstalledValue.textContent = String(installed);
   if (elements.traverseLocationValue) elements.traverseLocationValue.textContent = String(installedEntries.length);
-  if (elements.traverseQuantityInput) {
-    const currentQuantity = Math.max(1, Math.floor(Number(elements.traverseQuantityInput.value) || 1));
-    const maxQuantity = Math.max(1, placeLimit, pickLimit);
-    elements.traverseQuantityInput.max = String(maxQuantity);
-    elements.traverseQuantityInput.value = String(Math.min(currentQuantity, maxQuantity));
-  }
   if (elements.traverseActionDialogTitle) elements.traverseActionDialogTitle.textContent = t("traverse.menuTitle");
   if (elements.traversePlaceButton) {
     elements.traversePlaceButton.textContent = t("traverse.place");
-    elements.traversePlaceButton.disabled = state.traverseBusy || placeLimit <= 0 || currentTileAtCap;
+    elements.traversePlaceButton.disabled = state.traverseBusy || traverseQuantityLimit("place") <= 0 || currentTileAtCap;
     elements.traversePlaceButton.title = currentTileAtCap ? t("traverse.capReached") : "";
   }
   if (elements.traversePickButton) {
     elements.traversePickButton.textContent = t("traverse.pick");
-    elements.traversePickButton.disabled = state.traverseBusy || pickLimit <= 0;
+    elements.traversePickButton.disabled = state.traverseBusy || traverseQuantityLimit("pick") <= 0;
   }
   if (elements.traverseCreateBarrierButton) {
     const enoughStones = availableBarrierStoneIds().length >= 3;
@@ -13914,14 +14000,12 @@ function bindEvents() {
   elements.traverseActionButton.addEventListener("contextmenu", (event) => event.preventDefault());
   elements.traverseActionButton.addEventListener("click", handleTraverseActionClick);
   elements.traversePlaceButton.addEventListener("click", () => {
-    const quantity = Math.max(1, Math.floor(Number(elements.traverseQuantityInput?.value) || 1));
     closeTraverseActionDialog();
-    void performTraverseStoneAction("place", quantity);
+    openTraverseQuantityDialog("place");
   });
   elements.traversePickButton.addEventListener("click", () => {
-    const quantity = Math.max(1, Math.floor(Number(elements.traverseQuantityInput?.value) || 1));
     closeTraverseActionDialog();
-    void performTraverseStoneAction("pick", quantity);
+    openTraverseQuantityDialog("pick");
   });
   elements.traverseCreateBarrierButton.addEventListener("click", () => {
     closeTraverseActionDialog();
@@ -13931,8 +14015,15 @@ function bindEvents() {
     closeTraverseActionDialog();
     openKekkaishiStatusDialog();
   });
+  elements.traverseQuantityDecreaseButton?.addEventListener("click", () => adjustTraverseQuantity(-1));
+  elements.traverseQuantityIncreaseButton?.addEventListener("click", () => adjustTraverseQuantity(1));
+  elements.traverseQuantityCancelButton?.addEventListener("click", closeTraverseQuantityDialog);
+  elements.traverseQuantityConfirmButton?.addEventListener("click", confirmTraverseQuantity);
   elements.traverseActionDialog.addEventListener("click", (event) => {
     if (event.target === elements.traverseActionDialog) closeTraverseActionDialog();
+  });
+  elements.traverseQuantityDialog?.addEventListener("click", (event) => {
+    if (event.target === elements.traverseQuantityDialog) closeTraverseQuantityDialog();
   });
   elements.zoomInButton.addEventListener("click", () => zoomAtStage({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 1));
   elements.zoomOutButton.addEventListener("click", () => zoomAtStage({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, -1));
