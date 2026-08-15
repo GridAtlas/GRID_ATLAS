@@ -1375,7 +1375,7 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
   padding: 10px 12px;
   border: 1px solid var(--accent);
   border-radius: 8px;
-  background: var(--status-bg);
+  background: var(--surface-strong);
   color: var(--accent-strong);
   font-size: 12px;
   font-weight: 900;
@@ -1504,8 +1504,8 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
 
 .kekkaishi-status-dialog-form {
   display: grid;
-  gap: 16px;
-  padding: 18px;
+  gap: 10px;
+  padding: 14px;
 }
 
 .kekkaishi-status-hero {
@@ -1513,42 +1513,56 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  padding: 18px;
+  padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--surface-strong);
 }
 
 .kekkaishi-status-hero strong {
-  font-size: 42px;
+  font-size: 36px;
   line-height: 1;
   letter-spacing: 0.08em;
 }
 
 .kekkaishi-status-list {
   display: grid;
-  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
   margin: 0;
-  padding: 14px;
+  padding: 8px 6px;
   border-radius: 12px;
 }
 
 .kekkaishi-status-list div {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 7px;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 2px 7px;
+  border-bottom: 0;
+  border-right: 1px solid var(--line);
+}
+
+.kekkaishi-status-list div:last-child {
+  border-right: 0;
 }
 
 .kekkaishi-status-list dt {
+  overflow: hidden;
   color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .kekkaishi-status-list dd {
   margin: 0;
+  overflow: hidden;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .kekkaishi-status-progress {
@@ -1566,8 +1580,8 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
 .kekkaishi-status-shapes-panel,
 .kekkaishi-status-progress-card {
   display: grid;
-  gap: 12px;
-  padding: 14px;
+  gap: 8px;
+  padding: 10px;
   border-radius: 12px;
 }
 
@@ -1623,14 +1637,14 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
 .kekkaishi-status-detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px;
+  gap: 5px;
 }
 
 .kekkaishi-status-detail-grid div {
   display: grid;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
-  padding: 8px 9px;
+  padding: 6px 7px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);

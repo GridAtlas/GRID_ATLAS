@@ -58,7 +58,6 @@ import {
   barrierRankStoneProgress,
   rankForKekkaishi,
   rankForBarrier,
-  recentAverage,
   rankAchievementDays
 } from "./barrier-evaluation.js?v=1";
 
@@ -116,7 +115,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1974";
+const WEB_VERSION = "0.1976";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -380,9 +379,6 @@ const elements = {
   kekkaishiStatusRank: document.querySelector("#kekkaishiStatusRank"),
   kekkaishiStatusLifetime: document.querySelector("#kekkaishiStatusLifetime"),
   kekkaishiStatusDailyPower: document.querySelector("#kekkaishiStatusDailyPower"),
-  kekkaishiStatusPeak: document.querySelector("#kekkaishiStatusPeak"),
-  kekkaishiStatusRecent: document.querySelector("#kekkaishiStatusRecent"),
-  kekkaishiStatusRatio: document.querySelector("#kekkaishiStatusRatio"),
   kekkaishiStatusCount: document.querySelector("#kekkaishiStatusCount"),
   kekkaishiStatusCurrentRank: document.querySelector("#kekkaishiStatusCurrentRank"),
   kekkaishiStatusCurrentDetails: document.querySelector("#kekkaishiStatusCurrentDetails"),
@@ -1242,9 +1238,6 @@ const TRANSLATIONS = {
     ,"kekkaishi.rank": "結界師ランク"
     ,"kekkaishi.achievedDays": "（{days}日で到達）"
     ,"kekkaishi.lifetime": "累積結界霊量"
-    ,"kekkaishi.peak": "ピーク平均"
-    ,"kekkaishi.recent": "直近平均"
-    ,"kekkaishi.ratio": "ピーク比"
     ,"kekkaishi.createdCount": "作成した結界"
     ,"kekkaishi.next": "次のランクまで"
     ,"kekkaishi.shapesTitle": "結界術と能力"
@@ -1768,9 +1761,6 @@ const TRANSLATIONS = {
     ,"kekkaishi.rank": "Kekkaishi rank"
     ,"kekkaishi.achievedDays": "({days} days to reach)"
     ,"kekkaishi.lifetime": "Cumulative barrier spirit"
-    ,"kekkaishi.peak": "Peak average"
-    ,"kekkaishi.recent": "Recent average"
-    ,"kekkaishi.ratio": "Peak ratio"
     ,"kekkaishi.createdCount": "Barriers created"
     ,"kekkaishi.next": "To the next rank"
     ,"kekkaishi.shapesTitle": "Barrier techniques and abilities"
@@ -2291,7 +2281,6 @@ function commitDragonEye() {
     };
   });
   list.points.push(...createdPoints);
-  state.activePointListId = list.id;
   state.selection = createdPoints.map((point) => ({ type: "point", id: point.id }));
   state.selectedPointId = createdPoints[0]?.id || null;
   state.selectedLinkId = null;
@@ -5401,7 +5390,7 @@ function renderTraverseActionDialog() {
   if (elements.traverseCreateBarrierButton) {
     const enoughStones = availableBarrierStoneIds().length >= 3;
     elements.traverseCreateBarrierButton.textContent = t("traverse.connect");
-    elements.traverseCreateBarrierButton.disabled = state.traverseBusy || !enoughStones;
+    elements.traverseCreateBarrierButton.disabled = state.traverseBusy;
     elements.traverseCreateBarrierButton.title = enoughStones
       ? t("traverse.connect")
       : t("barrier.tooFew");
@@ -5620,7 +5609,6 @@ function performTraverseStoneAction(action, requestedQuantity = 1) {
         .replace("{count}", String(processed))
         .replace("{action}", feedbackAction);
       setTraverseFeedback(completionMessage);
-      showAppToast(completionMessage);
       returnToTraverseActionMenu();
     },
     () => {
@@ -6821,8 +6809,6 @@ function renderKekkaishiStatusDialog() {
   if (!state.traverseLog || !elements.kekkaishiStatusDialog) return;
   const status = state.traverseLog.kekkaishi || createKekkaishiStatus(Date.now(), Object.keys(state.traverseLog.barriers || {}).length);
   const rank = rankForKekkaishi(status);
-  const recent = recentAverage(status);
-  const peakRatio = rank.peak > 0 ? recent / rank.peak : null;
   const achievedDays = rank.index > 0 ? rankAchievementDays(status, rank.index) : null;
   const maxRankIndex = BARRIER_EVALUATION_CONFIG.kekkaishiRankNames.length - 1;
   const atMaxRank = rank.index >= maxRankIndex;
@@ -6835,9 +6821,6 @@ function renderKekkaishiStatusDialog() {
     elements.kekkaishiStatusRank.textContent = `${rank.name}${achievedDays === null ? "" : ` ${t("kekkaishi.achievedDays").replace("{days}", String(achievedDays))}`}`;
   }
   if (elements.kekkaishiStatusLifetime) elements.kekkaishiStatusLifetime.textContent = `${formatScoreValue(rank.lifetime)} Pt`;
-  if (elements.kekkaishiStatusPeak) elements.kekkaishiStatusPeak.textContent = `${formatScoreValue(rank.peak)} Pt${status.peakAchievedAt ? `（${formatMonth(status.peakAchievedAt)}）` : ""}`;
-  if (elements.kekkaishiStatusRecent) elements.kekkaishiStatusRecent.textContent = `${formatScoreValue(recent)} Pt`;
-  if (elements.kekkaishiStatusRatio) elements.kekkaishiStatusRatio.textContent = peakRatio === null ? "—" : `${Math.round(peakRatio * 100)}%`;
   if (elements.kekkaishiStatusCount) elements.kekkaishiStatusCount.textContent = String(Math.max(0, Number(status.kekkaiCreatedCount) || 0));
   if (elements.kekkaishiStatusDailyPower) elements.kekkaishiStatusDailyPower.textContent = `${formatScoreValue(status.lastDailyPower)} Pt`;
   if (elements.kekkaishiStatusCurrentRank) elements.kekkaishiStatusCurrentRank.textContent = rank.name;
@@ -6890,7 +6873,6 @@ function openKekkaishiStatusDialog() {
 async function renderKekkaishiStatusShareImage() {
   const status = state.traverseLog?.kekkaishi || createKekkaishiStatus();
   const rank = rankForKekkaishi(status);
-  const recent = recentAverage(status);
   const canvas = document.createElement("canvas");
   canvas.width = 1200;
   canvas.height = 820;
@@ -6918,8 +6900,6 @@ async function renderKekkaishiStatusShareImage() {
   const stats = [
     [t("kekkaishi.lifetime"), `${formatScoreValue(rank.lifetime)} Pt`],
     [t("kekkaishi.dailyPower"), `${formatScoreValue(status.lastDailyPower)} Pt`],
-    [t("kekkaishi.peak"), `${formatScoreValue(rank.peak)} Pt`],
-    [t("kekkaishi.recent"), `${formatScoreValue(recent)} Pt`],
     [t("kekkaishi.createdCount"), String(Math.max(0, Number(status.kekkaiCreatedCount) || 0))]
   ];
   stats.forEach(([label, value], index) => {
