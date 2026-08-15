@@ -5,32 +5,50 @@
 ## 基本方針
 
 - 地点、メモ、画像は既存の`.gridatlas` place-list documentが本体です。
-- 線は地点リストとは別のアプリ内考察レイヤーとして保存します。現在のWeb実装ではworkspaceの`analysisLayer`に格納し、旧workspaceの`links`は移行時だけ読み込みます。
+- 線と図形は地点リストとは別のアプリ内考察レイヤーとして保存します。workspaceでは`placeLists[]`と同じ階層の`analysisLayer`に格納し、既存のv1 place-list documentの構造は変更しません。
 - 地点を選択して接続した時点で線を保存します。保存ボタンは設けません。不要な線はグリッド上で選択して削除します。
 - 共有時は輸送上、地点リストdocumentの任意拡張として線レイヤーを同梱できますが、読み込み後は地点リストと線レイヤーを別データとしてアプリへ登録します。
 - 線を理解しない実装は、地点だけを読み込んでもかまいません。
-- 地点リストの表示切替は地点にだけ作用し、線レイヤーの表示は維持します。地点だけを削除した場合も、線レイヤーは削除せず、線自身が保持する端点情報を使って表示を続けます。線を明示的に削除した場合は表示されません。
-- 共有時は、共有対象の地点IDに両端が解決できる線だけをdocument拡張へ含めます。解決できない線をローカルの線レイヤーから自動削除することはありません。
+- 地点リストの表示切替は地点にだけ作用し、考察レイヤーの表示は維持します。地点の移動・改名・削除・コピーは、線と図形が保持する座標・名称スナップショットを変更しません。`placeRef`が解決できない頂点も描画・距離・面積・分析の対象です。
+- 共有時は、選択された地点・線・図形だけをdocument拡張へ含めます。リスト単位の共有は地点だけを含み、線や図形は含めません。
 
 ## document拡張
 
-拡張キーは`io.gridatlas.lines`です。
+拡張キーは`io.gridatlas.analysis`です。
 
 ```json
 {
   "extensions": {
-    "io.gridatlas.lines": {
+    "io.gridatlas.analysis": {
       "version": 1,
-      "items": [
-        { "id": "line-1", "a": "place-a", "b": "place-b", "strokeId": "stroke-1" }
+      "lines": [
+        {
+          "id": "line-1",
+          "a": { "lat": 35, "lng": 135, "key": "geo:35:135", "name": "A", "placeRef": "place-a" },
+          "b": { "lat": 35.1, "lng": 135.1, "key": "geo:35.1:135.1", "name": "B", "placeRef": null },
+          "strokeId": "stroke-1"
+        }
+      ],
+      "figures": [
+        {
+          "id": "figure-1",
+          "vertices": [
+            { "lat": 35, "lng": 135, "key": "geo:35:135", "name": "A", "placeRef": null },
+            { "lat": 35.1, "lng": 135, "key": "geo:35.1:135", "name": "B", "placeRef": null },
+            { "lat": 35, "lng": 135.1, "key": "geo:35:135.1", "name": "C", "placeRef": null }
+          ],
+          "closed": true
+        }
       ]
     }
   }
 }
 ```
 
-`a`と`b`は同じdocument内のplace IDを参照します。線は無向の関係として扱い、同じ2地点を結ぶ重複線は1本に正規化します。
+線の`a`と`b`、図形の`vertices[]`はcanonical vertex snapshotです。座標から導出した`key`は重複線の判定に使いますが、オブジェクトのidentityではありません。`placeRef`は任意の参照情報で、座標が同じ地点のIDをidentityとして扱いません。
 
-`strokeId`は任意で、同じひと筆で作成された線分に同じ値を付けます。対応実装では通常タップの選択単位に使い、端点変更などで接続関係が分断された場合はグループを分割します。
+`strokeId`は線の任意属性です。図形の辺は`vertices[]`から導出し、`strokeId`で図形と結び付けません。閉じた図形は`closed: true`、開いた図形は`closed: false`で表します。
+
+旧`io.gridatlas.lines`は互換読み込み対象ではありません。未知の拡張として保持され、アプリでは線を復元せず地点だけを読み込みます。旧workspaceの自動移行は行いません。
 
 この拡張は、既存のGRID ATLAS v1 Core必須項目を変更しません。対応していない実装では地点だけが表示されます。

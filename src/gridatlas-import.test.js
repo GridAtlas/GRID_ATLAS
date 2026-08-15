@@ -133,6 +133,55 @@ describe("GRID ATLAS import format", () => {
     expect(parsed.document.extensions["io.gridatlas.lines"]).toEqual(document.extensions["io.gridatlas.lines"]);
   });
 
+  it("round-trips line- and figure-only analysis through URL and .gridatlas formats", async () => {
+    const lineOnly = sampleDocument({
+      places: [],
+      extensions: {
+        "io.gridatlas.analysis": {
+          version: 1,
+          lines: [{
+            id: "line-only",
+            a: { lat: 35, lng: 135, key: "geo:35:135", name: "A", placeRef: "outside-a" },
+            b: { lat: 35.1, lng: 135.1, key: "geo:35.1:135.1", name: "B", placeRef: "outside-b" },
+            strokeId: "stroke-1"
+          }],
+          figures: []
+        }
+      }
+    });
+    const figureOnly = sampleDocument({
+      places: [],
+      extensions: {
+        "io.gridatlas.analysis": {
+          version: 1,
+          lines: [],
+          figures: [{
+            id: "figure-only",
+            vertices: [
+              { lat: 35, lng: 135, key: "geo:35:135", name: "A", placeRef: null },
+              { lat: 35.1, lng: 135.1, key: "geo:35.1:135.1", name: "B", placeRef: null },
+              { lat: 35.2, lng: 135, key: "geo:35.2:135", name: "C", placeRef: null }
+            ],
+            closed: true,
+            name: "独立図形"
+          }]
+        }
+      }
+    });
+
+    for (const document of [lineOnly, figureOnly]) {
+      const urlDocument = decodeGridAtlasUrlPayload(encodeGridAtlasUrlPayload(document));
+      const parsed = await parseGridAtlasArchive((await buildGridAtlasArchive(document)).bytes);
+
+      expect(urlDocument.places).toEqual([]);
+      expect(parsed.document).toEqual(document);
+    }
+    expect(lineOnly.extensions["io.gridatlas.analysis"].lines).toHaveLength(1);
+    expect(lineOnly.extensions["io.gridatlas.analysis"].figures).toHaveLength(0);
+    expect(figureOnly.extensions["io.gridatlas.analysis"].lines).toHaveLength(0);
+    expect(figureOnly.extensions["io.gridatlas.analysis"].figures).toHaveLength(1);
+  });
+
   it("rejects URL documents that reference unavailable images", () => {
     const document = sampleDocument({
       places: [samplePlace({ media: [{ resourceId: "missing", role: "photo" }] })]

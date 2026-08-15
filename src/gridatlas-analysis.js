@@ -1,5 +1,10 @@
-export const GRIDATLAS_LINE_LAYER_EXTENSION = "io.gridatlas.lines";
-export const GRIDATLAS_LINE_LAYER_VERSION = 1;
+import {
+  normalizeAnalysisFigure,
+  normalizeAnalysisLine
+} from "./analysis-layer.js";
+
+export const GRIDATLAS_ANALYSIS_EXTENSION = "io.gridatlas.analysis";
+export const GRIDATLAS_ANALYSIS_LAYER_VERSION = 1;
 
 export function normalizeGridAtlasLineColor(color) {
   return typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color)
@@ -7,74 +12,74 @@ export function normalizeGridAtlasLineColor(color) {
     : "";
 }
 
-export function buildGridAtlasLineLayer(links, toSharedPointId) {
-  const items = [];
-  const seenPairs = new Set();
-  const seenIds = new Set();
+function serializableLine(line) {
+  const normalized = normalizeAnalysisLine(line);
+  if (!normalized) return null;
 
-  for (const link of Array.isArray(links) ? links : []) {
-    const a = toSharedPointId(link?.a);
-    const b = toSharedPointId(link?.b);
-    if (!a || !b || a === b) continue;
-
-    const pairKey = [a, b].sort().join("\u0000");
-    if (seenPairs.has(pairKey)) continue;
-
-    let id = typeof link?.id === "string" && link.id ? link.id : `line-${items.length + 1}`;
-    while (seenIds.has(id)) id = `${id}-${items.length + 1}`;
-    seenPairs.add(pairKey);
-    seenIds.add(id);
-
-    const item = { id, a, b };
-    if (typeof link?.createdAt === "string" && link.createdAt) item.createdAt = link.createdAt;
-    if (typeof link?.strokeId === "string" && link.strokeId) item.strokeId = link.strokeId;
-    const color = normalizeGridAtlasLineColor(link?.color);
-    if (color) item.color = color;
-    items.push(item);
-  }
-
-  return items.length > 0
-    ? { version: GRIDATLAS_LINE_LAYER_VERSION, items }
-    : null;
+  const result = {
+    id: normalized.id,
+    a: normalized.a,
+    b: normalized.b
+  };
+  const color = normalizeGridAtlasLineColor(normalized.color);
+  if (color) result.color = color;
+  if (normalized.strokeId) result.strokeId = normalized.strokeId;
+  return result;
 }
 
-export function readGridAtlasLineLayer(document, toLocalPointId, createLocalId) {
-  const layer = document?.extensions?.[GRIDATLAS_LINE_LAYER_EXTENSION];
+function serializableFigure(figure) {
+  const normalized = normalizeAnalysisFigure(figure);
+  if (!normalized) return null;
+
+  const result = {
+    id: normalized.id,
+    vertices: normalized.vertices,
+    closed: normalized.closed
+  };
+  if (normalized.name) result.name = normalized.name;
+  const color = normalizeGridAtlasLineColor(normalized.color);
+  if (color) result.color = color;
+  if (normalized.createdAt) result.createdAt = normalized.createdAt;
+  return result;
+}
+
+export function buildGridAtlasAnalysisLayer(lines, figures) {
+  const normalizedLines = (Array.isArray(lines) ? lines : [])
+    .map(serializableLine)
+    .filter(Boolean);
+  const normalizedFigures = (Array.isArray(figures) ? figures : [])
+    .map(serializableFigure)
+    .filter(Boolean);
+
+  if (normalizedLines.length === 0 && normalizedFigures.length === 0) return null;
+  return {
+    version: GRIDATLAS_ANALYSIS_LAYER_VERSION,
+    lines: normalizedLines,
+    figures: normalizedFigures
+  };
+}
+
+export function readGridAtlasAnalysisLayer(document) {
+  const layer = document?.extensions?.[GRIDATLAS_ANALYSIS_EXTENSION];
   if (
     !layer
     || typeof layer !== "object"
-    || layer.version !== GRIDATLAS_LINE_LAYER_VERSION
-    || !Array.isArray(layer.items)
+    || layer.version !== GRIDATLAS_ANALYSIS_LAYER_VERSION
+    || !Array.isArray(layer.lines)
+    || !Array.isArray(layer.figures)
   ) {
-    return [];
+    return { lines: [], figures: [] };
   }
 
-  const links = [];
-  const seenPairs = new Set();
-  for (const item of layer.items) {
-    const a = toLocalPointId(item?.a);
-    const b = toLocalPointId(item?.b);
-    if (!a || !b || a === b) continue;
-
-    const pairKey = [a, b].sort().join("\u0000");
-    if (seenPairs.has(pairKey)) continue;
-    seenPairs.add(pairKey);
-
-    links.push({
-      id: createLocalId(),
-      a,
-      b,
-      ...(typeof item?.createdAt === "string" && item.createdAt ? { createdAt: item.createdAt } : {}),
-      ...(typeof item?.strokeId === "string" && item.strokeId ? { strokeId: item.strokeId } : {}),
-      ...(normalizeGridAtlasLineColor(item?.color) ? { color: normalizeGridAtlasLineColor(item.color) } : {})
-    });
-  }
-  return links;
+  return {
+    lines: layer.lines.map(normalizeAnalysisLine).filter(Boolean),
+    figures: layer.figures.map(normalizeAnalysisFigure).filter(Boolean)
+  };
 }
 
-export function withoutGridAtlasLineLayer(extensions) {
+export function withoutGridAtlasAnalysisLayer(extensions) {
   if (!extensions || typeof extensions !== "object" || Array.isArray(extensions)) return {};
   const next = structuredClone(extensions);
-  delete next[GRIDATLAS_LINE_LAYER_EXTENSION];
+  delete next[GRIDATLAS_ANALYSIS_EXTENSION];
   return next;
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createAnalysisFigure, figureEdges } from "./analysis-layer.js";
 import { analyzeLineIntersection, analyzeOpenPath, analyzeRegularPolygon, analyzeSegmentShape, vincentyDistanceMeters } from "./shape-analysis.js";
 
 describe("shape analysis", () => {
@@ -169,23 +170,35 @@ describe("shape analysis", () => {
     expect(result.shortestSide).toBeCloseTo(1000);
   });
 
-  it("uses a stable endpoint key when copied points have different ids", () => {
-    const points = [
-      { id: "a", endpointKey: "geo:35:135", x: 0, y: 0 },
-      { id: "b", endpointKey: "geo:35:135.01", x: 1, y: 0 },
-      { id: "c", endpointKey: "geo:35.01:135.01", x: 1, y: 1 },
-      { id: "d", endpointKey: "geo:35.01:135", x: 0, y: 1 }
-    ];
-    const result = analyzeSegmentShape([
-      { a: points[0], b: points[1] },
-      { a: { ...points[1], id: "b-copy" }, b: points[2] },
-      { a: points[2], b: { ...points[3], id: "d-copy" } },
-      { a: points[3], b: { ...points[0], id: "a-copy" } }
-    ]);
+  it("analyzes an independent figure when every vertex place reference is absent", () => {
+    const figure = createAnalysisFigure({
+      id: "figure-1",
+      closed: true,
+      vertices: [
+        { lat: 35.0, lng: 135.0, name: "A", placeRef: null },
+        { lat: 35.0, lng: 135.01, name: "B", placeRef: null },
+        { lat: 35.01, lng: 135.01, name: "C", placeRef: null },
+        { lat: 35.01, lng: 135.0, name: "D", placeRef: null }
+      ]
+    });
+    const screenCoords = [[0, 0], [1, 0], [1, 1], [0, 1]];
+    const runtimeByKey = new Map(figure.vertices.map((vertex, index) => [
+      vertex.key,
+      { ...vertex, x: screenCoords[index][0], y: screenCoords[index][1], geo: { lat: vertex.lat, lng: vertex.lng }, title: vertex.name }
+    ]));
+    const segments = figureEdges(figure).map(({ a, b }) => ({
+      a: runtimeByKey.get(a.key),
+      b: runtimeByKey.get(b.key)
+    }));
+
+    const result = analyzeSegmentShape(segments);
 
     expect(result.valid).toBe(true);
     expect(result.vertexCount).toBe(4);
     expect(result.edgeCount).toBe(4);
+    expect(result.area).toBeGreaterThan(0);
+    expect(result.referenceScore).toBeGreaterThan(0);
+    expect(figure.vertices.every((vertex) => vertex.placeRef === null)).toBe(true);
   });
 
   it("does not label a self-crossing five-edge cycle as a regular pentagon", () => {

@@ -13,12 +13,12 @@ export const BARRIER_CONFIG = Object.freeze({
   stoneCapVertexByRank: Object.freeze([100, 100, 100, 100, 100, 100, 100, 200, 300]),
   stoneCapLoose: 20,
   ryumyakuScatter: Object.freeze([0.15, 0.13, 0.11, 0.09, 0.07, 0.06, 0.05, 0.05, 0.05]),
-  rotationFromRank: 1,
+  rotationFromRank: 0,
   windowDays: 90,
   weatherRate: 0.001,
   accuracyThresholdMeters: 100,
-  guardianEnabled: true,
-  guardianLabelInImage: false
+  // Guardian fields remain accepted in old snapshots/events for migration,
+  // but are no longer active in the current scoring or UI.
 });
 
 export const BARRIER_LOG_SCHEMA_VERSION = 3;
@@ -292,15 +292,13 @@ export function replayBarrierEvents(events) {
       continue;
     }
     if (event.type === "guardian-placed" && typeof event.barrierId === "string") {
-      if (barriers[event.barrierId]) barriers[event.barrierId].guardian = normalizeGuardian(event.guardian, event.at);
+      // Legacy event: keep parsing it, but do not reactivate the retired field.
       continue;
     }
     if (event.type === "guardian-label-updated" && typeof event.barrierId === "string") {
-      if (barriers[event.barrierId]?.guardian) barriers[event.barrierId].guardian.label = typeof event.label === "string" ? event.label.slice(0, 120) : "";
       continue;
     }
     if (event.type === "guardian-removed" && typeof event.barrierId === "string") {
-      if (barriers[event.barrierId]) barriers[event.barrierId].guardian = null;
       continue;
     }
     if (!event.tile || !event.stoneId) continue;

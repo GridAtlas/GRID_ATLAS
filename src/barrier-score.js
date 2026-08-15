@@ -1,4 +1,4 @@
-import { BARRIER_CONFIG, stoneDisplayCount } from "./barrier.js";
+import { BARRIER_CONFIG, stoneDisplayCount, stoneExactCount } from "./barrier.js";
 
 export const BARRIER_SCORE_CONFIG = Object.freeze({
   earthRadiusKm: 6371.0088,
@@ -39,17 +39,18 @@ export function scoreBarrier(log, barrierId, config = BARRIER_SCORE_CONFIG) {
     ? nonZeroPolygonAreaKm2(geos, config.earthRadiusKm)
     : sphericalPolygonAreaKm2(geos, config.earthRadiusKm);
   const shape = shapeCoefficient(geos.length, selfIntersecting, config.shapeCoefficients, barrier.linkPattern);
-  const guardian = BARRIER_CONFIG.guardianEnabled ? barrier.guardian : null;
-  const beauty = beautyCoefficient(geos, config, guardian);
+  const beauty = beautyCoefficient(geos, config);
   const scale = scaleCoefficient(areaKm2, config);
   const stoneCount = stones.reduce((sum, stone) => sum + stoneDisplayCount(stone), 0);
-  const power = stoneCount * shape * beauty * scale;
+  const effectiveStoneCountValue = effectiveStoneCount(stones);
+  const power = effectiveStoneCountValue * shape * beauty * scale;
   const density = areaKm2 > 0 ? power / areaKm2 : 0;
   return {
     barrierId,
     name: barrier.name || "",
     vertexCount: geos.length,
     stoneCount,
+    effectiveStoneCount: effectiveStoneCountValue,
     areaKm2,
     shapeCoefficient: shape,
     beautyCoefficient: beauty,
@@ -57,9 +58,15 @@ export function scoreBarrier(log, barrierId, config = BARRIER_SCORE_CONFIG) {
     power,
     density,
     selfIntersecting,
-    guardian: guardian || null,
+    guardian: null,
     rank: rankForScore(power, config)
   };
+}
+
+export function effectiveStoneCount(stones) {
+  if (!Array.isArray(stones) || stones.length === 0) return 0;
+  const product = stones.reduce((value, stone) => value * Math.max(1, stoneExactCount(stone)), 1);
+  return stones.length * (product ** (1 / stones.length));
 }
 
 export function scaleCoefficient(areaKm2, config = BARRIER_SCORE_CONFIG) {
@@ -284,12 +291,12 @@ function planarWindingNumber(point, polygon) {
   return winding;
 }
 
-export function beautyCoefficient(geos, config = BARRIER_SCORE_CONFIG, guardian = null) {
+export function beautyCoefficient(geos, config = BARRIER_SCORE_CONFIG) {
   const minimum = Number.isFinite(Number(config.beautyMin)) ? Number(config.beautyMin) : 0.5;
   const maximum = Number.isFinite(Number(config.beautyMax)) ? Number(config.beautyMax) : 3;
   const gamma = Math.max(0.0001, Number(config.beautyGamma) || 1);
   if (!Array.isArray(geos) || geos.length < 3) return minimum;
-  const base = validGeo(guardian) ? guardian : centroidGeo(geos);
+  const base = centroidGeo(geos);
   const polar = geos.map((geo) => polarCoordinates(base, geo));
   const radii = polar.map((point) => point.distanceMeters);
   const radialMean = radii.reduce((sum, value) => sum + value, 0) / radii.length;
@@ -406,14 +413,13 @@ export function sightRadiusForRank(rankIndex = 0, config = BARRIER_CONFIG) {
   return Number(config.sightRadiusKm[index]) || config.sightRadiusKm[0];
 }
 
-export function barrierReferenceGeo(geos, guardian = null) {
+export function barrierReferenceGeo(geos) {
   if (!Array.isArray(geos) || geos.length === 0) return null;
-  if (validGeo(guardian)) return { lat: Number(guardian.lat), lng: Number(guardian.lng) };
   return centroidGeo(geos);
 }
 
-export function barrierFitsSightRadius(geos, rankIndex = 0, config = BARRIER_CONFIG, guardian = null) {
-  const reference = barrierReferenceGeo(geos, guardian);
+export function barrierFitsSightRadius(geos, rankIndex = 0, config = BARRIER_CONFIG) {
+  const reference = barrierReferenceGeo(geos);
   if (!reference) return { ok: false, reason: "invalid-reference" };
   const radiusKm = sightRadiusForRank(rankIndex, config);
   const distances = geos.map((geo, index) => ({ index, distanceKm: geoDistanceKm(reference, geo) }));

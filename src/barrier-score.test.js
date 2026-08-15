@@ -4,8 +4,10 @@ import {
   barrierFitsSightRadius,
   beautyCoefficient,
   effectiveBeautyTolerance,
+  effectiveStoneCount,
   geoDistanceKm,
   nonZeroPolygonAreaKm2,
+  polygonSelfIntersects,
   rankForScore,
   scoreBarrier,
   scaleCoefficient,
@@ -43,9 +45,35 @@ function regularPentagram(radiusKm) {
   return Array.from({ length: 5 }, (_, index) => destinationGeo(center, radiusKm, 90 + index * 144));
 }
 
+function regularPolygon(radiusKm, vertexCount) {
+  const center = { lat: 35, lng: 139 };
+  return Array.from({ length: vertexCount }, (_, index) => (
+    destinationGeo(center, radiusKm, 90 + index * 360 / vertexCount)
+  ));
+}
+
 function regularOctagram(radiusKm) {
   const center = { lat: 35, lng: 139 };
   const outer = Array.from({ length: 8 }, (_, index) => destinationGeo(center, radiusKm, 90 + index * 45));
+  return [0, 3, 6, 1, 4, 7, 2, 5].map((index) => outer[index]);
+}
+
+function irregularOctagram(radiusKm, perturbation = 0.05) {
+  const center = { lat: 35, lng: 139 };
+  const radiusFactors = [
+    1,
+    1 + perturbation,
+    1 - perturbation * 0.7,
+    1 + perturbation * 0.4,
+    1 - perturbation * 0.9,
+    1 + perturbation * 0.6,
+    1 - perturbation * 0.5,
+    1 + perturbation * 0.8
+  ];
+  const bearingOffsets = [0, 1.2, -0.8, 1.7, -1.1, 0.9, -1.5, 0.6];
+  const outer = radiusFactors.map((factor, index) => (
+    destinationGeo(center, radiusKm * factor, 90 + index * 45 + bearingOffsets[index] * perturbation / 0.05)
+  ));
   return [0, 3, 6, 1, 4, 7, 2, 5].map((index) => outer[index]);
 }
 
@@ -82,6 +110,32 @@ describe("barrier score helpers", () => {
     }
   });
 
+  it("keeps perturbed octagram area finite and continuous", () => {
+    const areas = [0, 0.03, 0.06, 0.1].map((perturbation) => (
+      nonZeroPolygonAreaKm2(irregularOctagram(30, perturbation))
+    ));
+    const baseline = areas[0];
+    expect(baseline).toBeGreaterThan(0);
+    for (const area of areas) {
+      expect(Number.isFinite(area)).toBe(true);
+      expect(area).toBeGreaterThan(baseline * 0.5);
+      expect(area).toBeLessThan(baseline * 1.5);
+    }
+    for (let index = 1; index < areas.length; index += 1) {
+      expect(Math.abs(areas[index] - areas[index - 1])).toBeLessThan(baseline * 0.25);
+    }
+  });
+
+  it("handles an asymmetric eight-vertex self-intersection", () => {
+    const polygon = irregularOctagram(30, 0.1);
+    const area = nonZeroPolygonAreaKm2(polygon);
+    const signedFanArea = sphericalPolygonAreaKm2(polygon);
+    expect(polygonSelfIntersects(polygon)).toBe(true);
+    expect(Number.isFinite(area)).toBe(true);
+    expect(area).toBeGreaterThan(0);
+    expect(Math.abs(area - signedFanArea)).toBeGreaterThan(area * 0.01);
+  });
+
   it("adds both regions of a bow-tie polygon instead of canceling them", () => {
     const bowTie = [
       { lat: 34.99, lng: 138.99 },
@@ -98,6 +152,14 @@ describe("barrier score helpers", () => {
   });
 
   it("keeps simple polygon areas unchanged", () => {
+    const existingHexagon = [
+      { lat: 35.01, lng: 139 },
+      { lat: 35.005, lng: 139.009 },
+      { lat: 34.995, lng: 139.009 },
+      { lat: 34.99, lng: 139 },
+      { lat: 34.995, lng: 138.991 },
+      { lat: 35.005, lng: 138.991 }
+    ];
     const polygons = [
       triangle,
       [
@@ -113,17 +175,47 @@ describe("barrier score helpers", () => {
         { lat: 34.992, lng: 138.994 },
         { lat: 35.003, lng: 138.991 }
       ],
-      [
-        { lat: 35.01, lng: 139 },
-        { lat: 35.005, lng: 139.009 },
-        { lat: 34.995, lng: 139.009 },
-        { lat: 34.99, lng: 139 },
-        { lat: 34.995, lng: 138.991 },
-        { lat: 35.005, lng: 138.991 }
-      ]
+      existingHexagon,
+      regularPolygon(10, 7),
+      regularPolygon(10, 8)
     ];
     for (const polygon of polygons) {
       expect(nonZeroPolygonAreaKm2(polygon)).toBeCloseTo(sphericalPolygonAreaKm2(polygon), 8);
+    }
+  });
+
+  it("preserves the existing six-vertex area result", () => {
+    const hexagon = [
+      { lat: 35.01, lng: 139 },
+      { lat: 35.005, lng: 139.009 },
+      { lat: 34.995, lng: 139.009 },
+      { lat: 34.99, lng: 139 },
+      { lat: 34.995, lng: 138.991 },
+      { lat: 35.005, lng: 138.991 }
+    ];
+    expect(nonZeroPolygonAreaKm2(hexagon)).toBeCloseTo(sphericalPolygonAreaKm2(hexagon), 8);
+  });
+
+  it("keeps degenerate crossings finite without defining new fill semantics", () => {
+    const concurrent = [
+      { lat: 35, lng: 138.99 },
+      { lat: 35, lng: 139.01 },
+      { lat: 35.01, lng: 138.99 },
+      { lat: 34.99, lng: 139.01 },
+      { lat: 34.99, lng: 138.99 },
+      { lat: 35.01, lng: 139.01 }
+    ];
+    const overlapping = [
+      { lat: 34.99, lng: 138.99 },
+      { lat: 35.01, lng: 139.01 },
+      { lat: 35.01, lng: 138.99 },
+      { lat: 34.99, lng: 139.01 },
+      { lat: 35.01, lng: 139.01 },
+      { lat: 34.99, lng: 138.99 }
+    ];
+    for (const polygon of [concurrent, overlapping]) {
+      expect(() => nonZeroPolygonAreaKm2(polygon)).not.toThrow();
+      expect(Number.isFinite(nonZeroPolygonAreaKm2(polygon))).toBe(true);
     }
   });
 
@@ -163,12 +255,10 @@ describe("barrier score helpers", () => {
     expect(geoDistanceKm(center, within[0])).toBeCloseTo(0.8, 2);
   });
 
-  it("uses a guardian as the sight-radius reference when provided", () => {
-    const guardian = { lat: 35, lng: 139 };
-    const geos = [0, 120, 240].map((bearing) => destinationGeo(guardian, 0.8, bearing));
-    expect(barrierFitsSightRadius(geos, 0, BARRIER_CONFIG, guardian).ok).toBe(true);
-    const farGuardian = destinationGeo(guardian, 1.5, 0);
-    expect(barrierFitsSightRadius(geos, 0, BARRIER_CONFIG, farGuardian).ok).toBe(false);
+  it("uses the vertex centroid as the sight-radius reference", () => {
+    const center = { lat: 35, lng: 139 };
+    const geos = [0, 120, 240].map((bearing) => destinationGeo(center, 0.8, bearing));
+    expect(barrierFitsSightRadius(geos, 0, BARRIER_CONFIG).ok).toBe(true);
   });
 
   it("supports seven/eight vertices and the octagram coefficient", () => {
@@ -191,17 +281,14 @@ describe("barrier score helpers", () => {
     expect(scaleCoefficient(Number.MAX_VALUE)).toBeLessThanOrEqual(BARRIER_SCORE_CONFIG.scaleL0);
   });
 
-  it("uses a guardian as the beauty reference point without changing shape", () => {
+  it("uses the vertex centroid as the beauty reference point", () => {
     const square = [
       { lat: 35.01, lng: 139 },
       { lat: 35, lng: 139.01 },
       { lat: 34.99, lng: 139 },
       { lat: 35, lng: 138.99 }
     ];
-    const centered = beautyCoefficient(square, BARRIER_SCORE_CONFIG, { lat: 35, lng: 139 });
-    const offset = beautyCoefficient(square, BARRIER_SCORE_CONFIG, { lat: 35.005, lng: 139 });
-    expect(centered).toBeGreaterThan(2.5);
-    expect(offset).toBeLessThan(centered);
+    expect(beautyCoefficient(square, BARRIER_SCORE_CONFIG)).toBeGreaterThan(2.5);
     expect(shapeCoefficient(5, false)).toBe(1.5);
     expect(shapeCoefficient(5, true)).toBe(3);
   });
@@ -249,7 +336,16 @@ describe("barrier score helpers", () => {
     expect(score.rank.name).toBeTruthy();
   });
 
-  it("keeps guardian data local to scoring and leaves other factors unchanged", () => {
+  it("uses the geometric mean of vertex stone counts as the effective count", () => {
+    expect(effectiveStoneCount([{ count: 20 }, { count: 20 }, { count: 20 }, { count: 20 }, { count: 20 }]))
+      .toBeCloseTo(100, 8);
+    expect(effectiveStoneCount([{ count: 40 }, { count: 15 }, { count: 15 }, { count: 15 }, { count: 15 }]))
+      .toBeCloseTo(5 * Math.pow(40 * 15 ** 4, 1 / 5), 8);
+    expect(effectiveStoneCount([{ count: 40 }, { count: 15 }, { count: 15 }, { count: 15 }, { count: 15 }]))
+      .toBeLessThan(100);
+  });
+
+  it("ignores retired guardian data while preserving score geometry", () => {
     const baseLog = {
       stones: {
         a: { tile: "18/232798/103246", count: 2 },
@@ -263,7 +359,7 @@ describe("barrier score helpers", () => {
     };
     const plain = scoreBarrier(baseLog, "plain");
     const guarded = scoreBarrier(baseLog, "guarded");
-    expect(guarded.guardian).toMatchObject({ lat: 35.681, lng: 139.767, label: "自宅" });
+    expect(guarded.guardian).toBeNull();
     expect(guarded.stoneCount).toBe(plain.stoneCount);
     expect(guarded.areaKm2).toBeCloseTo(plain.areaKm2, 8);
     expect(guarded.shapeCoefficient).toBe(plain.shapeCoefficient);

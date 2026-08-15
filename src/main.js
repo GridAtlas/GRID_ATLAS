@@ -11,6 +11,7 @@ import {
   GridAtlasImportError,
   buildGridAtlasArchive,
   decodeGridAtlasUrlPayload,
+  encodeGridAtlasUrlPayload,
   gridAtlasDocumentDigest,
   readGridAtlasFile
 } from "./gridatlas-import.js?v=2";
@@ -23,19 +24,32 @@ import {
   storeGridAtlasDataUrl
 } from "./gridatlas-assets.js?v=1";
 import {
-  GRIDATLAS_LINE_LAYER_EXTENSION,
-  buildGridAtlasLineLayer,
+  GRIDATLAS_ANALYSIS_EXTENSION,
+  buildGridAtlasAnalysisLayer,
   normalizeGridAtlasLineColor,
-  readGridAtlasLineLayer,
-  withoutGridAtlasLineLayer
-} from "./gridatlas-analysis.js?v=1";
+  readGridAtlasAnalysisLayer,
+  withoutGridAtlasAnalysisLayer
+} from "./gridatlas-analysis.js?v=2";
+import {
+  ANALYSIS_LAYER_VERSION,
+  analysisLineEndpointIdentityKey,
+  analysisVertexPlaceRef,
+  createAnalysisFigure,
+  createAnalysisLine,
+  figureEdges,
+  normalizeAnalysisLayer as normalizeAnalysisLayerModel,
+  normalizeAnalysisFigure,
+  normalizeAnalysisLine,
+  normalizeAnalysisVertex,
+  removeAnalysisFigureVertex,
+  setAnalysisFigureClosed
+} from "./analysis-layer.js?v=1";
 import { analyzeLineIntersection, analyzeOpenPath, analyzeSegmentShape, vincentyDistanceMeters } from "./shape-analysis.js?v=1";
 import {
   BARRIER_CONFIG,
   appendBarrierEvent,
   createBarrierLog,
   grantBarrierStock,
-  normalizeGuardian,
   maxVerticesForRank,
   registerBarrier,
   sanitizeBarrierLog,
@@ -62,7 +76,6 @@ import {
 } from "./barrier-evaluation.js?v=1";
 
 const STORAGE_KEY = "grid-atlas-workspace-v2";
-const ANALYSIS_LAYER_VERSION = 1;
 const DEFAULT_ANALYSIS_LAYER_ID = "analysis-layer-default";
 const DEFAULT_ANALYSIS_LAYER_NAME = "考察レイヤー";
 const THEME_KEY = "grid-atlas-theme";
@@ -70,7 +83,6 @@ const LANGUAGE_KEY = "grid-atlas-language";
 const DISTANCE_UNIT_KEY = "grid-atlas-distance-unit";
 const ROUTE_RETURN_KEY = "grid-atlas-route-return";
 const MAP_PROVIDER_KEY = "grid-atlas-map-provider";
-const GUARDIAN_LABEL_IN_IMAGE_KEY = "grid-atlas-guardian-label-in-image";
 const POINT_INFO_MAP_RETURN_KEY = "grid-atlas-point-info-map-return";
 const MAP_PROVIDER_GOOGLE = "google";
 const MAP_PROVIDER_APPLE = "apple";
@@ -115,7 +127,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2009";
+const WEB_VERSION = "0.2062";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -219,6 +231,7 @@ const elements = {
   textInputDialogDefaultActions: document.querySelector("#textInputDialogDefaultActions"),
   textInputDialogShareActions: document.querySelector("#textInputDialogShareActions"),
   textInputShareFileButton: document.querySelector("#textInputShareFileButton"),
+  textInputShareUrlButton: document.querySelector("#textInputShareUrlButton"),
   actionCopyToListButton: document.querySelector("#actionCopyToListButton"),
   actionMoveToListButton: document.querySelector("#actionMoveToListButton"),
   actionShareSelectedButton: document.querySelector("#actionShareSelectedButton"),
@@ -267,7 +280,6 @@ const elements = {
   settingsLanguageSelect: document.querySelector("#settingsLanguageSelect"),
   settingsUnitSelect: document.querySelector("#settingsUnitSelect"),
   settingsGpsEnabled: document.querySelector("#settingsGpsEnabled"),
-  settingsGuardianLabelInImage: document.querySelector("#settingsGuardianLabelInImage"),
   settingsMapProviderSelect: document.querySelector("#settingsMapProviderSelect"),
   systemUpdateButton: document.querySelector("#systemUpdateButton"),
   systemUpdateStatus: document.querySelector("#systemUpdateStatus"),
@@ -341,6 +353,15 @@ const elements = {
   gridLinkQuickColorMark: document.querySelector("#gridLinkQuickColorMark"),
   gridLinkQuickDeleteButton: document.querySelector("#gridLinkQuickDeleteButton"),
   gridLinkQuickDeleteLabel: document.querySelector("#gridLinkQuickDeleteLabel"),
+  gridFigureQuickDialog: document.querySelector("#gridFigureQuickDialog"),
+  gridFigureQuickName: document.querySelector("#gridFigureQuickName"),
+  gridFigureQuickInfo: document.querySelector("#gridFigureQuickInfo"),
+  gridFigureQuickToggleClosedButton: document.querySelector("#gridFigureQuickToggleClosedButton"),
+  gridFigureQuickToggleClosedLabel: document.querySelector("#gridFigureQuickToggleClosedLabel"),
+  gridFigureQuickDeleteVertexButton: document.querySelector("#gridFigureQuickDeleteVertexButton"),
+  gridFigureQuickDeleteVertexLabel: document.querySelector("#gridFigureQuickDeleteVertexLabel"),
+  gridFigureQuickDeleteButton: document.querySelector("#gridFigureQuickDeleteButton"),
+  gridFigureQuickDeleteLabel: document.querySelector("#gridFigureQuickDeleteLabel"),
   gridLinkColorDialog: document.querySelector("#gridLinkColorDialog"),
   gridLinkColorDialogTitle: document.querySelector("#gridLinkColorDialogTitle"),
   gridLinkColorDialogMessage: document.querySelector("#gridLinkColorDialogMessage"),
@@ -396,10 +417,6 @@ const elements = {
   barrierDetailShape: document.querySelector("#barrierDetailShape"),
   barrierDetailBeauty: document.querySelector("#barrierDetailBeauty"),
   barrierDetailScale: document.querySelector("#barrierDetailScale"),
-  barrierGuardianSummary: document.querySelector("#barrierGuardianSummary"),
-  barrierGuardianSetButton: document.querySelector("#barrierGuardianSetButton"),
-  barrierGuardianLabelButton: document.querySelector("#barrierGuardianLabelButton"),
-  barrierGuardianRemoveButton: document.querySelector("#barrierGuardianRemoveButton"),
   barrierShareButton: document.querySelector("#barrierShareButton"),
   selectionHeading: document.querySelector("#selectionHeading"),
   detailPhoto: document.querySelector("#detailPhoto"),
@@ -533,7 +550,8 @@ const state = {
     version: ANALYSIS_LAYER_VERSION,
     id: DEFAULT_ANALYSIS_LAYER_ID,
     name: DEFAULT_ANALYSIS_LAYER_NAME,
-    links: []
+    lines: [],
+    figures: []
   },
   mode: "inspect",
   mobilePage: "map",
@@ -544,6 +562,8 @@ const state = {
   pointInfoReturnPhase: null,
   gridPointQuickPointId: null,
   gridLinkQuickLinkId: null,
+  gridFigureQuickFigureId: null,
+  gridFigureQuickVertexIndex: null,
   gridLinkColorLinkId: null,
   gridPointHoverPointId: null,
   pointInfoBackdropClickPending: false,
@@ -551,6 +571,7 @@ const state = {
   selection: [],
   selectedPointId: null,
   selectedLinkId: null,
+  selectedFigureId: null,
   pendingLinkPointId: null,
   routeSelectionIds: [],
   routeStartPointId: null,
@@ -577,8 +598,6 @@ const state = {
   traverseQuantityAction: null,
   traverseQuantity: 1,
   traverseQuantityMax: 1,
-  guardianPlacementMode: false,
-  guardianLabelInImage: BARRIER_CONFIG.guardianLabelInImage,
   traverseBusy: false,
   dragonEye: {
     active: false,
@@ -636,10 +655,20 @@ let gridModeSuppressClick = false;
 Object.defineProperty(state, "links", {
   configurable: true,
   get() {
-    return this.analysisLayer.links;
+    return this.analysisLayer.lines;
   },
   set(value) {
-    this.analysisLayer.links = Array.isArray(value) ? value : [];
+    this.analysisLayer.lines = Array.isArray(value) ? value : [];
+  }
+});
+
+Object.defineProperty(state, "figures", {
+  configurable: true,
+  get() {
+    return this.analysisLayer.figures;
+  },
+  set(value) {
+    this.analysisLayer.figures = Array.isArray(value) ? value : [];
   }
 });
 
@@ -742,7 +771,6 @@ const TRANSLATIONS = {
     "settings.language": "言語",
     "settings.units": "距離単位",
     "settings.gps": "GPS機能を使用",
-    "settings.guardianLabelInImage": "共有画像に守護点ラベルを表示",
     "settings.mapProvider": "地図サービス",
     "settings.mapGoogle": "Googleマップ",
     "settings.mapApple": "Appleマップ",
@@ -799,7 +827,7 @@ const TRANSLATIONS = {
     "action.copyToList": "コピー",
     "action.moveToList": "移動",
     "action.shareSelected": "共有",
-    "action.shareSelectedTitle": "選択地点を共有",
+    "action.shareSelectedTitle": "選択した地点・線・図形を共有",
     "action.invert": "反転",
     "action.invertTitle": "表示中の地点の選択を反転",
     "action.info": "情報",
@@ -888,6 +916,18 @@ const TRANSLATIONS = {
     "line.reconnected": "「{old}」を「{new}」へ接続変更しました",
     "line.invalidTarget": "別の地点へドロップしてください",
     "line.duplicateTarget": "その2地点を結ぶ線はすでにあります",
+    "figure.openAction": "図形を開く",
+    "figure.closeAction": "図形を閉じる",
+    "figure.deleteVertex": "この頂点を削除",
+    "figure.delete": "図形を削除",
+    "figure.vertexCount": "{count}頂点",
+    "figure.opened": "図形を開きました",
+    "figure.closed": "図形を閉じました",
+    "figure.vertexDeleted": "図形の頂点を削除しました",
+    "figure.demoted": "2頂点になったため独立した線分へ変更しました",
+    "figure.deleteConfirm": "この図形を削除しますか？",
+    "figure.deleteVertexConfirm": "この頂点を削除しますか？",
+    "figure.closeUnavailable": "図形を閉じるには3頂点以上が必要です",
     "analysis.dialogTitle": "分析結果",
     "analysis.lineTitle": "交差角",
     "analysis.polygonTitle": "図形の分析",
@@ -1064,15 +1104,20 @@ const TRANSLATIONS = {
     "list.copy": "コピー",
     "list.export": "共有",
     "list.exportDialogTitle": "共有の確認",
-    "list.exportPrivacy": "地点名・緯度経度・コメント・保存済み画像を含みます。",
+    "list.exportPrivacy": "地点名・緯度経度・コメント・保存済み画像を含みます。選択共有では選択した線・図形も含みます。",
     "list.exportConfirm": "このリストを共有しますか？",
     "list.exportSummary": "「{name}」の{count}点",
     "list.exported": "共有ファイルを保存しました",
     "list.exportCompleted": "共有しました",
     "list.exportFailed": "共有ファイルを作成できませんでした。リスト内容を確認してください",
+    "list.exportUrl": "URLをコピー",
+    "list.exportUrlShared": "URLを共有しました",
+    "list.exportUrlCopied": "共有URLをコピーしました",
+    "list.exportUrlCopyFailed": "共有URLをコピーできませんでした",
+    "list.exportUrlTooLong": "URLが長すぎるため、共有ファイルに切り替えます",
     "list.shareSelectedNamePrompt": "共有するリスト名",
-    "list.shareSelectedDefaultName": "選択地点",
-    "list.shareSelectedUnavailable": "共有する地点を選択してください",
+    "list.shareSelectedDefaultName": "選択項目",
+    "list.shareSelectedUnavailable": "共有する地点・線・図形を選択してください",
     "list.shareUnavailable": "共有できるリストデータがありません",
     "list.edit": "編集",
     "list.rename": "リスト名を変更",
@@ -1199,7 +1244,7 @@ const TRANSLATIONS = {
     ,"barrier.scoreTitle": "結界力"
     ,"barrier.scoreDensity": "濃度"
     ,"barrier.scoreArea": "面積"
-    ,"barrier.scoreStones": "石の総数"
+    ,"barrier.scoreStones": "実効石数 / 総石数"
     ,"barrier.scoreShape": "形状係数"
     ,"barrier.scoreBeauty": "美しさ係数"
     ,"barrier.scoreScale": "規模係数"
@@ -1266,7 +1311,6 @@ const TRANSLATIONS = {
     "settings.language": "Language",
     "settings.units": "Distance Unit",
     "settings.gps": "Use GPS",
-    "settings.guardianLabelInImage": "Show guardian label in shared image",
     "settings.mapProvider": "Map service",
     "settings.mapGoogle": "Google Maps",
     "settings.mapApple": "Apple Maps",
@@ -1323,7 +1367,7 @@ const TRANSLATIONS = {
     "action.copyToList": "Copy",
     "action.moveToList": "Move",
     "action.shareSelected": "Share",
-    "action.shareSelectedTitle": "Share selected points",
+    "action.shareSelectedTitle": "Share selected points, lines, and figures",
     "action.invert": "Invert",
     "action.invertTitle": "Invert selection of displayed points",
     "action.info": "Info",
@@ -1412,6 +1456,18 @@ const TRANSLATIONS = {
     "line.reconnected": "Changed the connection from “{old}” to “{new}”",
     "line.invalidTarget": "Drop on a different point",
     "line.duplicateTarget": "A line between those points already exists",
+    "figure.openAction": "Open figure",
+    "figure.closeAction": "Close figure",
+    "figure.deleteVertex": "Delete this vertex",
+    "figure.delete": "Delete figure",
+    "figure.vertexCount": "{count} vertices",
+    "figure.opened": "Figure opened",
+    "figure.closed": "Figure closed",
+    "figure.vertexDeleted": "Figure vertex deleted",
+    "figure.demoted": "The figure became an independent line with two vertices",
+    "figure.deleteConfirm": "Delete this figure?",
+    "figure.deleteVertexConfirm": "Delete this vertex?",
+    "figure.closeUnavailable": "A figure needs at least three vertices to close",
     "analysis.dialogTitle": "Analysis result",
     "analysis.lineTitle": "Crossing angle",
     "analysis.polygonTitle": "Shape analysis",
@@ -1588,15 +1644,20 @@ const TRANSLATIONS = {
     "list.copy": "Copy",
     "list.export": "Share",
     "list.exportDialogTitle": "Confirm sharing",
-    "list.exportPrivacy": "Includes names, coordinates, notes, and saved images.",
+    "list.exportPrivacy": "Includes names, coordinates, notes, and saved images. Selected lines and figures are included for selection sharing.",
     "list.exportConfirm": "Share this list?",
     "list.exportSummary": "{count} point(s) in “{name}”",
     "list.exported": "Saved the shared file",
     "list.exportCompleted": "Shared",
     "list.exportFailed": "Could not create the shared file. Check the list contents",
+    "list.exportUrl": "Copy URL",
+    "list.exportUrlShared": "Shared the URL",
+    "list.exportUrlCopied": "Copied the sharing URL",
+    "list.exportUrlCopyFailed": "Could not copy the sharing URL",
+    "list.exportUrlTooLong": "The URL is too long, so file sharing will be used",
     "list.shareSelectedNamePrompt": "Name for the shared list",
-    "list.shareSelectedDefaultName": "Selected points",
-    "list.shareSelectedUnavailable": "Select points to share",
+    "list.shareSelectedDefaultName": "Selected items",
+    "list.shareSelectedUnavailable": "Select points, lines, or figures to share",
     "list.shareUnavailable": "No list data is available to share",
     "list.edit": "Edit",
     "list.rename": "Rename list",
@@ -1723,7 +1784,7 @@ const TRANSLATIONS = {
     ,"barrier.scoreTitle": "Barrier power"
     ,"barrier.scoreDensity": "Density"
     ,"barrier.scoreArea": "Area"
-    ,"barrier.scoreStones": "Total stones"
+    ,"barrier.scoreStones": "Effective / total stones"
     ,"barrier.scoreShape": "Shape factor"
     ,"barrier.scoreBeauty": "Beauty factor"
     ,"barrier.scoreScale": "Scale factor"
@@ -1904,7 +1965,6 @@ function syncSettingsControls() {
   elements.settingsLanguageSelect.value = activeLanguage();
   elements.settingsUnitSelect.value = state.distanceUnit;
   elements.settingsGpsEnabled.checked = state.gpsEnabled;
-  if (elements.settingsGuardianLabelInImage) elements.settingsGuardianLabelInImage.checked = state.guardianLabelInImage;
   elements.settingsMapProviderSelect.value = state.mapProvider;
   elements.routeReturnToStart.checked = state.routeReturnToStart;
 }
@@ -2334,7 +2394,6 @@ function setTraverseMode(enabled) {
   resetDragonEyeState();
   state.barrierSelection = [];
   state.selectedBarrierId = null;
-  state.guardianPlacementMode = false;
   reopenTraverseActionMenuAfterStatus = false;
   if (!state.traverseMode) closeTraverseActionDialog();
   if (state.traverseMode) {
@@ -2386,14 +2445,12 @@ function loadPreferences() {
   let unit = METRIC_UNIT;
   let returnToStart = true;
   let gpsEnabled = false;
-  let guardianLabelInImage = BARRIER_CONFIG.guardianLabelInImage;
   let mapProvider = defaultMapProvider();
   try {
     language = localStorage.getItem(LANGUAGE_KEY) === EN_LANGUAGE ? EN_LANGUAGE : JA_LANGUAGE;
     unit = localStorage.getItem(DISTANCE_UNIT_KEY) === IMPERIAL_UNIT ? IMPERIAL_UNIT : METRIC_UNIT;
     returnToStart = localStorage.getItem(ROUTE_RETURN_KEY) === "true";
     gpsEnabled = localStorage.getItem(GPS_ENABLED_KEY) === "true";
-    guardianLabelInImage = localStorage.getItem(GUARDIAN_LABEL_IN_IMAGE_KEY) === "true";
     const savedMapProvider = localStorage.getItem(MAP_PROVIDER_KEY);
     if (savedMapProvider === MAP_PROVIDER_APPLE || savedMapProvider === MAP_PROVIDER_GOOGLE) {
       mapProvider = savedMapProvider;
@@ -2405,7 +2462,6 @@ function loadPreferences() {
   setRouteReturnToStart(returnToStart, { persist: false });
   setMapProvider(mapProvider, { persist: false });
   state.gpsEnabled = gpsEnabled;
-  state.guardianLabelInImage = guardianLabelInImage;
 }
 
 function setSettingsMenuOpen(open) {
@@ -2597,6 +2653,7 @@ function applyWorkspace(workspace) {
   state.selection = [];
   state.selectedPointId = null;
   state.selectedLinkId = null;
+  state.selectedFigureId = null;
   state.pendingLinkPointId = null;
   state.routeSelectionIds = [];
   state.routeStartPointId = null;
@@ -3517,11 +3574,6 @@ async function renderBarrierShareImage(score) {
   context.fillStyle = colors.text;
   context.font = "800 42px system-ui, sans-serif";
   context.fillText(title.slice(0, 24), 82, 136);
-  if (state.guardianLabelInImage && score.guardian?.label) {
-    context.fillStyle = colors.muted;
-    context.font = "600 18px system-ui, sans-serif";
-    context.fillText(`${t("barrier.guardianTitle")}: ${score.guardian.label.slice(0, 40)}`, 82, 166);
-  }
 
   const originLat = geometry.reduce((sum, vertex) => sum + vertex.geo.lat, 0) / geometry.length;
   const originLng = geometry.reduce((sum, vertex) => sum + vertex.geo.lng, 0) / geometry.length;
@@ -3583,7 +3635,7 @@ async function renderBarrierShareImage(score) {
   const stats = [
     [t("barrier.scoreTitle"), `${formatScoreValue(score.power)} 力`],
     [t("barrier.scoreArea"), `${formatAreaValue(score.areaKm2)} km²`],
-    [t("barrier.scoreStones"), String(score.stoneCount)]
+    [t("barrier.scoreStones"), `${Math.floor(score.effectiveStoneCount)} / ${score.stoneCount}`]
   ];
   stats.forEach(([label, value], index) => {
     const top = cardTop + index * (cardHeight + 18);
@@ -3945,7 +3997,6 @@ function drawTraverseTiles() {
   const colors = canvasPalette();
   drawTraverseStones();
   drawTraverseBarriers();
-  drawTraverseGuardians();
 
   const currentGeo = state.currentGeo;
   const currentTileId = currentGeo ? tileIdFromGeo(currentGeo) : null;
@@ -4159,6 +4210,62 @@ function drawGridLines(topLeft, bottomRight, step, color, lineWidth) {
   }
 
   context.stroke();
+}
+
+function runtimeAnalysisVertex(vertex) {
+  const normalized = normalizeAnalysisVertex(vertex);
+  if (!normalized) return null;
+  const geo = { lat: normalized.lat, lng: normalized.lng };
+  return {
+    ...normalized,
+    id: normalized.placeRef || "",
+    title: normalized.name,
+    geo,
+    endpointKey: normalized.key,
+    ...projectLatLng(normalized.lat, normalized.lng)
+  };
+}
+
+function figureRuntimeVertices(figure) {
+  return Array.isArray(figure?.vertices)
+    ? figure.vertices.map(runtimeAnalysisVertex).filter(Boolean)
+    : [];
+}
+
+function figureSegments(figure) {
+  return figureEdges(figure).map((edge) => {
+    const a = runtimeAnalysisVertex(edge.a);
+    const b = runtimeAnalysisVertex(edge.b);
+    return a && b ? { a, b } : null;
+  }).filter(Boolean);
+}
+
+function drawFigures() {
+  const colors = canvasPalette();
+  for (const figure of state.figures) {
+    const vertices = figureRuntimeVertices(figure);
+    if (vertices.length < 2) continue;
+
+    const points = vertices.map(worldToScreen);
+    const isSelected = isFigureSelected(figure.id);
+    const stroke = normalizeGridAtlasLineColor(figure.color)
+      || (isSelected ? colors.linkSelected : colors.link);
+    context.save();
+    context.beginPath();
+    context.moveTo(points[0].x, points[0].y);
+    for (const point of points.slice(1)) context.lineTo(point.x, point.y);
+    if (figure.closed && points.length >= 3) context.closePath();
+    if (figure.closed && points.length >= 3) {
+      context.globalAlpha = isSelected ? 0.22 : 0.1;
+      context.fillStyle = stroke;
+      context.fill();
+      context.globalAlpha = 1;
+    }
+    context.strokeStyle = stroke;
+    context.lineWidth = isSelected ? 4 : 2;
+    context.stroke();
+    context.restore();
+  }
 }
 
 function drawLinks() {
@@ -4816,12 +4923,12 @@ function draw() {
   if (state.barrierPlacementView) {
     drawTraverseStones();
     drawTraverseBarriers();
-    drawTraverseGuardians();
     return;
   }
   drawTraverseTiles();
   drawDragonEyePreview();
   drawBarrierLinkGesture();
+  drawFigures();
   drawLinks();
   drawLineDragPreview();
   drawRouteResult();
@@ -4892,6 +4999,7 @@ function render() {
   renderPointInfoDialog();
   renderGridPointQuickDialog();
   renderGridLinkQuickDialog();
+  renderGridFigureQuickDialog();
   renderGridLinkColorDialog();
   renderSelectionAnalysisDialog();
   syncSettingsControls();
@@ -5117,7 +5225,6 @@ function renderSelectionInfo() {
 }
 
 function selectionInfoText() {
-  if (state.guardianPlacementMode) return t("barrier.guardianPlacementHint");
   if (state.selectedBarrierId) {
     const score = scoreBarrier(state.traverseLog, state.selectedBarrierId);
     if (score) {
@@ -5143,6 +5250,7 @@ function selectionInfoText() {
 
   const points = selectedPointIds().map(findPoint).filter(Boolean);
   const links = selectedLinkIds().map(findLink).filter(Boolean);
+  const figures = selectedFigureIds().map(findFigure).filter(Boolean);
   const observations = selectedObservationIds();
 
   if (state.selection.length === 1) {
@@ -5154,6 +5262,11 @@ function selectionInfoText() {
     if (entry.type === "point") {
       const point = findPoint(entry.id);
       return point ? pointSelectionInfo(point) : t("message.pointUnavailable");
+    }
+
+    if (entry.type === "figure") {
+      const figure = findFigure(entry.id);
+      return figure ? figureSelectionInfo(figure) : t("analysis.figure");
     }
 
     const link = findLink(entry.id);
@@ -5171,6 +5284,9 @@ function selectionInfoText() {
   }
   if (links.length > 0) {
     countParts.push(`${links.length}${t("label.links")}`);
+  }
+  if (figures.length > 0) {
+    countParts.push(`${figures.length}${t("analysis.figure")}`);
   }
   if (observations.length > 0) {
     countParts.push(`${observations.length}${t("label.observations")}`);
@@ -5237,6 +5353,16 @@ function linkSelectionInfo(link) {
   return `${linkTitle(link)} | ${t("field.distance")} ${formatDistance(distanceBetween(endpoints.a, endpoints.b))}`;
 }
 
+function figureSelectionInfo(figure) {
+  const segments = figureSegments(figure);
+  const analysis = figure.closed ? analyzeSegmentShape(segments) : null;
+  const name = figure.name || t("analysis.figure");
+  if (analysis?.valid) {
+    return `${name} | ${analysis.vertexCount}${t("analysis.vertexCount")} | ${t("analysis.area")} ${formatAreaValue(analysis.area)}`;
+  }
+  return `${name} | ${figure.vertices.length}${t("analysis.vertexCount")}`;
+}
+
 function pointSequenceDistance(points) {
   return points.slice(1).reduce((total, point, index) => total + distanceBetween(points[index], point), 0);
 }
@@ -5261,6 +5387,11 @@ function renderStatus() {
   }
   if (state.pointer.range) {
     elements.statusLine.value = t("status.rangeSelect");
+    return;
+  }
+
+  if (state.pointer.drag?.figureDrag?.active) {
+    elements.statusLine.value = "図形の頂点を移動中";
     return;
   }
 
@@ -5608,6 +5739,7 @@ function renderActionButtons() {
     && !hasPendingPoint
     && visiblePointCount > 0;
   const linkIds = selectedLinkIds();
+  const figureIds = selectedFigureIds();
   const barrierSelectionCount = state.barrierSelection.length;
   const routePlan = routePlanFromCurrentSelection();
   const routeActive = Boolean(state.routeResult);
@@ -5618,7 +5750,7 @@ function renderActionButtons() {
     && (pointEditable(id) || (state.cloud.connected && cloudPointListForPoint(id)?.editable))
   )).length;
   const observationSelected = isLoadedObservationSelected();
-  const canDelete = deletablePointCount + linkIds.length > 0 || observationSelected;
+  const canDelete = deletablePointCount + linkIds.length + figureIds.length > 0 || observationSelected;
   const transferablePointCount = transferableSelectedPoints().length;
   const analysisTarget = selectionAnalysisTarget();
 
@@ -5634,9 +5766,14 @@ function renderActionButtons() {
     .map(findPoint)
     .filter((point) => point && point.id !== CURRENT_LOCATION_ID)
     .length;
+  const shareableSelectedLineCount = selectedLinkIds().length;
+  const shareableSelectedFigureCount = selectedFigureIds().length;
+  const shareableSelectedObjectCount = shareableSelectedPointCount
+    + shareableSelectedLineCount
+    + shareableSelectedFigureCount;
   elements.actionCopyToListButton.disabled = transferablePointCount === 0;
   elements.actionMoveToListButton.disabled = transferablePointCount === 0;
-  elements.actionShareSelectedButton.disabled = shareableSelectedPointCount === 0;
+  elements.actionShareSelectedButton.disabled = shareableSelectedObjectCount === 0;
   elements.actionMapButton.disabled = !mapCandidate;
   elements.actionInvertButton.disabled = !canInvertSelection;
   for (const button of elements.selectAllListButtons) {
@@ -5675,8 +5812,11 @@ function renderActionButtons() {
   elements.actionMoveToListButton.title = transferablePointCount > 0
     ? cloudText("移動先を選択", "Choose a move destination")
     : t("list.transferNoSelection");
-  elements.actionShareSelectedButton.title = shareableSelectedPointCount > 0
-    ? cloudText(`選択した${shareableSelectedPointCount}地点を共有`, `Share ${shareableSelectedPointCount} selected point(s)`)
+  elements.actionShareSelectedButton.title = shareableSelectedObjectCount > 0
+    ? cloudText(
+      `選択した地点${shareableSelectedPointCount}・線${shareableSelectedLineCount}・図形${shareableSelectedFigureCount}を共有`,
+      `Share ${shareableSelectedPointCount} point(s), ${shareableSelectedLineCount} line(s), and ${shareableSelectedFigureCount} figure(s)`
+    )
     : t("list.shareSelectedUnavailable");
   elements.actionMapButton.classList.toggle("is-active", false);
   elements.actionInvertButton.classList.toggle("is-active", false);
@@ -5990,6 +6130,37 @@ function renderGridLinkQuickDialog() {
   elements.gridLinkQuickDeleteButton.title = t("action.delete");
 }
 
+function renderGridFigureQuickDialog() {
+  if (!elements.gridFigureQuickDialog?.open) return;
+  const figure = state.gridFigureQuickFigureId ? findFigure(state.gridFigureQuickFigureId) : null;
+  if (!figure) {
+    elements.gridFigureQuickDialog.close("selection-changed");
+    return;
+  }
+
+  const vertexIndex = state.gridFigureQuickVertexIndex;
+  const hasDeletableVertex = Number.isInteger(vertexIndex)
+    && vertexIndex >= 0
+    && vertexIndex < figure.vertices.length
+    && figure.vertices.length > 2;
+  const title = figure.name || `${t("analysis.figure")} ${figure.vertices.length}`;
+  const toggleLabel = figure.closed ? t("figure.openAction") : t("figure.closeAction");
+  elements.gridFigureQuickName.textContent = title;
+  elements.gridFigureQuickInfo.textContent = t("figure.vertexCount").replace("{count}", String(figure.vertices.length));
+  elements.gridFigureQuickToggleClosedLabel.textContent = toggleLabel;
+  elements.gridFigureQuickToggleClosedButton.setAttribute("aria-label", toggleLabel);
+  elements.gridFigureQuickToggleClosedButton.title = toggleLabel;
+  elements.gridFigureQuickToggleClosedButton.disabled = !figure.closed && figure.vertices.length < 3;
+  elements.gridFigureQuickDeleteVertexButton.hidden = !hasDeletableVertex;
+  elements.gridFigureQuickDeleteVertexButton.disabled = !hasDeletableVertex;
+  elements.gridFigureQuickDeleteVertexLabel.textContent = t("figure.deleteVertex");
+  elements.gridFigureQuickDeleteVertexButton.setAttribute("aria-label", t("figure.deleteVertex"));
+  elements.gridFigureQuickDeleteVertexButton.title = t("figure.deleteVertex");
+  elements.gridFigureQuickDeleteLabel.textContent = t("figure.delete");
+  elements.gridFigureQuickDeleteButton.setAttribute("aria-label", t("figure.delete"));
+  elements.gridFigureQuickDeleteButton.title = t("figure.delete");
+}
+
 function renderGridLinkColorDialog() {
   if (!elements.gridLinkColorDialog?.open) return;
   const link = state.gridLinkColorLinkId ? findLink(state.gridLinkColorLinkId) : null;
@@ -6028,7 +6199,18 @@ function renderGridLinkColorDialog() {
 }
 
 function selectionAnalysisTarget() {
+  const figures = selectedFigureIds().map(findFigure).filter(Boolean);
   const links = selectedLinkIds().map(findLink).filter(Boolean);
+
+  if (figures.length === 1 && links.length === 0 && selectedPointIds().length === 0 && selectedObservationIds().length === 0) {
+    const figure = figures[0];
+    const segments = figureSegments(figure);
+    if (figure.closed && segments.length >= 3) {
+      return { type: "polygon", figure, links: segments, segments };
+    }
+    return null;
+  }
+  if (figures.length > 0) return null;
 
   if (links.length === 1) {
     const segments = links.map((link) => linkEndpoints(link)).filter(Boolean);
@@ -6503,6 +6685,81 @@ async function deleteGridLinkFromQuickDialog() {
   showAppToast(t("line.deleted"));
 }
 
+async function toggleFigureClosedFromQuickDialog() {
+  const figureId = state.gridFigureQuickFigureId;
+  const figure = figureId ? findFigure(figureId) : null;
+  if (!figure) return;
+  const nextClosed = !figure.closed;
+  if (nextClosed && figure.vertices.length < 3) {
+    showAppToast(t("figure.closeUnavailable"), { error: true });
+    return;
+  }
+
+  const updated = setAnalysisFigureClosed(figure, nextClosed);
+  if (!updated) return;
+  state.figures = state.figures.map((candidate) => candidate.id === figureId ? updated : candidate);
+  persistWorkspace();
+  if (elements.gridFigureQuickDialog?.open) elements.gridFigureQuickDialog.close("closed-state");
+  render();
+  showAppToast(t(nextClosed ? "figure.closed" : "figure.opened"));
+}
+
+async function deleteFigureVertexFromQuickDialog() {
+  const figureId = state.gridFigureQuickFigureId;
+  const vertexIndex = state.gridFigureQuickVertexIndex;
+  const figure = figureId ? findFigure(figureId) : null;
+  if (!figure || !Number.isInteger(vertexIndex) || figure.vertices.length <= 2) return;
+
+  const confirmed = await requestConfirm({
+    title: t("figure.deleteVertex"),
+    message: t("figure.deleteVertexConfirm"),
+    confirmLabel: t("action.delete"),
+    danger: true
+  });
+  if (!confirmed || !findFigure(figureId)) return;
+
+  const result = removeAnalysisFigureVertex(figure, vertexIndex, {
+    lineId: createId(),
+    createdAt: new Date().toISOString()
+  });
+  if (!result.figure && !result.line) return;
+
+  if (result.line) {
+    state.figures = state.figures.filter((candidate) => candidate.id !== figureId);
+    state.links = [...state.links, result.line];
+    setSelection([{ type: "link", id: result.line.id }], { render: false });
+  } else {
+    state.figures = state.figures.map((candidate) => candidate.id === figureId ? result.figure : candidate);
+    setSelection([{ type: "figure", id: figureId }], { render: false });
+  }
+  persistWorkspace();
+  if (elements.gridFigureQuickDialog?.open) elements.gridFigureQuickDialog.close("vertex-deleted");
+  render();
+  showAppToast(result.line ? t("figure.demoted") : t("figure.vertexDeleted"));
+}
+
+async function deleteFigureFromQuickDialog() {
+  const figureId = state.gridFigureQuickFigureId;
+  const figure = figureId ? findFigure(figureId) : null;
+  if (!figure) return;
+
+  const confirmed = await requestConfirm({
+    title: t("figure.delete"),
+    message: t("figure.deleteConfirm"),
+    confirmLabel: t("action.delete"),
+    danger: true
+  });
+  if (!confirmed || !findFigure(figureId)) return;
+
+  state.figures = state.figures.filter((candidate) => candidate.id !== figureId);
+  removeSelectionEntry("figure", figureId);
+  if (state.selectedFigureId === figureId) state.selectedFigureId = null;
+  persistWorkspace();
+  if (elements.gridFigureQuickDialog?.open) elements.gridFigureQuickDialog.close("deleted");
+  render();
+  showAppToast(t("figure.delete"));
+}
+
 function setPointInfoActionLabel(button, label) {
   const labelNode = button.querySelector("[data-i18n]");
   if (labelNode) {
@@ -6579,6 +6836,27 @@ function positionGridLinkQuickDialog(screenPoint) {
   elements.gridLinkQuickDialog.style.top = `${top}px`;
 }
 
+function positionGridFigureQuickDialog(screenPoint) {
+  if (!screenPoint || !elements.gridFigureQuickDialog?.open) return;
+  const canvasRect = canvas.getBoundingClientRect();
+  const dialogRect = elements.gridFigureQuickDialog.getBoundingClientRect();
+  const viewportWidth = document.documentElement.clientWidth;
+  const viewportHeight = document.documentElement.clientHeight;
+  const pointX = canvasRect.left + screenPoint.x;
+  const pointY = canvasRect.top + screenPoint.y;
+  const margin = 8;
+  const gap = 10;
+  const maxLeft = Math.max(margin, viewportWidth - dialogRect.width - margin);
+  const left = Math.min(Math.max(margin, pointX - dialogRect.width / 2), maxLeft);
+  const aboveTop = pointY - dialogRect.height - gap;
+  const belowTop = pointY + gap;
+  const top = aboveTop >= margin
+    ? aboveTop
+    : Math.min(Math.max(margin, belowTop), Math.max(margin, viewportHeight - dialogRect.height - margin));
+  elements.gridFigureQuickDialog.style.left = `${left}px`;
+  elements.gridFigureQuickDialog.style.top = `${top}px`;
+}
+
 function openGridLinkQuickDialog(link, screenPoint = null) {
   if (!link || !elements.gridLinkQuickDialog?.show) return;
   hideGridPointHover();
@@ -6586,6 +6864,18 @@ function openGridLinkQuickDialog(link, screenPoint = null) {
   if (!elements.gridLinkQuickDialog.open) elements.gridLinkQuickDialog.show();
   renderGridLinkQuickDialog();
   positionGridLinkQuickDialog(screenPoint);
+}
+
+function openGridFigureQuickDialog(figure, options = {}) {
+  if (!figure || !elements.gridFigureQuickDialog?.show) return;
+  hideGridPointHover();
+  if (elements.gridPointQuickDialog?.open) elements.gridPointQuickDialog.close("figure");
+  if (elements.gridLinkQuickDialog?.open) elements.gridLinkQuickDialog.close("figure");
+  state.gridFigureQuickFigureId = figure.id;
+  state.gridFigureQuickVertexIndex = Number.isInteger(options.vertexIndex) ? options.vertexIndex : null;
+  if (!elements.gridFigureQuickDialog.open) elements.gridFigureQuickDialog.show();
+  renderGridFigureQuickDialog();
+  positionGridFigureQuickDialog(options.screenPoint || null);
 }
 
 function openGridLinkColorDialog(link) {
@@ -6636,12 +6926,6 @@ function renderBarrierDetails() {
     : null;
   panel.hidden = !score;
   if (elements.barrierShareButton) elements.barrierShareButton.disabled = !score;
-  if (elements.barrierGuardianSetButton) {
-    elements.barrierGuardianSetButton.hidden = !score || Boolean(score.guardian);
-    elements.barrierGuardianSetButton.disabled = !score || !BARRIER_CONFIG.guardianEnabled || state.guardianPlacementMode;
-  }
-  if (elements.barrierGuardianLabelButton) elements.barrierGuardianLabelButton.hidden = !score || !score.guardian;
-  if (elements.barrierGuardianRemoveButton) elements.barrierGuardianRemoveButton.hidden = !score || !score.guardian;
   if (!score) return false;
   elements.barrierDetailTitle.textContent = score.name || t("barrier.defaultName");
   const rank = rankForBarrier(state.traverseLog, score.barrierId);
@@ -6649,7 +6933,7 @@ function renderBarrierDetails() {
   elements.barrierDetailPower.textContent = `${formatScoreValue(score.power)} 力`;
   elements.barrierDetailDensity.textContent = `${formatScoreValue(score.density)} / km²`;
   elements.barrierDetailArea.textContent = `${formatAreaValue(score.areaKm2)} km²`;
-  elements.barrierDetailStones.textContent = `${score.stoneCount}`;
+  elements.barrierDetailStones.textContent = `${Math.floor(score.effectiveStoneCount)} / ${score.stoneCount}`;
   elements.barrierDetailShape.textContent = formatFactor(score.shapeCoefficient);
   elements.barrierDetailBeauty.textContent = formatFactor(score.beautyCoefficient);
   elements.barrierDetailScale.textContent = formatFactor(score.scaleCoefficient);
@@ -6673,11 +6957,6 @@ function renderBarrierDetails() {
         : `${t("barrier.rankDays")} ${activeDays} / ${BARRIER_EVALUATION_CONFIG.daysRequired[nextIndex]} ${t("barrier.daysUnit")}\n${t("barrier.rankPowerWait")}`;
       elements.barrierRankProgress.textContent = `${t("barrier.rankNext").replace("{rank}", `${nextName}（${BARRIER_EVALUATION_CONFIG.rankReadings[nextIndex]}）`)}\n${t("barrier.rankPower")} ${formatScoreValue(score.power)} / ${formatScoreValue(nextPower)}\n${stoneLine}\n${daysLine}`;
     }
-  }
-  if (elements.barrierGuardianSummary) {
-    elements.barrierGuardianSummary.textContent = score.guardian
-      ? `${score.guardian.label || t("barrier.guardianUnset")} · ${score.guardian.lat.toFixed(5)}, ${score.guardian.lng.toFixed(5)}`
-      : t("barrier.guardianUnset");
   }
   return true;
 }
@@ -7853,7 +8132,6 @@ function setupStorageListVisibility(row, entry) {
     }
     const nextVisible = !storageListIsVisible(currentEntry);
     setStorageListVisible(entry.storageId, nextVisible);
-    setCloudStatus(t(nextVisible ? "list.visible" : "list.hidden"), { menu: false });
   };
 
   row.addEventListener("click", (event) => {
@@ -10064,21 +10342,20 @@ function findPointIn(id, points) {
   return points.find((point) => point.id === id) ?? null;
 }
 
-function validLinkEndpointId(id) {
-  return id === CURRENT_LOCATION_ID || Boolean(findPointAny(id)) || Boolean(findCloudPointAny(id));
-}
-
 function findLink(id) {
   return state.links.find((link) => link.id === id) ?? null;
 }
 
+function findFigure(id) {
+  return state.figures.find((figure) => figure.id === id) ?? null;
+}
+
 function normalizeAnalysisLayer(layer) {
-  const rawLinks = Array.isArray(layer?.links) ? layer.links : [];
+  const normalized = normalizeAnalysisLayerModel(layer);
   return {
-    version: ANALYSIS_LAYER_VERSION,
+    ...normalized,
     id: typeof layer?.id === "string" && layer.id ? layer.id : DEFAULT_ANALYSIS_LAYER_ID,
-    name: typeof layer?.name === "string" && layer.name.trim() ? layer.name.trim() : DEFAULT_ANALYSIS_LAYER_NAME,
-    links: rawLinks.map(normalizeStoredLink).filter(Boolean)
+    name: typeof layer?.name === "string" && layer.name.trim() ? layer.name.trim() : DEFAULT_ANALYSIS_LAYER_NAME
   };
 }
 
@@ -10094,12 +10371,12 @@ function captureLineEndpoint(point) {
   }
 
   const geo = normalizeGeo(point.geo);
-  return {
-    id: typeof point.id === "string" ? point.id : "",
-    title: typeof point.title === "string" && point.title.trim() ? point.title.trim() : "Point",
-    geo,
-    endpointKey: canonicalEndpointKey(geo)
-  };
+  return normalizeAnalysisVertex({
+    lat: geo.lat,
+    lng: geo.lng,
+    name: typeof point.title === "string" ? point.title : "Point",
+    placeRef: typeof point.id === "string" ? point.id : null
+  });
 }
 
 function canonicalEndpointKey(geo) {
@@ -10110,23 +10387,15 @@ function canonicalEndpointKey(geo) {
 function remapPointIdInLinks(previousId, nextId) {
   if (!previousId || !nextId || previousId === nextId) return;
   for (const link of state.links) {
-    if (link.a === previousId) link.a = nextId;
-    if (link.b === previousId) link.b = nextId;
+    for (const side of ["a", "b"]) {
+      if (link[side]?.placeRef === previousId) link[side].placeRef = nextId;
+    }
   }
-}
-
-function normalizeLineEndpoint(snapshot) {
-  if (!snapshot || typeof snapshot !== "object" || !validGeo(snapshot.geo)) {
-    return null;
+  for (const figure of state.figures) {
+    for (const vertex of figure.vertices) {
+      if (vertex.placeRef === previousId) vertex.placeRef = nextId;
+    }
   }
-
-  const geo = normalizeGeo(snapshot.geo);
-  return {
-    id: typeof snapshot.id === "string" ? snapshot.id : "",
-    title: typeof snapshot.title === "string" && snapshot.title.trim() ? snapshot.title.trim() : "Point",
-    geo,
-    endpointKey: canonicalEndpointKey(geo)
-  };
 }
 
 function linkEndpoint(link, side) {
@@ -10134,56 +10403,45 @@ function linkEndpoint(link, side) {
 }
 
 function endpointSnapshotForLink(link, side) {
-  const snapshot = normalizeLineEndpoint(link?.[`${side}Endpoint`]);
+  const direct = link?.[side];
+  const snapshot = normalizeAnalysisVertex(direct);
   if (!snapshot) return null;
-  return { ...snapshot, ...projectLatLng(snapshot.geo.lat, snapshot.geo.lng) };
+  const geo = { lat: snapshot.lat, lng: snapshot.lng };
+  return {
+    ...snapshot,
+    id: snapshot.placeRef || "",
+    title: snapshot.name,
+    geo,
+    endpointKey: snapshot.key,
+    ...projectLatLng(snapshot.lat, snapshot.lng)
+  };
 }
 
 function normalizeStoredLink(link) {
-  if (!link || typeof link.id !== "string" || !link.id) {
-    return null;
-  }
+  return normalizeAnalysisLine(link);
+}
 
-  const next = { ...link };
-  const endpoints = {};
-  if (typeof next.strokeId !== "string" || !next.strokeId) {
-    delete next.strokeId;
-  }
-  const color = normalizeGridAtlasLineColor(next.color);
-  if (color) {
-    next.color = color;
-  } else {
-    delete next.color;
-  }
-  for (const side of ["a", "b"]) {
-    const endpointKey = `${side}Endpoint`;
-    const endpoint = normalizeLineEndpoint(next[endpointKey]);
-    if (!endpoint) return null;
-    endpoints[side] = endpoint;
-    next[endpointKey] = endpoint;
-  }
-  if (endpoints.a.endpointKey === endpoints.b.endpointKey) return null;
-  return next;
+function lineEndpointPlaceRef(link, side) {
+  return analysisVertexPlaceRef(link?.[side]);
 }
 
 function createStoredLink({ id = createId(), aPoint, bPoint, strokeId = "", color = "", createdAt = new Date().toISOString(), updatedAt = "" } = {}) {
-  const aEndpoint = captureLineEndpoint(aPoint);
-  const bEndpoint = captureLineEndpoint(bPoint);
-  if (!aEndpoint || !bEndpoint || aEndpoint.endpointKey === bEndpoint.endpointKey) {
-    return null;
-  }
-
-  return normalizeStoredLink({
+  const a = captureLineEndpoint(aPoint);
+  const b = captureLineEndpoint(bPoint);
+  return createAnalysisLine({
     id,
-    a: typeof aPoint.id === "string" ? aPoint.id : "",
-    b: typeof bPoint.id === "string" ? bPoint.id : "",
-    aEndpoint,
-    bEndpoint,
-    ...(strokeId ? { strokeId } : {}),
-    ...(normalizeGridAtlasLineColor(color) ? { color: normalizeGridAtlasLineColor(color) } : {}),
-    ...(createdAt ? { createdAt } : {}),
-    ...(updatedAt ? { updatedAt } : {})
+    a,
+    b,
+    strokeId,
+    color,
+    createdAt,
+    updatedAt
   });
+}
+
+function createStoredFigure({ id = createId(), points = [], closed = false, name = "", color = "", createdAt = new Date().toISOString() } = {}) {
+  const vertices = points.map(captureLineEndpoint).filter(Boolean);
+  return createAnalysisFigure({ id, vertices, closed, name, color, createdAt });
 }
 
 function linkTitle(link) {
@@ -10227,9 +10485,12 @@ function splitDisconnectedStrokeGroups() {
       while (queue.length > 0) {
         const current = queue.shift();
         component.push(current);
-        const currentEndpoints = new Set([current.a, current.b]);
+        const currentEndpoints = new Set(["a", "b"]
+          .map((side) => linkEndpointIdentityKey(current, side))
+          .filter(Boolean));
         for (const candidate of [...remaining]) {
-          if (!currentEndpoints.has(candidate.a) && !currentEndpoints.has(candidate.b)) continue;
+          const candidateEndpoints = ["a", "b"].map((side) => linkEndpointIdentityKey(candidate, side));
+          if (!candidateEndpoints.some((endpoint) => currentEndpoints.has(endpoint))) continue;
           remaining.delete(candidate);
           queue.push(candidate);
         }
@@ -10265,6 +10526,10 @@ function isValidSelectionEntry(entry) {
   if (entry.type === "link") {
     const link = findLink(entry.id);
     return Boolean(link);
+  }
+
+  if (entry.type === "figure") {
+    return Boolean(findFigure(entry.id));
   }
 
   if (entry.type === "observation") {
@@ -10310,6 +10575,7 @@ function normalizeSelection(options = {}) {
   const primary = primarySelection();
   state.selectedPointId = primary?.type === "point" ? primary.id : null;
   state.selectedLinkId = primary?.type === "link" ? primary.id : null;
+  state.selectedFigureId = primary?.type === "figure" ? primary.id : null;
 }
 
 function primarySelection() {
@@ -10323,6 +10589,11 @@ function selectionTitle(entry) {
 
   if (entry.type === "observation") {
     return loadedObservationTitle(findLoadedObservation(entry.id));
+  }
+
+  if (entry.type === "figure") {
+    const figure = findFigure(entry.id);
+    return figure?.name || `${t("analysis.figure")} ${figure?.vertices.length || ""}`.trim();
   }
 
   const link = findLink(entry.id);
@@ -10343,6 +10614,10 @@ function selectedLinkIds() {
   }).map((entry) => entry.id);
 }
 
+function selectedFigureIds() {
+  return state.selection.filter((entry) => entry.type === "figure" && findFigure(entry.id)).map((entry) => entry.id);
+}
+
 function selectedObservationIds() {
   return state.selection.filter((entry) => entry.type === "observation" && findLoadedObservation(entry.id)).map((entry) => entry.id);
 }
@@ -10354,8 +10629,9 @@ function selectedLoadedObservations() {
 function selectedCounts() {
   const point = selectedPointIds().length;
   const link = selectedLinkIds().length;
+  const figure = selectedFigureIds().length;
   const observation = selectedObservationIds().length;
-  return { point, link, observation, total: point + link + observation };
+  return { point, link, figure, observation, total: point + link + figure + observation };
 }
 
 function editableSelectedPoint() {
@@ -10421,6 +10697,10 @@ function isPointSelected(pointId) {
 
 function isLinkSelected(linkId) {
   return state.selection.some((entry) => entry.type === "link" && entry.id === linkId);
+}
+
+function isFigureSelected(figureId) {
+  return state.selection.some((entry) => entry.type === "figure" && entry.id === figureId);
 }
 
 function isLoadedObservationSelected(id) {
@@ -10663,9 +10943,7 @@ function pointEndpointIdentityKey(pointId) {
 }
 
 function linkEndpointIdentityKey(link, side) {
-  const snapshot = normalizeLineEndpoint(link?.[`${side}Endpoint`] ?? link?.[`${side}Snapshot`]);
-  if (snapshot?.endpointKey) return snapshot.endpointKey;
-  return pointEndpointIdentityKey(link?.[side]);
+  return analysisLineEndpointIdentityKey(link, side);
 }
 
 function linkEndpointPairKey(link) {
@@ -11057,6 +11335,89 @@ function findNearestLink(screenPoint) {
   return nearestDistance <= LINE_SELECTION_HIT_RADIUS ? nearest : null;
 }
 
+function findNearestFigure(screenPoint) {
+  let nearest = null;
+  let nearestDistance = Infinity;
+
+  for (const figure of state.figures) {
+    const points = figureRuntimeVertices(figure).map(worldToScreen);
+    if (points.length < 2) continue;
+
+    let distance = Infinity;
+    for (let index = 1; index < points.length; index += 1) {
+      distance = Math.min(distance, distanceToSegment(screenPoint, points[index - 1], points[index]));
+    }
+    if (figure.closed && points.length >= 3) {
+      distance = Math.min(distance, distanceToSegment(screenPoint, points.at(-1), points[0]));
+      if (pointInPolygon(screenPoint, points)) distance = 0;
+    }
+    if (distance < nearestDistance) {
+      nearest = figure;
+      nearestDistance = distance;
+    }
+  }
+
+  return nearestDistance <= LINE_SELECTION_HIT_RADIUS ? nearest : null;
+}
+
+function findNearestFigureEdge(screenPoint, options = {}) {
+  const figures = options.selectedOnly === false
+    ? state.figures
+    : state.figures.filter((figure) => isFigureSelected(figure.id));
+  let nearest = null;
+  let nearestDistance = Infinity;
+
+  for (const figure of figures) {
+    for (const [edgeIndex, segment] of figureSegments(figure).entries()) {
+      const start = worldToScreen(segment.a);
+      const end = worldToScreen(segment.b);
+      const distance = distanceToSegment(screenPoint, start, end);
+      if (distance < nearestDistance) {
+        nearest = { figureId: figure.id, edgeIndex };
+        nearestDistance = distance;
+      }
+    }
+  }
+
+  return nearestDistance <= LINE_SELECTION_HIT_RADIUS ? nearest : null;
+}
+
+function findNearestFigureVertex(screenPoint, options = {}) {
+  const figures = options.selectedOnly === false
+    ? state.figures
+    : state.figures.filter((figure) => isFigureSelected(figure.id));
+  let nearest = null;
+  let nearestDistance = Infinity;
+
+  for (const figure of figures) {
+    for (const [index, vertex] of figure.vertices.entries()) {
+      const runtime = runtimeAnalysisVertex(vertex);
+      if (!runtime) continue;
+      const point = worldToScreen(runtime);
+      const distance = Math.hypot(point.x - screenPoint.x, point.y - screenPoint.y);
+      if (distance < nearestDistance) {
+        nearest = { figureId: figure.id, vertexIndex: index };
+        nearestDistance = distance;
+      }
+    }
+  }
+
+  return nearestDistance <= POINT_SELECTION_RING_RADIUS + 6 ? nearest : null;
+}
+
+function updateFigureVertexDrag(figureDrag, screenPoint) {
+  const figure = findFigure(figureDrag?.figureId);
+  const vertex = figure?.vertices?.[figureDrag?.vertexIndex];
+  if (!vertex) return false;
+
+  const world = screenToWorld(screenPoint);
+  const geo = unprojectWorld(world.x, world.y);
+  const next = normalizeAnalysisVertex({ ...vertex, lat: geo.lat, lng: geo.lng });
+  if (!next) return false;
+  figure.vertices[figureDrag.vertexIndex] = next;
+  return true;
+}
+
 function lineDragSideAtPoint(link, screenPoint) {
   const endpoints = linkEndpoints(link);
   if (!endpoints) return null;
@@ -11073,9 +11434,9 @@ function updateLineDragTarget(drag, screenPoint) {
   const lineDrag = drag.lineDrag;
   lineDrag.current = { ...screenPoint };
   const link = findLink(lineDrag.linkId);
-  const fixedId = link?.[lineDrag.fixedSide];
+  const fixedId = linkEndpointPlaceRef(link, lineDrag.fixedSide);
   const replaceSide = lineDrag.fixedSide === "a" ? "b" : "a";
-  const replaceId = link?.[replaceSide];
+  const replaceId = lineEndpointPlaceRef(link, replaceSide);
   const candidate = findNearestPoint(screenPoint, {
     excludeIds: [fixedId, replaceId]
   });
@@ -11105,9 +11466,9 @@ function beginLineDrag(drag, screenPoint) {
 function finishLineDrag(lineDrag, screenPoint) {
   canvas.classList.remove("is-line-dragging");
   const link = findLink(lineDrag?.linkId);
-  const fixedId = link?.[lineDrag?.fixedSide];
+  const fixedId = lineEndpointPlaceRef(link, lineDrag?.fixedSide);
   const replaceSide = lineDrag?.fixedSide === "a" ? "b" : "a";
-  const replaceId = link?.[replaceSide];
+  const replaceId = lineEndpointPlaceRef(link, replaceSide);
   const target = findNearestPoint(screenPoint, {
     excludeIds: [fixedId, replaceId]
   });
@@ -11117,13 +11478,13 @@ function finishLineDrag(lineDrag, screenPoint) {
     return;
   }
 
-  if (target.id === fixedId || target.id === link[replaceSide]) {
+  if ((fixedId && target.id === fixedId) || (replaceId && target.id === replaceId)) {
     showAppToast(t("line.invalidTarget"), { error: true });
     render();
     return;
   }
 
-  const targetPair = [pointEndpointIdentityKey(fixedId), pointEndpointIdentityKey(target.id)]
+  const targetPair = [linkEndpointIdentityKey(link, lineDrag.fixedSide), pointEndpointIdentityKey(target.id)]
     .sort()
     .join("\u0000");
   const duplicate = state.links.find((candidate) => (
@@ -11136,11 +11497,15 @@ function finishLineDrag(lineDrag, screenPoint) {
   }
 
   const previous = linkEndpoint(link, replaceSide);
-  const targetEndpoint = captureLineEndpoint(target);
+  const targetVertex = captureLineEndpoint(target);
+  if (!targetVertex) {
+    showAppToast(t("line.invalidTarget"), { error: true });
+    render();
+    return;
+  }
   const next = {
     ...link,
-    [replaceSide]: target.id,
-    [`${replaceSide}Endpoint`]: targetEndpoint ? { ...targetEndpoint, id: target.id } : undefined,
+    [replaceSide]: targetVertex,
     updatedAt: new Date().toISOString()
   };
   state.links = state.links.map((candidate) => candidate.id === link.id ? normalizeStoredLink(next) : candidate);
@@ -11217,13 +11582,15 @@ function formatCoordinate(value) {
 }
 
 function formatDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return t("label.none");
   return new Intl.DateTimeFormat(localeName(), {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit"
-  }).format(new Date(value));
+  }).format(date);
 }
 
 function formatMonth(value) {
@@ -11328,6 +11695,7 @@ async function connectSelectedPoints() {
   }
 
   const strokeId = createId();
+  const createdAt = new Date().toISOString();
   let created = false;
   for (let index = 1; index < pointIds.length; index += 1) {
     const a = pointIds[index - 1];
@@ -11341,7 +11709,7 @@ async function connectSelectedPoints() {
       aPoint: findPoint(a),
       bPoint: findPoint(b),
       strokeId,
-      createdAt: new Date().toISOString()
+      createdAt
     });
     if (link) {
       state.links.push(link);
@@ -11358,12 +11726,25 @@ async function connectSelectedPoints() {
         aPoint: findPoint(a),
         bPoint: findPoint(b),
         strokeId,
-        createdAt: new Date().toISOString()
+        createdAt
       });
       if (link) {
         state.links.push(link);
         created = true;
       }
+    }
+  }
+
+  let createdFigure = null;
+  if (closeShape) {
+    createdFigure = createStoredFigure({
+      points: pointIds.map(findPoint).filter(Boolean),
+      closed: true,
+      createdAt
+    });
+    if (createdFigure) {
+      state.figures.push(createdFigure);
+      created = true;
     }
   }
 
@@ -11373,7 +11754,7 @@ async function connectSelectedPoints() {
 
   state.mode = "inspect";
   state.pendingLinkPointId = null;
-  setSelection([], { render: false });
+  setSelection(createdFigure ? [{ type: "figure", id: createdFigure.id }] : [], { render: false });
   render();
 }
 
@@ -11533,7 +11914,8 @@ function handleCanvasClick(screenPoint) {
 
   const nearest = findNearestPoint(screenPoint);
   const nearestLink = nearest ? null : findNearestLink(screenPoint);
-  const nearestObservation = nearest || nearestLink ? null : findNearestLoadedObservation(screenPoint);
+  const nearestFigure = nearest || nearestLink ? null : findNearestFigure(screenPoint);
+  const nearestObservation = nearest || nearestLink || nearestFigure ? null : findNearestLoadedObservation(screenPoint);
 
   if (nearest) {
     state.barrierSelection = [];
@@ -11546,6 +11928,13 @@ function handleCanvasClick(screenPoint) {
     state.barrierSelection = [];
     state.selectedBarrierId = null;
     toggleSelection("link", nearestLink.id);
+    return;
+  }
+
+  if (nearestFigure) {
+    state.barrierSelection = [];
+    state.selectedBarrierId = null;
+    toggleSelection("figure", nearestFigure.id);
     return;
   }
 
@@ -11970,7 +12359,8 @@ function fitTargetPoints() {
     .flatMap((list) => list.points)
     .map(syncProjectedPoint)
     .filter(Boolean);
-  const points = [...state.points, ...cloudPoints, ...routeStartSnapshot, ...loadedPoints];
+  const figurePoints = state.figures.flatMap(figureRuntimeVertices);
+  const points = [...state.points, ...cloudPoints, ...figurePoints, ...routeStartSnapshot, ...loadedPoints];
   if (state.followCurrentLocation || points.length === 0) {
     const current = currentLocationPoint();
     if (current) {
@@ -12096,8 +12486,11 @@ function startDragGesture(pointerId, point, options = {}) {
     return;
   }
   const barrierOrigin = barrierLinkMode && !options.moved ? findNearestBarrierStone(point) : null;
-  const longPressPoint = options.moved ? null : findNearestPoint(point);
-  const longPressLink = options.moved || longPressPoint ? null : findNearestLink(point);
+  const figureVertex = options.moved ? null : findNearestFigureVertex(point);
+  const figureEdge = figureVertex || options.moved ? null : findNearestFigureEdge(point);
+  const longPressFigure = figureVertex || figureEdge;
+  const longPressPoint = longPressFigure ? null : options.moved ? null : findNearestPoint(point);
+  const longPressLink = longPressFigure || options.moved || longPressPoint ? null : findNearestLink(point);
   const drag = {
     id: pointerId,
     start: point,
@@ -12106,8 +12499,16 @@ function startDragGesture(pointerId, point, options = {}) {
     viewportY: state.viewport.y,
     moved: Boolean(options.moved),
     longPressed: false,
+    longPressFigure,
     longPressPoint,
     longPressLink,
+    figureDrag: figureVertex
+      ? {
+        ...figureVertex,
+        active: false,
+        originalVertex: { ...state.figures.find((figure) => figure.id === figureVertex.figureId)?.vertices?.[figureVertex.vertexIndex] }
+      }
+      : null,
     lineDragReady: false,
     lineDrag: null,
     cancelled: false,
@@ -12123,6 +12524,25 @@ function startDragGesture(pointerId, point, options = {}) {
     dragonEye: false
   };
   state.pointer.drag = drag;
+
+  if (longPressFigure) {
+    if (!options.moved) {
+      drag.longPressTimerId = window.setTimeout(() => {
+        if (
+          state.pointer.drag !== drag
+          || state.pointer.active.size !== 1
+          || drag.moved
+          || drag.cancelled
+        ) return;
+        drag.longPressed = true;
+        openGridFigureQuickDialog(findFigure(longPressFigure.figureId), {
+          vertexIndex: Number.isInteger(longPressFigure.vertexIndex) ? longPressFigure.vertexIndex : null,
+          screenPoint: drag.start
+        });
+      }, LINE_INFO_LONG_PRESS_MS);
+    }
+    return;
+  }
 
   if (barrierLinkMode) {
     if (!options.moved) {
@@ -12442,8 +12862,22 @@ function removePointer(event, options = {}) {
     return;
   }
 
+  const figureDrag = drag?.figureDrag;
   const lineDrag = drag?.lineDrag;
   state.pointer.drag = null;
+
+  if (figureDrag) {
+    const figure = findFigure(figureDrag.figureId);
+    if (!allowTap && figureDrag.active && figure?.vertices?.[figureDrag.vertexIndex]) {
+      figure.vertices[figureDrag.vertexIndex] = figureDrag.originalVertex;
+    }
+    if (allowTap && figureDrag.active) {
+      persistWorkspace();
+      normalizeSelection();
+    }
+    render();
+    if (figureDrag.active) return;
+  }
 
   if (lineDrag) {
     if (allowTap) {
@@ -12456,7 +12890,7 @@ function removePointer(event, options = {}) {
   }
 
   if (drag?.longPressed) {
-    if (drag.longPressPoint || drag.longPressLink) {
+    if (drag.longPressFigure || drag.longPressPoint || drag.longPressLink) {
       return;
     }
     if (allowTap) {
@@ -13659,15 +14093,10 @@ function readJsonFile(file) {
   });
 }
 
-function pointListGridAtlasDocument(list) {
+function pointListGridAtlasDocument(list, options = {}) {
   list.gridAtlas = list.gridAtlas && typeof list.gridAtlas === "object" ? list.gridAtlas : {};
   list.gridAtlas.documentId = list.gridAtlas.documentId || list.cloudId || list.id || createId();
 
-  const localPointIds = new Set(list.points.map((point) => point.id));
-  const sharedPointIdByLocalId = new Map(list.points.map((point) => [
-    point.id,
-    point.gridAtlas?.placeId || point.id
-  ]));
   const places = list.points.map((point) => {
     const geo = pointGeo(point);
     const place = {
@@ -13695,26 +14124,28 @@ function pointListGridAtlasDocument(list) {
   if (list.author) document.attribution = { name: list.author };
   if (list.createdAt) document.createdAt = list.createdAt;
   if (list.updatedAt) document.updatedAt = list.updatedAt;
-  const documentExtensions = withoutGridAtlasLineLayer(list.gridAtlas.documentExtensions);
+  const documentExtensions = withoutGridAtlasAnalysisLayer(list.gridAtlas.documentExtensions);
   if (Object.keys(documentExtensions).length > 0) {
     document.extensions = documentExtensions;
   }
 
-  const lineLayer = buildGridAtlasLineLayer(
-    state.links.filter((link) => localPointIds.has(link.a) && localPointIds.has(link.b)),
-    (pointId) => sharedPointIdByLocalId.get(pointId) || ""
-  );
-  if (lineLayer) {
+  const analysisLayer = options.includeAnalysisLayer === true
+    ? buildGridAtlasAnalysisLayer(
+      list.analysisLayer?.lines,
+      list.analysisLayer?.figures
+    )
+    : null;
+  if (analysisLayer) {
     document.extensions = {
       ...(document.extensions || {}),
-      [GRIDATLAS_LINE_LAYER_EXTENSION]: lineLayer
+      [GRIDATLAS_ANALYSIS_EXTENSION]: analysisLayer
     };
   }
   return document;
 }
 
-async function buildPointListGridAtlasPackage(list) {
-  const document = pointListGridAtlasDocument(list);
+async function buildPointListGridAtlasPackage(list, options = {}) {
+  const document = pointListGridAtlasDocument(list, options);
   const resources = [];
   const supportedMediaTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 
@@ -13877,7 +14308,7 @@ async function sharePointListFile(list, options = {}) {
   }
 
   try {
-    const archive = await buildPointListGridAtlasPackage(list);
+    const archive = await buildPointListGridAtlasPackage(list, options);
     persistWorkspace();
     const file = new File([archive.bytes], `${safeFilenamePart(title)}.gridatlas`, { type: GRIDATLAS_MIME_TYPE });
     const canShareFile = typeof navigator.share === "function"
@@ -13909,13 +14340,63 @@ async function shareStorageListFile(storageId) {
   await sharePointListFile(entry?.local || entry?.preview);
 }
 
+function gridAtlasShareUrl(list, options = {}) {
+  const document = pointListGridAtlasDocument(list, options);
+  const payload = encodeGridAtlasUrlPayload(document);
+  const url = new URL(window.location.href);
+  url.hash = `${GRIDATLAS_URL_PARAMETER}=${payload}`;
+  return url.toString();
+}
+
+async function sharePointListUrl(list, options = {}) {
+  if (!list) {
+    setShareFeedback(t("list.shareUnavailable"), { error: true });
+    return;
+  }
+
+  try {
+    const url = gridAtlasShareUrl(list, options);
+    if (new TextEncoder().encode(url).byteLength > 8192) {
+      setShareFeedback(t("list.exportUrlTooLong"));
+      await sharePointListFile(list, { ...options, confirm: false });
+      return;
+    }
+
+    if (typeof navigator.share === "function") {
+      try {
+        await navigator.share({
+          url,
+          title: `GRID ATLAS — ${list.name || "地点リスト"}`,
+          text: cloudText(`GRID ATLAS「${list.name || "地点リスト"}」`, `GRID ATLAS “${list.name || "Point list"}”`)
+        });
+        setShareFeedback(t("list.exportUrlShared"));
+        return;
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+        console.warn("GRID ATLAS URL share failed; falling back to clipboard", error);
+      }
+    }
+
+    if (await writeClipboardText(url)) {
+      setShareFeedback(t("list.exportUrlCopied"));
+      return;
+    }
+    setShareFeedback(t("list.exportUrlCopyFailed"), { error: true });
+  } catch (error) {
+    console.warn("GRID ATLAS URL export failed", error);
+    setShareFeedback(t("list.exportUrlCopyFailed"), { error: true });
+  }
+}
+
 async function shareSelectedPointsFile() {
   normalizeSelection();
   const points = selectedPointIds()
     .filter((pointId) => pointId !== CURRENT_LOCATION_ID)
     .map(findPoint)
     .filter(Boolean);
-  if (points.length === 0) {
+  const lines = selectedLinkIds().map(findLink).filter(Boolean);
+  const figures = selectedFigureIds().map(findFigure).filter(Boolean);
+  if (points.length === 0 && lines.length === 0 && figures.length === 0) {
     setShareFeedback(t("list.shareSelectedUnavailable"), { error: true });
     return;
   }
@@ -13940,9 +14421,18 @@ async function shareSelectedPointsFile() {
     createdAt: now,
     updatedAt: now,
     gridAtlas: { documentId: createId() },
-    points: points.map(clonePlain)
+    points: points.map(clonePlain),
+    analysisLayer: {
+      version: ANALYSIS_LAYER_VERSION,
+      id: createId(),
+      name,
+      lines: lines.map(clonePlain),
+      figures: figures.map(clonePlain)
+    }
   };
-  if (input.action === "file") await sharePointListFile(list, { confirm: false });
+  const shareOptions = { confirm: false, includeAnalysisLayer: true };
+  if (input.action === "file") await sharePointListFile(list, shareOptions);
+  if (input.action === "url") await sharePointListUrl(list, { includeAnalysisLayer: true });
 }
 function gridAtlasFileLikely(file) {
   return Boolean(file) && (
@@ -13968,25 +14458,31 @@ function analysisLayerFromGridAtlasDocument(document, pointList) {
     point.gridAtlas?.placeId || point.id,
     point.id
   ]));
-  const pointById = new Map(pointList.points.map((point) => [point.id, point]));
-  const importedLinks = readGridAtlasLineLayer(
-    document,
-    (sharedPointId) => localPointIdBySharedId.get(sharedPointId) || "",
-    createId
-  );
+  const importedLayer = readGridAtlasAnalysisLayer(document);
+  const remapVertex = (vertex) => {
+    const normalized = normalizeAnalysisVertex(vertex);
+    if (!normalized) return null;
+    const localPlaceRef = normalized.placeRef
+      ? (localPointIdBySharedId.get(normalized.placeRef) || normalized.placeRef)
+      : null;
+    return normalizeAnalysisVertex({ ...normalized, placeRef: localPlaceRef });
+  };
   return {
     version: ANALYSIS_LAYER_VERSION,
     id: createId(),
     name: `${document.name || DEFAULT_ANALYSIS_LAYER_NAME} - ${DEFAULT_ANALYSIS_LAYER_NAME}`,
     sourceDocumentId: document.id,
-    links: importedLinks
-      .map((link) => createStoredLink({
-        id: link.id,
-        aPoint: pointById.get(link.a),
-        bPoint: pointById.get(link.b),
-        strokeId: link.strokeId,
-        color: link.color,
-        createdAt: link.createdAt
+    lines: importedLayer.lines
+      .map((line) => normalizeAnalysisLine({
+        ...line,
+        a: remapVertex(line.a),
+        b: remapVertex(line.b)
+      }))
+      .filter(Boolean),
+    figures: importedLayer.figures
+      .map((figure) => normalizeAnalysisFigure({
+        ...figure,
+        vertices: figure.vertices.map(remapVertex).filter(Boolean)
       }))
       .filter(Boolean)
   };
@@ -14107,6 +14603,24 @@ function mergeAnalysisLinks(links) {
   state.links = next;
 }
 
+function mergeAnalysisFigures(figures) {
+  const next = state.figures.slice();
+  const seenIds = new Set(next.map((figure) => figure.id));
+  for (const rawFigure of Array.isArray(figures) ? figures : []) {
+    const figure = normalizeAnalysisFigure(rawFigure);
+    if (!figure || seenIds.has(figure.id)) continue;
+    next.push(figure);
+    seenIds.add(figure.id);
+  }
+  state.figures = next;
+}
+
+function mergeAnalysisLayers(layers) {
+  const validLayers = Array.isArray(layers) ? layers : [];
+  mergeAnalysisLinks(validLayers.flatMap((layer) => layer?.lines || []));
+  mergeAnalysisFigures(validLayers.flatMap((layer) => layer?.figures || []));
+}
+
 function focusPresetVisibility(targetLists) {
   const targetStorageIds = new Set(
     (Array.isArray(targetLists) ? targetLists : [])
@@ -14143,11 +14657,11 @@ function focusPresetVisibility(targetLists) {
 function applyImportedPointLists(importedLists, importedAnalysisLayers, successMessage, options = {}) {
   const previousLists = state.pointLists;
   const previousLinks = state.links;
+  const previousFigures = state.figures;
   const previousSelection = state.selection;
   try {
     state.pointLists = [...state.pointLists, ...importedLists];
-    const importedLinks = importedAnalysisLayers.flatMap((layer) => layer.links || []);
-    mergeAnalysisLinks(importedLinks);
+    mergeAnalysisLayers(importedAnalysisLayers);
     if (options.source === "preset") {
       focusPresetVisibility(options.focusLists || importedLists);
     }
@@ -14158,6 +14672,7 @@ function applyImportedPointLists(importedLists, importedAnalysisLayers, successM
   } catch (error) {
     state.pointLists = previousLists;
     state.links = previousLinks;
+    state.figures = previousFigures;
     state.selection = previousSelection;
     refreshVisiblePoints();
     throw error;
@@ -14206,7 +14721,7 @@ async function importGridAtlasPackages(packages, options = {}) {
 
     if (importedLists.length === 0 && duplicates.length > 0) {
       const duplicate = duplicates[0];
-      mergeAnalysisLinks(importedAnalysisLayers.flatMap((layer) => layer.links || []));
+      mergeAnalysisLayers(importedAnalysisLayers);
       if (options.source === "preset") {
         focusPresetVisibility(duplicates);
       }
@@ -14478,12 +14993,14 @@ async function deleteSelectedPoint() {
     !candidateCloudPointIdSet.has(id) && !candidatePointIds.includes(id)
   ));
   const explicitLinkIds = selectedLinkIds();
+  const explicitFigureIds = selectedFigureIds();
   const selectedObservations = selectedLoadedObservations();
   const selectedObservationIdSet = new Set(selectedObservations.map((observation) => observation.id));
   const candidatePointIdSet = new Set(candidatePointIds);
   const candidateLinkIdSet = new Set(explicitLinkIds);
+  const candidateFigureIdSet = new Set(explicitFigureIds);
 
-  if (candidatePointIdSet.size + candidateCloudPointIdSet.size + candidateLinkIdSet.size + selectedObservationIdSet.size === 0) {
+  if (candidatePointIdSet.size + candidateCloudPointIdSet.size + candidateLinkIdSet.size + candidateFigureIdSet.size + selectedObservationIdSet.size === 0) {
     return;
   }
 
@@ -14497,6 +15014,9 @@ async function deleteSelectedPoint() {
   if (candidateLinkIdSet.size > 0) {
     parts.push(String(candidateLinkIdSet.size) + "線");
   }
+  if (candidateFigureIdSet.size > 0) {
+    parts.push(String(candidateFigureIdSet.size) + t("analysis.figure"));
+  }
   if (selectedObservationIdSet.size > 0) {
     parts.push(String(selectedObservationIdSet.size) + "観察（保存ファイルには影響しません）");
   }
@@ -14504,15 +15024,21 @@ async function deleteSelectedPoint() {
   const selectedPointCount = selectedIds.length;
   const linksOnly = candidateLinkIdSet.size > 0
     && selectedPointCount === 0
+    && candidateFigureIdSet.size === 0
     && selectedObservationIdSet.size === 0;
   const pointsOnly = selectedPointCount > 0
     && candidateLinkIdSet.size === 0
+    && candidateFigureIdSet.size === 0
+    && selectedObservationIdSet.size === 0;
+  const figuresOnly = candidateFigureIdSet.size > 0
+    && selectedPointCount === 0
+    && candidateLinkIdSet.size === 0
     && selectedObservationIdSet.size === 0;
   let deletionMode;
-  if (linksOnly || pointsOnly) {
-    const count = linksOnly ? candidateLinkIdSet.size : selectedPointCount;
-    const noun = linksOnly ? "本の線" : "地点";
-    const nounEn = linksOnly ? "line(s)" : "point(s)";
+  if (linksOnly || pointsOnly || figuresOnly) {
+    const count = linksOnly ? candidateLinkIdSet.size : figuresOnly ? candidateFigureIdSet.size : selectedPointCount;
+    const noun = linksOnly ? "本の線" : figuresOnly ? "図形" : "地点";
+    const nounEn = linksOnly ? "line(s)" : figuresOnly ? "figure(s)" : "point(s)";
     const confirmed = await requestConfirm({
       title: cloudText("削除の確認", "Confirm deletion"),
       message: cloudText(
@@ -14552,9 +15078,10 @@ async function deleteSelectedPoint() {
   const cloudPointIdSet = pointDeletionSelected ? new Set(candidateCloudPointIds) : new Set();
   const deletionPointIdSet = new Set([...pointIdSet, ...cloudPointIdSet]);
   const linkIdSet = deletionMode === "points" ? new Set() : new Set(candidateLinkIdSet);
+  const figureIdSet = deletionMode === "all" ? new Set(candidateFigureIdSet) : new Set();
   const observationIdSet = deletionMode === "all" ? selectedObservationIdSet : new Set();
 
-  if (deletionPointIdSet.size + linkIdSet.size + observationIdSet.size === 0) {
+  if (deletionPointIdSet.size + linkIdSet.size + figureIdSet.size + observationIdSet.size === 0) {
     return;
   }
 
@@ -14590,9 +15117,11 @@ async function deleteSelectedPoint() {
   }
   refreshVisiblePoints();
   state.links = linksAfterPointDeletion.filter((item) => !linkIdSet.has(item.id));
+  state.figures = state.figures.filter((item) => !figureIdSet.has(item.id));
   state.selection = state.selection.filter((entry) => (
     !(entry.type === "point" && deletionPointIdSet.has(entry.id))
     && !(entry.type === "link" && linkIdSet.has(entry.id))
+    && !(entry.type === "figure" && figureIdSet.has(entry.id))
     && !(entry.type === "observation" && observationIdSet.has(entry.id))
   ));
   state.selectedPointId = null;
@@ -14614,7 +15143,7 @@ async function deleteSelectedPoint() {
     clearTarget({ render: false });
   }
 
-  if (pointIdSet.size + linkIdSet.size > 0) {
+  if (pointIdSet.size + linkIdSet.size + figureIdSet.size > 0) {
     persistWorkspace();
   }
   render();
@@ -14689,12 +15218,6 @@ function bindEvents() {
   elements.settingsGpsEnabled.addEventListener("change", () => {
     void setGpsEnabled(elements.settingsGpsEnabled.checked);
   });
-  elements.settingsGuardianLabelInImage?.addEventListener("change", () => {
-    state.guardianLabelInImage = elements.settingsGuardianLabelInImage.checked;
-    try {
-      localStorage.setItem(GUARDIAN_LABEL_IN_IMAGE_KEY, String(state.guardianLabelInImage));
-    } catch {}
-  });
   elements.shareKekkaishiStatusButton?.addEventListener("click", () => void shareKekkaishiStatus());
   elements.kekkaishiStatusDialog?.addEventListener("click", (event) => {
     if (event.target === elements.kekkaishiStatusDialog) elements.kekkaishiStatusDialog.close("cancel");
@@ -14762,13 +15285,6 @@ function bindEvents() {
   elements.actionLinkButton.addEventListener("click", handleLinkAction);
   elements.barrierShareButton?.addEventListener("click", () => {
     void shareSelectedBarrierImage();
-  });
-  elements.barrierGuardianSetButton?.addEventListener("click", beginGuardianPlacement);
-  elements.barrierGuardianLabelButton?.addEventListener("click", () => {
-    void changeSelectedGuardianLabel();
-  });
-  elements.barrierGuardianRemoveButton?.addEventListener("click", () => {
-    void removeSelectedGuardian();
   });
   elements.actionAnalyzeButton.addEventListener("click", openSelectionAnalysis);
   elements.actionRegisterButton.addEventListener("click", submitPendingPoint);
@@ -14839,6 +15355,22 @@ function bindEvents() {
   elements.gridLinkQuickDialog.addEventListener("click", (event) => {
     if (event.target === elements.gridLinkQuickDialog) elements.gridLinkQuickDialog.close("cancel");
   });
+  elements.gridFigureQuickDialog.addEventListener("close", () => {
+    state.gridFigureQuickFigureId = null;
+    state.gridFigureQuickVertexIndex = null;
+  });
+  bindPointerActionButton(elements.gridFigureQuickToggleClosedButton, () => {
+    void toggleFigureClosedFromQuickDialog();
+  });
+  bindPointerActionButton(elements.gridFigureQuickDeleteVertexButton, () => {
+    void deleteFigureVertexFromQuickDialog();
+  });
+  bindPointerActionButton(elements.gridFigureQuickDeleteButton, () => {
+    void deleteFigureFromQuickDialog();
+  });
+  elements.gridFigureQuickDialog.addEventListener("click", (event) => {
+    if (event.target === elements.gridFigureQuickDialog) elements.gridFigureQuickDialog.close("cancel");
+  });
   elements.gridLinkColorDialog.addEventListener("close", () => {
     if (elements.gridLinkColorDialog.returnValue === "apply") {
       applyGridLinkColorFromDialog();
@@ -14862,6 +15394,11 @@ function bindEvents() {
     if (event.target instanceof Node && elements.gridLinkQuickDialog.contains(event.target)) return;
     elements.gridLinkQuickDialog.close("outside");
   }, true);
+  document.addEventListener("pointerdown", (event) => {
+    if (!elements.gridFigureQuickDialog.open) return;
+    if (event.target instanceof Node && elements.gridFigureQuickDialog.contains(event.target)) return;
+    elements.gridFigureQuickDialog.close("outside");
+  }, true);
   document.addEventListener("click", (event) => {
     if (!elements.gridPointQuickDialog.open) return;
     if (event.target instanceof Node && elements.gridPointQuickDialog.contains(event.target)) return;
@@ -14869,6 +15406,14 @@ function bindEvents() {
       ? event.target.closest("button, a, input, select, textarea, summary")
       : null;
     if (target) elements.gridPointQuickDialog.close("outside-control");
+  }, true);
+  document.addEventListener("click", (event) => {
+    if (!elements.gridFigureQuickDialog.open) return;
+    if (event.target instanceof Node && elements.gridFigureQuickDialog.contains(event.target)) return;
+    const target = event.target instanceof Element
+      ? event.target.closest("button, a, input, select, textarea, summary")
+      : null;
+    if (target) elements.gridFigureQuickDialog.close("outside-control");
   }, true);
   elements.pointInfoMapButton.addEventListener("click", () => {
     const point = findPointAny(elements.pointInfoDialog.dataset.pointId || state.pointInfoTargetId || state.pointInfoReturnContext?.pointId) || singleSelectedPoint();
@@ -14921,7 +15466,7 @@ function bindEvents() {
         : elements.textInputDialogValue.value);
       return;
     }
-    if (options.shareMode === true && returnValue === "share-file") {
+    if (options.shareMode === true && ["share-file", "share-url"].includes(returnValue)) {
       resolve({ value: elements.textInputDialogValue.value, action: returnValue.slice("share-".length) });
       return;
     }
@@ -14956,6 +15501,7 @@ function bindEvents() {
   });
   elements.readClipboardButton.addEventListener("click", readClipboardShare);
   elements.textInputShareFileButton.addEventListener("click", () => elements.textInputDialog.close("share-file"));
+  elements.textInputShareUrlButton.addEventListener("click", () => elements.textInputDialog.close("share-url"));
   document.querySelector("[data-share-action-cancel]")?.addEventListener("click", () => elements.textInputDialog.close("cancel"));
   window.addEventListener("pointerup", handlePointInfoRelease, true);
   window.addEventListener("pointercancel", () => {
@@ -15060,6 +15606,13 @@ function bindEvents() {
   }
   for (const button of elements.clearAllListButtons) {
     button.addEventListener("click", () => setAllStorageListsVisible(false));
+  }
+  for (const container of elements.storageListContainers) {
+    container.addEventListener("contextmenu", (event) => {
+      if (mobilePageUiActive()) return;
+      event.preventDefault();
+      setAllStorageListsVisible(false);
+    });
   }
 
   elements.pointImportFile.addEventListener("change", async () => {
@@ -15174,7 +15727,32 @@ function bindEvents() {
       }
     }
 
+    if (drag.figureDrag) {
+      if (Math.hypot(dx, dy) > POINTER_MOVE_THRESHOLD) {
+        clearDragLongPressTimer(drag);
+        drag.moved = true;
+        drag.figureDrag.active = true;
+      }
+      if (drag.figureDrag.active) {
+        event.preventDefault();
+        updateFigureVertexDrag(drag.figureDrag, point);
+        draw();
+        renderStatus();
+        drag.last = point;
+        return;
+      }
+    }
+
     if (Math.hypot(dx, dy) > POINTER_MOVE_THRESHOLD) {
+      if (drag.longPressFigure) {
+        if (drag.longPressed) {
+          drag.last = point;
+          return;
+        }
+        clearDragLongPressTimer(drag);
+        drag.cancelled = true;
+        drag.longPressFigure = null;
+      }
       if (drag.lineDrag) {
         updateLineDragTarget(drag, point);
         draw();

@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=73">
-    <script src="src/main.js?v=435" type="module" defer></script>
+    <script src="src/main.js?v=443" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -115,10 +115,6 @@
               <label class="settings-check">
                 <input id="settingsGpsEnabled" type="checkbox">
                 <span data-i18n="settings.gps">GPS機能を使用</span>
-              </label>
-              <label class="settings-check">
-                <input id="settingsGuardianLabelInImage" type="checkbox">
-                <span data-i18n="settings.guardianLabelInImage">共有画像に守護点ラベルを表示</span>
               </label>
               <div class="settings-nav settings-nav-subtle">
                 <button id="openGridAtlasButton" class="settings-nav-button" type="button" data-i18n="settings.openGridAtlas">.gridatlasを開く</button>
@@ -278,10 +274,6 @@
               <svg class="ui-icon" aria-hidden="true"><use href="#icon-connect"></use></svg>
               <span id="actionLinkLabel" data-i18n="action.connect">接続</span>
             </button>
-            <button id="actionAnalyzeButton" class="action-button" type="button" data-i18n-title="action.analyzeTitle" disabled>
-              <svg class="ui-icon" aria-hidden="true"><use href="#icon-analysis"></use></svg>
-              <span data-i18n="action.analyze">分析</span>
-            </button>
             <button id="actionCenterButton" class="action-button" type="button" title="選択点の中心に仮ポイントを作成" disabled>
               <svg class="ui-icon" aria-hidden="true"><use href="#icon-center"></use></svg>
               <span data-i18n="action.center">中心</span>
@@ -290,17 +282,25 @@
               <svg class="ui-icon" aria-hidden="true"><use href="#icon-clear"></use></svg>
               <span data-i18n="action.clear">解除</span>
             </button>
+            <button id="actionInvertButton" class="action-button" type="button" data-i18n-title="action.invertTitle" disabled>
+              <svg class="ui-icon" aria-hidden="true"><use href="#icon-invert"></use></svg>
+              <span data-i18n="action.invert">反転</span>
+            </button>
             <button id="actionRouteButton" class="action-button" type="button" title="選択点を巡回対象にする" disabled>
               <svg class="ui-icon" aria-hidden="true"><use href="#icon-route"></use></svg>
               <span id="actionRouteLabel" data-i18n="action.route">巡回</span>
             </button>
+            <button id="actionAnalyzeButton" class="action-button" type="button" data-i18n-title="action.analyzeTitle" disabled>
+              <svg class="ui-icon" aria-hidden="true"><use href="#icon-analysis"></use></svg>
+              <span data-i18n="action.analyze">分析</span>
+            </button>
+            <button id="actionShareSelectedButton" class="action-button" type="button" data-i18n-title="action.shareSelectedTitle" disabled>
+              <svg class="ui-icon" aria-hidden="true"><use href="#icon-share"></use></svg>
+              <span data-i18n="action.shareSelected">共有</span>
+            </button>
             <button id="deletePointButton" class="action-button danger-button" type="button" title="選択対象を削除" disabled>
               <svg class="ui-icon" aria-hidden="true"><use href="#icon-trash"></use></svg>
               <span data-i18n="action.delete">削除</span>
-            </button>
-            <button id="actionMapButton" class="action-button" type="button" title="選択地点を地図で開く" disabled>
-              <svg class="ui-icon" aria-hidden="true"><use href="#icon-map"></use></svg>
-              <span data-i18n="action.map">地図</span>
             </button>
             <button id="actionCopyToListButton" class="action-button" type="button" title="選択地点を登録先リストへコピー" disabled>
               <svg class="ui-icon" aria-hidden="true"><use href="#icon-copy"></use></svg>
@@ -310,13 +310,9 @@
               <svg class="ui-icon" aria-hidden="true"><use href="#icon-move"></use></svg>
               <span data-i18n="action.moveToList">移動</span>
             </button>
-            <button id="actionShareSelectedButton" class="action-button" type="button" data-i18n-title="action.shareSelectedTitle" disabled>
-              <svg class="ui-icon" aria-hidden="true"><use href="#icon-share"></use></svg>
-              <span data-i18n="action.shareSelected">共有</span>
-            </button>
-            <button id="actionInvertButton" class="action-button" type="button" data-i18n-title="action.invertTitle" disabled>
-              <svg class="ui-icon" aria-hidden="true"><use href="#icon-invert"></use></svg>
-              <span data-i18n="action.invert">反転</span>
+            <button id="actionMapButton" class="action-button" type="button" title="選択地点を地図で開く" disabled>
+              <svg class="ui-icon" aria-hidden="true"><use href="#icon-map"></use></svg>
+              <span data-i18n="action.map">地図</span>
             </button>
           </nav>
           <nav class="mobile-grid-tabs" aria-label="表示切替">
@@ -380,20 +376,11 @@
             <dl class="barrier-score-list">
               <div><dt data-i18n="barrier.scoreDensity">濃度</dt><dd id="barrierDetailDensity"></dd></div>
               <div><dt data-i18n="barrier.scoreArea">面積</dt><dd id="barrierDetailArea"></dd></div>
-              <div><dt data-i18n="barrier.scoreStones">石の総数</dt><dd id="barrierDetailStones"></dd></div>
+              <div><dt data-i18n="barrier.scoreStones">実効石数 / 総石数</dt><dd id="barrierDetailStones"></dd></div>
               <div><dt data-i18n="barrier.scoreShape">形状係数</dt><dd id="barrierDetailShape"></dd></div>
               <div><dt data-i18n="barrier.scoreBeauty">美しさ係数</dt><dd id="barrierDetailBeauty"></dd></div>
               <div><dt data-i18n="barrier.scoreScale">規模係数</dt><dd id="barrierDetailScale"></dd></div>
             </dl>
-            <div class="barrier-guardian-section">
-              <div class="barrier-guardian-heading" data-i18n="barrier.guardianTitle">守護点</div>
-              <div id="barrierGuardianSummary" class="barrier-guardian-summary"></div>
-              <div class="button-row barrier-guardian-actions">
-                <button id="barrierGuardianSetButton" type="button" data-i18n="barrier.guardianSet">守護点を地図で指定</button>
-                <button id="barrierGuardianLabelButton" type="button" data-i18n="barrier.guardianChangeLabel" hidden>ラベルを変更</button>
-                <button id="barrierGuardianRemoveButton" class="danger-button" type="button" data-i18n="barrier.guardianRemove" hidden>守護点を削除</button>
-              </div>
-            </div>
             <div class="button-row barrier-share-actions">
               <button id="barrierShareButton" class="primary-button" type="button" data-i18n="barrier.share">画像を共有</button>
             </div>
@@ -745,6 +732,19 @@
         </div>
       </form>
     </dialog>
+    <dialog id="gridFigureQuickDialog" class="grid-point-quick-dialog grid-figure-quick-dialog" aria-labelledby="gridFigureQuickName" tabindex="-1">
+      <form class="grid-point-quick-dialog-form grid-figure-quick-dialog-form" method="dialog">
+        <div class="grid-point-quick-heading">
+          <strong id="gridFigureQuickName" class="grid-point-quick-name" tabindex="-1"></strong>
+          <span id="gridFigureQuickInfo" class="grid-point-quick-list"></span>
+        </div>
+        <div class="grid-point-quick-actions grid-figure-quick-actions" aria-label="図形のクイック操作">
+          <button id="gridFigureQuickToggleClosedButton" class="grid-point-quick-role-button" type="button" aria-label="図形を開く" title="図形を開く"><svg class="ui-icon" aria-hidden="true"><use href="#icon-edit"></use></svg><span id="gridFigureQuickToggleClosedLabel">図形を開く</span></button>
+          <button id="gridFigureQuickDeleteVertexButton" class="grid-point-quick-role-button" type="button" aria-label="この頂点を削除" title="この頂点を削除"><svg class="ui-icon" aria-hidden="true"><use href="#icon-trash"></use></svg><span id="gridFigureQuickDeleteVertexLabel">この頂点を削除</span></button>
+          <button id="gridFigureQuickDeleteButton" class="grid-point-quick-role-button danger-button" type="button" aria-label="図形を削除" title="図形を削除"><svg class="ui-icon" aria-hidden="true"><use href="#icon-trash"></use></svg><span id="gridFigureQuickDeleteLabel">図形を削除</span></button>
+        </div>
+      </form>
+    </dialog>
     <dialog id="gridLinkColorDialog" class="grid-link-color-dialog" aria-labelledby="gridLinkColorDialogTitle" aria-describedby="gridLinkColorDialogMessage" tabindex="-1">
       <form class="grid-link-color-dialog-form" method="dialog">
         <div class="grid-link-color-dialog-heading">
@@ -906,6 +906,7 @@
         <div id="textInputDialogShareActions" class="text-input-dialog-actions text-input-dialog-share-actions" hidden>
           <button class="compact-button" type="button" data-share-action-cancel data-i18n="action.cancel">キャンセル</button>
           <button id="textInputShareFileButton" class="share-action-button" type="button" data-i18n="list.export">共有</button>
+          <button id="textInputShareUrlButton" class="share-action-button" type="button" data-i18n="list.exportUrl">URLをコピー</button>
         </div>
       </form>
     </dialog>

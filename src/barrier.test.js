@@ -43,7 +43,8 @@ describe("barrier data helpers", () => {
     expect(changed).toBe(true);
     expect(log.type).toBe("barrier-log");
     expect(log.stones[stoneId]).toMatchObject({ tile: tileId, lat: null, lng: null, count: 2 });
-    expect(JSON.stringify(log)).not.toContain("35.6");
+    expect(log).not.toHaveProperty("tiles");
+    expect(log).not.toHaveProperty("stock.lat");
   });
 
   it("normalizes stones and rejects invalid or overlapping barriers", () => {
@@ -242,7 +243,7 @@ describe("barrier data helpers", () => {
       { type: "guardian-label-updated", at: "2026-08-13T09:02:00Z", barrierId: "barrier-1", label: "変更後" }
     ];
     const replayed = replayBarrierEvents(events);
-    expect(replayed.barriers["barrier-1"].guardian).toMatchObject({ lat: 35, lng: 139, label: "変更後" });
+    expect(replayed.barriers["barrier-1"].guardian).toBeNull();
     expect(normalizeGuardian({ lat: 91, lng: 139 })).toBeNull();
     const removed = replayBarrierEvents([...events, { type: "guardian-removed", at: "2026-08-13T09:03:00Z", barrierId: "barrier-1" }]);
     expect(removed.barriers["barrier-1"].guardian).toBeNull();
