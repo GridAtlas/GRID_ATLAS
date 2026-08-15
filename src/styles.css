@@ -1319,8 +1319,20 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
   }
 }
 
+@keyframes kekkai-action-glow {
+  0%, 100% {
+    filter: brightness(1);
+    box-shadow: 0 0 10px rgb(255 166 82 / 0.86), 0 0 24px rgb(255 123 28 / 0.52), inset 0 0 8px rgb(255 235 188 / 0.28);
+  }
+  50% {
+    filter: brightness(1.12);
+    box-shadow: 0 0 15px rgb(255 184 102 / 0.98), 0 0 34px rgb(255 123 28 / 0.68), inset 0 0 10px rgb(255 245 210 / 0.38);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .traverse-action-button.is-dragon-eye-active {
+  .traverse-action-button.is-dragon-eye-active,
+  :root[data-theme="kekkai"] .traverse-action-button:not(.traverse-action-button-cancel):not(.is-dragon-eye-active) {
     animation: none;
   }
 }
@@ -1927,7 +1939,24 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
 
 :root[data-theme="kekkai"] .traverse-action-button {
   color: #f0d9ff;
-  box-shadow: none;
+}
+
+:root[data-theme="kekkai"] .traverse-action-button:not(.traverse-action-button-cancel) {
+  min-width: 112px;
+  min-height: 52px;
+  padding: 0 22px;
+  color: #fff8e9;
+}
+
+:root[data-theme="kekkai"] .traverse-action-button:not(.traverse-action-button-cancel):not(.is-dragon-eye-active) {
+  background: rgb(255 154 58 / 0.86);
+  box-shadow: 0 0 10px rgb(255 166 82 / 0.86), 0 0 24px rgb(255 123 28 / 0.52), inset 0 0 8px rgb(255 235 188 / 0.28);
+  animation: kekkai-action-glow 2.2s ease-in-out infinite;
+}
+
+:root[data-theme="kekkai"] .traverse-action-button:not(.traverse-action-button-cancel):not(.is-dragon-eye-active):hover:not(:disabled),
+:root[data-theme="kekkai"] .traverse-action-button:not(.traverse-action-button-cancel):not(.is-dragon-eye-active).is-placement-view-active {
+  background: rgb(255 169 77 / 0.94);
 }
 
 canvas.is-barrier-linking {
