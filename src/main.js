@@ -128,7 +128,7 @@ const KEKKAI_THEME = "kekkai";
 const KEKKAI_MODE = "kekkai";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2162";
+const WEB_VERSION = "0.2164";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -14649,8 +14649,6 @@ function drawShareSnapshotBrand(target, palette, textColor) {
   target.textBaseline = "alphabetic";
   target.font = kekkai ? "800 29px system-ui, sans-serif" : "800 32px system-ui, sans-serif";
   target.fillText(kekkai ? "結界アトラス" : "GRID ATLAS", 114, 82);
-  target.font = "700 11px system-ui, sans-serif";
-  target.fillText("WEB版", 330, 80);
   target.textAlign = "right";
   target.font = "600 13px system-ui, sans-serif";
   target.fillText(shareSnapshotAppUrl().replace(/^https?:\/\//, ""), 1120, 48);
@@ -14724,7 +14722,7 @@ async function renderSelectedShareImage(points, lines, figures, visiblePoints = 
   const maxY = Math.max(...projectedWorldVertices.map((vertex) => vertex.world.y));
   const spanX = Math.max(maxX - minX, SHARE_SNAPSHOT_MIN_SPAN_METERS);
   const spanY = Math.max(maxY - minY, SHARE_SNAPSHOT_MIN_SPAN_METERS);
-  const pad = Math.max(spanX, spanY) * 0.055;
+  const pad = Math.max(spanX, spanY) * 0.07;
   const frameWidth = SHARE_SNAPSHOT_FRAME.right - SHARE_SNAPSHOT_FRAME.left;
   const frameHeight = SHARE_SNAPSHOT_FRAME.bottom - SHARE_SNAPSHOT_FRAME.top;
   const scale = Math.min(frameWidth / (spanX + pad * 2), frameHeight / (spanY + pad * 2));
@@ -14784,19 +14782,6 @@ async function renderSelectedShareImage(points, lines, figures, visiblePoints = 
     const b = project(endpoints.b.geo);
     target.strokeStyle = normalizeGridAtlasLineColor(line.color) || palette.link;
     target.beginPath(); target.moveTo(a.x, a.y); target.lineTo(b.x, b.y); target.stroke();
-    const result = analyzeOpenPath([{ a: endpoints.a, b: endpoints.b }]);
-    const endpointNameA = String(shareSnapshotPointAtGeo(endpoints.a.geo, labelPoints)?.title || "").trim();
-    const endpointNameB = String(shareSnapshotPointAtGeo(endpoints.b.geo, labelPoints)?.title || "").trim();
-    const endpointNames = endpointNameA && endpointNameB ? `${endpointNameA} - ${endpointNameB}  ` : "";
-    drawShareSnapshotLabel(
-      target,
-      `${endpointNames}${formatDistance(distanceBetween(endpoints.a, endpoints.b))} / ${formatAngle(result.bearingDegrees)}`,
-      { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
-      textColor,
-      surfaceColor,
-      palette,
-      { font: "600 13px system-ui, sans-serif", maxChars: 100, maxWidth: 620, height: 22, offsetX: 8, offsetY: -8 }
-    );
   }
 
   const markers = new Map();
@@ -14843,7 +14828,7 @@ async function renderSelectedShareImage(points, lines, figures, visiblePoints = 
       surfaceColor,
       palette,
       isPoint
-        ? { anchor: "top-center", font: "700 15px system-ui, sans-serif", maxWidth: 260, height: 26, offsetY: -10 }
+        ? { anchor: "top-center", font: "700 18px system-ui, sans-serif", maxWidth: 280, height: 30, offsetY: -10 }
         : { font: "600 12px system-ui, sans-serif", maxWidth: 240, height: 22 }
     );
   }
@@ -14858,7 +14843,8 @@ async function renderSelectedShareImage(points, lines, figures, visiblePoints = 
   if (analyses.length > 0) {
     const { result } = analyses[0];
     target.save();
-    const right = 1110;
+    const right = 1130;
+    const scoreCenter = 1040;
     const scoreY = 1088;
     const displayFont = "'Avenir Next', 'Helvetica Neue', 'Trebuchet MS', 'Segoe UI', sans-serif";
     const textFont = "'Yu Gothic', 'Hiragino Sans', 'Segoe UI', sans-serif";
@@ -14870,10 +14856,11 @@ async function renderSelectedShareImage(points, lines, figures, visiblePoints = 
     target.fillStyle = textColor;
     target.globalAlpha = 0.88;
     target.font = `500 13px ${textFont}`;
-    target.fillText(`${t("analysis.area")} ${formatShareSnapshotArea(result.area)}   ${t("analysis.perimeterDisplay")} ${formatShareSnapshotPerimeter(result.perimeter)}`, right, 1182);
+    target.textAlign = "center";
+    target.fillText(`${t("analysis.area")} ${formatShareSnapshotArea(result.area)}   ${t("analysis.perimeterDisplay")} ${formatShareSnapshotPerimeter(result.perimeter)}`, scoreCenter, 1122);
     target.globalAlpha = 0.9;
     target.font = `500 18px ${textFont}`;
-    target.fillText(t("analysis.regularityScore"), right, 1014);
+    target.fillText(t("analysis.regularityScore"), scoreCenter, 1014);
     target.fillStyle = palette.pointFill || palette.link || textColor;
     target.globalAlpha = 1;
     target.font = `600 78px ${displayFont}`;
@@ -14883,7 +14870,7 @@ async function renderSelectedShareImage(points, lines, figures, visiblePoints = 
     target.font = `500 22px ${displayFont}`;
     const scoreSuffix = "/100";
     const suffixWidth = target.measureText(scoreSuffix).width;
-    const scoreRight = right - suffixWidth - 14;
+    const scoreRight = scoreCenter - (suffixWidth + 14) / 2;
     target.fillStyle = palette.pointFill || palette.link || textColor;
     target.globalAlpha = 1;
     target.font = `600 78px ${displayFont}`;
@@ -14891,14 +14878,15 @@ async function renderSelectedShareImage(points, lines, figures, visiblePoints = 
     target.fillStyle = textColor;
     target.globalAlpha = 0.82;
     target.font = `500 22px ${displayFont}`;
-    target.fillText(scoreSuffix, right, scoreY - 4);
+    target.fillText(scoreSuffix, scoreCenter + (suffixWidth + 14) / 2, scoreY - 4);
     target.globalAlpha = 0.9;
     target.fillStyle = textColor;
     target.font = `500 14px ${textFont}`;
-    target.fillText(`${t("analysis.angleVariation")} ${formatAngle(result.maxAngleDeviation)} (${formatPercent(result.maxAngleDeviationPercent)})   ${t("analysis.sideVariation")} ${formatPercent(result.sideRangePercent)}`, right, 1120);
+    target.textAlign = "right";
+    target.fillText(`${t("analysis.angleVariation")} ${formatAngle(result.maxAngleDeviation)} (${formatPercent(result.maxAngleDeviationPercent)})   ${t("analysis.sideVariation")} ${formatPercent(result.sideRangePercent)}`, right, 1150);
     target.globalAlpha = 0.72;
     target.font = `400 12px ${textFont}`;
-    target.fillText(t("analysis.referenceScoreDefinition"), right, 1150);
+    target.fillText(t("analysis.referenceScoreDefinition"), right, 1180);
     target.restore();
   }
   drawShareSnapshotBrand(target, palette, textColor);
@@ -15453,10 +15441,6 @@ function clearIncomingCloudShareId() {
   const url = new URL(window.location.href);
   url.searchParams.delete(CLOUD_SHARE_URL_PARAMETER);
   window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
-}
-
-function closeCloudSharePreview() {
-  document.querySelector("#cloudSharePreview")?.remove();
 }
 
 async function openCloudShareInGridAtlas(payload) {
