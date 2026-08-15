@@ -128,7 +128,7 @@ const KEKKAI_THEME = "kekkai";
 const KEKKAI_MODE = "kekkai";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2118";
+const WEB_VERSION = "0.2128";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -14390,10 +14390,9 @@ function shareSnapshotSurfaceColor() {
 }
 
 const SHARE_SNAPSHOT_WIDTH = 1200;
-const SHARE_SNAPSHOT_HEIGHT = 630;
-const SHARE_SNAPSHOT_FRAME = Object.freeze({ left: 72, top: 64, right: 1128, bottom: 482 });
+const SHARE_SNAPSHOT_HEIGHT = 1200;
+const SHARE_SNAPSHOT_FRAME = Object.freeze({ left: 80, top: 160, right: 1120, bottom: 900 });
 const SHARE_SNAPSHOT_MIN_SPAN_METERS = 2500;
-let shareSnapshotLogoPromise = null;
 
 function shareSnapshotAppUrl() {
   const canonical = document.querySelector('link[rel="canonical"]')?.href;
@@ -14406,26 +14405,6 @@ function shareSnapshotAppUrl() {
   } catch {
     return "https://gridatlas.github.io/GRID_ATLAS/";
   }
-}
-
-function loadShareSnapshotLogo() {
-  if (shareSnapshotLogoPromise) return shareSnapshotLogoPromise;
-  shareSnapshotLogoPromise = new Promise((resolve) => {
-    if (typeof globalThis.Image !== "function") {
-      resolve(null);
-      return;
-    }
-
-    const image = new globalThis.Image();
-    image.addEventListener("load", () => resolve(image), { once: true });
-    image.addEventListener("error", () => resolve(null), { once: true });
-    try {
-      image.src = new URL("assets/icon-grid.svg", document.baseURI).href;
-    } catch {
-      resolve(null);
-    }
-  });
-  return shareSnapshotLogoPromise;
 }
 
 function drawShareSnapshotGrid(target, palette) {
@@ -14461,23 +14440,30 @@ function drawShareSnapshotLabel(target, label, screen, textColor, surfaceColor, 
   const text = String(label || "").trim();
   if (!text) return;
 
-  const maxChars = options.maxChars || 30;
+  const maxChars = options.maxChars || 28;
   const clipped = text.length > maxChars ? `${text.slice(0, maxChars - 1)}…` : text;
   target.save();
-  target.font = options.font || "700 18px system-ui, sans-serif";
+  target.font = options.font || "700 11px system-ui, sans-serif";
   target.textAlign = "left";
   target.textBaseline = "middle";
-  const maxWidth = options.maxWidth || 280;
-  const boxWidth = Math.min(maxWidth, target.measureText(clipped).width + 18);
-  const boxHeight = options.height || 28;
-  const offsetY = options.offsetY || 0;
-  const x = Math.min(Math.max(screen.x + (options.offsetX ?? 15), 20), SHARE_SNAPSHOT_WIDTH - boxWidth - 20);
-  const y = Math.min(Math.max(screen.y - 18 + offsetY, 20), SHARE_SNAPSHOT_FRAME.bottom - boxHeight - 8);
+  const maxWidth = options.maxWidth || 220;
+  const boxWidth = Math.min(maxWidth, target.measureText(clipped).width + 12);
+  const boxHeight = options.height || 20;
+  const offsetX = options.offsetX ?? 8;
+  const offsetY = options.offsetY ?? -8;
+  const x = Math.min(Math.max(screen.x + offsetX, 12), SHARE_SNAPSHOT_WIDTH - boxWidth - 12);
+  const y = Math.min(Math.max(screen.y + offsetY, 12), SHARE_SNAPSHOT_FRAME.bottom - boxHeight - 8);
 
   target.globalAlpha = 0.92;
   target.fillStyle = surfaceColor;
+  target.shadowColor = "rgb(0 0 0 / 16%)";
+  target.shadowBlur = 4;
+  target.shadowOffsetY = 2;
   drawShareSnapshotRoundedRect(target, x, y, boxWidth, boxHeight, 6);
   target.fill();
+  target.shadowColor = "transparent";
+  target.shadowBlur = 0;
+  target.shadowOffsetY = 0;
   target.globalAlpha = 0.82;
   target.strokeStyle = palette.gridMajor || palette.link || textColor;
   target.lineWidth = 1;
@@ -14488,56 +14474,51 @@ function drawShareSnapshotLabel(target, label, screen, textColor, surfaceColor, 
   target.restore();
 }
 
-function drawShareSnapshotLogoFallback(target, x, y, size, palette, surfaceColor) {
+function drawShareSnapshotBrand(target, palette, textColor) {
   target.save();
-  target.fillStyle = surfaceColor;
-  target.fillRect(x, y, size, size);
-  target.strokeStyle = palette.link || palette.gridMajor;
-  target.lineWidth = 2;
-  target.strokeRect(x + 5, y + 5, size - 10, size - 10);
+  target.fillStyle = palette.pointFill || palette.link || "#23ff5e";
   target.beginPath();
-  for (let index = 1; index < 4; index += 1) {
-    const offset = x + (size * index) / 4;
-    target.moveTo(offset, y + 7);
-    target.lineTo(offset, y + size - 7);
-    target.moveTo(x + 7, y + (size * index) / 4);
-    target.lineTo(x + size - 7, y + (size * index) / 4);
-  }
-  target.stroke();
-  target.fillStyle = palette.observationTrail || palette.pointFill || palette.link;
-  target.fillRect(x + size * 0.54, y + size * 0.36, size * 0.2, size * 0.2);
-  target.restore();
-}
-
-async function drawShareSnapshotBrand(target, palette, textColor) {
-  const logoSize = 42;
-  const logoX = 1022;
-  const logoY = 536;
-  const surfaceColor = shareSnapshotSurfaceColor();
-  const logo = await loadShareSnapshotLogo();
-  if (logo) {
-    target.drawImage(logo, logoX, logoY, logoSize, logoSize);
-  } else {
-    drawShareSnapshotLogoFallback(target, logoX, logoY, logoSize, palette, surfaceColor);
-  }
-
-  target.save();
+  target.arc(86, 70, 13, 0, Math.PI * 2);
+  target.fill();
   target.fillStyle = textColor;
-  target.textAlign = "right";
+  target.textAlign = "left";
   target.textBaseline = "alphabetic";
-  target.font = "800 19px system-ui, sans-serif";
-  target.fillText("GRID ATLAS", 1180, 555);
-  target.font = "600 11px system-ui, sans-serif";
-  target.fillText(shareSnapshotAppUrl().replace(/^https?:\/\//, ""), 1180, 596);
-  target.font = "800 13px system-ui, sans-serif";
-  target.fillText("#GRIDATLAS", 1180, 616);
+  target.font = "800 30px system-ui, sans-serif";
+  target.fillText("GRID ATLAS", 112, 81);
+  target.font = "700 11px system-ui, sans-serif";
+  target.fillText("WEB版", 318, 80);
+  target.textAlign = "right";
+  target.font = "600 13px system-ui, sans-serif";
+  target.fillText(shareSnapshotAppUrl().replace(/^https?:\/\//, ""), 1120, 1128);
+  target.font = "800 14px system-ui, sans-serif";
+  target.fillText("#GRIDATLAS", 1120, 1155);
   target.restore();
 }
 
-async function renderSelectedShareImage(points, lines, figures) {
+function shareSnapshotGeo(value) {
+  if (validGeo(value?.geo)) return normalizeGeo(value.geo);
+  if (validGeo(value)) return normalizeGeo(value);
+  if (Number.isFinite(Number(value?.x)) && Number.isFinite(Number(value?.y))) return pointGeo(value);
+  return null;
+}
+
+function shareSnapshotPointAtGeo(geo, visiblePoints) {
+  if (!validGeo(geo)) return null;
+  return visiblePoints.find((point) => {
+    const pointGeoValue = shareSnapshotGeo(point);
+    return pointGeoValue && isSameGeo(geo, pointGeoValue);
+  }) || null;
+}
+
+function shareSnapshotVertexLabel(vertex, visiblePoints) {
+  if (vertex.markerKind === "point") return String(vertex.title || "").trim();
+  return String(shareSnapshotPointAtGeo(vertex.geo, visiblePoints)?.title || "").trim();
+}
+
+async function renderSelectedShareImage(points, lines, figures, visiblePoints = []) {
   const pointVertices = points.map((point) => ({
     ...point,
-    geo: point.geo,
+    geo: shareSnapshotGeo(point),
     title: point.title,
     markerKind: "point"
   }));
@@ -14549,7 +14530,7 @@ async function renderSelectedShareImage(points, lines, figures) {
     .map((vertex, index) => ({ ...vertex, markerKind: "figure-vertex", figureId: figure.id, vertexIndex: index })));
   const snapshotVertices = [...pointVertices, ...lineVertices, ...figureVertices]
     .map((vertex) => {
-      const geo = validGeo(vertex.geo) ? normalizeGeo(vertex.geo) : validGeo(vertex) ? normalizeGeo(vertex) : null;
+      const geo = shareSnapshotGeo(vertex);
       return geo ? { ...vertex, geo } : null;
     })
     .filter(Boolean);
@@ -14588,6 +14569,7 @@ async function renderSelectedShareImage(points, lines, figures) {
   const palette = canvasPalette();
   const textColor = shareSnapshotTextColor();
   const surfaceColor = shareSnapshotSurfaceColor();
+  const labelPoints = points.length > 0 ? points : visiblePoints;
   drawShareSnapshotGrid(target, palette);
 
   for (const figure of figures) {
@@ -14611,7 +14593,7 @@ async function renderSelectedShareImage(points, lines, figures) {
         textColor,
         surfaceColor,
         palette,
-        { font: "600 18px system-ui, sans-serif", offsetX: 8, offsetY: 0 }
+        { offsetX: 8, offsetY: -8 }
       );
     }
   }
@@ -14625,26 +14607,32 @@ async function renderSelectedShareImage(points, lines, figures) {
     target.strokeStyle = normalizeGridAtlasLineColor(line.color) || palette.link;
     target.beginPath(); target.moveTo(a.x, a.y); target.lineTo(b.x, b.y); target.stroke();
     const result = analyzeOpenPath([{ a: endpoints.a, b: endpoints.b }]);
+    const endpointNameA = String(shareSnapshotPointAtGeo(endpoints.a.geo, labelPoints)?.title || "").trim();
+    const endpointNameB = String(shareSnapshotPointAtGeo(endpoints.b.geo, labelPoints)?.title || "").trim();
+    const endpointNames = endpointNameA && endpointNameB ? `${endpointNameA} - ${endpointNameB}  ` : "";
     drawShareSnapshotLabel(
       target,
-      `${endpoints.a.title} - ${endpoints.b.title}  ${formatDistance(distanceBetween(endpoints.a, endpoints.b))} / ${formatAngle(result.bearingDegrees)}`,
+      `${endpointNames}${formatDistance(distanceBetween(endpoints.a, endpoints.b))} / ${formatAngle(result.bearingDegrees)}`,
       { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
       textColor,
       surfaceColor,
       palette,
-      { font: "600 16px system-ui, sans-serif", maxChars: 90, maxWidth: 620, offsetX: 8, offsetY: -8 }
+      { font: "600 13px system-ui, sans-serif", maxChars: 100, maxWidth: 620, height: 22, offsetX: 8, offsetY: -8 }
     );
   }
 
   const markers = new Map();
   for (const vertex of snapshotVertices) {
-    const key = vertex.placeRef
-      ? `ref:${vertex.placeRef}`
-      : `geo:${vertex.geo.lat.toFixed(7)}:${vertex.geo.lng.toFixed(7)}`;
-    const label = String(vertex.title || vertex.name || "").trim();
+    const matchingPoint = shareSnapshotPointAtGeo(vertex.geo, labelPoints);
+    const isSelectedPoint = vertex.markerKind === "point";
+    const hasDisplayedPoint = Boolean(matchingPoint);
+    const keyGeo = matchingPoint ? shareSnapshotGeo(matchingPoint) : vertex.geo;
+    const key = `geo:${keyGeo.lat.toFixed(6)}:${keyGeo.lng.toFixed(6)}`;
+    const label = shareSnapshotVertexLabel(vertex, labelPoints);
+    const markerKind = isSelectedPoint || hasDisplayedPoint ? "point" : vertex.markerKind;
     const existing = markers.get(key);
-    if (!existing || vertex.markerKind === "point") {
-      markers.set(key, { ...vertex, label });
+    if (!existing || isSelectedPoint || (hasDisplayedPoint && existing.markerKind !== "point")) {
+      markers.set(key, { ...vertex, label, markerKind });
     } else if (!existing.label && label) {
       existing.label = label;
     }
@@ -14669,11 +14657,7 @@ async function renderSelectedShareImage(points, lines, figures) {
     target.lineWidth = isPoint ? 3 : 2;
     target.stroke();
     target.restore();
-    drawShareSnapshotLabel(target, marker.label, screen, textColor, surfaceColor, palette, {
-      font: isPoint ? "700 18px system-ui, sans-serif" : "600 15px system-ui, sans-serif",
-      offsetX: isPoint ? 15 : 12,
-      offsetY: isPoint ? 0 : 4
-    });
+    drawShareSnapshotLabel(target, marker.label, screen, textColor, surfaceColor, palette);
   }
 
   const metrics = [];
@@ -14684,15 +14668,16 @@ async function renderSelectedShareImage(points, lines, figures) {
     }
   }
   target.fillStyle = textColor;
-  target.font = "600 16px sans-serif";
-  target.fillText(`${points.length}${t("label.points")}  ${lines.length}${t("label.links")}  ${figures.length}${t("analysis.figure")}`, 90, 555);
-  metrics.slice(0, 2).forEach((metric, index) => target.fillText(metric, 90, 580 + index * 18));
-  await drawShareSnapshotBrand(target, palette, textColor);
+  target.font = "600 20px sans-serif";
+  target.fillText(`${points.length}${t("label.points")}  ${lines.length}${t("label.links")}  ${figures.length}${t("analysis.figure")}`, 90, 1015);
+  target.font = "600 18px sans-serif";
+  metrics.slice(0, 2).forEach((metric, index) => target.fillText(metric, 90, 1050 + index * 24));
+  drawShareSnapshotBrand(target, palette, textColor);
   return canvasToPngBlob(canvas);
 }
 
-async function shareSelectedSnapshot(points, lines, figures, name) {
-  const blob = await renderSelectedShareImage(points, lines, figures);
+async function shareSelectedSnapshot(points, lines, figures, name, visiblePoints = []) {
+  const blob = await renderSelectedShareImage(points, lines, figures, visiblePoints);
   const file = new File([blob], `grid-atlas-${safeFilenamePart(name || "snapshot")}.png`, { type: "image/png" });
   const canShareFile = typeof navigator.share === "function" && (!navigator.canShare || navigator.canShare({ files: [file] }));
   if (canShareFile) {
@@ -14728,6 +14713,10 @@ async function shareSelectedCloud(list) {
 
 async function shareSelectedPointsFile() {
   normalizeSelection();
+  const visiblePointsAtShare = visibleSelectablePoints()
+    .filter((point) => point.id !== CURRENT_LOCATION_ID)
+    .map((point) => ({ ...point, geo: shareSnapshotGeo(point) }))
+    .filter((point) => validGeo(point.geo));
   const points = selectedPointIds()
     .filter((pointId) => pointId !== CURRENT_LOCATION_ID)
     .map(findPoint)
@@ -14770,7 +14759,7 @@ async function shareSelectedPointsFile() {
   };
   const shareOptions = { confirm: false, includeAnalysisLayer: true };
   if (input.action === "file") await sharePointListFile(list, shareOptions);
-  if (input.action === "image") await shareSelectedSnapshot(points, lines, figures, name);
+  if (input.action === "image") await shareSelectedSnapshot(points, lines, figures, name, visiblePointsAtShare);
   if (input.action === "cloud") await shareSelectedCloud(list);
 }
 function gridAtlasFileLikely(file) {
@@ -15244,7 +15233,7 @@ async function handleIncomingCloudShare() {
     card.querySelector(".cloud-share-preview-title").textContent = share.name || payload.name || "共有リスト";
     const visual = card.querySelector(".cloud-share-preview-visual");
     if (list && points.length > 0) {
-      const blob = await renderSelectedShareImage(points, lines, figures);
+      const blob = await renderSelectedShareImage(points, lines, figures, points);
       const image = document.createElement("img");
       image.alt = share.name || "GRID ATLAS共有スナップショット";
       image.src = URL.createObjectURL(blob);
