@@ -470,6 +470,73 @@ button {
   padding: 12px;
 }
 
+.cloud-shares-section {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.cloud-shares-section h3 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+}
+
+.cloud-share-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.cloud-share-row-info {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.cloud-share-row-info strong,
+.cloud-share-row-info span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloud-share-row-info span {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.cloud-share-import-notice {
+  position: fixed;
+  z-index: 30;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 8px;
+  min-width: min(92vw, 360px);
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.share-image-preview-dialog {
+  width: min(92vw, 760px);
+  max-width: 760px;
+}
+
+.share-image-preview-image {
+  display: block;
+  width: 100%;
+  max-height: 68vh;
+  object-fit: contain;
+  background: var(--surface-alt);
+}
+
 .cloud-auth-panel {
   display: grid;
   gap: 12px;
@@ -1155,7 +1222,7 @@ button {
   box-shadow: var(--shadow);
 }
 
-.traverse-action-button {
+.traverse-action-controls {
   position: absolute;
   left: 50%;
   bottom: 14px;
@@ -1163,22 +1230,46 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 2px;
+  transform: translateX(-50%);
+  pointer-events: auto;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.traverse-action-controls[hidden] {
+  display: none !important;
+}
+
+.traverse-action-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   gap: 4px;
   width: auto;
-  min-width: 0;
+  min-width: 76px;
   min-height: 36px;
-  padding: 0 16px;
+  padding: 0 12px;
   border: 0;
   border-radius: 0;
   background: rgb(242 138 46 / 0.3);
   color: #ffd7aa;
   box-shadow: none;
   clip-path: polygon(12% 0, 88% 0, 100% 50%, 88% 100%, 12% 100%, 0 50%);
-  transform: translateX(-50%);
   white-space: nowrap;
   pointer-events: auto;
   touch-action: manipulation;
   user-select: none;
+}
+
+.traverse-action-button-cancel {
+  background: rgb(86 67 96 / 0.68);
+  color: #eadcf2;
+}
+
+.traverse-action-button-cancel:hover:not(:disabled) {
+  background: rgb(108 82 120 / 0.82);
 }
 
 html.is-traverse-mode .traverse-action-button:not([hidden]) {

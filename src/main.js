@@ -128,7 +128,7 @@ const KEKKAI_THEME = "kekkai";
 const KEKKAI_MODE = "kekkai";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2140";
+const WEB_VERSION = "0.2161";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -242,8 +242,10 @@ const elements = {
   clearSelectionButton: document.querySelector("#clearSelectionButton"),
   actionCenterButton: document.querySelector("#actionCenterButton"),
   actionMapButton: document.querySelector("#actionMapButton"),
+  traverseActionControls: document.querySelector("#traverseActionControls"),
   traverseActionButton: document.querySelector("#traverseActionButton"),
   traverseActionLabel: document.querySelector("#traverseActionLabel"),
+  traverseDragonEyeCancelButton: document.querySelector("#traverseDragonEyeCancelButton"),
   dragonEyeDialog: document.querySelector("#dragonEyeDialog"),
   dragonEyeAvailability: document.querySelector("#dragonEyeAvailability"),
   dragonEyeShapeOptions: document.querySelector("#dragonEyeShapeOptions"),
@@ -277,6 +279,10 @@ const elements = {
   cloudDialog: document.querySelector("#cloudDialog"),
   closeCloudButton: document.querySelector("#closeCloudButton"),
   cloudDialogBody: document.querySelector("#cloudDialogBody"),
+  cloudSharesSection: document.querySelector("#cloudSharesSection"),
+  cloudSharesList: document.querySelector("#cloudSharesList"),
+  shareImagePreviewDialog: document.querySelector("#shareImagePreviewDialog"),
+  shareImagePreviewImage: document.querySelector("#shareImagePreviewImage"),
   cloudTesterSignupDialog: document.querySelector("#cloudTesterSignupDialog"),
   closeCloudTesterSignupButton: document.querySelector("#closeCloudTesterSignupButton"),
   cloudTesterSignupDialogBody: document.querySelector("#cloudTesterSignupDialogBody"),
@@ -542,6 +548,7 @@ const state = {
     lists: [],
     pointLists: [],
     pointRows: [],
+    shares: [],
     lastFetchedAt: 0,
     lastAutoRefreshAt: 0,
     hiddenListIds: new Set(),
@@ -1223,7 +1230,7 @@ const TRANSLATIONS = {
     "dragonEye.sightLimit": "見通しの限界（半径{radius}）",
       "dragonEye.rotationOn": "解放",
       "dragonEye.rotationLocked": "E級で解放",
-    "dragonEye.confirm": "龍脈眼を確定",
+    "dragonEye.confirm": "確定",
     "dragonEye.cancel": "解除",
     "dragonEye.triangle": "正三角形",
     "dragonEye.square": "正方形",
@@ -1764,7 +1771,7 @@ const TRANSLATIONS = {
     "dragonEye.sightLimit": "Sight limit (radius {radius})",
       "dragonEye.rotationOn": "unlocked",
       "dragonEye.rotationLocked": "unlocks at E",
-    "dragonEye.confirm": "Place Dragon Eye",
+    "dragonEye.confirm": "Confirm",
     "dragonEye.cancel": "Cancel",
     "dragonEye.triangle": "Equilateral triangle",
     "dragonEye.square": "Square",
@@ -2322,6 +2329,12 @@ function openDragonEyeDialog() {
     elements.traverseActionDialog?.close("dragon-eye");
     elements.dragonEyeDialog.showModal();
   }
+}
+
+function cancelDragonEye() {
+  if (!state.dragonEye.active) return;
+  resetDragonEyeState();
+  returnToTraverseActionMenu();
 }
 
 function dragonEyePlacementVertex(vertex) {
@@ -3824,7 +3837,7 @@ function pointGeoFromAny(point, origin) {
 
 function workspaceSnapshot() {
   ensurePointLists();
-  const pointLists = state.pointLists.map((list) => ({
+  const pointLists = state.pointLists.filter((list) => list.transient !== true).map((list) => ({
     ...list,
     points: list.points.map((point) => ({
       ...point,
@@ -5466,23 +5479,34 @@ function renderStatus() {
 }
 
 function ensureTraverseActionButtonPlacement() {
-  const button = elements.traverseActionButton;
+  const controls = elements.traverseActionControls || elements.traverseActionButton;
   const mapContent = document.querySelector(".map-content");
-  if (button && mapContent && button.parentElement !== mapContent) {
-    mapContent.append(button);
+  if (controls && mapContent && controls.parentElement !== mapContent) {
+    mapContent.append(controls);
   }
+}
+
+function setTraverseActionControlVisibility(element, visible) {
+  if (!element) return;
+  element.hidden = !visible;
+  element.style.display = visible ? "inline-flex" : "none";
+  element.style.visibility = visible ? "visible" : "hidden";
+  element.setAttribute("aria-hidden", String(!visible));
+}
+
+function syncTraverseActionControlsVisibility(visible) {
+  setTraverseActionControlVisibility(elements.traverseActionControls, visible);
+  setTraverseActionControlVisibility(elements.traverseActionButton, visible);
+  setTraverseActionControlVisibility(
+    elements.traverseDragonEyeCancelButton,
+    visible && Boolean(state.dragonEye.active)
+  );
 }
 
 function syncTraverseModeUi() {
   const enabled = Boolean(state.traverseMode);
   const visible = enabled && isTraverseGridSurfaceActive();
-  const button = elements.traverseActionButton;
-  if (button) {
-    button.hidden = !visible;
-    button.style.display = visible ? "inline-flex" : "none";
-    button.style.visibility = visible ? "visible" : "hidden";
-    button.setAttribute("aria-hidden", String(!visible));
-  }
+  syncTraverseActionControlsVisibility(visible);
   document.documentElement.classList.toggle("is-traverse-mode", enabled);
 }
 
@@ -5490,10 +5514,16 @@ function renderTraverseActionButton() {
   const button = elements.traverseActionButton;
   if (!button) return;
   const visible = state.traverseMode && isTraverseGridSurfaceActive();
-  button.hidden = !visible;
-  button.style.display = visible ? "inline-flex" : "none";
-  button.style.visibility = visible ? "visible" : "hidden";
-  button.setAttribute("aria-hidden", String(!visible));
+  syncTraverseActionControlsVisibility(visible);
+  const cancelButton = elements.traverseDragonEyeCancelButton;
+  const cancelLabel = t("dragonEye.cancel");
+  const cancelLabelNode = cancelButton?.querySelector(".traverse-action-label");
+  if (cancelLabelNode) cancelLabelNode.textContent = cancelLabel;
+  if (cancelButton) {
+    cancelButton.disabled = state.traverseBusy;
+    cancelButton.setAttribute("aria-label", cancelLabel);
+    cancelButton.title = cancelLabel;
+  }
   if (!visible) {
     button.disabled = false;
     button.classList.remove("is-dragon-eye-active", "is-placement-view-active");
@@ -9305,6 +9335,77 @@ function renderCloudAuthControls() {
     );
   }
   renderCloudTesterSignupDialog();
+  renderCloudShares();
+}
+
+function renderCloudShares() {
+  const section = elements.cloudSharesSection;
+  const container = elements.cloudSharesList;
+  if (!section || !container) return;
+  const signedIn = Boolean(state.cloud.authSession?.access_token) || Boolean(state.cloud.testerCode);
+  section.hidden = !signedIn;
+  container.replaceChildren();
+  if (!signedIn) return;
+  if (!state.cloud.shares.length) {
+    const empty = document.createElement("p");
+    empty.className = "cloud-empty-state";
+    empty.textContent = cloudText("発行済みリンクはありません", "No issued links");
+    container.append(empty);
+    return;
+  }
+  for (const share of state.cloud.shares) {
+    const shareId = share.share_id || share.id;
+    const row = document.createElement("div");
+    row.className = "cloud-share-row";
+    const info = document.createElement("div");
+    info.className = "cloud-share-row-info";
+    const title = document.createElement("strong");
+    title.textContent = share.name || shareId || cloudText("共有", "Share");
+    const dates = document.createElement("span");
+    dates.textContent = `${share.created_at || share.createdAt || ""} / ${share.expires_at || share.expiresAt || ""}`;
+    info.append(title, dates);
+    const actions = document.createElement("div");
+    actions.className = "button-row";
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "compact-button";
+    copy.textContent = cloudText("リンクをコピー", "Copy link");
+    copy.addEventListener("click", async () => {
+      const url = new URL(window.location.href);
+      url.search = "";
+      url.searchParams.set(CLOUD_SHARE_URL_PARAMETER, shareId);
+      if (await writeClipboardText(url)) setCloudStatus(cloudText("リンクをコピーしました", "Link copied"));
+    });
+    const revoke = document.createElement("button");
+    revoke.type = "button";
+    revoke.className = "danger-button";
+    revoke.textContent = cloudText("失効", "Revoke");
+    revoke.disabled = Boolean(share.revoked_at || share.revokedAt);
+    revoke.addEventListener("click", async () => {
+      if (!window.confirm(cloudText("この共有リンクを失効させますか？", "Revoke this share link?"))) return;
+      try {
+        await cloudClientFromInputs().revokeShare(shareId);
+        await refreshCloudShares();
+      } catch (error) {
+        setCloudStatus(error?.message || cloudText("失効に失敗しました", "Revoke failed"), { error: true });
+      }
+    });
+    actions.append(copy, revoke);
+    row.append(info, actions);
+    container.append(row);
+  }
+}
+
+async function refreshCloudShares() {
+  if (!state.cloud.connected && !state.cloud.authSession?.access_token) return;
+  try {
+    const response = await cloudClientFromInputs().listShares();
+    state.cloud.shares = Array.isArray(response?.shares) ? response.shares : [];
+  } catch (error) {
+    state.cloud.shares = [];
+    console.warn("GRID ATLAS share list failed", error);
+  }
+  renderCloudShares();
 }
 
 function renderCloudTesterStatus() {
@@ -9854,6 +9955,7 @@ async function refreshCloudLists(options = {}) {
     ));
     syncProjectedCoordinates();
     state.cloud.connected = true;
+    await refreshCloudShares();
     state.cloud.lastFetchedAt = Date.now();
     setCloudProgress(3, 3, "read");
     if (options.quiet !== true && state.cloud.canUseMine) {
@@ -11482,7 +11584,7 @@ function updateLineDragTarget(drag, screenPoint) {
   const lineDrag = drag.lineDrag;
   lineDrag.current = { ...screenPoint };
   const link = findLink(lineDrag.linkId);
-  const fixedId = linkEndpointPlaceRef(link, lineDrag.fixedSide);
+  const fixedId = lineEndpointPlaceRef(link, lineDrag.fixedSide);
   const replaceSide = lineDrag.fixedSide === "a" ? "b" : "a";
   const replaceId = lineEndpointPlaceRef(link, replaceSide);
   const candidate = findNearestPoint(screenPoint, {
@@ -12838,7 +12940,7 @@ function updatePinchGesture() {
       let delta = currentAngle - pinch.startAngle;
       if (delta > Math.PI) delta -= Math.PI * 2;
       if (delta < -Math.PI) delta += Math.PI * 2;
-      state.dragonEye.rotation = pinch.startDragonEyeRotation + delta;
+      state.dragonEye.rotation = pinch.startDragonEyeRotation - delta;
     }
     draw();
     return;
@@ -14388,7 +14490,22 @@ async function sharePointListFile(list, options = {}) {
 
 async function shareStorageListFile(storageId) {
   const entry = findStorageListEntry(storageId);
-  await sharePointListFile(entry?.local || entry?.preview);
+  const list = entry?.local || entry?.preview;
+  if (!list) return;
+  const input = await requestTextInput({
+    title: t("list.shareSelectedNamePrompt"),
+    message: t("list.exportPrivacy"),
+    label: t("field.name"),
+    defaultValue: list.name || t("list.shareSelectedDefaultName"),
+    submitLabel: t("action.shareSelected"),
+    shareMode: true
+  });
+  if (!input) return;
+  const name = input.value.trim() || list.name || t("list.shareSelectedDefaultName");
+  const shareList = { ...clonePlain(list), name, analysisLayer: undefined };
+  if (input.action === "file") await sharePointListFile(shareList, { confirm: false, includeAnalysisLayer: false });
+  if (input.action === "image") await shareSelectedSnapshot(shareList.points || [], [], [], name, shareList.points || []);
+  if (input.action === "cloud") await shareSelectedCloud(shareList);
 }
 
 function shareSnapshotTextColor() {
@@ -14772,6 +14889,8 @@ async function renderSelectedShareImage(points, lines, figures, visiblePoints = 
 async function shareSelectedSnapshot(points, lines, figures, name, visiblePoints = []) {
   const blob = await renderSelectedShareImage(points, lines, figures, visiblePoints);
   const file = new File([blob], `grid-atlas-${safeFilenamePart(name || "snapshot")}.png`, { type: "image/png" });
+  const preview = await requestShareImagePreview(blob);
+  if (!preview) return;
   const canShareFile = typeof navigator.share === "function" && (!navigator.canShare || navigator.canShare({ files: [file] }));
   if (canShareFile) {
     try {
@@ -14787,16 +14906,39 @@ async function shareSelectedSnapshot(points, lines, figures, name, visiblePoints
   setShareFeedback(t("list.exportImageDownloaded"));
 }
 
+function requestShareImagePreview(blob) {
+  const dialog = elements.shareImagePreviewDialog;
+  const image = elements.shareImagePreviewImage;
+  if (!dialog || !image) return Promise.resolve(true);
+  const url = URL.createObjectURL(blob);
+  image.src = url;
+  dialog.showModal();
+  return new Promise((resolve) => {
+    const finish = () => {
+      dialog.removeEventListener("close", finish);
+      URL.revokeObjectURL(url);
+      image.removeAttribute("src");
+      resolve(dialog.returnValue === "confirm");
+    };
+    dialog.addEventListener("close", finish, { once: true });
+  });
+}
+
 async function shareSelectedCloud(list) {
   try {
     const client = cloudClientFromInputs();
-    const response = await client.createShare(list, list.name, 90);
+    const response = await client.createShare(
+      list?.type === "place-list" ? list : pointListGridAtlasDocument(list, { includeAnalysisLayer: Boolean(list?.analysisLayer) }),
+      list.name,
+      90
+    );
     const shareId = response?.share?.id;
     if (!shareId) throw new Error("共有IDがありません");
     const url = new URL(window.location.href);
     url.search = "";
     url.searchParams.set(CLOUD_SHARE_URL_PARAMETER, shareId);
     if (!(await writeClipboardText(url))) throw new Error("クリップボードへコピーできませんでした");
+    await refreshCloudShares();
     setShareFeedback(t("list.exportCloudCreated"));
   } catch (error) {
     console.warn("GRID ATLAS cloud share failed", error);
@@ -15089,7 +15231,7 @@ function applyImportedPointLists(importedLists, importedAnalysisLayers, successM
     refreshVisiblePoints();
     state.selection = importedLists.flatMap((list) => list.points.map((point) => ({ type: "point", id: point.id })));
     normalizeSelection();
-    persistWorkspace();
+    if (options.persist !== false) persistWorkspace();
   } catch (error) {
     state.pointLists = previousLists;
     state.links = previousLinks;
@@ -15138,6 +15280,10 @@ async function importGridAtlasPackages(packages, options = {}) {
       );
       importedLists.push(imported.list);
       importedAnalysisLayers.push(imported.analysisLayer);
+    }
+
+    if (options.persist === false) {
+      for (const list of importedLists) list.transient = true;
     }
 
     if (importedLists.length === 0 && duplicates.length > 0) {
@@ -15295,54 +15441,49 @@ function closeCloudSharePreview() {
 }
 
 async function openCloudShareInGridAtlas(payload) {
-  const document = payload?.type === "place-list"
+  const coreDocument = payload?.type === "place-list"
     ? payload
     : pointListGridAtlasDocument(payload, { includeAnalysisLayer: true });
-  await importGridAtlasPackages([{ manifest: null, document, resources: new Map() }], { source: "cloud-share" });
+  const imported = await importGridAtlasPackages([{ manifest: null, document: coreDocument, resources: new Map() }], { source: "cloud-share", persist: false });
+  if (!imported) return;
   clearIncomingCloudShareId();
-  closeCloudSharePreview();
+  const list = state.pointLists.find((item) => item.transient === true && item.gridAtlas?.documentId === coreDocument.id);
+  const notice = documentFromIncomingShareNotice(list);
+  if (notice) document.body.append(notice);
+}
+
+function documentFromIncomingShareNotice(list) {
+  if (!list) return null;
+  const notice = document.createElement("section");
+  notice.className = "cloud-share-import-notice";
+  notice.innerHTML = `<strong>${cloudText("共有を表示中", "Shared data is being viewed")}</strong><span>${cloudText("保存するには「取り込む」を押してください。", "Press Import to save it.")}</span><div class="button-row"><button type="button" class="primary-button">${cloudText("取り込む", "Import")}</button><button type="button" class="compact-button">${cloudText("閉じる", "Close")}</button></div>`;
+  const [importButton, closeButton] = notice.querySelectorAll("button");
+  importButton.addEventListener("click", () => {
+    list.transient = false;
+    persistWorkspace();
+    notice.remove();
+    setShareFeedback(cloudText("共有を取り込みました", "Shared data imported"));
+  });
+  closeButton.addEventListener("click", () => {
+    state.pointLists = state.pointLists.filter((item) => item !== list);
+    refreshVisiblePoints();
+    render();
+    notice.remove();
+  });
+  return notice;
 }
 
 async function handleIncomingCloudShare() {
   const shareId = incomingCloudShareId();
   if (!shareId) return false;
-  const panel = document.createElement("section");
-  panel.id = "cloudSharePreview";
-  panel.className = "cloud-share-preview";
-  panel.innerHTML = `<div class="cloud-share-preview-card"><p class="cloud-share-preview-kicker">GRID ATLAS</p><h1 class="cloud-share-preview-title">共有を読み込み中…</h1><p class="cloud-share-preview-notice">これは位置情報を含む共有です。</p></div>`;
-  document.body.append(panel);
   try {
     const response = await fetch(new URL("v1/shares/" + encodeURIComponent(shareId), CLOUD_PRODUCTION_API_URL), { cache: "no-store" });
     const result = await response.json();
     if (!response.ok || !result?.share?.payload) throw new Error(result?.error || "共有を読み込めませんでした");
-    const share = result.share;
-    const payload = share.payload;
-    const list = payload?.type === "place-list" ? null : payload;
-    const points = list?.points || payload?.places || [];
-    const lines = list?.analysisLayer?.lines || [];
-    const figures = list?.analysisLayer?.figures || [];
-    const card = panel.firstElementChild;
-    card.innerHTML = `<p class="cloud-share-preview-kicker">GRID ATLAS</p><h1 class="cloud-share-preview-title"></h1><p class="cloud-share-preview-notice">これは位置情報を含む共有です。</p><div class="cloud-share-preview-visual"></div><ul class="cloud-share-preview-list"></ul><button class="primary-button cloud-share-preview-open">GRID ATLASで開く</button>`;
-    card.querySelector(".cloud-share-preview-title").textContent = share.name || payload.name || "共有リスト";
-    const visual = card.querySelector(".cloud-share-preview-visual");
-    if (list && points.length > 0) {
-      const blob = await renderSelectedShareImage(points, lines, figures, points);
-      const image = document.createElement("img");
-      image.alt = share.name || "GRID ATLAS共有スナップショット";
-      image.src = URL.createObjectURL(blob);
-      visual.append(image);
-    }
-    const listElement = card.querySelector(".cloud-share-preview-list");
-    for (const point of points.slice(0, 50)) {
-      const item = document.createElement("li");
-      item.textContent = point.title || point.name || "地点";
-      listElement.append(item);
-    }
-    card.querySelector(".cloud-share-preview-open").addEventListener("click", () => void openCloudShareInGridAtlas(payload));
+    await openCloudShareInGridAtlas(result.share.payload);
   } catch (error) {
-    panel.firstElementChild.innerHTML = `<p class="cloud-share-preview-kicker">GRID ATLAS</p><h1 class="cloud-share-preview-title">共有を開けません</h1><p class="cloud-share-preview-notice"></p><button class="compact-button cloud-share-preview-close">閉じる</button>`;
-    panel.querySelector(".cloud-share-preview-notice").textContent = error?.message || "共有が見つからないか、有効期限切れです。";
-    panel.querySelector(".cloud-share-preview-close").addEventListener("click", () => { clearIncomingCloudShareId(); closeCloudSharePreview(); });
+    clearIncomingCloudShareId();
+    setShareFeedback(error?.message || "共有が見つからないか、有効期限切れです。", { error: true });
   }
   return true;
 }
@@ -16021,6 +16162,8 @@ function bindEvents() {
   elements.useLocationButton.addEventListener("click", useCurrentLocation);
   elements.traverseActionButton.addEventListener("contextmenu", (event) => event.preventDefault());
   elements.traverseActionButton.addEventListener("click", handleTraverseActionClick);
+  elements.traverseDragonEyeCancelButton?.addEventListener("contextmenu", (event) => event.preventDefault());
+  elements.traverseDragonEyeCancelButton?.addEventListener("click", cancelDragonEye);
   elements.traversePlaceButton.addEventListener("click", () => {
     if (openTraverseQuantityDialog("place")) closeTraverseActionDialog();
   });

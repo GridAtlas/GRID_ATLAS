@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=73">
-    <script src="src/main.js?v=458" type="module" defer></script>
+    <script src="src/main.js?v=461" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -260,9 +260,14 @@
               </div>
               <div id="mobilePointListItems" class="storage-list-items" data-storage-list-items></div>
             </section>
-            <button id="traverseActionButton" class="traverse-action-button" type="button" hidden>
-              <span id="traverseActionLabel" class="traverse-action-label" data-i18n="traverse.menuTitle">結界操作</span>
-            </button>
+            <div id="traverseActionControls" class="traverse-action-controls" hidden>
+              <button id="traverseDragonEyeCancelButton" class="traverse-action-button traverse-action-button-cancel" type="button" hidden>
+                <span class="traverse-action-label" data-i18n="dragonEye.cancel">解除</span>
+              </button>
+              <button id="traverseActionButton" class="traverse-action-button" type="button" hidden>
+                <span id="traverseActionLabel" class="traverse-action-label" data-i18n="traverse.menuTitle">結界操作</span>
+              </button>
+            </div>
           </div>
 
           <nav class="actionbar" aria-label="地点操作">
@@ -460,7 +465,12 @@
           </div>
           <button id="closeCloudButton" class="share-link-close" type="button" aria-label="閉じる" title="クラウドを閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
         </div>
-        <div id="cloudDialogBody" class="cloud-dialog-body"></div>
+        <div id="cloudDialogBody" class="cloud-dialog-body">
+          <section id="cloudSharesSection" class="cloud-shares-section" hidden>
+            <h3 data-i18n="cloud.sharesTitle">発行済みリンク</h3>
+            <div id="cloudSharesList" class="cloud-shares-list"></div>
+          </section>
+        </div>
       </div>
     </dialog>
     <dialog id="cloudTesterSignupDialog" class="cloud-dialog" aria-labelledby="cloudTesterSignupDialogTitle" tabindex="-1">
@@ -909,6 +919,16 @@
           <button id="textInputShareFileButton" class="share-action-button" type="button" data-i18n="list.export">.gridatlas</button>
           <button id="textInputShareImageButton" class="share-action-button" type="button" data-i18n="list.exportImage">画像</button>
           <button id="textInputShareCloudButton" class="share-action-button" type="button" data-i18n="list.exportCloud" hidden>短縮URL</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="shareImagePreviewDialog" class="share-image-preview-dialog" aria-labelledby="shareImagePreviewTitle" tabindex="-1">
+      <form class="share-image-preview-form" method="dialog">
+        <div class="text-input-dialog-heading"><h2 id="shareImagePreviewTitle">画像を確認</h2></div>
+        <img id="shareImagePreviewImage" class="share-image-preview-image" alt="共有画像のプレビュー">
+        <div class="text-input-dialog-actions">
+          <button id="shareImagePreviewCancelButton" class="compact-button" type="submit" value="cancel" data-i18n="action.cancel">キャンセル</button>
+          <button id="shareImagePreviewConfirmButton" class="primary-button" type="submit" value="confirm" data-i18n="action.share">共有</button>
         </div>
       </form>
     </dialog>
