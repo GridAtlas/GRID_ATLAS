@@ -128,7 +128,7 @@ const KEKKAI_THEME = "kekkai";
 const KEKKAI_MODE = "kekkai";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2139";
+const WEB_VERSION = "0.2140";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -14402,7 +14402,7 @@ function shareSnapshotSurfaceColor() {
 const SHARE_SNAPSHOT_WIDTH = 1200;
 const SHARE_SNAPSHOT_HEIGHT = 1200;
 const SHARE_SNAPSHOT_HEADER_HEIGHT = 122;
-const SHARE_SNAPSHOT_FRAME = Object.freeze({ left: 50, top: 138, right: 1150, bottom: 915 });
+const SHARE_SNAPSHOT_FRAME = Object.freeze({ left: 50, top: 154, right: 1150, bottom: 1158 });
 const SHARE_SNAPSHOT_MIN_SPAN_METERS = 2500;
 
 function shareSnapshotAppUrl() {
@@ -14722,37 +14722,47 @@ async function renderSelectedShareImage(points, lines, figures, visiblePoints = 
   if (analyses.length > 0) {
     const { result } = analyses[0];
     target.save();
-    const left = 90;
+    const right = 1110;
     const scoreY = 1088;
-    const fontFamily = "'Avenir Next', 'Segoe UI', system-ui, sans-serif";
-    target.textAlign = "left";
+    const displayFont = "'Avenir Next', 'Helvetica Neue', 'Trebuchet MS', 'Segoe UI', sans-serif";
+    const textFont = "'Yu Gothic', 'Hiragino Sans', 'Segoe UI', sans-serif";
+    target.textAlign = "right";
     target.textBaseline = "alphabetic";
     target.shadowColor = "rgb(0 0 0 / 52%)";
     target.shadowBlur = 4;
     target.shadowOffsetY = 2;
     target.fillStyle = textColor;
-    target.font = `500 16px ${fontFamily}`;
-    target.fillText(`${t("analysis.area")} ${formatShareSnapshotArea(result.area)}   ${t("analysis.perimeterDisplay")} ${formatShareSnapshotPerimeter(result.perimeter)}`, left, 980);
+    target.globalAlpha = 0.88;
+    target.font = `500 13px ${textFont}`;
+    target.fillText(`${t("analysis.area")} ${formatShareSnapshotArea(result.area)}   ${t("analysis.perimeterDisplay")} ${formatShareSnapshotPerimeter(result.perimeter)}`, right, 1182);
     target.globalAlpha = 0.9;
-    target.font = `600 19px ${fontFamily}`;
-    target.fillText(t("analysis.regularityScore"), left, 1015);
+    target.font = `500 18px ${textFont}`;
+    target.fillText(t("analysis.regularityScore"), right, 1014);
     target.fillStyle = palette.pointFill || palette.link || textColor;
     target.globalAlpha = 1;
-    target.font = `800 76px ${fontFamily}`;
+    target.font = `600 78px ${displayFont}`;
     const scoreText = String(Math.round(result.referenceScore));
-    target.fillText(scoreText, left, scoreY);
-    const scoreWidth = target.measureText(scoreText).width;
     target.fillStyle = textColor;
     target.globalAlpha = 0.82;
-    target.font = `600 22px ${fontFamily}`;
-    target.fillText("/100", left + scoreWidth + 12, scoreY - 4);
+    target.font = `500 22px ${displayFont}`;
+    const scoreSuffix = "/100";
+    const suffixWidth = target.measureText(scoreSuffix).width;
+    const scoreRight = right - suffixWidth - 14;
+    target.fillStyle = palette.pointFill || palette.link || textColor;
+    target.globalAlpha = 1;
+    target.font = `600 78px ${displayFont}`;
+    target.fillText(scoreText, scoreRight, scoreY);
+    target.fillStyle = textColor;
+    target.globalAlpha = 0.82;
+    target.font = `500 22px ${displayFont}`;
+    target.fillText(scoreSuffix, right, scoreY - 4);
     target.globalAlpha = 0.9;
     target.fillStyle = textColor;
-    target.font = `500 15px ${fontFamily}`;
-    target.fillText(`${t("analysis.angleVariation")} ${formatAngle(result.maxAngleDeviation)} (${formatPercent(result.maxAngleDeviationPercent)})   ${t("analysis.sideVariation")} ${formatPercent(result.sideRangePercent)}`, left, 1120);
+    target.font = `500 14px ${textFont}`;
+    target.fillText(`${t("analysis.angleVariation")} ${formatAngle(result.maxAngleDeviation)} (${formatPercent(result.maxAngleDeviationPercent)})   ${t("analysis.sideVariation")} ${formatPercent(result.sideRangePercent)}`, right, 1120);
     target.globalAlpha = 0.72;
-    target.font = `400 13px ${fontFamily}`;
-    target.fillText(t("analysis.referenceScoreDefinition"), left, 1152);
+    target.font = `400 12px ${textFont}`;
+    target.fillText(t("analysis.referenceScoreDefinition"), right, 1150);
     target.restore();
   }
   drawShareSnapshotBrand(target, palette, textColor);
