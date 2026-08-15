@@ -116,7 +116,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1968";
+const WEB_VERSION = "0.1974";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -231,10 +231,6 @@ const elements = {
   actionMapButton: document.querySelector("#actionMapButton"),
   traverseActionButton: document.querySelector("#traverseActionButton"),
   traverseActionLabel: document.querySelector("#traverseActionLabel"),
-  dragonEyeCanvasActions: document.querySelector("#dragonEyeCanvasActions"),
-  dragonEyeCanvasLimit: document.querySelector("#dragonEyeCanvasLimit"),
-  dragonEyeConfirmButton: document.querySelector("#dragonEyeConfirmButton"),
-  dragonEyeCancelButton: document.querySelector("#dragonEyeCancelButton"),
   dragonEyeDialog: document.querySelector("#dragonEyeDialog"),
   dragonEyeAvailability: document.querySelector("#dragonEyeAvailability"),
   dragonEyeShapeOptions: document.querySelector("#dragonEyeShapeOptions"),
@@ -249,6 +245,7 @@ const elements = {
   traverseStockValue: document.querySelector("#traverseStockValue"),
   traverseInstalledValue: document.querySelector("#traverseInstalledValue"),
   traverseLocationValue: document.querySelector("#traverseLocationValue"),
+  traverseActionFeedback: document.querySelector("#traverseActionFeedback"),
   traverseQuantityDialog: document.querySelector("#traverseQuantityDialog"),
   traverseQuantityDialogTitle: document.querySelector("#traverseQuantityDialogTitle"),
   traverseQuantityDialogMessage: document.querySelector("#traverseQuantityDialogMessage"),
@@ -1039,6 +1036,9 @@ const TRANSLATIONS = {
     "storage.device": "端末",
     "storage.cloud": "クラウド",
     "storage.both": "端末＋クラウド",
+    "storage.cloudReadProgress": "クラウド読込中",
+    "storage.cloudOperationProgress": "クラウド操作中",
+    "storage.processingProgress": "処理しています",
     "storage.moveCloud": "クラウド保管へ移動",
     "storage.move": "移動",
     "storage.moveDevice": "端末に移動",
@@ -1047,9 +1047,6 @@ const TRANSLATIONS = {
     "storage.dragHint": "リストをタップするとグリッド表示をオン／オフできます。長押しすると地点一覧を表示します。少し長押ししてからドラッグすると、移動先を選んで移動またはコピーできます。",
     "storage.dragReordering": "クラウドに並び順を保存中",
     "storage.dragReordered": "リストの順番を変更しました",
-    "storage.transferCloudProgress": "クラウドへ保存中",
-    "storage.transferDeviceProgress": "端末へ保存中",
-    "storage.transferDevicePhotos": "画像を端末へ復元中",
     "storage.dragMoveCloud": "クラウド保管へ移動",
     "storage.dragMoveDevice": "端末へ移動",
     "storage.transferTitle": "リストの移動／コピー",
@@ -1153,7 +1150,7 @@ const TRANSLATIONS = {
     "dragonEye.open": "龍脈眼",
     "dragonEye.title": "龍脈眼の形を選択",
     "dragonEye.message": "形を選ぶとグリッド上で移動・拡縮できます。",
-    "dragonEye.rankInfo": "{rank}級 · 見通し半径 {radius} · ばらつき {scatter}% · 回転 {rotation}",
+    "dragonEye.rankInfo": "{rank}級 · 見通し半径 {radius} · 精度 誤差{scatter}% · 回転 {rotation}",
     "dragonEye.sightLimit": "見通しの限界（半径{radius}）",
       "dragonEye.rotationOn": "解放",
       "dragonEye.rotationLocked": "E級で解放",
@@ -1250,22 +1247,23 @@ const TRANSLATIONS = {
     ,"kekkaishi.ratio": "ピーク比"
     ,"kekkaishi.createdCount": "作成した結界"
     ,"kekkaishi.next": "次のランクまで"
-    ,"kekkaishi.shapesTitle": "図形と能力"
-    ,"kekkaishi.shapesHint": "現在使える図形と、次のクラスで追加される図形。"
-    ,"kekkaishi.currentShapes": "現在解放"
-    ,"kekkaishi.nextShapes": "次のクラスで解放"
+    ,"kekkaishi.shapesTitle": "結界術と能力"
+    ,"kekkaishi.shapesHint": "使用できる結界術と、次のクラスで追加される結界術。"
+    ,"kekkaishi.currentShapes": "使用できる結界術"
+    ,"kekkaishi.nextShapes": "次のクラスで追加される結界術"
     ,"kekkaishi.progressTitle": "次のクラスまで"
     ,"kekkaishi.sightRadius": "見通し半径"
     ,"kekkaishi.maxVertices": "最大頂点"
     ,"kekkaishi.stoneCap": "石上限"
-    ,"kekkaishi.scatter": "龍脈眼ばらつき"
+    ,"kekkaishi.scatter": "龍脈眼精度"
+    ,"kekkaishi.scatterValue": "誤差{scatter}%"
     ,"kekkaishi.edgeGuide": "1辺目安"
     ,"kekkaishi.progressLifetime": "累積"
     ,"kekkaishi.dailyPower": "前日の結界霊量"
     ,"kekkaishi.progressDays": "現在のペースであと{days}日"
     ,"kekkaishi.noDailyPower": "結界を張ると進みます"
-    ,"kekkaishi.unlocks": "解放: 見通し半径{radius} / 結べる形{shapes} / 1辺目安{edges} / 最大{vertices}頂点 / 石上限{stones} / 龍脈眼ばらつき{scatter}%"
-    ,"kekkaishi.nextUnlocks": "次に解放: 見通し半径{radius} / 結べる形{shapes} / 1辺目安{edges} / 最大{vertices}頂点 / 石上限{stones} / 龍脈眼ばらつき{scatter}%"
+    ,"kekkaishi.unlocks": "使用できる結界術: {shapes} / 見通し半径{radius} / 1辺目安{edges} / 最大{vertices}頂点 / 石上限{stones} / 龍脈眼精度 誤差{scatter}%"
+    ,"kekkaishi.nextUnlocks": "次のクラスで追加される結界術: {shapes} / 見通し半径{radius} / 1辺目安{edges} / 最大{vertices}頂点 / 石上限{stones} / 龍脈眼精度 誤差{scatter}%"
     ,"kekkaishi.rankMax": "最高ランク"
     ,"kekkaishi.share": "ステータスを共有"
     ,"kekkaishi.shared": "ステータス画像を共有しました"
@@ -1564,6 +1562,9 @@ const TRANSLATIONS = {
     "storage.device": "Device",
     "storage.cloud": "Cloud",
     "storage.both": "Device + Cloud",
+    "storage.cloudReadProgress": "Loading cloud data",
+    "storage.cloudOperationProgress": "Cloud operation in progress",
+    "storage.processingProgress": "Processing",
     "storage.moveCloud": "Move to cloud storage",
     "storage.move": "Move",
     "storage.moveDevice": "Move to device",
@@ -1572,9 +1573,6 @@ const TRANSLATIONS = {
     "storage.dragHint": "Tap a list to toggle its grid display. Long-press to show its places. Hold briefly, then drag to choose a destination and move or copy the list.",
     "storage.dragReordering": "Saving list order to the cloud",
     "storage.dragReordered": "List order updated",
-    "storage.transferCloudProgress": "Saving to the cloud",
-    "storage.transferDeviceProgress": "Saving to the device",
-    "storage.transferDevicePhotos": "Restoring images to the device",
     "storage.dragMoveCloud": "Move to cloud storage",
     "storage.dragMoveDevice": "Move to device",
     "storage.transferTitle": "List transfer",
@@ -1678,7 +1676,7 @@ const TRANSLATIONS = {
     "dragonEye.open": "Dragon eye",
     "dragonEye.title": "Choose a Dragon Eye shape",
     "dragonEye.message": "Choose a shape, then drag or pinch it on the grid.",
-    "dragonEye.rankInfo": "Rank {rank} · sight radius {radius} · scatter {scatter}% · rotation {rotation}",
+    "dragonEye.rankInfo": "Rank {rank} · sight radius {radius} · accuracy {scatter}% error · rotation {rotation}",
     "dragonEye.sightLimit": "Sight limit (radius {radius})",
       "dragonEye.rotationOn": "unlocked",
       "dragonEye.rotationLocked": "unlocks at E",
@@ -1775,22 +1773,23 @@ const TRANSLATIONS = {
     ,"kekkaishi.ratio": "Peak ratio"
     ,"kekkaishi.createdCount": "Barriers created"
     ,"kekkaishi.next": "To the next rank"
-    ,"kekkaishi.shapesTitle": "Shapes and abilities"
-    ,"kekkaishi.shapesHint": "Available shapes and the shapes added by the next class."
-    ,"kekkaishi.currentShapes": "Unlocked now"
-    ,"kekkaishi.nextShapes": "Unlocked by next class"
+    ,"kekkaishi.shapesTitle": "Barrier techniques and abilities"
+    ,"kekkaishi.shapesHint": "Usable barrier techniques and those added by the next class."
+    ,"kekkaishi.currentShapes": "Usable barrier techniques"
+    ,"kekkaishi.nextShapes": "Barrier techniques added by the next class"
     ,"kekkaishi.progressTitle": "To the next class"
     ,"kekkaishi.sightRadius": "Sight radius"
     ,"kekkaishi.maxVertices": "Max vertices"
     ,"kekkaishi.stoneCap": "Stone cap"
-    ,"kekkaishi.scatter": "Dragon Eye scatter"
+    ,"kekkaishi.scatter": "Dragon Eye accuracy"
+    ,"kekkaishi.scatterValue": "{scatter}% error"
     ,"kekkaishi.edgeGuide": "Edge guide"
     ,"kekkaishi.progressLifetime": "Lifetime"
     ,"kekkaishi.dailyPower": "Previous day's barrier spirit"
     ,"kekkaishi.progressDays": "At this pace: {days} more days"
     ,"kekkaishi.noDailyPower": "Create a barrier to make progress"
-    ,"kekkaishi.unlocks": "Unlocked: sight radius {radius} / shapes {shapes} / edge guide {edges} / max {vertices} vertices / stone cap {stones} / Dragon Eye scatter {scatter}%"
-    ,"kekkaishi.nextUnlocks": "Next unlock: sight radius {radius} / shapes {shapes} / edge guide {edges} / max {vertices} vertices / stone cap {stones} / Dragon Eye scatter {scatter}%"
+    ,"kekkaishi.unlocks": "Usable barrier techniques: {shapes} / sight radius {radius} / edge guide {edges} / max {vertices} vertices / stone cap {stones} / Dragon Eye accuracy {scatter}% error"
+    ,"kekkaishi.nextUnlocks": "Barrier techniques added by the next class: {shapes} / sight radius {radius} / edge guide {edges} / max {vertices} vertices / stone cap {stones} / Dragon Eye accuracy {scatter}% error"
     ,"kekkaishi.rankMax": "Maximum rank"
     ,"kekkaishi.share": "Share status"
     ,"kekkaishi.shared": "Status image shared"
@@ -2099,7 +2098,6 @@ function resetDragonEyeState() {
   state.dragonEye.sightRadiusKm = 0;
   state.pointer.pinch = null;
   if (state.pointer.drag?.dragonEye) state.pointer.drag.dragonEye = false;
-  renderDragonEyeControls();
 }
 
 function dragonEyeShapesForRank(rankIndex) {
@@ -2236,7 +2234,6 @@ function beginDragonEye(shape) {
     sightRadiusKm: rankInfo.sightRadiusKm
   };
   if (elements.dragonEyeDialog?.open) elements.dragonEyeDialog.close("shape-selected");
-  showAppToast(t("dragonEye.message"));
   render();
 }
 
@@ -2283,7 +2280,7 @@ function commitDragonEye() {
       x: vertex.x,
       y: vertex.y,
       title: `龍脈眼 ${definition.glyph} ${index + 1}`,
-      note: `${DRAGON_EYE_LIST_NAME} / ${definition.ja} / ${state.dragonEye.rankName || dragonEyeRankInfo().rank.name}級 / ばらつき${scatterPercent}% / 半径${formatBarrierRadius(state.dragonEye.sightRadiusKm || dragonEyeRankInfo().sightRadiusKm)}`,
+      note: `${DRAGON_EYE_LIST_NAME} / ${definition.ja} / ${state.dragonEye.rankName || dragonEyeRankInfo().rank.name}級 / 精度 誤差${scatterPercent}% / 半径${formatBarrierRadius(state.dragonEye.sightRadiusKm || dragonEyeRankInfo().sightRadiusKm)}`,
       photo: "",
       photoName: "",
       photoAssetId: "",
@@ -2301,7 +2298,7 @@ function commitDragonEye() {
   resetDragonEyeState();
   refreshVisiblePoints();
   persistWorkspace();
-  showAppToast(t("dragonEye.placed").replace("{count}", String(createdPoints.length)));
+  setTraverseFeedback(t("dragonEye.placed").replace("{count}", String(createdPoints.length)), 6000);
   returnToTraverseActionMenu();
 }
 
@@ -2409,6 +2406,7 @@ function setTraverseFeedback(message, duration = 3500) {
     traverseFeedbackTimerId = 0;
     state.traverseFeedback = "";
     state.traverseFeedbackExpiresAt = 0;
+    if (elements.traverseActionDialog?.open) renderTraverseActionDialog();
     render();
   }, duration);
 }
@@ -2824,7 +2822,7 @@ async function cloudPayloadWithPhotos(list, cloudId, client) {
       setCloudProgress(
         completed,
         total,
-        cloudText("画像をアップロード中", "Uploading images")
+        "processing"
       );
     }
   });
@@ -2870,8 +2868,8 @@ async function updateCloudPointList(list, nextList, options = {}) {
   }
 
   setCloudBusy(true);
-  const progressMessage = options.progressMessage || cloudText("クラウドを更新中", "Updating cloud");
-  setCloudProgress(0, 3, progressMessage);
+  const progressKind = options.progressKind || "operation";
+  setCloudProgress(0, 3, progressKind);
   let payload;
   let client;
   try {
@@ -2885,17 +2883,17 @@ async function updateCloudPointList(list, nextList, options = {}) {
 
   let updated = false;
   try {
-    setCloudProgress(1, 3, cloudText("クラウドへ保存中", "Saving to cloud"));
+    setCloudProgress(1, 3, "operation");
     await client.updateList(cloudId, meta.revision, payload);
     updated = true;
-    setCloudProgress(2, 3, cloudText("クラウドの一覧を確認中", "Refreshing cloud lists"));
+    setCloudProgress(2, 3, "read");
   } catch (error) {
     setCloudStatus(cloudErrorMessage(error), { error: true });
   }
 
   if (updated) {
     await refreshCloudLists({ quiet: true, keepBusy: true });
-    setCloudProgress(3, 3, cloudText("クラウドへ登録しました", "Registered to cloud"));
+    setCloudProgress(3, 3, "operation");
     setCloudStatus(options.message || cloudText("マイリスト（クラウド）を更新しました", "My List (Cloud) updated"));
   }
   setCloudBusy(false);
@@ -4919,7 +4917,6 @@ function render() {
   renderStatus();
   renderTraverseActionButton();
   syncTraverseModeUi();
-  renderDragonEyeControls();
   renderWebVersion();
   renderActionButtons();
   renderPointInfoDialog();
@@ -5362,20 +5359,6 @@ function renderTraverseActionButton() {
   button.title = buttonLabel;
 }
 
-function renderDragonEyeControls() {
-  const active = Boolean(state.traverseMode && state.dragonEye.active);
-  if (elements.dragonEyeCanvasActions) elements.dragonEyeCanvasActions.hidden = !active;
-  if (elements.dragonEyeCanvasLimit) {
-    const info = dragonEyeRankInfo();
-    elements.dragonEyeCanvasLimit.hidden = !active;
-    elements.dragonEyeCanvasLimit.textContent = active
-      ? t("dragonEye.sightLimit").replace("{radius}", formatBarrierRadius(info.sightRadiusKm))
-      : "";
-  }
-  if (elements.dragonEyeConfirmButton) elements.dragonEyeConfirmButton.disabled = !active;
-  if (elements.dragonEyeCancelButton) elements.dragonEyeCancelButton.disabled = !active;
-}
-
 function renderTraverseActionDialog() {
   if (!elements.traverseActionDialog) return;
   refreshTraverseStock();
@@ -5394,6 +5377,14 @@ function renderTraverseActionDialog() {
   if (elements.traverseInstalledValue) elements.traverseInstalledValue.textContent = String(installed);
   if (elements.traverseLocationValue) elements.traverseLocationValue.textContent = String(installedEntries.length);
   if (elements.traverseActionDialogTitle) elements.traverseActionDialogTitle.textContent = t("traverse.menuTitle");
+  const feedbackActive = Boolean(
+    state.traverseFeedback
+    && Date.now() < state.traverseFeedbackExpiresAt
+  );
+  if (elements.traverseActionFeedback) {
+    elements.traverseActionFeedback.hidden = !feedbackActive;
+    elements.traverseActionFeedback.textContent = feedbackActive ? state.traverseFeedback : "";
+  }
   if (elements.traversePlaceButton) {
     elements.traversePlaceButton.textContent = t("traverse.place");
     elements.traversePlaceButton.disabled = state.traverseBusy || traverseQuantityLimit("place") <= 0 || currentTileAtCap;
@@ -6787,7 +6778,7 @@ function renderKekkaishiUnlockDetails(container, rankIndex) {
     [t("kekkaishi.sightRadius"), formatBarrierRadius(radius)],
     [t("kekkaishi.maxVertices"), `${maxVertices}`],
     [t("kekkaishi.stoneCap"), `${BARRIER_CONFIG.stoneCapVertexByRank[index] || BARRIER_CONFIG.stoneCapVertex}`],
-    [t("kekkaishi.scatter"), `${Math.round(ryumyakuScatterForRank(index) * 100)}%`],
+    [t("kekkaishi.scatter"), t("kekkaishi.scatterValue").replace("{scatter}", String(Math.round(ryumyakuScatterForRank(index) * 100)))],
     [t("kekkaishi.edgeGuide"), edges]
   ];
   container.replaceChildren();
@@ -6821,9 +6812,7 @@ function renderKekkaishiShapeCards(container, shapes, locked = false) {
     svg.append(polygon);
     preview.append(svg);
 
-    const label = document.createElement("small");
-    label.textContent = t(`dragonEye.${shape}`);
-    card.append(preview, label);
+    card.append(preview);
     container.append(card);
   }
 }
@@ -8042,10 +8031,10 @@ async function reorderStorageLists(sourceEntry, targetEntry, before) {
   if (!isCloudSection) return true;
 
   setCloudBusy(true);
-  setCloudProgress(0, 1, t("storage.dragReordering"));
+  setCloudProgress(0, 1, "operation");
   try {
     await cloudClientFromInputs().updateListOrder(state.cloud.listOrder);
-    setCloudProgress(1, 1, t("storage.dragReordered"));
+    setCloudProgress(1, 1, "operation");
     setCloudBusy(false);
     setCloudStatus(t("storage.dragReordered"), { menu: false });
     render();
@@ -8198,6 +8187,15 @@ function updateStorageListDragGhost(dragState, clientX, clientY) {
   dragState.ghost.style.transform = "translate3d(" + (clientX + 14) + "px, " + (clientY + 14) + "px, 0)";
 }
 
+function findVerticalScrollContainer(element) {
+  for (let candidate = element?.parentElement; candidate; candidate = candidate.parentElement) {
+    const overflowY = window.getComputedStyle(candidate).overflowY;
+    const canScroll = overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay";
+    if (canScroll && candidate.scrollHeight > candidate.clientHeight) return candidate;
+  }
+  return null;
+}
+
 function beginStorageListDrag(dragState) {
   if (activeStorageListDrag !== dragState || dragState.dragging) return;
   window.clearTimeout(dragState.timerId);
@@ -8268,7 +8266,7 @@ function setupStorageListDrag(row, entry) {
       autoTimerId: 0,
       actionTriggered: false,
       scrolling: false,
-      scrollContainer: row.closest(".mobile-content-panel, [data-mobile-panel], .sidebar")
+      scrollContainer: findVerticalScrollContainer(row)
     };
     activeStorageListDrag = dragState;
 
@@ -9090,7 +9088,7 @@ async function setCloudPassword() {
   state.cloud.authBusy = true;
   renderCloudAuthControls();
   setCloudPasswordStatus("パスワードを設定しています…");
-  setCloudProgress(0, 1, cloudText("パスワードを設定中…", "Setting your password…"));
+  setCloudProgress(0, 1, "operation");
   try {
     const { error } = await state.cloud.authClient.auth.updateUser({ password });
     if (error) throw error;
@@ -9102,7 +9100,7 @@ async function setCloudPassword() {
     elements.cloudNewPassword.value = "";
     elements.cloudNewPasswordConfirm.value = "";
     setCloudPasswordStatus("パスワードを設定しました。次回から通常ログインできます");
-    setCloudProgress(1, 1, cloudText("パスワード設定完了", "Password ready"));
+    setCloudProgress(1, 1, "operation");
   } catch (error) {
     setCloudPasswordStatus(error?.message || "パスワードの設定に失敗しました", { error: true });
   } finally {
@@ -9117,7 +9115,7 @@ async function initializeCloudAuth() {
   state.cloud.authConfigured = Boolean(config.url && config.publishableKey);
   state.cloud.authPending = state.cloud.authConfigured;
   if (state.cloud.authPending) {
-    setCloudProgress(0, 1, cloudText("クラウド接続を確認中", "Checking cloud connection"));
+    setCloudProgress(0, 1, "read");
     renderStorageLists();
     renderActionButtons();
   }
@@ -9211,7 +9209,7 @@ async function signUpCloud() {
     return;
   }
   state.cloud.authBusy = true;
-  setCloudProgress(0, 1, cloudText("登録情報を送信中…", "Sending sign-up information…"));
+  setCloudProgress(0, 1, "operation");
   renderCloudAuthControls();
   try {
     const { data, error } = await state.cloud.authClient.auth.signUp({
@@ -9226,7 +9224,7 @@ async function signUpCloud() {
     } else {
       setCloudAuthStatus(cloudText("確認メールを送信しました。メールのリンクを開いてください", "Confirmation email sent. Open the link to continue"));
     }
-    setCloudProgress(1, 1, cloudText("登録情報を送信しました", "Sign-up information sent"));
+    setCloudProgress(1, 1, "operation");
   } catch (error) {
     setCloudAuthStatus(error?.message || cloudText("登録に失敗しました", "Sign-up failed"), { error: true });
   } finally {
@@ -9249,7 +9247,7 @@ async function submitTesterSignup() {
     return;
   }
   state.cloud.authBusy = true;
-  setCloudProgress(0, 1, cloudText("アカウント設定を送信中…", "Sending account setup information…"));
+  setCloudProgress(0, 1, "operation");
   setCloudTesterSignupStatus(cloudText("アカウント設定メールを送信しています…", "Sending account setup email…"));
   renderCloudAuthControls();
   renderCloudTesterStatus();
@@ -9259,7 +9257,7 @@ async function submitTesterSignup() {
     setCloudTesterSignupStatus(result?.status === "invited"
       ? cloudText("アカウント設定メールを送信しました。メールのリンクを開いてください", "Account setup email sent. Open the link to continue")
       : cloudText("送信しました", "Sent"));
-    setCloudProgress(1, 1, cloudText("アカウント設定メールを送信しました", "Account setup email sent"));
+    setCloudProgress(1, 1, "operation");
   } catch (error) {
     setCloudTesterSignupStatus(error?.message || cloudText("アカウント設定に失敗しました", "Account setup failed"), { error: true });
   } finally {
@@ -9279,7 +9277,7 @@ async function signInCloud() {
     return;
   }
   state.cloud.authBusy = true;
-  setCloudProgress(0, 1, cloudText("ログイン中…", "Signing in…"));
+  setCloudProgress(0, 1, "operation");
   renderCloudAuthControls();
   try {
     const { data, error } = await state.cloud.authClient.auth.signInWithPassword({ email, password });
@@ -9288,7 +9286,7 @@ async function signInCloud() {
     markCloudPasswordSetup(data.user?.id);
     applyCloudAuthSession(data.session, { forceRefresh: true });
     setCloudAuthStatus(cloudText("ログインしました", "Signed in"));
-    setCloudProgress(1, 1, cloudText("ログインしました", "Signed in"));
+    setCloudProgress(1, 1, "operation");
   } catch (error) {
     setCloudAuthStatus(error?.message || cloudText("ログインに失敗しました", "Sign-in failed"), { error: true });
   } finally {
@@ -9351,7 +9349,16 @@ function setCloudStatus(message, options = {}) {
     status.classList.toggle("is-error", options.error === true);
   }
 }
-function setCloudProgress(completed, total, message) {
+function cloudProgressText(kind = "processing") {
+  const key = kind === "read"
+    ? "storage.cloudReadProgress"
+    : kind === "operation"
+      ? "storage.cloudOperationProgress"
+      : "storage.processingProgress";
+  return t(key);
+}
+
+function setCloudProgress(completed, total, kind = "processing") {
   if (!elements.cloudProgress || !elements.cloudProgressPattern || !elements.cloudProgressTitle) return;
   if (cloudProgressClearTimer !== null) {
     window.clearTimeout(cloudProgressClearTimer);
@@ -9364,7 +9371,7 @@ function setCloudProgress(completed, total, message) {
   const width = 7;
   const ratio = Math.max(0, Math.min(1, completed / total));
   const filled = completed >= total ? width : Math.floor(ratio * width);
-  elements.cloudProgressTitle.textContent = message || cloudText("処理中", "Working");
+  elements.cloudProgressTitle.textContent = cloudProgressText(kind);
   elements.cloudProgressPattern.textContent = "■".repeat(filled) + "□".repeat(width - filled);
   elements.cloudProgress.hidden = false;
 }
@@ -9462,7 +9469,7 @@ function disconnectCloud() {
 }
 async function refreshCloudLists(options = {}) {
   setCloudBusy(true);
-  setCloudProgress(0, 3, cloudText("クラウドのリスト一覧を確認中", "Checking cloud lists"));
+  setCloudProgress(0, 3, "read");
   try {
     const client = cloudClientFromInputs();
     const response = await client.listLists();
@@ -9479,7 +9486,7 @@ async function refreshCloudLists(options = {}) {
     state.cloud.listOrder = state.cloud.lists.map((list) => list.id);
     repairLocalCloudIdCollisions();
 
-    setCloudProgress(1, 3, cloudText("クラウドリストの内容を読み込み中", "Loading cloud list contents"));
+    setCloudProgress(1, 3, "read");
     const details = await Promise.all(state.cloud.lists.map((list) => client.getList(list.id)));
     state.cloud.pointLists = await Promise.all(details.map(async (result) => {
       const list = cloudPayloadToPointList(result.list, {
@@ -9490,7 +9497,7 @@ async function refreshCloudLists(options = {}) {
       });
       return hydrateCloudPointListAssets(list, client);
     }));
-    setCloudProgress(2, 3, cloudText("クラウドリストを表示する準備中", "Preparing cloud lists for display"));
+    setCloudProgress(2, 3, "read");
     applyCloudListOrder();
     repairLocalCloudPointIdCollisions();
     ensureActivePointListVisible();
@@ -9501,7 +9508,7 @@ async function refreshCloudLists(options = {}) {
     syncProjectedCoordinates();
     state.cloud.connected = true;
     state.cloud.lastFetchedAt = Date.now();
-    setCloudProgress(3, 3, cloudText("クラウドリストを読み込みました", "Cloud lists loaded"));
+    setCloudProgress(3, 3, "read");
     if (options.quiet !== true && state.cloud.canUseMine) {
       setCloudStatus(cloudText(
         `${state.cloud.lists.length}件のマイリスト（クラウド）を読み込みました`,
@@ -9647,7 +9654,7 @@ async function moveListToCloud(storageId, options = {}) {
   const cloudList = { ...source, id: targetCloudId, cloudId: targetCloudId, cloudScope: targetScope };
   const payload = pointListToCloudPayload(cloudList, pointGeo);
   setCloudBusy(true);
-  setCloudProgress(0, 1, t("storage.transferCloudProgress"));
+  setCloudProgress(0, 1, "operation");
   let completed = false;
   let cloudDeleteFailed = false;
   try {
@@ -9658,9 +9665,7 @@ async function moveListToCloud(storageId, options = {}) {
       await client.updateList(targetCloudId, created?.revision || 1, photoPayload);
     }
     if (options.copy !== true) removeLocalListForStorageChange(source.id);
-    setCloudProgress(1, 1, options.copy === true
-      ? cloudText("クラウドへコピーしました", "Copied to the cloud")
-      : cloudText("クラウドへ移動しました", "Moved to the cloud"));
+    setCloudProgress(1, 1, "operation");
     completed = true;
   } catch (error) {
     setCloudStatus(cloudErrorMessage(error), { error: true });
@@ -9696,7 +9701,7 @@ async function moveCloudListToCloud(storageId, targetScope, options = {}) {
   }
 
   setCloudBusy(true);
-  setCloudProgress(0, 1, t("storage.transferCloudProgress"));
+  setCloudProgress(0, 1, "operation");
   let completed = false;
   try {
     const client = cloudClientFromInputs();
@@ -9726,7 +9731,7 @@ async function moveCloudListToCloud(storageId, targetScope, options = {}) {
         cloudDeleteFailed = true;
       }
     }
-    setCloudProgress(1, 1, t("storage.transferCloudProgress"));
+    setCloudProgress(1, 1, "operation");
     completed = true;
   } catch (error) {
     setCloudStatus(cloudErrorMessage(error), { error: true });
@@ -9782,7 +9787,7 @@ async function moveListToDevice(storageId, options = {}) {
   }
   const name = entry.cloud.name || "地点リスト";
   setCloudBusy(true);
-  setCloudProgress(0, 1, t("storage.transferDeviceProgress"));
+  setCloudProgress(0, 1, "operation");
   let installed = false;
   let cloudDeleteFailed = false;
   try {
@@ -9790,9 +9795,9 @@ async function moveListToDevice(storageId, options = {}) {
     const result = await client.getList(entry.cloud.id);
     const imported = await hydrateCloudPointListAssets(cloudPayloadToPointList(result.list, { localId: uniqueLocalListId(result.list.list.id), revision: result.revision, editable: true }), client, {
       required: true,
-      onProgress: (completed, total) => setCloudProgress(completed, Math.max(total, 1), t("storage.transferDevicePhotos"))
+      onProgress: (completed, total) => setCloudProgress(completed, Math.max(total, 1), "processing")
     });
-    setCloudProgress(1, 1, t("storage.transferDeviceProgress"));
+    setCloudProgress(1, 1, "operation");
     const existingPointIds = new Set([
       ...allPointListPoints().map((point) => point.id),
       ...state.cloud.pointLists.flatMap((list) => list.points.map((point) => point.id))
@@ -9817,9 +9822,7 @@ async function moveListToDevice(storageId, options = {}) {
       try { await client.deleteList(entry.cloud.id, result.revision); }
       catch { cloudDeleteFailed = true; }
     }
-    setCloudProgress(1, 1, options.copy === true
-      ? cloudText("端末へコピーしました", "Copied to the device")
-      : cloudText("端末へ移動しました", "Moved to the device"));
+    setCloudProgress(1, 1, "operation");
   } catch (error) {
     setCloudStatus(cloudErrorMessage(error), { error: true });
   } finally {
@@ -12643,7 +12646,6 @@ async function submitPointInternal() {
   list.points.push(point);
   if (list.source === "cloud") {
     const updated = await updateCloudPointList(list, list, {
-      progressMessage: cloudText("クラウドへ登録中", "Registering to cloud"),
       message: cloudText("地点をクラウドへ登録しました", "Point registered to cloud")
     });
     if (!updated) { list.points.pop(); render(); return; }
@@ -14559,7 +14561,7 @@ async function deleteSelectedPoint() {
       };
       const updated = await updateCloudPointList(list, nextList, {
         message: cloudText("クラウド地点を削除しました", "Cloud point(s) deleted"),
-        progressMessage: cloudText("クラウド地点を削除中", "Deleting cloud point(s)")
+        progressKind: "operation"
       });
       if (!updated) {
         render();
@@ -14996,11 +14998,6 @@ function bindEvents() {
     const option = event.target.closest("[data-dragon-eye-shape]");
     if (!option) return;
     beginDragonEye(option.dataset.dragonEyeShape);
-  });
-  elements.dragonEyeConfirmButton?.addEventListener("click", commitDragonEye);
-  elements.dragonEyeCancelButton?.addEventListener("click", () => {
-    resetDragonEyeState();
-    render();
   });
   elements.traverseStatusButton?.addEventListener("click", () => {
     reopenTraverseActionMenuAfterStatus = true;

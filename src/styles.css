@@ -1186,31 +1186,6 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
   letter-spacing: 0.02em;
 }
 
-.dragon-eye-canvas-actions {
-  position: absolute;
-  top: 14px;
-  left: 50%;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transform: translateX(-50%);
-  pointer-events: auto;
-}
-
-.dragon-eye-canvas-actions button {
-  min-height: 38px;
-  white-space: nowrap;
-  touch-action: manipulation;
-}
-
-.dragon-eye-canvas-limit {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
 .dragon-eye-dialog {
   width: min(420px, calc(100vw - 24px));
   padding: 0;
@@ -1393,6 +1368,23 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
   color: var(--accent-strong);
   font-size: 12px;
   letter-spacing: 0.05em;
+}
+
+.traverse-action-feedback {
+  display: block;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--status-bg);
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.traverse-action-feedback[hidden] {
+  display: none;
 }
 
 .traverse-stone-status-grid {

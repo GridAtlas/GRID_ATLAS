@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=73">
-    <script src="src/main.js?v=421" type="module" defer></script>
+    <script src="src/main.js?v=427" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -242,11 +242,6 @@
                 <button id="originButton" class="icon-button" type="button" aria-pressed="false" title="現在地を中央にして画面追従">⌾</button>
               </div>
               <output id="statusLine" class="status-line" aria-live="polite"></output>
-              <div id="dragonEyeCanvasActions" class="dragon-eye-canvas-actions" hidden>
-                <output id="dragonEyeCanvasLimit" class="dragon-eye-canvas-limit" aria-live="polite" hidden></output>
-                <button id="dragonEyeCancelButton" class="compact-button" type="button" data-i18n="dragonEye.cancel">解除</button>
-                <button id="dragonEyeConfirmButton" class="primary-button" type="button" data-i18n="dragonEye.confirm">龍脈眼を確定</button>
-              </div>
             </section>
 
             <section class="mobile-content-panel" data-mobile-grid-panel="points" aria-label="地点一覧">
@@ -529,6 +524,7 @@
             <div><span data-i18n="traverse.locationsShort">箇所</span><strong id="traverseLocationValue">0</strong></div>
           </div>
         </section>
+        <output id="traverseActionFeedback" class="traverse-action-feedback" role="status" aria-live="polite" hidden></output>
           <div class="traverse-action-dialog-actions">
             <button id="traversePlaceButton" class="primary-button" type="button" data-i18n="traverse.place">置く</button>
             <button id="traversePickButton" type="button" data-i18n="traverse.pick">拾う</button>
@@ -599,19 +595,19 @@
         <section class="kekkaishi-status-card kekkaishi-status-shapes-panel" aria-labelledby="kekkaishiStatusShapesTitle">
           <div class="kekkaishi-status-section-heading">
             <div>
-              <h3 id="kekkaishiStatusShapesTitle" data-i18n="kekkaishi.shapesTitle">図形と能力</h3>
-              <p data-i18n="kekkaishi.shapesHint">現在使える図形と、次のクラスで追加される図形。</p>
+              <h3 id="kekkaishiStatusShapesTitle" data-i18n="kekkaishi.shapesTitle">結界術と能力</h3>
+              <p data-i18n="kekkaishi.shapesHint">使用できる結界術と、次のクラスで追加される結界術。</p>
             </div>
             <span id="kekkaishiStatusCurrentRank" class="kekkaishi-status-section-badge"></span>
           </div>
           <div id="kekkaishiStatusCurrentDetails" class="kekkaishi-status-detail-grid"></div>
           <div class="kekkaishi-status-subheading">
-            <span data-i18n="kekkaishi.currentShapes">現在解放</span>
+              <span data-i18n="kekkaishi.currentShapes">使用できる結界術</span>
           </div>
           <div id="kekkaishiStatusCurrentShapes" class="kekkaishi-status-shape-grid"></div>
           <div id="kekkaishiStatusNextShapesPanel" class="kekkaishi-status-next-panel" hidden>
             <div class="kekkaishi-status-subheading">
-              <span data-i18n="kekkaishi.nextShapes">次のクラスで解放</span>
+              <span data-i18n="kekkaishi.nextShapes">次のクラスで追加される結界術</span>
               <strong id="kekkaishiStatusNextRank"></strong>
             </div>
             <div id="kekkaishiStatusNextDetails" class="kekkaishi-status-detail-grid"></div>
