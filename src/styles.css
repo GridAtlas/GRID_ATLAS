@@ -88,25 +88,25 @@
   --bg: #160c22;
   --surface: #251238;
   --surface-strong: #1d0d2d;
-  --line: #633b86;
-  --line-strong: #d29aff;
-  --text: #f0d9ff;
-  --muted: #bd93d6;
-  --accent: #c884ff;
-  --accent-strong: #edcfff;
-  --teal: #65e0ff;
-  --green: #d29aff;
+  --line: #654c76;
+  --line-strong: #c3a7d2;
+  --text: #eadcf0;
+  --muted: #b69fbd;
+  --accent: #b487c8;
+  --accent-strong: #e3d1ea;
+  --teal: #8dcbd4;
+  --green: #c3a5cf;
   --danger: #ff7aa8;
-  --shadow: 0 0 24px rgb(200 132 255 / 0.2);
+  --shadow: 0 0 18px rgb(180 135 200 / 0.12);
   --field-bg: #180b26;
   --canvas-bg: #160c22;
   --status-bg: rgb(22 12 34 / 0.92);
-  --active-bg: rgb(200 132 255 / 0.18);
-  --focus-ring: rgb(200 132 255 / 0.4);
-  --brand-glow: 0 0 18px rgb(200 132 255 / 0.54);
-  --route: #d8a8ff;
-  --route-soft: rgb(200 132 255 / 0.12);
-  --route-text: #f0d9ff;
+  --active-bg: rgb(180 135 200 / 0.13);
+  --focus-ring: rgb(180 135 200 / 0.26);
+  --brand-glow: 0 0 12px rgb(180 135 200 / 0.28);
+  --route: #c7a9d8;
+  --route-soft: rgb(180 135 200 / 0.09);
+  --route-text: #eadcf0;
   --on-accent: #160c22;
   --on-route: #160c22;
 }
@@ -775,7 +775,7 @@ button {
 :root[data-theme="kekkai"] .brand h1,
 :root[data-theme="kekkai"] .theme-toggle,
 :root[data-theme="kekkai"] .status-line {
-  text-shadow: 0 0 8px rgb(200 132 255 / 0.5);
+  text-shadow: 0 0 6px rgb(180 135 200 / 0.28);
 }
 
 .selected-summary {
@@ -977,7 +977,7 @@ button {
 }
 
 :root[data-theme="kekkai"] .mobile-grid-summary-field > strong {
-  text-shadow: 0 0 8px rgb(200 132 255 / 0.28);
+  text-shadow: 0 0 6px rgb(180 135 200 / 0.18);
 }
 
 :root[data-theme="retro"] .selection-info strong {
@@ -985,7 +985,7 @@ button {
 }
 
 :root[data-theme="kekkai"] .selection-info strong {
-  text-shadow: 0 0 8px rgb(200 132 255 / 0.28);
+  text-shadow: 0 0 6px rgb(180 135 200 / 0.18);
 }
 
 .actionbar {
