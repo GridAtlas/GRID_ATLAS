@@ -24,11 +24,13 @@ const serviceWorker = fs.readFileSync(serviceWorkerPath, "utf8");
 const versionMatch = main.match(/const WEB_VERSION = "(\d+\.\d{4})";/);
 const readmeMatch = readme.match(/現在のWeb版は `(\d+\.\d{4})` です。/);
 const indexAssetMatch = index.match(/src\/main\.js\?v=(\d+)/);
+const indexStylesAssetMatch = index.match(/src\/styles\.css\?v=(\d+)/);
 const workerAssetMatch = serviceWorker.match(/src\/main\.js\?v=(\d+)/);
+const workerStylesAssetMatch = serviceWorker.match(/src\/styles\.css\?v=(\d+)/);
 const cacheMatch = serviceWorker.match(/const CACHE_NAME = "grid-atlas-static-v(\d+)";/);
 if (!versionMatch) throw new Error("WEB_VERSION was not found in src/main.js");
 if (!readmeMatch) throw new Error("Web version line was not found in README.md");
-if (!indexAssetMatch || !workerAssetMatch || !cacheMatch) {
+if (!indexAssetMatch || !indexStylesAssetMatch || !workerAssetMatch || !workerStylesAssetMatch || !cacheMatch) {
   throw new Error("Asset cache versions were not found");
 }
 if (readmeMatch[1] !== versionMatch[1]) {
@@ -37,19 +39,26 @@ if (readmeMatch[1] !== versionMatch[1]) {
 if (indexAssetMatch[1] !== workerAssetMatch[1]) {
   throw new Error(`Asset mismatch: index.html=${indexAssetMatch[1]}, service-worker.js=${workerAssetMatch[1]}`);
 }
+if (indexStylesAssetMatch[1] !== workerStylesAssetMatch[1]) {
+  throw new Error(`Styles asset mismatch: index.html=${indexStylesAssetMatch[1]}, service-worker.js=${workerStylesAssetMatch[1]}`);
+}
 
 const nextVersion = (Number(versionMatch[1]) + increments[kind]).toFixed(4);
 const nextAsset = Number(indexAssetMatch[1]) + 1;
+const nextStylesAsset = Number(indexStylesAssetMatch[1]) + 1;
 const nextCache = Number(cacheMatch[1]) + 1;
 const updatedMain = main.replace(versionMatch[0], `const WEB_VERSION = "${nextVersion}";`);
 const updatedReadme = readme.replace(readmeMatch[0], `現在のWeb版は \`${nextVersion}\` です。`);
-const updatedIndex = index.replace(indexAssetMatch[0], `src/main.js?v=${nextAsset}`);
+const updatedIndex = index
+  .replace(indexAssetMatch[0], `src/main.js?v=${nextAsset}`)
+  .replace(indexStylesAssetMatch[0], `src/styles.css?v=${nextStylesAsset}`);
 const updatedServiceWorker = serviceWorker
   .replace(cacheMatch[0], `const CACHE_NAME = "grid-atlas-static-v${nextCache}";`)
-  .replace(workerAssetMatch[0], `src/main.js?v=${nextAsset}`);
+  .replace(workerAssetMatch[0], `src/main.js?v=${nextAsset}`)
+  .replace(workerStylesAssetMatch[0], `src/styles.css?v=${nextStylesAsset}`);
 
 fs.writeFileSync(mainPath, updatedMain);
 fs.writeFileSync(readmePath, updatedReadme);
 fs.writeFileSync(indexPath, updatedIndex);
 fs.writeFileSync(serviceWorkerPath, updatedServiceWorker);
-console.log(`Web version ${versionMatch[1]} -> ${nextVersion} (${kind}); asset v${nextAsset}; cache v${nextCache}`);
+console.log(`Web version ${versionMatch[1]} -> ${nextVersion} (${kind}); assets main v${nextAsset}, styles v${nextStylesAsset}; cache v${nextCache}`);
