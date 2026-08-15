@@ -85,28 +85,28 @@
 
 :root[data-theme="kekkai"] {
   color-scheme: dark;
-  --bg: #0b0710;
-  --surface: #17101f;
-  --surface-strong: #241633;
-  --line: #654c76;
-  --line-strong: #c3a7d2;
-  --text: #eadcf0;
-  --muted: #b69fbd;
-  --accent: #b487c8;
-  --accent-strong: #e3d1ea;
+  --bg: #07050a;
+  --surface: #0f0915;
+  --surface-strong: #180d24;
+  --line: #392047;
+  --line-strong: #79568a;
+  --text: #d8c5e2;
+  --muted: #90799c;
+  --accent: #7d4e97;
+  --accent-strong: #b38ac3;
   --teal: #8dcbd4;
   --green: #c3a5cf;
   --danger: #ff7aa8;
-  --shadow: 0 0 16px rgb(159 107 185 / 0.12);
-  --field-bg: #120b19;
+  --shadow: 0 0 14px rgb(125 78 151 / 0.1);
+  --field-bg: #0b0610;
   --canvas-bg: #020204;
   --status-bg: rgb(7 3 10 / 0.94);
-  --active-bg: rgb(159 107 185 / 0.13);
-  --focus-ring: rgb(159 107 185 / 0.25);
-  --brand-glow: 0 0 10px rgb(159 107 185 / 0.24);
-  --route: #b88acc;
-  --route-soft: rgb(159 107 185 / 0.08);
-  --route-text: #dfcce8;
+  --active-bg: rgb(125 78 151 / 0.11);
+  --focus-ring: rgb(125 78 151 / 0.2);
+  --brand-glow: 0 0 8px rgb(125 78 151 / 0.18);
+  --route: #a47bb5;
+  --route-soft: rgb(125 78 151 / 0.06);
+  --route-text: #d8c5e2;
   --on-accent: #160c22;
   --on-route: #160c22;
 }
@@ -775,7 +775,7 @@ button {
 :root[data-theme="kekkai"] .brand h1,
 :root[data-theme="kekkai"] .theme-toggle,
 :root[data-theme="kekkai"] .status-line {
-  text-shadow: 0 0 5px rgb(159 107 185 / 0.22);
+  text-shadow: 0 0 4px rgb(125 78 151 / 0.16);
 }
 
 .selected-summary {
@@ -977,7 +977,7 @@ button {
 }
 
 :root[data-theme="kekkai"] .mobile-grid-summary-field > strong {
-  text-shadow: 0 0 5px rgb(159 107 185 / 0.14);
+  text-shadow: 0 0 4px rgb(125 78 151 / 0.1);
 }
 
 :root[data-theme="retro"] .selection-info strong {
@@ -985,7 +985,7 @@ button {
 }
 
 :root[data-theme="kekkai"] .selection-info strong {
-  text-shadow: 0 0 5px rgb(159 107 185 / 0.14);
+  text-shadow: 0 0 4px rgb(125 78 151 / 0.1);
 }
 
 .actionbar {

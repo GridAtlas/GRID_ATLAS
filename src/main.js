@@ -128,7 +128,7 @@ const KEKKAI_THEME = "kekkai";
 const KEKKAI_MODE = "kekkai";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2115";
+const WEB_VERSION = "0.2116";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -763,11 +763,11 @@ const CANVAS_PALETTES = {
     badgeStartText: "#ffffff"
   },
   kekkai: {
-    gridMinor: "rgb(164 76 255 / 0.24)",
-    gridMajor: "rgb(211 125 255 / 0.72)",
-    link: "#b968e8",
-    linkSelected: "#efd7ff",
-    route: "#d18cff",
+    gridMinor: "rgb(126 75 170 / 0.12)",
+    gridMajor: "rgb(180 125 210 / 0.38)",
+    link: "#8f5ca9",
+    linkSelected: "#d8c5e2",
+    route: "#b78bc9",
     target: "#ff9fce",
     targetSoft: "rgb(255 159 206 / 0.2)",
     targetGuide: "rgb(240 217 255 / 0.68)",
@@ -779,12 +779,12 @@ const CANVAS_PALETTES = {
     currentStale: "#b6a0c4",
     pendingFill: "rgb(196 132 255 / 0.2)",
     pendingStroke: "rgb(232 195 255 / 0.78)",
-    pointFill: "#bb70f0",
+    pointFill: "#a85dcc",
     pointBaseStroke: "#050207",
     routeStart: "#65e0ff",
     routeSelected: "#e1b7ff",
     pendingPointStroke: "#f0d9ff",
-    traverseFill: "#bb70f0",
+    traverseFill: "#a85dcc",
     selected: "#ffffff",
     badgeFill: "#050207",
     badgeText: "#f0d9ff",
@@ -3960,8 +3960,8 @@ function drawGrid(width, height) {
   const gridGlow = currentTheme() === KEKKAI_THEME && !barrierLinkVisualActive;
   if (gridGlow) {
     context.save();
-    context.shadowColor = "rgb(174 74 255 / 0.78)";
-    context.shadowBlur = 8;
+    context.shadowColor = "rgb(150 82 190 / 0.4)";
+    context.shadowBlur = 5;
   }
   drawGridLines(topLeft, bottomRight, minorStep, gridMinor, 1);
   drawGridLines(topLeft, bottomRight, majorStep, gridMajor, 1.25);
