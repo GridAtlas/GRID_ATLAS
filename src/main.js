@@ -128,7 +128,7 @@ const KEKKAI_THEME = "kekkai";
 const KEKKAI_MODE = "kekkai";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2164";
+const WEB_VERSION = "0.2167";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -147,6 +147,9 @@ const METRIC_UNIT = "metric";
 const IMPERIAL_UNIT = "imperial";
 const POINT_RADIUS = 8;
 const BARRIER_TILE_MIN_SCREEN_SIZE = POINT_RADIUS * 2 + 8;
+const BARRIER_SINGLE_TILE_TARGET_RATIO = 0.28;
+const BARRIER_SINGLE_TILE_MIN_SCREEN_SIZE = 140;
+const BARRIER_SINGLE_TILE_MAX_SCREEN_SIZE = 220;
 const BARRIER_LINK_LONG_PRESS_MS = 500;
 const GRID_MODE_LONG_PRESS_MS = 1500;
 const BARRIER_LINK_DWELL_MS = 500;
@@ -563,6 +566,7 @@ const state = {
     lines: [],
     figures: []
   },
+  transientAnalysisIds: new Set(),
   mode: "inspect",
   mobilePage: "map",
   mobileGridPage: "grid",
@@ -865,6 +869,7 @@ const TRANSLATIONS = {
     "action.apply": "適用",
     "action.copyToList": "コピー",
     "action.moveToList": "移動",
+    "action.share": "共有",
     "action.shareSelected": "共有",
     "action.shareSelectedTitle": "選択した地点・線・図形を共有",
     "action.invert": "反転",
@@ -1090,6 +1095,7 @@ const TRANSLATIONS = {
     "cloud.gridName": "表示名（ニックネーム）",
     "cloud.sendConfirmation": "アカウント設定メールを送信",
     "cloud.close": "閉じる",
+    "cloud.sharesTitle": "発行済みリンク",
     "cloud.refresh": "更新",
     "cloud.disconnect": "切断",
     "cloud.neverFetched": "まだクラウドを確認していません",
@@ -1406,6 +1412,7 @@ const TRANSLATIONS = {
     "action.apply": "Apply",
     "action.copyToList": "Copy",
     "action.moveToList": "Move",
+    "action.share": "Share",
     "action.shareSelected": "Share",
     "action.shareSelectedTitle": "Share selected points, lines, and figures",
     "action.invert": "Invert",
@@ -1631,6 +1638,7 @@ const TRANSLATIONS = {
     "cloud.gridName": "Display name (nickname)",
     "cloud.sendConfirmation": "Send account setup email",
     "cloud.close": "Close",
+    "cloud.sharesTitle": "Issued links",
     "cloud.refresh": "Refresh",
     "cloud.disconnect": "Disconnect",
     "cloud.neverFetched": "Cloud has not been checked yet",
@@ -2550,6 +2558,7 @@ function setCloudDialogOpen(open) {
     moveCloudPasswordPanelToAuth();
     setSettingsMenuOpen(false);
     if (!elements.cloudDialog.open) elements.cloudDialog.showModal();
+    void refreshCloudShares();
     return;
   }
   if (elements.cloudDialog.open) elements.cloudDialog.close();
@@ -3847,8 +3856,14 @@ function pointGeoFromAny(point, origin) {
 
 function workspaceSnapshot() {
   ensurePointLists();
+  const transientAnalysisIds = state.transientAnalysisIds;
+  const analysisLayer = {
+    ...clonePlain(state.analysisLayer),
+    lines: state.links.filter((line) => !transientAnalysisIds.has(line.id)).map(clonePlain),
+    figures: state.figures.filter((figure) => !transientAnalysisIds.has(figure.id)).map(clonePlain)
+  };
   const pointLists = state.pointLists.filter((list) => list.transient !== true).map((list) => ({
-    ...list,
+    ...(({ transientAnalysisIds: _transientAnalysisIds, ...persistedList }) => persistedList)(list),
     points: list.points.map((point) => ({
       ...point,
       photo: point.photoAssetId ? "" : point.photo
@@ -3861,7 +3876,7 @@ function workspaceSnapshot() {
     activePointListId: state.activePointListId,
     favoriteListIds: [...state.favoriteListIds],
     storageListSectionCollapsed: { ...state.storageListSectionCollapsed },
-    analysisLayer: clonePlain(state.analysisLayer),
+    analysisLayer,
     cloudHiddenListIds: [...state.cloud.hiddenListIds],
     testerSharedCloudListIds: [...state.cloud.testerSharedListIds],
     cloudListOrder: [...state.cloud.listOrder]
@@ -5631,10 +5646,11 @@ function returnToTraverseActionMenu() {
 function fitBarrierPlacementView() {
   syncCanvasSize();
   pauseLocationFollowForManualView();
-  const geos = Object.values(state.traverseLog?.stones || {})
+  const visibleStones = Object.values(state.traverseLog?.stones || {})
     .filter((stone) => stoneDisplayCount(stone) > 0)
-    .map((stone) => tileCenterGeo(stone.tile))
-    .filter(validGeo);
+    .map((stone) => ({ stone, geo: tileCenterGeo(stone.tile) }))
+    .filter(({ geo }) => validGeo(geo));
+  const geos = visibleStones.map(({ geo }) => geo);
   if (geos.length === 0) {
     render();
     return;
@@ -5644,6 +5660,37 @@ function fitBarrierPlacementView() {
   if (centerGeo) setProjectionCenterGeo(centerGeo);
   const projected = geos.map((geo) => projectGeo(geo));
   const size = canvasSize();
+
+  if (geos.length === 1) {
+    const bounds = tileBounds(visibleStones[0]?.stone.tile);
+    const tile = bounds
+      ? [
+        projectLatLng(bounds.north, bounds.west),
+        projectLatLng(bounds.north, bounds.east),
+        projectLatLng(bounds.south, bounds.east),
+        projectLatLng(bounds.south, bounds.west)
+      ]
+      : [];
+    const tileWidth = tile.length > 0
+      ? Math.max(...tile.map((point) => point.x)) - Math.min(...tile.map((point) => point.x))
+      : 0;
+    const tileHeight = tile.length > 0
+      ? Math.max(...tile.map((point) => point.y)) - Math.min(...tile.map((point) => point.y))
+      : 0;
+    const targetSize = Math.min(
+      BARRIER_SINGLE_TILE_MAX_SCREEN_SIZE,
+      Math.max(BARRIER_SINGLE_TILE_MIN_SCREEN_SIZE, Math.min(size.width, size.height) * BARRIER_SINGLE_TILE_TARGET_RATIO)
+    );
+
+    if (tileWidth > 0 && tileHeight > 0) {
+      state.viewport.x = projected[0].x;
+      state.viewport.y = projected[0].y;
+      state.viewport.scale = clampScale(targetSize / Math.max(tileWidth, tileHeight));
+      render();
+      return;
+    }
+  }
+
   const minX = Math.min(...projected.map((point) => point.x));
   const maxX = Math.max(...projected.map((point) => point.x));
   const minY = Math.min(...projected.map((point) => point.y));
@@ -15229,9 +15276,22 @@ function applyImportedPointLists(importedLists, importedAnalysisLayers, successM
   const previousLinks = state.links;
   const previousFigures = state.figures;
   const previousSelection = state.selection;
+  const previousTransientAnalysisIds = new Set(state.transientAnalysisIds);
   try {
+    const existingLineIds = new Set(state.links.map((line) => line.id));
+    const existingFigureIds = new Set(state.figures.map((figure) => figure.id));
     state.pointLists = [...state.pointLists, ...importedLists];
     mergeAnalysisLayers(importedAnalysisLayers);
+    if (options.persist === false) {
+      const transientAnalysisIds = state.transientAnalysisIds;
+      for (const line of state.links) {
+        if (!existingLineIds.has(line.id)) transientAnalysisIds.add(line.id);
+      }
+      for (const figure of state.figures) {
+        if (!existingFigureIds.has(figure.id)) transientAnalysisIds.add(figure.id);
+      }
+      for (const list of importedLists) list.transientAnalysisIds = [...transientAnalysisIds];
+    }
     if (options.source === "preset") {
       focusPresetVisibility(options.focusLists || importedLists);
     }
@@ -15244,6 +15304,7 @@ function applyImportedPointLists(importedLists, importedAnalysisLayers, successM
     state.links = previousLinks;
     state.figures = previousFigures;
     state.selection = previousSelection;
+    state.transientAnalysisIds = previousTransientAnalysisIds;
     refreshVisiblePoints();
     throw error;
   }
@@ -15463,12 +15524,19 @@ function documentFromIncomingShareNotice(list) {
   const [importButton, closeButton] = notice.querySelectorAll("button");
   importButton.addEventListener("click", () => {
     list.transient = false;
+    const transientAnalysisIds = new Set(list.transientAnalysisIds || []);
+    for (const id of transientAnalysisIds) state.transientAnalysisIds.delete(id);
+    delete list.transientAnalysisIds;
     persistWorkspace();
     notice.remove();
     setShareFeedback(cloudText("共有を取り込みました", "Shared data imported"));
   });
   closeButton.addEventListener("click", () => {
+    const transientAnalysisIds = new Set(list.transientAnalysisIds || []);
     state.pointLists = state.pointLists.filter((item) => item !== list);
+    state.links = state.links.filter((line) => !transientAnalysisIds.has(line.id));
+    state.figures = state.figures.filter((figure) => !transientAnalysisIds.has(figure.id));
+    for (const id of transientAnalysisIds) state.transientAnalysisIds.delete(id);
     refreshVisiblePoints();
     render();
     notice.remove();
