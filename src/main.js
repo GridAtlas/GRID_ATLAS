@@ -128,7 +128,7 @@ const KEKKAI_THEME = "kekkai";
 const KEKKAI_MODE = "kekkai";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2116";
+const WEB_VERSION = "0.2118";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -4308,6 +4308,7 @@ function drawFigures() {
     context.moveTo(points[0].x, points[0].y);
     for (const point of points.slice(1)) context.lineTo(point.x, point.y);
     if (points.length >= 3) {
+      context.closePath();
       context.globalAlpha = isSelected ? 0.22 : 0.1;
       context.fillStyle = stroke;
       context.fill();
@@ -11316,16 +11317,26 @@ function findNearestBarrier(screenPoint) {
 }
 
 function pointInPolygon(point, polygon) {
-  let inside = false;
-  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index++) {
+  if (!Array.isArray(polygon) || polygon.length < 3) return false;
+
+  // Match CanvasRenderingContext2D.fill(), whose default rule is nonzero.
+  // An even-odd ray cast treats the center of self-intersecting figures such
+  // as pentagrams as empty even though that region is visibly filled.
+  let windingNumber = 0;
+  for (let index = 0; index < polygon.length; index += 1) {
     const currentPoint = polygon[index];
-    const previousPoint = polygon[previous];
-    const intersects = ((currentPoint.y > point.y) !== (previousPoint.y > point.y))
-      && point.x < (previousPoint.x - currentPoint.x) * (point.y - currentPoint.y)
-        / (previousPoint.y - currentPoint.y) + currentPoint.x;
-    if (intersects) inside = !inside;
+    const nextPoint = polygon[(index + 1) % polygon.length];
+    const cross = (nextPoint.x - currentPoint.x) * (point.y - currentPoint.y)
+      - (point.x - currentPoint.x) * (nextPoint.y - currentPoint.y);
+
+    if (currentPoint.y <= point.y) {
+      if (nextPoint.y > point.y && cross > 0) windingNumber += 1;
+    } else if (nextPoint.y <= point.y && cross < 0) {
+      windingNumber -= 1;
+    }
   }
-  return inside;
+
+  return windingNumber !== 0;
 }
 
 function toggleBarrierStoneSelection(stoneId) {
@@ -14378,51 +14389,205 @@ function shareSnapshotSurfaceColor() {
   return getComputedStyle(document.documentElement).getPropertyValue("--surface").trim() || "#fffdf7";
 }
 
-function drawShareSnapshotGrid(target, palette) {
-  target.fillStyle = shareSnapshotSurfaceColor();
-  target.fillRect(0, 0, 1200, 630);
-  target.strokeStyle = palette.gridMinor || "#d7e4df";
-  target.lineWidth = 1;
-  for (let x = 0; x <= 1200; x += 30) {
-    target.beginPath(); target.moveTo(x, 0); target.lineTo(x, 630); target.stroke();
-  }
-  for (let y = 0; y <= 630; y += 30) {
-    target.beginPath(); target.moveTo(0, y); target.lineTo(1200, y); target.stroke();
+const SHARE_SNAPSHOT_WIDTH = 1200;
+const SHARE_SNAPSHOT_HEIGHT = 630;
+const SHARE_SNAPSHOT_FRAME = Object.freeze({ left: 72, top: 64, right: 1128, bottom: 482 });
+const SHARE_SNAPSHOT_MIN_SPAN_METERS = 2500;
+let shareSnapshotLogoPromise = null;
+
+function shareSnapshotAppUrl() {
+  const canonical = document.querySelector('link[rel="canonical"]')?.href;
+  if (canonical) return canonical;
+  try {
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.hash = "";
+    return url.href;
+  } catch {
+    return "https://gridatlas.github.io/GRID_ATLAS/";
   }
 }
 
-async function renderSelectedShareImage(points, lines, figures) {
-  const vertices = [
-    ...points.map((point) => ({ ...point.geo, name: point.title })),
-    ...lines.flatMap((line) => {
-      const endpoints = linkEndpoints(line);
-      return endpoints ? [endpoints.a, endpoints.b] : [];
-    }),
-    ...figures.flatMap((figure) => figureRuntimeVertices(figure))
-  ].filter((vertex) => validGeo(vertex));
-  if (vertices.length === 0) throw new Error("Snapshot geometry unavailable");
+function loadShareSnapshotLogo() {
+  if (shareSnapshotLogoPromise) return shareSnapshotLogoPromise;
+  shareSnapshotLogoPromise = new Promise((resolve) => {
+    if (typeof globalThis.Image !== "function") {
+      resolve(null);
+      return;
+    }
 
-  const minLat = Math.min(...vertices.map((vertex) => vertex.lat));
-  const maxLat = Math.max(...vertices.map((vertex) => vertex.lat));
-  const minLng = Math.min(...vertices.map((vertex) => vertex.lng));
-  const maxLng = Math.max(...vertices.map((vertex) => vertex.lng));
-  const latSpan = Math.max(maxLat - minLat, 0.02);
-  const lngSpan = Math.max(maxLng - minLng, 0.02);
-  const span = Math.max(latSpan, lngSpan);
-  const pad = span * 0.12;
-  const loLat = (minLat + maxLat) / 2 - span / 2 - pad;
-  const loLng = (minLng + maxLng) / 2 - span / 2 - pad;
-  const totalSpan = span + pad * 2;
-  const project = (geo) => ({
-    x: 90 + ((geo.lng - loLng) / totalSpan) * 1020,
-    y: 470 - ((geo.lat - loLat) / totalSpan) * 390
+    const image = new globalThis.Image();
+    image.addEventListener("load", () => resolve(image), { once: true });
+    image.addEventListener("error", () => resolve(null), { once: true });
+    try {
+      image.src = new URL("assets/icon-grid.svg", document.baseURI).href;
+    } catch {
+      resolve(null);
+    }
   });
+  return shareSnapshotLogoPromise;
+}
+
+function drawShareSnapshotGrid(target, palette) {
+  target.fillStyle = shareSnapshotSurfaceColor();
+  target.fillRect(0, 0, SHARE_SNAPSHOT_WIDTH, SHARE_SNAPSHOT_HEIGHT);
+  target.strokeStyle = palette.gridMinor || "#d7e4df";
+  target.lineWidth = 1;
+  for (let x = 0; x <= SHARE_SNAPSHOT_WIDTH; x += 30) {
+    target.beginPath(); target.moveTo(x, 0); target.lineTo(x, SHARE_SNAPSHOT_HEIGHT); target.stroke();
+  }
+  for (let y = 0; y <= SHARE_SNAPSHOT_HEIGHT; y += 30) {
+    target.beginPath(); target.moveTo(0, y); target.lineTo(SHARE_SNAPSHOT_WIDTH, y); target.stroke();
+  }
+}
+
+function drawShareSnapshotRoundedRect(target, x, y, width, height, radius) {
+  target.beginPath();
+  if (typeof target.roundRect === "function") {
+    target.roundRect(x, y, width, height, radius);
+    return;
+  }
+
+  const r = Math.min(radius, width / 2, height / 2);
+  target.moveTo(x + r, y);
+  target.arcTo(x + width, y, x + width, y + height, r);
+  target.arcTo(x + width, y + height, x, y + height, r);
+  target.arcTo(x, y + height, x, y, r);
+  target.arcTo(x, y, x + width, y, r);
+  target.closePath();
+}
+
+function drawShareSnapshotLabel(target, label, screen, textColor, surfaceColor, palette, options = {}) {
+  const text = String(label || "").trim();
+  if (!text) return;
+
+  const maxChars = options.maxChars || 30;
+  const clipped = text.length > maxChars ? `${text.slice(0, maxChars - 1)}…` : text;
+  target.save();
+  target.font = options.font || "700 18px system-ui, sans-serif";
+  target.textAlign = "left";
+  target.textBaseline = "middle";
+  const maxWidth = options.maxWidth || 280;
+  const boxWidth = Math.min(maxWidth, target.measureText(clipped).width + 18);
+  const boxHeight = options.height || 28;
+  const offsetY = options.offsetY || 0;
+  const x = Math.min(Math.max(screen.x + (options.offsetX ?? 15), 20), SHARE_SNAPSHOT_WIDTH - boxWidth - 20);
+  const y = Math.min(Math.max(screen.y - 18 + offsetY, 20), SHARE_SNAPSHOT_FRAME.bottom - boxHeight - 8);
+
+  target.globalAlpha = 0.92;
+  target.fillStyle = surfaceColor;
+  drawShareSnapshotRoundedRect(target, x, y, boxWidth, boxHeight, 6);
+  target.fill();
+  target.globalAlpha = 0.82;
+  target.strokeStyle = palette.gridMajor || palette.link || textColor;
+  target.lineWidth = 1;
+  target.stroke();
+  target.globalAlpha = 1;
+  target.fillStyle = textColor;
+  target.fillText(clipped, x + 9, y + boxHeight / 2);
+  target.restore();
+}
+
+function drawShareSnapshotLogoFallback(target, x, y, size, palette, surfaceColor) {
+  target.save();
+  target.fillStyle = surfaceColor;
+  target.fillRect(x, y, size, size);
+  target.strokeStyle = palette.link || palette.gridMajor;
+  target.lineWidth = 2;
+  target.strokeRect(x + 5, y + 5, size - 10, size - 10);
+  target.beginPath();
+  for (let index = 1; index < 4; index += 1) {
+    const offset = x + (size * index) / 4;
+    target.moveTo(offset, y + 7);
+    target.lineTo(offset, y + size - 7);
+    target.moveTo(x + 7, y + (size * index) / 4);
+    target.lineTo(x + size - 7, y + (size * index) / 4);
+  }
+  target.stroke();
+  target.fillStyle = palette.observationTrail || palette.pointFill || palette.link;
+  target.fillRect(x + size * 0.54, y + size * 0.36, size * 0.2, size * 0.2);
+  target.restore();
+}
+
+async function drawShareSnapshotBrand(target, palette, textColor) {
+  const logoSize = 42;
+  const logoX = 1022;
+  const logoY = 536;
+  const surfaceColor = shareSnapshotSurfaceColor();
+  const logo = await loadShareSnapshotLogo();
+  if (logo) {
+    target.drawImage(logo, logoX, logoY, logoSize, logoSize);
+  } else {
+    drawShareSnapshotLogoFallback(target, logoX, logoY, logoSize, palette, surfaceColor);
+  }
+
+  target.save();
+  target.fillStyle = textColor;
+  target.textAlign = "right";
+  target.textBaseline = "alphabetic";
+  target.font = "800 19px system-ui, sans-serif";
+  target.fillText("GRID ATLAS", 1180, 555);
+  target.font = "600 11px system-ui, sans-serif";
+  target.fillText(shareSnapshotAppUrl().replace(/^https?:\/\//, ""), 1180, 596);
+  target.font = "800 13px system-ui, sans-serif";
+  target.fillText("#GRIDATLAS", 1180, 616);
+  target.restore();
+}
+
+async function renderSelectedShareImage(points, lines, figures) {
+  const pointVertices = points.map((point) => ({
+    ...point,
+    geo: point.geo,
+    title: point.title,
+    markerKind: "point"
+  }));
+  const lineVertices = lines.flatMap((line) => {
+    const endpoints = linkEndpoints(line);
+    return endpoints ? [endpoints.a, endpoints.b].map((vertex) => ({ ...vertex, markerKind: "line-vertex" })) : [];
+  });
+  const figureVertices = figures.flatMap((figure) => figureRuntimeVertices(figure)
+    .map((vertex, index) => ({ ...vertex, markerKind: "figure-vertex", figureId: figure.id, vertexIndex: index })));
+  const snapshotVertices = [...pointVertices, ...lineVertices, ...figureVertices]
+    .map((vertex) => {
+      const geo = validGeo(vertex.geo) ? normalizeGeo(vertex.geo) : validGeo(vertex) ? normalizeGeo(vertex) : null;
+      return geo ? { ...vertex, geo } : null;
+    })
+    .filter(Boolean);
+  if (snapshotVertices.length === 0) throw new Error("Snapshot geometry unavailable");
+
+  const projectedWorldVertices = snapshotVertices.map((vertex) => ({
+    ...vertex,
+    world: projectLatLng(vertex.geo.lat, vertex.geo.lng)
+  }));
+  const minX = Math.min(...projectedWorldVertices.map((vertex) => vertex.world.x));
+  const maxX = Math.max(...projectedWorldVertices.map((vertex) => vertex.world.x));
+  const minY = Math.min(...projectedWorldVertices.map((vertex) => vertex.world.y));
+  const maxY = Math.max(...projectedWorldVertices.map((vertex) => vertex.world.y));
+  const spanX = Math.max(maxX - minX, SHARE_SNAPSHOT_MIN_SPAN_METERS);
+  const spanY = Math.max(maxY - minY, SHARE_SNAPSHOT_MIN_SPAN_METERS);
+  const pad = Math.max(spanX, spanY) * 0.12;
+  const frameWidth = SHARE_SNAPSHOT_FRAME.right - SHARE_SNAPSHOT_FRAME.left;
+  const frameHeight = SHARE_SNAPSHOT_FRAME.bottom - SHARE_SNAPSHOT_FRAME.top;
+  const scale = Math.min(frameWidth / (spanX + pad * 2), frameHeight / (spanY + pad * 2));
+  const centerWorld = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+  const centerScreen = {
+    x: (SHARE_SNAPSHOT_FRAME.left + SHARE_SNAPSHOT_FRAME.right) / 2,
+    y: (SHARE_SNAPSHOT_FRAME.top + SHARE_SNAPSHOT_FRAME.bottom) / 2
+  };
+  const project = (geo) => {
+    const world = projectLatLng(geo.lat, geo.lng);
+    return {
+      x: centerScreen.x + (world.x - centerWorld.x) * scale,
+      y: centerScreen.y - (world.y - centerWorld.y) * scale
+    };
+  };
   const canvas = document.createElement("canvas");
-  canvas.width = 1200;
-  canvas.height = 630;
+  canvas.width = SHARE_SNAPSHOT_WIDTH;
+  canvas.height = SHARE_SNAPSHOT_HEIGHT;
   const target = canvas.getContext("2d");
   const palette = canvasPalette();
   const textColor = shareSnapshotTextColor();
+  const surfaceColor = shareSnapshotSurfaceColor();
   drawShareSnapshotGrid(target, palette);
 
   for (const figure of figures) {
@@ -14439,9 +14604,15 @@ async function renderSelectedShareImage(points, lines, figures) {
     target.restore();
     if (figure.name) {
       const center = projected.reduce((sum, point) => ({ x: sum.x + point.x, y: sum.y + point.y }), { x: 0, y: 0 });
-      target.fillStyle = textColor;
-      target.font = "600 20px sans-serif";
-      target.fillText(figure.name, center.x / projected.length + 8, center.y / projected.length);
+      drawShareSnapshotLabel(
+        target,
+        figure.name,
+        { x: center.x / projected.length, y: center.y / projected.length },
+        textColor,
+        surfaceColor,
+        palette,
+        { font: "600 18px system-ui, sans-serif", offsetX: 8, offsetY: 0 }
+      );
     }
   }
 
@@ -14454,35 +14625,69 @@ async function renderSelectedShareImage(points, lines, figures) {
     target.strokeStyle = normalizeGridAtlasLineColor(line.color) || palette.link;
     target.beginPath(); target.moveTo(a.x, a.y); target.lineTo(b.x, b.y); target.stroke();
     const result = analyzeOpenPath([{ a: endpoints.a, b: endpoints.b }]);
-    target.fillStyle = textColor;
-    target.font = "600 17px sans-serif";
-    target.fillText(`${endpoints.a.title} - ${endpoints.b.title}  ${formatDistance(distanceBetween(endpoints.a, endpoints.b))} / ${formatAngle(result.bearingDegrees)}`, (a.x + b.x) / 2 + 8, (a.y + b.y) / 2 - 8);
+    drawShareSnapshotLabel(
+      target,
+      `${endpoints.a.title} - ${endpoints.b.title}  ${formatDistance(distanceBetween(endpoints.a, endpoints.b))} / ${formatAngle(result.bearingDegrees)}`,
+      { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+      textColor,
+      surfaceColor,
+      palette,
+      { font: "600 16px system-ui, sans-serif", maxChars: 90, maxWidth: 620, offsetX: 8, offsetY: -8 }
+    );
   }
 
-  target.fillStyle = palette.pointFill;
-  target.strokeStyle = palette.pointBaseStroke;
-  target.lineWidth = 3;
-  for (const point of points) {
-    const screen = project(point.geo);
-    target.beginPath(); target.arc(screen.x, screen.y, 10, 0, Math.PI * 2); target.fill(); target.stroke();
-    target.fillStyle = textColor;
-    target.font = "700 19px sans-serif";
-    target.fillText(point.title || t("analysis.vertex"), screen.x + 15, screen.y - 12);
-    target.fillStyle = palette.pointFill;
+  const markers = new Map();
+  for (const vertex of snapshotVertices) {
+    const key = vertex.placeRef
+      ? `ref:${vertex.placeRef}`
+      : `geo:${vertex.geo.lat.toFixed(7)}:${vertex.geo.lng.toFixed(7)}`;
+    const label = String(vertex.title || vertex.name || "").trim();
+    const existing = markers.get(key);
+    if (!existing || vertex.markerKind === "point") {
+      markers.set(key, { ...vertex, label });
+    } else if (!existing.label && label) {
+      existing.label = label;
+    }
+  }
+  for (const marker of markers.values()) {
+    const screen = project(marker.geo);
+    const isPoint = marker.markerKind === "point";
+    target.save();
+    target.beginPath();
+    if (isPoint) {
+      target.arc(screen.x, screen.y, 10, 0, Math.PI * 2);
+    } else {
+      target.moveTo(screen.x, screen.y - 8);
+      target.lineTo(screen.x + 8, screen.y);
+      target.lineTo(screen.x, screen.y + 8);
+      target.lineTo(screen.x - 8, screen.y);
+      target.closePath();
+    }
+    target.fillStyle = isPoint ? palette.pointFill : surfaceColor;
+    target.fill();
+    target.strokeStyle = isPoint ? palette.pointBaseStroke : palette.link;
+    target.lineWidth = isPoint ? 3 : 2;
+    target.stroke();
+    target.restore();
+    drawShareSnapshotLabel(target, marker.label, screen, textColor, surfaceColor, palette, {
+      font: isPoint ? "700 18px system-ui, sans-serif" : "600 15px system-ui, sans-serif",
+      offsetX: isPoint ? 15 : 12,
+      offsetY: isPoint ? 0 : 4
+    });
   }
 
   const metrics = [];
   for (const figure of figures) {
     const result = analyzeSegmentShape(figureSegments(figure));
-    if (result?.valid) metrics.push(`${figure.name || t("analysis.figure")}: ${t("analysis.area")} ${formatAreaValue(result.area)} / ${t("analysis.perimeter")} ${formatDistance(result.perimeter)}`);
+    if (result?.valid) {
+      metrics.push(`${figure.name || t("analysis.figure")}: ${t("analysis.area")} ${formatAreaValue(result.area)} / ${t("analysis.perimeter")} ${formatDistance(result.perimeter)} / ${t("analysis.referenceScore")} ${Math.round(result.referenceScore)} / 100`);
+    }
   }
   target.fillStyle = textColor;
   target.font = "600 16px sans-serif";
   target.fillText(`${points.length}${t("label.points")}  ${lines.length}${t("label.links")}  ${figures.length}${t("analysis.figure")}`, 90, 555);
   metrics.slice(0, 2).forEach((metric, index) => target.fillText(metric, 90, 580 + index * 18));
-  target.textAlign = "right";
-  target.fillText("GRID ATLAS  #GRIDATLAS", 1110, 605);
-  target.textAlign = "left";
+  await drawShareSnapshotBrand(target, palette, textColor);
   return canvasToPngBlob(canvas);
 }
 
