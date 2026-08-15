@@ -115,7 +115,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1999";
+const WEB_VERSION = "0.2009";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -242,7 +242,6 @@ const elements = {
   traverseStockValue: document.querySelector("#traverseStockValue"),
   traverseInstalledValue: document.querySelector("#traverseInstalledValue"),
   traverseLocationValue: document.querySelector("#traverseLocationValue"),
-  traverseActionFeedback: document.querySelector("#traverseActionFeedback"),
   traverseQuantityDialog: document.querySelector("#traverseQuantityDialog"),
   traverseQuantityDialogTitle: document.querySelector("#traverseQuantityDialogTitle"),
   traverseQuantityDialogMessage: document.querySelector("#traverseQuantityDialogMessage"),
@@ -580,8 +579,6 @@ const state = {
   traverseQuantityMax: 1,
   guardianPlacementMode: false,
   guardianLabelInImage: BARRIER_CONFIG.guardianLabelInImage,
-  traverseFeedback: "",
-  traverseFeedbackExpiresAt: 0,
   traverseBusy: false,
   dragonEye: {
     active: false,
@@ -629,7 +626,6 @@ let pendingTextInputOptions = null;
 let pointSubmitInFlight = null;
 let activeStorageListDrag = null;
 let activePointIndexDrag = null;
-let traverseFeedbackTimerId = 0;
 let reopenTraverseActionMenuAfterStatus = false;
 let gridModePressTimerId = 0;
 let gridModePressPointerId = null;
@@ -1137,7 +1133,6 @@ const TRANSLATIONS = {
     "traverse.stockEmpty": "置ける結界石がありません",
     "traverse.noStone": "このタイルに結界石がありません",
     "traverse.stockLabel": "結界石 {amount} / {cap}",
-    "traverse.progress": "結界石を{action}ました",
     "traverse.place": "結界石を置く",
     "traverse.pick": "結界石を拾う",
     "traverse.placementView": "配置をみる",
@@ -1180,14 +1175,11 @@ const TRANSLATIONS = {
     "traverse.quantityMessage": "操作する個数を選んでください。",
     "traverse.quantityDecrease": "1個減らす",
     "traverse.quantityIncrease": "1個増やす",
-    "traverse.bulkDone": "結界石を{count}個{action}ました",
     "traverse.linkReady": "起点の結界石を長押ししてください",
     "traverse.linkOriginSelected": "起点を選択しました。次の結界石へドラッグしてください",
     "traverse.linkReturnHint": "起点に戻って指を離すと結界が完成します",
     "traverse.linkReturnRequired": "最後は起点に戻って指を離してください",
     "traverse.linkDwell": "次の結界石で少し待っています…",
-    "traverse.placeDone": "置き",
-    "traverse.pickDone": "拾い",
     "traverse.stockFull": "結界石ストックが満タンです",
     "traverse.capReached": "このタイルの結界石は上限です",
     "traverse.barrier": "結界",
@@ -1665,7 +1657,6 @@ const TRANSLATIONS = {
     "traverse.stockEmpty": "No barrier stones available to place",
     "traverse.noStone": "There is no barrier stone on this tile",
     "traverse.stockLabel": "Barrier stones {amount} / {cap}",
-    "traverse.progress": "Barrier stone {action}",
     "traverse.place": "Place barrier stone",
     "traverse.pick": "Pick up barrier stone",
     "traverse.placementView": "View placement",
@@ -1708,14 +1699,11 @@ const TRANSLATIONS = {
     "traverse.quantityMessage": "Choose how many stones to operate.",
     "traverse.quantityDecrease": "Decrease by one",
     "traverse.quantityIncrease": "Increase by one",
-    "traverse.bulkDone": "{count} barrier stone(s) {action}",
     "traverse.linkReady": "Long-press an origin barrier stone",
     "traverse.linkOriginSelected": "Origin selected. Drag to the next barrier stone",
     "traverse.linkReturnHint": "Return to the origin and release to complete the barrier",
     "traverse.linkReturnRequired": "Return to the origin before releasing",
     "traverse.linkDwell": "Holding on the next barrier stone…",
-    "traverse.placeDone": "placed",
-    "traverse.pickDone": "picked up",
     "traverse.stockFull": "Barrier stone stock is full",
     "traverse.capReached": "This tile has reached its barrier-stone cap",
     "traverse.barrier": "Barrier",
@@ -2039,12 +2027,12 @@ function closeTraverseQuantityDialog() {
 }
 
 function openTraverseQuantityDialog(action) {
-  if (!state.traverseMode || state.traverseBusy || !elements.traverseQuantityDialog) return;
+  if (!state.traverseMode || state.traverseBusy || !elements.traverseQuantityDialog) return false;
   const max = traverseQuantityLimit(action);
   if (max < 1) {
-    setTraverseFeedback(action === "place" ? t("traverse.stockEmpty") : t("traverse.noStone"));
+    showAppToast(action === "place" ? t("traverse.stockEmpty") : t("traverse.noStone"), { error: true });
     render();
-    return;
+    return false;
   }
   state.traverseQuantityAction = action;
   state.traverseQuantityMax = max;
@@ -2052,6 +2040,7 @@ function openTraverseQuantityDialog(action) {
   renderTraverseQuantityDialog();
   if (!elements.traverseQuantityDialog.open) elements.traverseQuantityDialog.showModal();
   elements.traverseQuantityIncreaseButton?.focus();
+  return true;
 }
 
 function adjustTraverseQuantity(delta) {
@@ -2291,15 +2280,15 @@ function commitDragonEye() {
   resetDragonEyeState();
   refreshVisiblePoints();
   persistWorkspace();
-  setTraverseFeedback(t("dragonEye.placed").replace("{count}", String(createdPoints.length)), 6000);
+  showAppToast(t("dragonEye.placed").replace("{count}", String(createdPoints.length)), { duration: 6000 });
   returnToTraverseActionMenu();
 }
 
 function beginBarrierLinking() {
-  if (!state.traverseMode || state.traverseBusy) return;
+  if (!state.traverseMode || state.traverseBusy) return false;
   if (availableBarrierStoneIds().length < 3) {
     showAppToast(t("barrier.tooFew"), { error: true });
-    return;
+    return false;
   }
   state.barrierLinkingMode = true;
   state.barrierLinkPath = [];
@@ -2309,6 +2298,7 @@ function beginBarrierLinking() {
   state.selectedBarrierId = null;
   showAppToast(t("traverse.linkReady"));
   render();
+  return true;
 }
 
 function applyTraverseModeToggle(enabled) {
@@ -2389,19 +2379,6 @@ async function requestTraverseModeToggle() {
   // touch browsers. Applying it again is intentional and idempotent: it
   // repairs the visible surface after the dialog has fully settled.
   applyTraverseModeToggle(nextMode);
-}
-
-function setTraverseFeedback(message, duration = 3500) {
-  state.traverseFeedback = message;
-  state.traverseFeedbackExpiresAt = Date.now() + duration;
-  if (traverseFeedbackTimerId) clearTimeout(traverseFeedbackTimerId);
-  traverseFeedbackTimerId = window.setTimeout(() => {
-    traverseFeedbackTimerId = 0;
-    state.traverseFeedback = "";
-    state.traverseFeedbackExpiresAt = 0;
-    if (elements.traverseActionDialog?.open) renderTraverseActionDialog();
-    render();
-  }, duration);
 }
 
 function loadPreferences() {
@@ -5339,16 +5316,11 @@ function renderTraverseActionButton() {
     : dragonEyeActive
       ? t("dragonEye.confirm")
       : t("traverse.menuTitle");
-  const feedbackActive = !state.barrierPlacementView
-    && state.traverseFeedback
-    && Date.now() < state.traverseFeedbackExpiresAt;
   elements.traverseActionLabel.textContent = buttonLabel;
   button.disabled = state.traverseBusy && !state.barrierPlacementView;
   button.classList.toggle("is-dragon-eye-active", dragonEyeActive);
   button.classList.toggle("is-placement-view-active", state.barrierPlacementView);
-  button.setAttribute("aria-label", feedbackActive && !dragonEyeActive
-    ? `${buttonLabel} ${state.traverseFeedback}`
-    : buttonLabel);
+  button.setAttribute("aria-label", buttonLabel);
   button.title = buttonLabel;
 }
 
@@ -5370,14 +5342,6 @@ function renderTraverseActionDialog() {
   if (elements.traverseInstalledValue) elements.traverseInstalledValue.textContent = String(installed);
   if (elements.traverseLocationValue) elements.traverseLocationValue.textContent = String(installedEntries.length);
   if (elements.traverseActionDialogTitle) elements.traverseActionDialogTitle.textContent = t("traverse.menuTitle");
-  const feedbackActive = Boolean(
-    state.traverseFeedback
-    && Date.now() < state.traverseFeedbackExpiresAt
-  );
-  if (elements.traverseActionFeedback) {
-    elements.traverseActionFeedback.hidden = !feedbackActive;
-    elements.traverseActionFeedback.textContent = feedbackActive ? state.traverseFeedback : "";
-  }
   if (elements.traversePlaceButton) {
     elements.traversePlaceButton.textContent = t("traverse.place");
     elements.traversePlaceButton.disabled = state.traverseBusy || traverseQuantityLimit("place") <= 0 || currentTileAtCap;
@@ -5481,14 +5445,14 @@ function exitBarrierPlacementView() {
 function performTraverseStoneAction(action, requestedQuantity = 1) {
   if (!state.traverseMode || state.traverseBusy || !state.traverseLog) return;
   if (!navigator.geolocation?.getCurrentPosition) {
-    setTraverseFeedback(t("traverse.gpsUnavailable"));
+    showAppToast(t("traverse.gpsUnavailable"), { error: true });
     returnToTraverseActionMenu();
     return;
   }
   refreshTraverseStock();
   const quantity = Math.max(1, Math.floor(Number(requestedQuantity) || 1));
   if (action === "place" && (state.traverseLog.stock?.amount ?? 0) <= 0) {
-    setTraverseFeedback(t("traverse.stockEmpty"));
+    showAppToast(t("traverse.stockEmpty"), { error: true });
     returnToTraverseActionMenu();
     return;
   }
@@ -5500,7 +5464,7 @@ function performTraverseStoneAction(action, requestedQuantity = 1) {
       const accuracy = Number(position.coords?.accuracy);
       if (!Number.isFinite(accuracy) || accuracy > BARRIER_CONFIG.accuracyThresholdMeters) {
         state.traverseBusy = false;
-        setTraverseFeedback(t("traverse.accuracyError"));
+        showAppToast(t("traverse.accuracyError"), { error: true });
         returnToTraverseActionMenu();
         return;
       }
@@ -5513,15 +5477,13 @@ function performTraverseStoneAction(action, requestedQuantity = 1) {
       const tileId = tileIdFromGeo(geo);
       if (!tileId) {
         state.traverseBusy = false;
-        setTraverseFeedback(t("traverse.gpsUnavailable"));
+        showAppToast(t("traverse.gpsUnavailable"), { error: true });
         returnToTraverseActionMenu();
         return;
       }
 
       const stoneId = stoneIdFromTile(tileId);
       let stone = stoneId ? state.traverseLog.stones[stoneId] : null;
-      let processed = 0;
-      let feedbackAction;
       if (action === "place") {
         const stoneCap = stoneCapFor(state.traverseLog, stoneId, currentKekkaishiRankInfo().rank.index);
         const limit = actionQuantityLimit("place", {
@@ -5531,7 +5493,7 @@ function performTraverseStoneAction(action, requestedQuantity = 1) {
         });
         if (limit <= 0) {
           state.traverseBusy = false;
-          setTraverseFeedback(t("traverse.capReached"));
+          showAppToast(t("traverse.capReached"), { error: true });
           returnToTraverseActionMenu();
           return;
         }
@@ -5563,9 +5525,7 @@ function performTraverseStoneAction(action, requestedQuantity = 1) {
             amount: 1,
             countExact: nextStone.countExact
           });
-          processed += 1;
         }
-        feedbackAction = t("traverse.placeDone");
       } else {
           const limit = actionQuantityLimit("pick", {
           amount: state.traverseLog.stock.amount,
@@ -5574,7 +5534,7 @@ function performTraverseStoneAction(action, requestedQuantity = 1) {
         });
         if (limit <= 0) {
           state.traverseBusy = false;
-          setTraverseFeedback(stone ? t("traverse.stockFull") : t("traverse.noStone"));
+          showAppToast(stone ? t("traverse.stockFull") : t("traverse.noStone"), { error: true });
           returnToTraverseActionMenu();
           return;
         }
@@ -5598,25 +5558,19 @@ function performTraverseStoneAction(action, requestedQuantity = 1) {
             amount: 1,
             countExact: stone.countExact
           });
-          processed += 1;
           if (stone.countExact <= 0) break;
         }
-        feedbackAction = t("traverse.pickDone");
       }
       state.currentGeo = geo;
       state.lastLocationUpdateAt = Date.now();
       state.lastLocationError = null;
       persistTraverseLog();
       state.traverseBusy = false;
-      const completionMessage = t("traverse.bulkDone")
-        .replace("{count}", String(processed))
-        .replace("{action}", feedbackAction);
-      setTraverseFeedback(completionMessage);
       returnToTraverseActionMenu();
     },
     () => {
       state.traverseBusy = false;
-      setTraverseFeedback(t("traverse.gpsUnavailable"));
+      showAppToast(t("traverse.gpsUnavailable"), { error: true });
       returnToTraverseActionMenu();
     },
     geolocationOptions()
@@ -13888,12 +13842,12 @@ function requestTextInput(options = {}) {
 function showAppToast(message, options = {}) {
   if (!elements.appToast || !message) return;
   window.clearTimeout(appToastTimerId);
-  elements.appToast.value = message;
-  elements.appToast.hidden = false;
+  elements.appToast.textContent = message;
   elements.appToast.classList.toggle("is-error", options.error === true);
+  if (!elements.appToast.open) elements.appToast.show();
   appToastTimerId = window.setTimeout(() => {
-    elements.appToast.hidden = true;
-    elements.appToast.value = "";
+    if (elements.appToast.open) elements.appToast.close();
+    elements.appToast.textContent = "";
   }, options.duration ?? 4200);
 }
 
@@ -15035,17 +14989,14 @@ function bindEvents() {
   elements.traverseActionButton.addEventListener("contextmenu", (event) => event.preventDefault());
   elements.traverseActionButton.addEventListener("click", handleTraverseActionClick);
   elements.traversePlaceButton.addEventListener("click", () => {
-    closeTraverseActionDialog();
-    openTraverseQuantityDialog("place");
+    if (openTraverseQuantityDialog("place")) closeTraverseActionDialog();
   });
   elements.traversePickButton.addEventListener("click", () => {
-    closeTraverseActionDialog();
-    openTraverseQuantityDialog("pick");
+    if (openTraverseQuantityDialog("pick")) closeTraverseActionDialog();
   });
   elements.traversePlacementViewButton?.addEventListener("click", enterBarrierPlacementView);
   elements.traverseCreateBarrierButton.addEventListener("click", () => {
-    closeTraverseActionDialog();
-    beginBarrierLinking();
+    if (beginBarrierLinking()) closeTraverseActionDialog();
   });
   elements.traverseDragonEyeButton?.addEventListener("click", () => {
     openDragonEyeDialog();

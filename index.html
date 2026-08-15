@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=73">
-    <script src="src/main.js?v=434" type="module" defer></script>
+    <script src="src/main.js?v=435" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -524,14 +524,13 @@
             <div><span data-i18n="traverse.locationsShort">箇所</span><strong id="traverseLocationValue">0</strong></div>
           </div>
         </section>
-        <output id="traverseActionFeedback" class="traverse-action-feedback" role="status" aria-live="polite" hidden></output>
-          <div class="traverse-action-dialog-actions">
-            <button id="traversePlaceButton" class="primary-button" type="button" data-i18n="traverse.place">置く</button>
-            <button id="traversePickButton" type="button" data-i18n="traverse.pick">拾う</button>
-            <button id="traversePlacementViewButton" type="button" data-i18n="traverse.placementView">配置をみる</button>
-            <button id="traverseCreateBarrierButton" type="button" data-i18n="traverse.connect">結界を結ぶ</button>
-            <button id="traverseDragonEyeButton" type="button" data-i18n="dragonEye.open">龍脈眼</button>
-            <button id="traverseStatusButton" type="button" data-i18n="traverse.status">ステータス確認</button>
+        <div class="traverse-action-dialog-actions">
+          <button id="traversePlaceButton" class="primary-button" type="button" data-i18n="traverse.place">置く</button>
+          <button id="traversePickButton" type="button" data-i18n="traverse.pick">拾う</button>
+          <button id="traversePlacementViewButton" type="button" data-i18n="traverse.placementView">配置をみる</button>
+          <button id="traverseCreateBarrierButton" type="button" data-i18n="traverse.connect">結界を結ぶ</button>
+          <button id="traverseDragonEyeButton" type="button" data-i18n="dragonEye.open">龍脈眼</button>
+          <button id="traverseStatusButton" type="button" data-i18n="traverse.status">ステータス確認</button>
         </div>
       </form>
     </dialog>
@@ -914,7 +913,7 @@
       <strong id="cloudProgressTitle"></strong>
       <span id="cloudProgressPattern" class="cloud-progress-pattern" aria-label="進捗"></span>
     </div>
-    <output id="appToast" class="app-toast" role="status" aria-live="polite" hidden></output>
+    <dialog id="appToast" class="app-toast" role="status" aria-live="polite" aria-atomic="true"></dialog>
     <div id="gridAtlasDropOverlay" class="gridatlas-drop-overlay" aria-hidden="true">
       <div class="gridatlas-drop-card" role="status" aria-live="polite">
         <span class="gridatlas-drop-icon" aria-hidden="true"><svg class="ui-icon" aria-hidden="true"><use href="#icon-drop"></use></svg></span>

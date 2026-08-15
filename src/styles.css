@@ -1375,23 +1375,6 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
   letter-spacing: 0.05em;
 }
 
-.traverse-action-feedback {
-  display: block;
-  padding: 10px 12px;
-  border: 1px solid var(--accent);
-  border-radius: 8px;
-  background: var(--surface-strong);
-  color: var(--accent-strong);
-  font-size: 12px;
-  font-weight: 900;
-  line-height: 1.5;
-  text-align: center;
-}
-
-.traverse-action-feedback[hidden] {
-  display: none;
-}
-
 .traverse-stone-status-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3962,9 +3945,12 @@ textarea {
   position: fixed;
   z-index: 3000;
   left: 50%;
+  top: auto;
+  right: auto;
   bottom: max(22px, env(safe-area-inset-bottom));
   width: max-content;
   max-width: min(520px, calc(100vw - 24px));
+  margin: 0;
   transform: translateX(-50%);
   padding: 11px 14px;
   border: 1px solid var(--accent);
@@ -3979,13 +3965,13 @@ textarea {
   pointer-events: none;
 }
 
+.app-toast:not([open]) {
+  display: none;
+}
+
 .app-toast.is-error {
   border-color: var(--danger);
   color: var(--danger);
-}
-
-.app-toast[hidden] {
-  display: none;
 }
 
 @media (max-width: 760px) {
