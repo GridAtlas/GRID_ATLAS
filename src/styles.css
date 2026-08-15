@@ -1287,6 +1287,9 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
 }
 
 .dragon-eye-shape-secret {
+  position: absolute;
+  top: 50%;
+  left: 50%;
   display: none;
   place-items: center;
   width: 42px;
@@ -1296,6 +1299,7 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
   font-size: 26px;
   font-weight: 800;
   line-height: 1;
+  transform: translate(-50%, -50%);
 }
 
 .dragon-eye-shape-option.is-locked .dragon-eye-shape-preview svg {
@@ -1307,6 +1311,7 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
 }
 
 .dragon-eye-shape-option > small {
+  display: none;
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
@@ -3230,6 +3235,12 @@ textarea {
 .point-transfer-destination-button:hover {
   border-color: var(--accent);
   background: var(--active-bg);
+}
+
+.point-transfer-destination-button.is-selected {
+  border-color: var(--accent-strong);
+  background: var(--active-bg);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .point-transfer-destination-name {

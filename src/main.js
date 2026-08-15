@@ -115,7 +115,7 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.1987";
+const WEB_VERSION = "0.1999";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -148,9 +148,6 @@ const RANGE_SELECTION_LONG_PRESS_MS = 450;
 const LINE_DRAG_LONG_PRESS_MS = 400;
 const LINE_INFO_LONG_PRESS_MS = 1000;
 const RANGE_SELECTION_MIN_SIZE = 8;
-const ZOOM_STAGE_NAMES = ["全体", "広域", "近景", "接近", "詳細", "超詳細", "精密", "最大"];
-const ZOOM_STAGE_FACTOR = 1.8;
-const ZOOM_STAGE_COUNT = ZOOM_STAGE_NAMES.length;
 const CURRENT_LOCATION_ID = "__current_location__";
 const LOADED_OBSERVATION_PREFIX = "__loaded_observation__";
 const DEFAULT_POINT_LIST_ID = "local";
@@ -195,6 +192,7 @@ const elements = {
   storageTransferDialog: document.querySelector("#storageTransferDialog"),
   storageTransferDialogTitle: document.querySelector("#storageTransferDialogTitle"),
   storageTransferDialogHint: document.querySelector("#storageTransferDialogHint"),
+  storageTransferDestinationList: document.querySelector("#storageTransferDestinationList"),
   storageTransferMoveButton: document.querySelector("#storageTransferMoveButton"),
   storageTransferCopyButton: document.querySelector("#storageTransferCopyButton"),
   storageTransferCancelButton: document.querySelector("#storageTransferCancelButton"),
@@ -620,7 +618,6 @@ const state = {
     y: DEFAULT_CENTER.y,
     scale: 0.7
   },
-  zoomStage: 0,
   pointer: createPointerGestureState()
 };
 
@@ -1047,6 +1044,11 @@ const TRANSLATIONS = {
     "storage.dragMoveDevice": "端末へ移動",
     "storage.transferTitle": "リストの移動／コピー",
     "storage.transferHint": "「{name}」を{target}へ移動またはコピーします。",
+    "storage.transferDestinationLabel": "コピー／移動先のリスト枠",
+    "storage.transferSelectTarget": "「{name}」のコピー／移動先のリスト枠を選択してください。",
+    "storage.transferTargetSelected": "「{target}」を選択中です。移動またはコピーを押してください。",
+    "storage.transferNoTarget": "コピー／移動できるリスト枠がありません。",
+    "storage.transferFrameCount": "{count}リスト",
     "storage.transferMove": "移動",
     "storage.transferCopy": "コピー",
     "storage.dragImportedDestination": "インポートリストはコピー先・移動先にできません。",
@@ -1079,6 +1081,7 @@ const TRANSLATIONS = {
     "list.edit": "編集",
     "list.rename": "リスト名を変更",
     "list.renamePrompt": "新しいリスト名",
+    "list.transfer": "リストをコピー／移動",
     "list.setHome": "地点登録先に設定",
     "list.unsetHome": "地点登録先の設定を解除",
     "list.destinationLocked": "地点登録先に設定されています",
@@ -1110,7 +1113,6 @@ const TRANSLATIONS = {
 
     "list.none": "リストなし",
     "status.grid": "格子",
-    "status.zoom": "ズーム",
     "status.rangeSelect": "範囲選択中",
     "label.points": "点",
     "label.links": "線",
@@ -1570,6 +1572,11 @@ const TRANSLATIONS = {
     "storage.dragMoveDevice": "Move to device",
     "storage.transferTitle": "List transfer",
     "storage.transferHint": "Move or copy “{name}” to {target}.",
+    "storage.transferDestinationLabel": "List section for copy or move",
+    "storage.transferSelectTarget": "Choose a list section for copying or moving “{name}”.",
+    "storage.transferTargetSelected": "“{target}” is selected. Press Move or Copy to continue.",
+    "storage.transferNoTarget": "There are no list sections available for copying or moving.",
+    "storage.transferFrameCount": "{count} list(s)",
     "storage.transferMove": "Move",
     "storage.transferCopy": "Copy",
     "storage.dragImportedDestination": "Imported Lists cannot be a copy or move destination.",
@@ -1602,6 +1609,7 @@ const TRANSLATIONS = {
     "list.edit": "Edit",
     "list.rename": "Rename list",
     "list.renamePrompt": "New list name",
+    "list.transfer": "Copy or move list",
     "list.setHome": "Set as point registration destination",
     "list.unsetHome": "Unset point registration destination",
     "list.destinationLocked": "This list is set as the point registration destination",
@@ -1633,7 +1641,6 @@ const TRANSLATIONS = {
 
     "list.none": "No lists",
     "status.grid": "Grid",
-    "status.zoom": "Zoom",
     "status.rangeSelect": "Selecting range",
     "label.points": "pts",
     "label.links": "lines",
@@ -2148,9 +2155,7 @@ function renderDragonEyeShapeOptions() {
     option.classList.toggle("is-locked", !available);
     option.setAttribute("aria-label", available ? label : t("dragonEye.secret"));
     if (labelNode) labelNode.textContent = available ? label : "";
-    option.title = available
-      ? label
-      : "";
+    option.title = "";
   });
 }
 
@@ -2211,7 +2216,6 @@ function beginDragonEye(shape) {
   const maxRadius = dragonEyeMaxRadius(definition, rankInfo.sightRadiusKm);
   const minRadius = Math.min(maxRadius, 24 / Math.max(0.01, state.viewport.scale));
   state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
-  state.zoomStage = null;
   state.dragonEye = {
     active: true,
     shape,
@@ -5424,7 +5428,6 @@ function returnToTraverseActionMenu() {
 function fitBarrierPlacementView() {
   syncCanvasSize();
   pauseLocationFollowForManualView();
-  state.zoomStage = null;
   const geos = Object.values(state.traverseLog?.stones || {})
     .filter((stone) => stoneDisplayCount(stone) > 0)
     .map((stone) => tileCenterGeo(stone.tile))
@@ -5643,6 +5646,9 @@ function renderActionButtons() {
   const visiblePointCount = new Set(visibleSelectablePoints().map((point) => point.id)).size;
   const displayableListEntries = storageListEntries().filter((entry) => entry.local || entry.preview || entry.cloud);
   const visibleListCount = displayableListEntries.filter((entry) => storageListIsVisible(entry)).length;
+  const clearableVisibleListCount = displayableListEntries.filter((entry) => (
+    storageListIsVisible(entry) && !storageListIsPointRegistrationDestination(entry)
+  )).length;
   const hiddenListCount = displayableListEntries.length - visibleListCount;
   const canInvertSelection = !state.editingPointId
     && !hasPendingPoint
@@ -5683,7 +5689,7 @@ function renderActionButtons() {
     button.disabled = hiddenListCount === 0;
   }
   for (const button of elements.clearAllListButtons) {
-    button.disabled = visibleListCount === 0;
+    button.disabled = clearableVisibleListCount === 0;
   }
   elements.actionMapButton.title = mapCandidate?.isPending
     ? "仮ポイントを地図で開く"
@@ -7860,6 +7866,11 @@ function storageListIsVisible(entry) {
     : cloudListVisible(entry?.cloud?.id);
 }
 
+function storageListIsPointRegistrationDestination(entry) {
+  const destinationList = entry?.local ?? entry?.preview;
+  return Boolean(destinationList && pointListStorageKey(destinationList) === state.activePointListId);
+}
+
 function storageListIsFavorite(storageId) {
   return typeof storageId === "string" && state.favoriteListIds.has(storageId);
 }
@@ -7882,8 +7893,7 @@ function setupStorageListVisibility(row, entry) {
 
   const toggleVisibility = () => {
     const currentEntry = findStorageListEntry(entry.storageId) ?? entry;
-    const destinationList = currentEntry.local ?? currentEntry.preview;
-    if (destinationList && pointListStorageKey(destinationList) === state.activePointListId) {
+    if (storageListIsPointRegistrationDestination(currentEntry)) {
       setCloudStatus(t("list.destinationLocked"), { error: true });
       return;
     }
@@ -8047,32 +8057,108 @@ function storageListTransferReason(sourceEntry, targetSection) {
   return "";
 }
 
-function openStorageTransferDialog(storageId, targetSection) {
-  const targetKeys = {
-    mineDevice: "storage.targetMineDevice",
-    mineCloud: "storage.targetMineCloud",
-    testerShared: "storage.targetTesterShared"
-  };
-  if (!Object.hasOwn(targetKeys, targetSection)) {
-    showAppToast(cloudText("移動先を確認できません。", "The transfer destination is unavailable."), { error: true });
-    return;
+const STORAGE_TRANSFER_TARGETS = Object.freeze([
+  { key: "mineDevice", label: "storage.targetMineDevice" },
+  { key: "mineCloud", label: "storage.targetMineCloud" },
+  { key: "testerShared", label: "storage.targetTesterShared" }
+]);
+
+function storageTransferTargetSections(sourceEntry) {
+  if (!sourceEntry) return [];
+  const sourceSection = storageListSectionKey(sourceEntry);
+  return STORAGE_TRANSFER_TARGETS.filter((target) => (
+    target.key !== sourceSection && !storageListTransferReason(sourceEntry, target.key)
+  ));
+}
+
+function storageTransferTargetListCount(targetSection) {
+  return storageListEntries().filter((entry) => storageListSectionKey(entry) === targetSection).length;
+}
+
+function renderStorageTransferDialog() {
+  const pending = state.pendingStorageTransfer;
+  const entry = pending ? findStorageListEntry(pending.storageId) : null;
+  const name = entry?.local?.name || entry?.cloud?.name || "地点リスト";
+  const target = STORAGE_TRANSFER_TARGETS.find((item) => item.key === pending?.targetSection) || null;
+  const targets = storageTransferTargetSections(entry);
+  const selectedTarget = target && targets.some((item) => item.key === target.key) ? target : null;
+
+  if (pending && pending.targetSection && !selectedTarget) {
+    pending.targetSection = "";
   }
+
+  elements.storageTransferDialogTitle.textContent = t("storage.transferTitle");
+  elements.storageTransferDestinationList.setAttribute("aria-label", t("storage.transferDestinationLabel"));
+  elements.storageTransferDialogHint.textContent = !entry
+    ? ""
+    : selectedTarget
+      ? t("storage.transferTargetSelected").replace("{target}", t(selectedTarget.label))
+      : t("storage.transferSelectTarget").replace("{name}", name);
+  elements.storageTransferDestinationList.replaceChildren();
+
+  if (entry && targets.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "point-transfer-dialog-empty";
+    empty.textContent = t("storage.transferNoTarget");
+    elements.storageTransferDestinationList.append(empty);
+  }
+
+  for (const item of targets) {
+    const button = document.createElement("button");
+    const itemLabel = t(item.label);
+    const count = storageTransferTargetListCount(item.key);
+    const isSelected = selectedTarget?.key === item.key;
+    button.type = "button";
+    button.className = "point-transfer-destination-button storage-transfer-destination-button";
+    button.classList.toggle("is-selected", isSelected);
+    button.dataset.storageTransferTarget = item.key;
+    button.setAttribute("role", "option");
+    button.setAttribute("aria-selected", String(isSelected));
+    button.setAttribute("aria-label", `${itemLabel} ${t("storage.transferFrameCount").replace("{count}", String(count))}`);
+    button.disabled = state.cloud.busy;
+
+    const label = document.createElement("span");
+    label.className = "point-transfer-destination-name";
+    label.textContent = itemLabel;
+    const countLabel = document.createElement("span");
+    countLabel.className = "point-transfer-destination-count";
+    countLabel.textContent = t("storage.transferFrameCount").replace("{count}", String(count));
+    button.append(label, countLabel);
+    button.addEventListener("click", () => {
+      if (!state.pendingStorageTransfer) return;
+      state.pendingStorageTransfer.targetSection = item.key;
+      renderStorageTransferDialog();
+      elements.storageTransferDestinationList.querySelector(`[data-storage-transfer-target="${item.key}"]`)?.focus();
+    });
+    elements.storageTransferDestinationList.append(button);
+  }
+
+  elements.storageTransferMoveButton.textContent = t("storage.transferMove");
+  elements.storageTransferCopyButton.textContent = t("storage.transferCopy");
+  elements.storageTransferCancelButton.textContent = t("action.cancel");
+  const canExecute = Boolean(pending && entry && selectedTarget && !state.cloud.busy);
+  elements.storageTransferMoveButton.disabled = !canExecute;
+  elements.storageTransferCopyButton.disabled = !canExecute;
+}
+
+function openStorageTransferDialog(storageId, targetSection = "") {
   const entry = findStorageListEntry(storageId);
   if (!entry) {
     showAppToast(cloudText("移動元のリストを確認できません。", "The source list is unavailable."), { error: true });
     return;
   }
+  if (targetSection && !STORAGE_TRANSFER_TARGETS.some((target) => target.key === targetSection)) {
+    showAppToast(cloudText("移動先を確認できません。", "The transfer destination is unavailable."), { error: true });
+    return;
+  }
   state.pendingStorageTransfer = { storageId, targetSection };
-  const targetLabel = t(targetKeys[targetSection]);
-  const name = entry.local?.name || entry.cloud?.name || "地点リスト";
-  elements.storageTransferDialogTitle.textContent = t("storage.transferTitle");
-  elements.storageTransferDialogHint.textContent = t("storage.transferHint")
-    .replace("{name}", name)
-    .replace("{target}", targetLabel);
-  elements.storageTransferMoveButton.textContent = t("storage.transferMove");
-  elements.storageTransferCopyButton.textContent = t("storage.transferCopy");
-  elements.storageTransferCancelButton.textContent = t("action.cancel");
+  renderStorageTransferDialog();
   if (!elements.storageTransferDialog.open) elements.storageTransferDialog.showModal();
+  requestAnimationFrame(() => {
+    const selected = elements.storageTransferDestinationList.querySelector(".is-selected");
+    const first = elements.storageTransferDestinationList.querySelector("button:not(:disabled)");
+    (selected || first || elements.storageTransferCancelButton)?.focus();
+  });
 }
 
 function closeStorageTransferDialog() {
@@ -8082,6 +8168,10 @@ function closeStorageTransferDialog() {
 
 async function executeStorageListTransfer(mode) {
   const pending = state.pendingStorageTransfer;
+  if (!pending?.targetSection) {
+    renderStorageTransferDialog();
+    return;
+  }
   closeStorageTransferDialog();
   if (!pending) return;
   const entry = findStorageListEntry(pending.storageId);
@@ -8669,9 +8759,15 @@ function createStorageListRow(entry) {
     return button;
   };
 
-  addEditAction("edit", t("list.rename"), {
+addEditAction("edit", t("list.rename"), {
     disabled: state.cloud.busy || !(entry.local?.editable || entry.preview?.editable),
     onClick: () => void renameStorageList(entry.storageId)
+  });
+
+  addEditAction("copy", t("list.transfer"), {
+    disabled: state.cloud.busy,
+    title: t("list.transfer"),
+    onClick: () => openStorageTransferDialog(entry.storageId)
   });
 
   const destinationList = entry.local ?? (isMyCloudStorageEntry(entry) ? entry.preview : null);
@@ -8815,6 +8911,7 @@ function renderStorageLists() {
     }
   }
 
+  renderStorageTransferDialog();
   renderPointTransferDialog();
 
   renderCloudLastFetched();
@@ -9639,7 +9736,7 @@ async function moveListToCloud(storageId, options = {}) {
   let cloudDeleteFailed = false;
   try {
     const client = cloudClientFromInputs();
-    await client.createList(payload, { scope: targetScope });
+    const created = await client.createList(payload, { scope: targetScope });
     if (cloudList.points.some((point) => point.photoAssetId || point.photo || point.cloudPhoto)) {
       const photoPayload = await cloudPayloadWithPhotos(cloudList, targetCloudId, client);
       await client.updateList(targetCloudId, created?.revision || 1, photoPayload);
@@ -10529,6 +10626,8 @@ function setAllStorageListsVisible(visible) {
   let changed = false;
 
   for (const entry of entries) {
+    if (!visible && storageListIsPointRegistrationDestination(entry)) continue;
+
     if (entry.local && entry.local.visible !== visible) {
       entry.local.visible = visible;
       entry.local.updatedAt = new Date().toISOString();
@@ -11746,27 +11845,6 @@ function sumDistances(distances) {
 }
 function zoomAt(screenPoint, factor) {
   state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
-  state.zoomStage = null;
-  const before = screenToWorld(screenPoint);
-  state.viewport.scale = clampScale(state.viewport.scale * factor);
-  const after = screenToWorld(screenPoint);
-  state.viewport.x += before.x - after.x;
-  state.viewport.y += before.y - after.y;
-  render();
-}
-
-function zoomAtStage(screenPoint, direction) {
-  const currentStage = Number.isInteger(state.zoomStage)
-    ? state.zoomStage
-    : direction > 0 ? 0 : 1;
-  const nextStage = Math.max(0, Math.min(ZOOM_STAGE_COUNT - 1, currentStage + direction));
-  if (nextStage === currentStage) {
-    return;
-  }
-
-  const factor = direction > 0 ? ZOOM_STAGE_FACTOR : 1 / ZOOM_STAGE_FACTOR;
-  state.zoomStage = nextStage;
-  state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
   const before = screenToWorld(screenPoint);
   state.viewport.scale = clampScale(state.viewport.scale * factor);
   const after = screenToWorld(screenPoint);
@@ -11778,7 +11856,6 @@ function zoomAtStage(screenPoint, direction) {
 function fitToPoints(fitPointsOverride = null) {
   syncCanvasSize();
   pauseLocationFollowForManualView();
-  state.zoomStage = 0;
 
   const overridePoints = Array.isArray(fitPointsOverride) ? fitPointsOverride.filter(Boolean) : null;
   let fitPoints = overridePoints ?? fitTargetPoints();
@@ -12349,7 +12426,6 @@ function updatePinchGesture() {
   const size = canvasSize();
   const nextScale = clampScale(pinch.startScale * (distance / pinch.startDistance));
   state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
-  state.zoomStage = null;
   state.viewport.scale = nextScale;
   state.viewport.x = pinch.startWorld.x - (pinch.startMidpoint.x - size.width / 2) / nextScale;
   state.viewport.y = pinch.startWorld.y + (pinch.startMidpoint.y - size.height / 2) / nextScale;
@@ -15003,8 +15079,8 @@ function bindEvents() {
       returnToTraverseActionMenu();
     }
   });
-  elements.zoomInButton.addEventListener("click", () => zoomAtStage({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 1));
-  elements.zoomOutButton.addEventListener("click", () => zoomAtStage({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, -1));
+  elements.zoomInButton.addEventListener("click", () => zoomAt({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 1.25));
+  elements.zoomOutButton.addEventListener("click", () => zoomAt({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 0.8));
   elements.fitButton.addEventListener("click", () => {
     if (state.barrierPlacementView) {
       fitBarrierPlacementView();

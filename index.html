@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=73">
-    <script src="src/main.js?v=431" type="module" defer></script>
+    <script src="src/main.js?v=434" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -544,15 +544,15 @@
         <p class="dragon-eye-dialog-message" data-i18n="dragonEye.message">形を選ぶとグリッド上で移動・拡縮できます。</p>
         <p id="dragonEyeAvailability" class="dragon-eye-availability" aria-live="polite"></p>
         <div id="dragonEyeShapeOptions" class="dragon-eye-shape-options" role="listbox" aria-label="龍脈眼の形">
-          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="triangle" aria-label="正三角形"><span class="dragon-eye-shape-preview" aria-hidden="true"><svg viewBox="0 0 100 100"><polygon points="50,10 91,84 9,84"></polygon><span class="dragon-eye-shape-secret">?</span></span><small data-dragon-eye-label>正三角形</small></button>
-          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="square" aria-label="正方形"><span class="dragon-eye-shape-preview" aria-hidden="true"><svg viewBox="0 0 100 100"><polygon points="17,17 83,17 83,83 17,83"></polygon><span class="dragon-eye-shape-secret">?</span></span><small data-dragon-eye-label>正方形</small></button>
-          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="diamond" aria-label="ひし形"><span class="dragon-eye-shape-preview" aria-hidden="true"><svg viewBox="0 0 100 100"><polygon points="50,10 90,50 50,90 10,50"></polygon><span class="dragon-eye-shape-secret">?</span></span><small data-dragon-eye-label>ひし形</small></button>
-          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="pentagon" aria-label="正五角形"><span class="dragon-eye-shape-preview" aria-hidden="true"><svg viewBox="0 0 100 100"><polygon points="50,9 89,38 74,86 26,86 11,38"></polygon><span class="dragon-eye-shape-secret">?</span></span><small data-dragon-eye-label>正五角形</small></button>
-          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="hexagon" aria-label="正六角形"><span class="dragon-eye-shape-preview" aria-hidden="true"><svg viewBox="0 0 100 100"><polygon points="50,9 86,30 86,70 50,91 14,70 14,30"></polygon><span class="dragon-eye-shape-secret">?</span></span><small data-dragon-eye-label>正六角形</small></button>
-          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="heptagon" aria-label="正七角形"><span class="dragon-eye-shape-preview" aria-hidden="true"><svg viewBox="0 0 100 100"><polygon points="50,8 89,30 80,76 50,92 20,76 11,30"></polygon><span class="dragon-eye-shape-secret">?</span></span><small data-dragon-eye-label>正七角形</small></button>
-          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="octagon" aria-label="正八角形"><span class="dragon-eye-shape-preview" aria-hidden="true"><svg viewBox="0 0 100 100"><polygon points="30,10 70,10 90,30 90,70 70,90 30,90 10,70 10,30"></polygon><span class="dragon-eye-shape-secret">?</span></span><small data-dragon-eye-label>正八角形</small></button>
-          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="pentagram" aria-label="五芒星"><span class="dragon-eye-shape-preview" aria-hidden="true"><svg viewBox="0 0 100 100"><polygon points="50,8 60,36 90,36 66,53 76,83 50,64 24,83 34,53 10,36 40,36"></polygon><span class="dragon-eye-shape-secret">?</span></span><small data-dragon-eye-label>五芒星</small></button>
-          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="octagram" aria-label="八芒星"><span class="dragon-eye-shape-preview" aria-hidden="true"><svg viewBox="0 0 100 100"><polygon points="50,7 58,31 72,13 68,38 93,31 71,50 93,69 68,62 72,87 58,69 50,93 42,69 28,87 32,62 7,69 29,50 7,31 32,38 28,13 42,31"></polygon><span class="dragon-eye-shape-secret">?</span></span><small data-dragon-eye-label>八芒星</small></button>
+          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="triangle" aria-label="正三角形"><span class="dragon-eye-shape-preview" aria-hidden="true"><svg viewBox="0 0 100 100"><polygon points="50,10 91,84 9,84"></polygon></svg><span class="dragon-eye-shape-secret">?</span></span><small data-dragon-eye-label>正三角形</small></button>
+          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="square" aria-label="正方形"><span class="dragon-eye-shape-preview" aria-hidden="true"><svg viewBox="0 0 100 100"><polygon points="17,17 83,17 83,83 17,83"></polygon></svg><span class="dragon-eye-shape-secret">?</span></span><small data-dragon-eye-label>正方形</small></button>
+          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="diamond" aria-label="ひし形"><span class="dragon-eye-shape-preview" aria-hidden="true"><svg viewBox="0 0 100 100"><polygon points="50,10 90,50 50,90 10,50"></polygon></svg><span class="dragon-eye-shape-secret">?</span></span><small data-dragon-eye-label>ひし形</small></button>
+          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="pentagon" aria-label="正五角形"><span class="dragon-eye-shape-preview" aria-hidden="true"><svg viewBox="0 0 100 100"><polygon points="50,9 89,38 74,86 26,86 11,38"></polygon></svg><span class="dragon-eye-shape-secret">?</span></span><small data-dragon-eye-label>正五角形</small></button>
+          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="hexagon" aria-label="正六角形"><span class="dragon-eye-shape-preview" aria-hidden="true"><svg viewBox="0 0 100 100"><polygon points="50,9 86,30 86,70 50,91 14,70 14,30"></polygon></svg><span class="dragon-eye-shape-secret">?</span></span><small data-dragon-eye-label>正六角形</small></button>
+          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="heptagon" aria-label="正七角形"><span class="dragon-eye-shape-preview" aria-hidden="true"><svg viewBox="0 0 100 100"><polygon points="50,8 89,30 80,76 50,92 20,76 11,30"></polygon></svg><span class="dragon-eye-shape-secret">?</span></span><small data-dragon-eye-label>正七角形</small></button>
+          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="octagon" aria-label="正八角形"><span class="dragon-eye-shape-preview" aria-hidden="true"><svg viewBox="0 0 100 100"><polygon points="30,10 70,10 90,30 90,70 70,90 30,90 10,70 10,30"></polygon></svg><span class="dragon-eye-shape-secret">?</span></span><small data-dragon-eye-label>正八角形</small></button>
+          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="pentagram" aria-label="五芒星"><span class="dragon-eye-shape-preview" aria-hidden="true"><svg viewBox="0 0 100 100"><polygon points="50,8 60,36 90,36 66,53 76,83 50,64 24,83 34,53 10,36 40,36"></polygon></svg><span class="dragon-eye-shape-secret">?</span></span><small data-dragon-eye-label>五芒星</small></button>
+          <button class="dragon-eye-shape-option" type="button" data-dragon-eye-shape="octagram" aria-label="八芒星"><span class="dragon-eye-shape-preview" aria-hidden="true"><svg viewBox="0 0 100 100"><polygon points="50,7 58,31 72,13 68,38 93,31 71,50 93,69 68,62 72,87 58,69 50,93 42,69 28,87 32,62 7,69 29,50 7,31 32,38 28,13 42,31"></polygon></svg><span class="dragon-eye-shape-secret">?</span></span><small data-dragon-eye-label>八芒星</small></button>
         </div>
       </form>
     </dialog>
@@ -849,9 +849,10 @@
             <p id="storageTransferDialogHint" class="point-transfer-dialog-hint">このリストを移動またはコピーします。</p>
           </div>
         </div>
+        <div id="storageTransferDestinationList" class="point-transfer-destination-list storage-transfer-destination-list" role="listbox" aria-label="コピー／移動先のリスト枠"></div>
         <div class="point-transfer-dialog-actions">
-          <button id="storageTransferMoveButton" class="primary-button" type="button">移動</button>
-          <button id="storageTransferCopyButton" type="button">コピー</button>
+          <button id="storageTransferMoveButton" class="primary-button" type="button" disabled>移動</button>
+          <button id="storageTransferCopyButton" type="button" disabled>コピー</button>
           <button id="storageTransferCancelButton" class="compact-button" type="submit" value="cancel">キャンセル</button>
         </div>
       </form>
