@@ -128,7 +128,7 @@ const KEKKAI_THEME = "kekkai";
 const KEKKAI_MODE = "kekkai";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2138";
+const WEB_VERSION = "0.2139";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -993,8 +993,8 @@ const TRANSLATIONS = {
     "analysis.comparisonTitle": "比較基準",
     "analysis.reference": "参考値",
     "analysis.referenceScore": "参考整い度",
-    "analysis.regularityScore": "整い度スコア",
-    "analysis.referenceScoreDefinition": "整い度スコアは、基準形に対する角度と辺長のそろい方を0〜100で示す参考値です。",
+    "analysis.regularityScore": "整い度",
+    "analysis.referenceScoreDefinition": "整い度は、基準形に対する角度と辺長のそろい方を0〜100で示す参考値です。",
     "analysis.copy": "結果をコピー",
     "analysis.copied": "分析結果をコピーしました",
     "analysis.copyFailed": "コピーできませんでした",
@@ -1534,8 +1534,8 @@ const TRANSLATIONS = {
     "analysis.comparisonTitle": "Comparison baseline",
     "analysis.reference": "Reference",
     "analysis.referenceScore": "Reference fit",
-    "analysis.regularityScore": "Regularity score",
-    "analysis.referenceScoreDefinition": "The regularity score is a reference value from 0 to 100 showing how evenly the angles and side lengths match the reference shape.",
+    "analysis.regularityScore": "Regularity",
+    "analysis.referenceScoreDefinition": "Regularity is a reference value from 0 to 100 showing how evenly the angles and side lengths match the reference shape.",
     "analysis.copy": "Copy result",
     "analysis.copied": "Analysis result copied",
     "analysis.copyFailed": "Could not copy the result",
@@ -14403,7 +14403,6 @@ const SHARE_SNAPSHOT_WIDTH = 1200;
 const SHARE_SNAPSHOT_HEIGHT = 1200;
 const SHARE_SNAPSHOT_HEADER_HEIGHT = 122;
 const SHARE_SNAPSHOT_FRAME = Object.freeze({ left: 50, top: 138, right: 1150, bottom: 915 });
-const SHARE_SNAPSHOT_ANALYSIS_PANEL = Object.freeze({ left: 58, top: 948, right: 1142, bottom: 1164 });
 const SHARE_SNAPSHOT_MIN_SPAN_METERS = 2500;
 
 function shareSnapshotAppUrl() {
@@ -14722,36 +14721,38 @@ async function renderSelectedShareImage(points, lines, figures, visiblePoints = 
   }
   if (analyses.length > 0) {
     const { result } = analyses[0];
-    const panel = SHARE_SNAPSHOT_ANALYSIS_PANEL;
     target.save();
-    target.globalAlpha = 0.94;
-    target.fillStyle = surfaceColor;
-    target.shadowColor = "rgb(0 0 0 / 20%)";
-    target.shadowBlur = 14;
-    target.shadowOffsetY = 4;
-    drawShareSnapshotRoundedRect(target, panel.left, panel.top, panel.right - panel.left, panel.bottom - panel.top, 14);
-    target.fill();
-    target.shadowColor = "transparent";
-    target.shadowBlur = 0;
-    target.shadowOffsetY = 0;
-    target.globalAlpha = 0.88;
-    target.strokeStyle = palette.gridMajor || palette.link || textColor;
-    target.lineWidth = 2;
-    target.stroke();
-    target.globalAlpha = 1;
+    const left = 90;
+    const scoreY = 1088;
+    const fontFamily = "'Avenir Next', 'Segoe UI', system-ui, sans-serif";
     target.textAlign = "left";
     target.textBaseline = "alphabetic";
+    target.shadowColor = "rgb(0 0 0 / 52%)";
+    target.shadowBlur = 4;
+    target.shadowOffsetY = 2;
     target.fillStyle = textColor;
-    target.font = "700 18px system-ui, sans-serif";
-    target.fillText(`${t("analysis.area")} ${formatShareSnapshotArea(result.area)}   ${t("analysis.perimeterDisplay")} ${formatShareSnapshotPerimeter(result.perimeter)}`, panel.left + 28, panel.top + 34);
+    target.font = `500 16px ${fontFamily}`;
+    target.fillText(`${t("analysis.area")} ${formatShareSnapshotArea(result.area)}   ${t("analysis.perimeterDisplay")} ${formatShareSnapshotPerimeter(result.perimeter)}`, left, 980);
+    target.globalAlpha = 0.9;
+    target.font = `600 19px ${fontFamily}`;
+    target.fillText(t("analysis.regularityScore"), left, 1015);
     target.fillStyle = palette.pointFill || palette.link || textColor;
-    target.font = "800 56px system-ui, sans-serif";
-    target.fillText(`${t("analysis.regularityScore")} ${Math.round(result.referenceScore)} / 100`, panel.left + 28, panel.top + 101);
+    target.globalAlpha = 1;
+    target.font = `800 76px ${fontFamily}`;
+    const scoreText = String(Math.round(result.referenceScore));
+    target.fillText(scoreText, left, scoreY);
+    const scoreWidth = target.measureText(scoreText).width;
     target.fillStyle = textColor;
-    target.font = "700 17px system-ui, sans-serif";
-    target.fillText(`${t("analysis.angleVariation")} ${formatAngle(result.maxAngleDeviation)} (${formatPercent(result.maxAngleDeviationPercent)})   ${t("analysis.sideVariation")} ${formatPercent(result.sideRangePercent)}`, panel.left + 28, panel.top + 137);
-    target.font = "500 14px system-ui, sans-serif";
-    target.fillText(t("analysis.referenceScoreDefinition"), panel.left + 28, panel.top + 178);
+    target.globalAlpha = 0.82;
+    target.font = `600 22px ${fontFamily}`;
+    target.fillText("/100", left + scoreWidth + 12, scoreY - 4);
+    target.globalAlpha = 0.9;
+    target.fillStyle = textColor;
+    target.font = `500 15px ${fontFamily}`;
+    target.fillText(`${t("analysis.angleVariation")} ${formatAngle(result.maxAngleDeviation)} (${formatPercent(result.maxAngleDeviationPercent)})   ${t("analysis.sideVariation")} ${formatPercent(result.sideRangePercent)}`, left, 1120);
+    target.globalAlpha = 0.72;
+    target.font = `400 13px ${fontFamily}`;
+    target.fillText(t("analysis.referenceScoreDefinition"), left, 1152);
     target.restore();
   }
   drawShareSnapshotBrand(target, palette, textColor);
