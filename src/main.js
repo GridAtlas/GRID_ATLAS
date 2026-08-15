@@ -128,7 +128,7 @@ const KEKKAI_THEME = "kekkai";
 const KEKKAI_MODE = "kekkai";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2161";
+const WEB_VERSION = "0.2162";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -279,6 +279,7 @@ const elements = {
   cloudDialog: document.querySelector("#cloudDialog"),
   closeCloudButton: document.querySelector("#closeCloudButton"),
   cloudDialogBody: document.querySelector("#cloudDialogBody"),
+  brandTitle: document.querySelector("#brandTitle"),
   cloudSharesSection: document.querySelector("#cloudSharesSection"),
   cloudSharesList: document.querySelector("#cloudSharesList"),
   shareImagePreviewDialog: document.querySelector("#shareImagePreviewDialog"),
@@ -1910,6 +1911,14 @@ function applyStaticTranslations() {
   if (elements.editionBadge) {
     elements.editionBadge.textContent = t("edition.web");
   }
+  syncBrandIdentity();
+}
+
+function syncBrandIdentity() {
+  if (!elements.brandTitle) return;
+  const kekkai = currentTheme() === KEKKAI_THEME;
+  elements.brandTitle.textContent = kekkai ? "結界アトラス" : "GRID ATLAS";
+  elements.brandTitle.setAttribute("aria-label", elements.brandTitle.textContent);
 }
 
 function setLanguage(language, options = {}) {
@@ -2578,6 +2587,7 @@ function setTheme(theme, options = {}) {
         ? RETRO_THEME
         : PASTEL_THEME;
   document.documentElement.dataset.theme = normalized;
+  syncBrandIdentity();
   const themeColor = normalized === KEKKAI_THEME
     ? "#5b2a86"
     : normalized === RETRO_THEME
@@ -14620,16 +14630,25 @@ function drawShareSnapshotLabel(target, label, screen, textColor, surfaceColor, 
 }
 
 function drawShareSnapshotBrand(target, palette, textColor) {
+  const kekkai = currentTheme() === KEKKAI_THEME;
   target.save();
   target.fillStyle = palette.pointFill || palette.link || "#23ff5e";
   target.beginPath();
-  target.arc(86, 70, 14, 0, Math.PI * 2);
-  target.fill();
+  if (kekkai) {
+    target.save();
+    target.translate(86, 70);
+    target.rotate(Math.PI / 4);
+    target.fillRect(-10, -10, 20, 20);
+    target.restore();
+  } else {
+    target.arc(86, 70, 14, 0, Math.PI * 2);
+    target.fill();
+  }
   target.fillStyle = textColor;
   target.textAlign = "left";
   target.textBaseline = "alphabetic";
-  target.font = "800 32px system-ui, sans-serif";
-  target.fillText("GRID ATLAS", 114, 82);
+  target.font = kekkai ? "800 29px system-ui, sans-serif" : "800 32px system-ui, sans-serif";
+  target.fillText(kekkai ? "結界アトラス" : "GRID ATLAS", 114, 82);
   target.font = "700 11px system-ui, sans-serif";
   target.fillText("WEB版", 330, 80);
   target.textAlign = "right";

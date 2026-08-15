@@ -845,6 +845,18 @@ button {
   text-shadow: 0 0 4px rgb(125 78 151 / 0.16);
 }
 
+:root[data-theme="kekkai"] .brand-dot {
+  width: 14px;
+  height: 14px;
+  margin: 2px;
+  border-radius: 0;
+  transform: rotate(45deg);
+}
+
+:root[data-theme="kekkai"] .brand h1 {
+  font-size: 18px;
+}
+
 .selected-summary {
   min-width: 0;
   display: grid;
