@@ -128,7 +128,7 @@ const KEKKAI_THEME = "kekkai";
 const KEKKAI_MODE = "kekkai";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2128";
+const WEB_VERSION = "0.2138";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -993,6 +993,8 @@ const TRANSLATIONS = {
     "analysis.comparisonTitle": "比較基準",
     "analysis.reference": "参考値",
     "analysis.referenceScore": "参考整い度",
+    "analysis.regularityScore": "整い度スコア",
+    "analysis.referenceScoreDefinition": "整い度スコアは、基準形に対する角度と辺長のそろい方を0〜100で示す参考値です。",
     "analysis.copy": "結果をコピー",
     "analysis.copied": "分析結果をコピーしました",
     "analysis.copyFailed": "コピーできませんでした",
@@ -1012,13 +1014,16 @@ const TRANSLATIONS = {
     "analysis.idealAngle": "理想の内角",
     "analysis.meanSide": "平均辺長",
     "analysis.perimeter": "周長",
+    "analysis.perimeterDisplay": "周囲長",
     "analysis.area": "面積",
     "analysis.vertexCount": "頂点数",
     "analysis.edgeCount": "辺数",
     "analysis.longestSide": "最長辺",
     "analysis.shortestSide": "最短辺",
     "analysis.areaUnavailable": "自己交差する図形のため、面積は算出していません。",
+    "analysis.areaUnavailableShort": "算出不可",
     "analysis.sideVariation": "辺のばらつき",
+    "analysis.angleVariation": "角のばらつき",
     "analysis.maxAngleDeviation": "角度の最大ずれ",
     "analysis.angleDeviationRate": "基準角に対する割合",
     "analysis.referenceDiagonalRatio": "基準 対角÷辺",
@@ -1529,6 +1534,8 @@ const TRANSLATIONS = {
     "analysis.comparisonTitle": "Comparison baseline",
     "analysis.reference": "Reference",
     "analysis.referenceScore": "Reference fit",
+    "analysis.regularityScore": "Regularity score",
+    "analysis.referenceScoreDefinition": "The regularity score is a reference value from 0 to 100 showing how evenly the angles and side lengths match the reference shape.",
     "analysis.copy": "Copy result",
     "analysis.copied": "Analysis result copied",
     "analysis.copyFailed": "Could not copy the result",
@@ -1548,13 +1555,16 @@ const TRANSLATIONS = {
     "analysis.idealAngle": "Ideal interior angle",
     "analysis.meanSide": "Average side",
     "analysis.perimeter": "Perimeter",
+    "analysis.perimeterDisplay": "Perimeter",
     "analysis.area": "Area",
     "analysis.vertexCount": "Vertices",
     "analysis.edgeCount": "Edges",
     "analysis.longestSide": "Longest side",
     "analysis.shortestSide": "Shortest side",
     "analysis.areaUnavailable": "Area is not calculated for self-intersecting shapes.",
+    "analysis.areaUnavailableShort": "Unavailable",
     "analysis.sideVariation": "Side variation",
+    "analysis.angleVariation": "Angle variation",
     "analysis.maxAngleDeviation": "Maximum angle deviation",
     "analysis.angleDeviationRate": "Relative to reference angle",
     "analysis.referenceDiagonalRatio": "Reference diagonal/side",
@@ -14391,7 +14401,9 @@ function shareSnapshotSurfaceColor() {
 
 const SHARE_SNAPSHOT_WIDTH = 1200;
 const SHARE_SNAPSHOT_HEIGHT = 1200;
-const SHARE_SNAPSHOT_FRAME = Object.freeze({ left: 80, top: 160, right: 1120, bottom: 900 });
+const SHARE_SNAPSHOT_HEADER_HEIGHT = 122;
+const SHARE_SNAPSHOT_FRAME = Object.freeze({ left: 50, top: 138, right: 1150, bottom: 915 });
+const SHARE_SNAPSHOT_ANALYSIS_PANEL = Object.freeze({ left: 58, top: 948, right: 1142, bottom: 1164 });
 const SHARE_SNAPSHOT_MIN_SPAN_METERS = 2500;
 
 function shareSnapshotAppUrl() {
@@ -14418,6 +14430,18 @@ function drawShareSnapshotGrid(target, palette) {
   for (let y = 0; y <= SHARE_SNAPSHOT_HEIGHT; y += 30) {
     target.beginPath(); target.moveTo(0, y); target.lineTo(SHARE_SNAPSHOT_WIDTH, y); target.stroke();
   }
+  target.save();
+  const darkTheme = currentTheme() === RETRO_THEME || currentTheme() === KEKKAI_THEME;
+  target.fillStyle = darkTheme ? "rgb(0 0 0 / 42%)" : "rgb(255 255 255 / 64%)";
+  target.fillRect(0, 0, SHARE_SNAPSHOT_WIDTH, SHARE_SNAPSHOT_HEADER_HEIGHT);
+  target.globalAlpha = 0.78;
+  target.strokeStyle = palette.gridMajor || palette.link;
+  target.lineWidth = 2;
+  target.beginPath();
+  target.moveTo(0, SHARE_SNAPSHOT_HEADER_HEIGHT);
+  target.lineTo(SHARE_SNAPSHOT_WIDTH, SHARE_SNAPSHOT_HEADER_HEIGHT);
+  target.stroke();
+  target.restore();
 }
 
 function drawShareSnapshotRoundedRect(target, x, y, width, height, radius) {
@@ -14444,15 +14468,19 @@ function drawShareSnapshotLabel(target, label, screen, textColor, surfaceColor, 
   const clipped = text.length > maxChars ? `${text.slice(0, maxChars - 1)}…` : text;
   target.save();
   target.font = options.font || "700 11px system-ui, sans-serif";
-  target.textAlign = "left";
   target.textBaseline = "middle";
   const maxWidth = options.maxWidth || 220;
   const boxWidth = Math.min(maxWidth, target.measureText(clipped).width + 12);
   const boxHeight = options.height || 20;
-  const offsetX = options.offsetX ?? 8;
-  const offsetY = options.offsetY ?? -8;
-  const x = Math.min(Math.max(screen.x + offsetX, 12), SHARE_SNAPSHOT_WIDTH - boxWidth - 12);
-  const y = Math.min(Math.max(screen.y + offsetY, 12), SHARE_SNAPSHOT_FRAME.bottom - boxHeight - 8);
+  const isTopCentered = options.anchor === "top-center";
+  const offsetX = options.offsetX ?? 0;
+  const offsetY = options.offsetY ?? (isTopCentered ? -10 : -8);
+  const x = isTopCentered
+    ? Math.min(Math.max(screen.x - boxWidth / 2 + offsetX, 12), SHARE_SNAPSHOT_WIDTH - boxWidth - 12)
+    : Math.min(Math.max(screen.x + offsetX, 12), SHARE_SNAPSHOT_WIDTH - boxWidth - 12);
+  const y = isTopCentered
+    ? Math.min(Math.max(screen.y - boxHeight + offsetY, 12), SHARE_SNAPSHOT_FRAME.bottom - boxHeight - 8)
+    : Math.min(Math.max(screen.y + offsetY, 12), SHARE_SNAPSHOT_FRAME.bottom - boxHeight - 8);
 
   target.globalAlpha = 0.92;
   target.fillStyle = surfaceColor;
@@ -14470,7 +14498,8 @@ function drawShareSnapshotLabel(target, label, screen, textColor, surfaceColor, 
   target.stroke();
   target.globalAlpha = 1;
   target.fillStyle = textColor;
-  target.fillText(clipped, x + 9, y + boxHeight / 2);
+  target.textAlign = isTopCentered ? "center" : "left";
+  target.fillText(clipped, isTopCentered ? x + boxWidth / 2 : x + 9, y + boxHeight / 2);
   target.restore();
 }
 
@@ -14478,21 +14507,35 @@ function drawShareSnapshotBrand(target, palette, textColor) {
   target.save();
   target.fillStyle = palette.pointFill || palette.link || "#23ff5e";
   target.beginPath();
-  target.arc(86, 70, 13, 0, Math.PI * 2);
+  target.arc(86, 70, 14, 0, Math.PI * 2);
   target.fill();
   target.fillStyle = textColor;
   target.textAlign = "left";
   target.textBaseline = "alphabetic";
-  target.font = "800 30px system-ui, sans-serif";
-  target.fillText("GRID ATLAS", 112, 81);
+  target.font = "800 32px system-ui, sans-serif";
+  target.fillText("GRID ATLAS", 114, 82);
   target.font = "700 11px system-ui, sans-serif";
-  target.fillText("WEB版", 318, 80);
+  target.fillText("WEB版", 330, 80);
   target.textAlign = "right";
   target.font = "600 13px system-ui, sans-serif";
-  target.fillText(shareSnapshotAppUrl().replace(/^https?:\/\//, ""), 1120, 1128);
+  target.fillText(shareSnapshotAppUrl().replace(/^https?:\/\//, ""), 1120, 48);
   target.font = "800 14px system-ui, sans-serif";
-  target.fillText("#GRIDATLAS", 1120, 1155);
+  target.fillText("#GRIDATLAS", 1120, 80);
   target.restore();
+}
+
+function formatShareSnapshotArea(area) {
+  return Number.isFinite(area) && area >= 0 ? formatArea(area) : t("analysis.areaUnavailableShort");
+}
+
+function formatShareSnapshotPerimeter(distance) {
+  if (!Number.isFinite(distance) || distance < 0) return "-";
+  if (state.distanceUnit === IMPERIAL_UNIT) {
+    const miles = Math.round(distance / 1609.344).toLocaleString(localeName());
+    return activeLanguage() === EN_LANGUAGE ? `~${miles} mi` : `約${miles}mi`;
+  }
+  const kilometers = Math.round(distance / 1000).toLocaleString(localeName());
+  return activeLanguage() === EN_LANGUAGE ? `~${kilometers} km` : `約${kilometers}km`;
 }
 
 function shareSnapshotGeo(value) {
@@ -14546,7 +14589,7 @@ async function renderSelectedShareImage(points, lines, figures, visiblePoints = 
   const maxY = Math.max(...projectedWorldVertices.map((vertex) => vertex.world.y));
   const spanX = Math.max(maxX - minX, SHARE_SNAPSHOT_MIN_SPAN_METERS);
   const spanY = Math.max(maxY - minY, SHARE_SNAPSHOT_MIN_SPAN_METERS);
-  const pad = Math.max(spanX, spanY) * 0.12;
+  const pad = Math.max(spanX, spanY) * 0.055;
   const frameWidth = SHARE_SNAPSHOT_FRAME.right - SHARE_SNAPSHOT_FRAME.left;
   const frameHeight = SHARE_SNAPSHOT_FRAME.bottom - SHARE_SNAPSHOT_FRAME.top;
   const scale = Math.min(frameWidth / (spanX + pad * 2), frameHeight / (spanY + pad * 2));
@@ -14657,21 +14700,60 @@ async function renderSelectedShareImage(points, lines, figures, visiblePoints = 
     target.lineWidth = isPoint ? 3 : 2;
     target.stroke();
     target.restore();
-    drawShareSnapshotLabel(target, marker.label, screen, textColor, surfaceColor, palette);
+    drawShareSnapshotLabel(
+      target,
+      marker.label,
+      screen,
+      textColor,
+      surfaceColor,
+      palette,
+      isPoint
+        ? { anchor: "top-center", font: "700 15px system-ui, sans-serif", maxWidth: 260, height: 26, offsetY: -10 }
+        : { font: "600 12px system-ui, sans-serif", maxWidth: 240, height: 22 }
+    );
   }
 
-  const metrics = [];
+  const analyses = [];
   for (const figure of figures) {
     const result = analyzeSegmentShape(figureSegments(figure));
     if (result?.valid) {
-      metrics.push(`${figure.name || t("analysis.figure")}: ${t("analysis.area")} ${formatAreaValue(result.area)} / ${t("analysis.perimeter")} ${formatDistance(result.perimeter)} / ${t("analysis.referenceScore")} ${Math.round(result.referenceScore)} / 100`);
+      analyses.push({ figure, result });
     }
   }
-  target.fillStyle = textColor;
-  target.font = "600 20px sans-serif";
-  target.fillText(`${points.length}${t("label.points")}  ${lines.length}${t("label.links")}  ${figures.length}${t("analysis.figure")}`, 90, 1015);
-  target.font = "600 18px sans-serif";
-  metrics.slice(0, 2).forEach((metric, index) => target.fillText(metric, 90, 1050 + index * 24));
+  if (analyses.length > 0) {
+    const { result } = analyses[0];
+    const panel = SHARE_SNAPSHOT_ANALYSIS_PANEL;
+    target.save();
+    target.globalAlpha = 0.94;
+    target.fillStyle = surfaceColor;
+    target.shadowColor = "rgb(0 0 0 / 20%)";
+    target.shadowBlur = 14;
+    target.shadowOffsetY = 4;
+    drawShareSnapshotRoundedRect(target, panel.left, panel.top, panel.right - panel.left, panel.bottom - panel.top, 14);
+    target.fill();
+    target.shadowColor = "transparent";
+    target.shadowBlur = 0;
+    target.shadowOffsetY = 0;
+    target.globalAlpha = 0.88;
+    target.strokeStyle = palette.gridMajor || palette.link || textColor;
+    target.lineWidth = 2;
+    target.stroke();
+    target.globalAlpha = 1;
+    target.textAlign = "left";
+    target.textBaseline = "alphabetic";
+    target.fillStyle = textColor;
+    target.font = "700 18px system-ui, sans-serif";
+    target.fillText(`${t("analysis.area")} ${formatShareSnapshotArea(result.area)}   ${t("analysis.perimeterDisplay")} ${formatShareSnapshotPerimeter(result.perimeter)}`, panel.left + 28, panel.top + 34);
+    target.fillStyle = palette.pointFill || palette.link || textColor;
+    target.font = "800 56px system-ui, sans-serif";
+    target.fillText(`${t("analysis.regularityScore")} ${Math.round(result.referenceScore)} / 100`, panel.left + 28, panel.top + 101);
+    target.fillStyle = textColor;
+    target.font = "700 17px system-ui, sans-serif";
+    target.fillText(`${t("analysis.angleVariation")} ${formatAngle(result.maxAngleDeviation)} (${formatPercent(result.maxAngleDeviationPercent)})   ${t("analysis.sideVariation")} ${formatPercent(result.sideRangePercent)}`, panel.left + 28, panel.top + 137);
+    target.font = "500 14px system-ui, sans-serif";
+    target.fillText(t("analysis.referenceScoreDefinition"), panel.left + 28, panel.top + 178);
+    target.restore();
+  }
   drawShareSnapshotBrand(target, palette, textColor);
   return canvasToPngBlob(canvas);
 }
