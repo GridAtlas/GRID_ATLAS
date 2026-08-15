@@ -128,7 +128,7 @@ const KEKKAI_THEME = "kekkai";
 const KEKKAI_MODE = "kekkai";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2114";
+const WEB_VERSION = "0.2115";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -763,11 +763,11 @@ const CANVAS_PALETTES = {
     badgeStartText: "#ffffff"
   },
   kekkai: {
-    gridMinor: "rgb(196 132 255 / 0.16)",
-    gridMajor: "rgb(219 169 255 / 0.42)",
-    link: "#d29aff",
-    linkSelected: "#f0d9ff",
-    route: "#d8a8ff",
+    gridMinor: "rgb(164 76 255 / 0.24)",
+    gridMajor: "rgb(211 125 255 / 0.72)",
+    link: "#b968e8",
+    linkSelected: "#efd7ff",
+    route: "#d18cff",
     target: "#ff9fce",
     targetSoft: "rgb(255 159 206 / 0.2)",
     targetGuide: "rgb(240 217 255 / 0.68)",
@@ -779,14 +779,14 @@ const CANVAS_PALETTES = {
     currentStale: "#b6a0c4",
     pendingFill: "rgb(196 132 255 / 0.2)",
     pendingStroke: "rgb(232 195 255 / 0.78)",
-    pointFill: "#c884ff",
-    pointBaseStroke: "#160c22",
+    pointFill: "#bb70f0",
+    pointBaseStroke: "#050207",
     routeStart: "#65e0ff",
     routeSelected: "#e1b7ff",
     pendingPointStroke: "#f0d9ff",
-    traverseFill: "#c884ff",
+    traverseFill: "#bb70f0",
     selected: "#ffffff",
-    badgeFill: "#160c22",
+    badgeFill: "#050207",
     badgeText: "#f0d9ff",
     badgeStartFill: "#c884ff",
     badgeStartText: "#160c22"
@@ -3957,8 +3957,15 @@ function drawGrid(width, height) {
     || Boolean(state.barrierLinkCompletion);
   const gridMinor = barrierLinkVisualActive ? "rgb(242 138 46 / 0.2)" : colors.gridMinor;
   const gridMajor = barrierLinkVisualActive ? "rgb(242 138 46 / 0.48)" : colors.gridMajor;
+  const gridGlow = currentTheme() === KEKKAI_THEME && !barrierLinkVisualActive;
+  if (gridGlow) {
+    context.save();
+    context.shadowColor = "rgb(174 74 255 / 0.78)";
+    context.shadowBlur = 8;
+  }
   drawGridLines(topLeft, bottomRight, minorStep, gridMinor, 1);
   drawGridLines(topLeft, bottomRight, majorStep, gridMajor, 1.25);
+  if (gridGlow) context.restore();
 }
 
 function traverseTilePolygon(tileId) {
