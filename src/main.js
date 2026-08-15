@@ -128,7 +128,7 @@ const KEKKAI_THEME = "kekkai";
 const KEKKAI_MODE = "kekkai";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2170";
+const WEB_VERSION = "0.2171";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
