@@ -26,12 +26,19 @@ export default {
     try {
       const route = parseRoute(new URL(request.url).pathname);
       if (!route) return jsonResponse({ error: "Not found" }, 404, cors);
+      if (route.publicShareId) {
+        if (request.method !== "GET") return methodNotAllowed(["GET"], cors);
+        return await handlePublicShare(env, cors, route.publicShareId);
+      }
 
       const user = await authenticateRequest(request, env);
       if (!env.DB) return jsonResponse({ error: "データベースが未設定です" }, 503, cors);
 
       if (route.testSignup) {
         return await handleTestSignup(request, env, cors, user);
+      }
+      if (route.shareId || route.shares) {
+        return await handleShares(request, env, cors, user, route.shareId);
       }
 
       if (route.assetId) {
@@ -91,7 +98,95 @@ function parseRoute(pathname) {
   if (parts.length === 2 && parts[0] === "v1" && parts[1] === "test-signups") {
     return { testSignup: true };
   }
+  if (parts.length === 3 && parts[0] === "v1" && parts[1] === "shares" && parts[2]) {
+    const publicShareId = decodeRoutePart(parts[2], "共有ID");
+    validateShareId(publicShareId);
+    return { publicShareId };
+  }
+  if (parts.length === 3 && parts[0] === "v1" && parts[1] === "me" && parts[2] === "shares") {
+    return { shares: true };
+  }
+  if (parts.length === 4 && parts[0] === "v1" && parts[1] === "me" && parts[2] === "shares" && parts[3]) {
+    const shareId = decodeRoutePart(parts[3], "共有ID");
+    validateShareId(shareId);
+    return { shares: true, shareId };
+  }
   return null;
+}
+
+async function handleShares(request, env, cors, user, shareId = null) {
+  const ownerId = user.id || user.testerOwnerId;
+  if (!ownerId) throw new AuthError("共有発行権限が必要です", 403);
+  if (request.method === "GET" && !shareId) {
+    const result = await env.DB.prepare(
+      `SELECT share_id, name, created_at, expires_at, revoked_at
+       FROM cloud_shared_snapshots WHERE owner_id = ?1 ORDER BY created_at DESC LIMIT 100`
+    ).bind(ownerId).all();
+    return jsonResponse({ shares: result.results }, 200, cors);
+  }
+  if (request.method === "POST" && !shareId) {
+    const body = await readJsonObject(request);
+    const payload = body.payload;
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new HttpError("共有データが不正です", 400);
+    const serialized = JSON.stringify(payload);
+    if (serialized.length > MAX_BODY_BYTES) throw new HttpError("共有データが大きすぎます", 413);
+    const name = String(body.name || "GRID ATLAS共有").trim().slice(0, 120) || "GRID ATLAS共有";
+    const days = Number(body.expiresInDays);
+    if (![7, 30, 90].includes(days)) throw new HttpError("有効期限は7日、30日、90日のいずれかです", 400);
+    const createdAt = new Date();
+    const expiresAt = new Date(createdAt.getTime() + days * 86400000);
+    return jsonResponse({ share: await insertShareSnapshot(env.DB, { ownerId, name, serialized, createdAt, expiresAt }) }, 201, cors);
+  }
+  if (request.method === "DELETE" && shareId) {
+    const result = await env.DB.prepare(
+      `UPDATE cloud_shared_snapshots SET revoked_at = ?1
+       WHERE share_id = ?2 AND owner_id = ?3 AND revoked_at IS NULL`
+    ).bind(new Date().toISOString(), shareId, ownerId).run();
+    if (!result.meta?.changes) throw new HttpError("共有が見つからないか、失効済みです", 404);
+    return jsonResponse({ revoked: true, shareId }, 200, cors);
+  }
+  return methodNotAllowed(["GET", "POST", "DELETE"], cors);
+}
+
+async function handlePublicShare(env, cors, shareId) {
+  const row = await env.DB.prepare(
+    `SELECT share_id, name, payload_json, created_at, expires_at
+     FROM cloud_shared_snapshots
+     WHERE share_id = ?1 AND revoked_at IS NULL AND expires_at > ?2`
+  ).bind(shareId, new Date().toISOString()).first();
+  if (!row) throw new HttpError("共有が見つからないか、有効期限切れです", 404);
+  return jsonResponse({ share: { id: row.share_id, name: row.name, payload: JSON.parse(row.payload_json), createdAt: row.created_at, expiresAt: row.expires_at } }, 200, cors);
+}
+
+async function insertShareSnapshot(db, { ownerId, name, serialized, createdAt, expiresAt }) {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const shareId = randomShareId();
+    try {
+      await db.prepare(
+        `INSERT INTO cloud_shared_snapshots
+         (share_id, owner_id, name, payload_json, created_at, expires_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)`
+      ).bind(shareId, ownerId, name, serialized, createdAt.toISOString(), expiresAt.toISOString()).run();
+      return { id: shareId, name, createdAt: createdAt.toISOString(), expiresAt: expiresAt.toISOString() };
+    } catch (error) {
+      if (attempt === 3) throw error;
+    }
+  }
+  throw new Error("共有IDを発行できませんでした");
+}
+
+function randomShareId() {
+  const bytes = new Uint8Array(10);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((byte) => byte.toString(36).padStart(2, "0")).join("").slice(0, 12);
+}
+
+function validateShareId(value) {
+  if (typeof value !== "string" || !/^[a-z0-9]{8,16}$/.test(value)) throw new HttpError("共有IDが不正です", 400);
+}
+
+function decodeRoutePart(value, label) {
+  try { return decodeURIComponent(value); } catch { throw new HttpError(`${label}が不正です`, 400); }
 }
 
 async function handleTestSignup(request, env, cors, user) {

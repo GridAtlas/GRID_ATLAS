@@ -34,6 +34,7 @@ beforeEach(async () => {
   await env.DB.prepare("DELETE FROM cloud_lists").run();
   await env.DB.prepare("DELETE FROM cloud_assets").run();
   await env.DB.prepare("DELETE FROM test_signup_registrations").run();
+  await env.DB.prepare("DELETE FROM cloud_shared_snapshots").run();
 });
 
 afterAll(() => {
@@ -199,6 +200,50 @@ describe("GRID ATLAS Cloud API", () => {
 
     const malformed = await api("/v1/me/lists/%ZZ", { token: null });
     expect(malformed.status).toBe(400);
+  });
+
+  it("publishes public snapshot shares, keeps them owner-scoped, and revokes them", async () => {
+    const payload = { type: "place-list", schemaVersion: 1, id: "snapshot-1", name: "共有テスト", places: [] };
+    const created = await api("/v1/me/shares", {
+      method: "POST",
+      token: await issueToken("share-owner"),
+      body: { payload, name: "共有テスト", expiresInDays: 7 }
+    });
+    expect(created.status).toBe(201);
+    const share = (await created.json()).share;
+    expect(share).toMatchObject({ name: "共有テスト" });
+    expect(share.id).toMatch(/^[a-z0-9]{8,16}$/);
+
+    const publicRead = await worker.fetch(new Request(`https://api.test/v1/shares/${share.id}`), env);
+    expect(publicRead.status).toBe(200);
+    expect((await publicRead.json()).share.payload).toEqual(payload);
+
+    const otherRevoke = await api(`/v1/me/shares/${share.id}`, {
+      method: "DELETE",
+      token: await issueToken("other-owner")
+    });
+    expect(otherRevoke.status).toBe(404);
+
+    const revoked = await api(`/v1/me/shares/${share.id}`, {
+      method: "DELETE",
+      token: await issueToken("share-owner")
+    });
+    expect(revoked.status).toBe(200);
+    const afterRevoke = await worker.fetch(new Request(`https://api.test/v1/shares/${share.id}`), env);
+    expect(afterRevoke.status).toBe(404);
+  });
+
+  it("does not expose expired snapshot shares", async () => {
+    const created = await api("/v1/me/shares", {
+      method: "POST",
+      token: await issueToken("expiry-owner"),
+      body: { payload: { type: "place-list", schemaVersion: 1, places: [] }, name: "期限テスト", expiresInDays: 7 }
+    });
+    const shareId = (await created.json()).share.id;
+    await env.DB.prepare("UPDATE cloud_shared_snapshots SET expires_at = ?1 WHERE share_id = ?2")
+      .bind("2000-01-01T00:00:00.000Z", shareId).run();
+    const response = await worker.fetch(new Request(`https://api.test/v1/shares/${shareId}`), env);
+    expect(response.status).toBe(404);
   });
 
   it("allows test sign-up only with a tester code and records the registration", async () => {

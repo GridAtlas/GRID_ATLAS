@@ -114,11 +114,7 @@ export function normalizeAnalysisFigure(figure) {
   const vertices = figure.vertices.map((vertex) => normalizeAnalysisVertex(vertex)).filter(Boolean);
   if (vertices.length < 2) return null;
 
-  const normalized = {
-    id,
-    vertices,
-    closed: figure.closed === true
-  };
+  const normalized = { id, vertices };
   const name = cleanText(figure.name);
   const color = normalizeColor(figure.color);
   const createdAt = cleanText(figure.createdAt);
@@ -128,11 +124,10 @@ export function normalizeAnalysisFigure(figure) {
   return normalized;
 }
 
-export function createAnalysisFigure({ id, vertices, closed = false, name = "", color = "", createdAt = "" } = {}) {
+export function createAnalysisFigure({ id, vertices, name = "", color = "", createdAt = "" } = {}) {
   return normalizeAnalysisFigure({
     id,
     vertices,
-    closed,
     ...(name ? { name } : {}),
     ...(color ? { color } : {}),
     ...(createdAt ? { createdAt } : {})
@@ -147,7 +142,7 @@ export function figureEdges(figure) {
     a: normalized.vertices[index],
     b: vertex
   }));
-  if (normalized.closed && normalized.vertices.length >= 3) {
+  if (normalized.vertices.length >= 3) {
     edges.push({
       a: normalized.vertices.at(-1),
       b: normalized.vertices[0]
@@ -182,17 +177,7 @@ export function normalizeAnalysisLayer(layer) {
   return normalized;
 }
 
-export function setAnalysisFigureClosed(figure, closed) {
-  const normalized = normalizeAnalysisFigure(figure);
-  if (!normalized) return null;
-  if (closed === true && normalized.vertices.length < 3) return normalized;
-  return {
-    ...normalized,
-    closed: closed === true
-  };
-}
-
-export function removeAnalysisFigureVertex(figure, vertexIndex, options = {}) {
+export function removeAnalysisFigureVertex(figure, vertexIndex) {
   const normalized = normalizeAnalysisFigure(figure);
   if (!normalized || !Number.isInteger(vertexIndex) || vertexIndex < 0 || vertexIndex >= normalized.vertices.length) {
     return { figure: normalized, line: null };
@@ -205,13 +190,7 @@ export function removeAnalysisFigureVertex(figure, vertexIndex, options = {}) {
   if (vertices.length === 2) {
     return {
       figure: null,
-      line: createAnalysisLine({
-        id: cleanText(options.lineId) || `${normalized.id}-line`,
-        a: vertices[0],
-        b: vertices[1],
-        color: normalized.color || "",
-        ...(cleanText(options.createdAt) ? { createdAt: cleanText(options.createdAt) } : {})
-      })
+      line: null
     };
   }
 

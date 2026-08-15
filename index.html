@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
     <link rel="stylesheet" href="src/styles.css?v=73">
-    <script src="src/main.js?v=443" type="module" defer></script>
+    <script src="src/main.js?v=449" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -511,6 +511,7 @@
             <div><span data-i18n="traverse.locationsShort">箇所</span><strong id="traverseLocationValue">0</strong></div>
           </div>
         </section>
+        <p id="traverseBarrierRequirement" class="traverse-action-dialog-requirement" role="status" aria-live="polite" hidden></p>
         <div class="traverse-action-dialog-actions">
           <button id="traversePlaceButton" class="primary-button" type="button" data-i18n="traverse.place">置く</button>
           <button id="traversePickButton" type="button" data-i18n="traverse.pick">拾う</button>
@@ -739,7 +740,6 @@
           <span id="gridFigureQuickInfo" class="grid-point-quick-list"></span>
         </div>
         <div class="grid-point-quick-actions grid-figure-quick-actions" aria-label="図形のクイック操作">
-          <button id="gridFigureQuickToggleClosedButton" class="grid-point-quick-role-button" type="button" aria-label="図形を開く" title="図形を開く"><svg class="ui-icon" aria-hidden="true"><use href="#icon-edit"></use></svg><span id="gridFigureQuickToggleClosedLabel">図形を開く</span></button>
           <button id="gridFigureQuickDeleteVertexButton" class="grid-point-quick-role-button" type="button" aria-label="この頂点を削除" title="この頂点を削除"><svg class="ui-icon" aria-hidden="true"><use href="#icon-trash"></use></svg><span id="gridFigureQuickDeleteVertexLabel">この頂点を削除</span></button>
           <button id="gridFigureQuickDeleteButton" class="grid-point-quick-role-button danger-button" type="button" aria-label="図形を削除" title="図形を削除"><svg class="ui-icon" aria-hidden="true"><use href="#icon-trash"></use></svg><span id="gridFigureQuickDeleteLabel">図形を削除</span></button>
         </div>
@@ -882,8 +882,9 @@
         <p id="confirmDialogMessage" class="confirm-dialog-message"></p>
         <div class="confirm-dialog-actions">
           <button id="confirmDialogCancelButton" class="compact-button" type="button" value="cancel" data-i18n="action.cancel">キャンセル</button>
-          <button id="confirmDialogDeleteLinksButton" class="danger-button" type="submit" value="links" data-i18n="delete.linksOnly" hidden>線のみ</button>
-          <button id="confirmDialogDeletePointsButton" class="danger-button" type="submit" value="points" data-i18n="delete.pointsOnly" hidden>地点のみ</button>
+          <button id="confirmDialogDeleteLinksButton" class="danger-button" type="submit" value="links" data-i18n="delete.linksOnly" hidden>線分</button>
+          <button id="confirmDialogDeletePointsButton" class="danger-button" type="submit" value="points" data-i18n="delete.pointsOnly" hidden>地点</button>
+          <button id="confirmDialogDeleteFiguresButton" class="danger-button" type="submit" value="figures" data-i18n="delete.figuresOnly" hidden>図形</button>
           <button id="confirmDialogDeleteAllButton" class="danger-button" type="submit" value="all" data-i18n="delete.all" hidden>すべて</button>
           <button id="confirmDialogConfirmButton" class="danger-button" type="button" value="confirm">確認</button>
         </div>
@@ -905,8 +906,9 @@
         </div>
         <div id="textInputDialogShareActions" class="text-input-dialog-actions text-input-dialog-share-actions" hidden>
           <button class="compact-button" type="button" data-share-action-cancel data-i18n="action.cancel">キャンセル</button>
-          <button id="textInputShareFileButton" class="share-action-button" type="button" data-i18n="list.export">共有</button>
-          <button id="textInputShareUrlButton" class="share-action-button" type="button" data-i18n="list.exportUrl">URLをコピー</button>
+          <button id="textInputShareFileButton" class="share-action-button" type="button" data-i18n="list.export">.gridatlas</button>
+          <button id="textInputShareImageButton" class="share-action-button" type="button" data-i18n="list.exportImage">画像</button>
+          <button id="textInputShareCloudButton" class="share-action-button" type="button" data-i18n="list.exportCloud" hidden>短縮URL</button>
         </div>
       </form>
     </dialog>

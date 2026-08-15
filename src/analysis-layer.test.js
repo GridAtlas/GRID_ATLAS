@@ -10,8 +10,7 @@ import {
   normalizeAnalysisLayer,
   normalizeAnalysisLine,
   normalizeAnalysisVertex,
-  removeAnalysisFigureVertex,
-  setAnalysisFigureClosed
+  removeAnalysisFigureVertex
 } from "./analysis-layer.js";
 import { analyzeSegmentShape } from "./shape-analysis.js";
 
@@ -77,7 +76,6 @@ describe("analysis layer model", () => {
   it("stores ordered figure vertices and derives only its edges", () => {
     const figure = createAnalysisFigure({
       id: "figure-1",
-      closed: true,
       name: "四点",
       color: "#AABBCC",
       vertices: [vertex(35, 135, "A"), vertex(35, 135.1, "B"), vertex(35.1, 135.1, "C")]
@@ -86,7 +84,6 @@ describe("analysis layer model", () => {
     expect(figure).toEqual({
       id: "figure-1",
       vertices: expect.any(Array),
-      closed: true,
       name: "四点",
       color: "#aabbcc"
     });
@@ -175,29 +172,23 @@ describe("analysis layer model", () => {
     expect(afterLineDeletion.figures).toHaveLength(1);
   });
 
-  it("allows reopening a closed figure but only closes figures with at least three vertices", () => {
+  it("treats every figure as closed and ignores the retired closed field", () => {
     const triangle = createAnalysisFigure({
       id: "triangle",
-      closed: true,
       vertices: [vertex(35, 135, "A"), vertex(35, 135.1, "B"), vertex(35.1, 135, "C")]
     });
-    const open = setAnalysisFigureClosed(triangle, false);
-    const reopened = setAnalysisFigureClosed(open, true);
     const line = createAnalysisFigure({
       id: "line-figure",
-      closed: false,
       vertices: [vertex(35, 135, "A"), vertex(35, 135.1, "B")]
     });
 
-    expect(open.closed).toBe(false);
-    expect(reopened.closed).toBe(true);
-    expect(setAnalysisFigureClosed(line, true).closed).toBe(false);
+    expect(triangle).not.toHaveProperty("closed");
+    expect(line).not.toHaveProperty("closed");
   });
 
-  it("demotes a figure to one independent line when vertex deletion leaves two vertices", () => {
+  it("deletes a figure when vertex deletion leaves two vertices", () => {
     const figure = createAnalysisFigure({
       id: "triangle",
-      closed: true,
       vertices: [
         vertex(35, 135, "A", "a"),
         vertex(35, 135.1, "B", "b"),
@@ -205,14 +196,10 @@ describe("analysis layer model", () => {
       ]
     });
 
-    const result = removeAnalysisFigureVertex(figure, 1, { lineId: "demoted-line" });
+    const result = removeAnalysisFigureVertex(figure, 1);
 
     expect(result.figure).toBeNull();
-    expect(result.line).toMatchObject({
-      id: "demoted-line",
-      a: { lat: 35, lng: 135, name: "A", placeRef: "a" },
-      b: { lat: 35.1, lng: 135, name: "C", placeRef: "c" }
-    });
+    expect(result.line).toBeNull();
   });
 
   it("does not delete a vertex from a two-vertex figure", () => {
@@ -221,7 +208,7 @@ describe("analysis layer model", () => {
       vertices: [vertex(35, 135, "A"), vertex(35, 135.1, "B")]
     });
 
-    const result = removeAnalysisFigureVertex(figure, 0, { lineId: "unused" });
+    const result = removeAnalysisFigureVertex(figure, 0);
 
     expect(result.figure).toEqual(figure);
     expect(result.line).toBeNull();

@@ -11,7 +11,6 @@ import {
   GridAtlasImportError,
   buildGridAtlasArchive,
   decodeGridAtlasUrlPayload,
-  encodeGridAtlasUrlPayload,
   gridAtlasDocumentDigest,
   readGridAtlasFile
 } from "./gridatlas-import.js?v=2";
@@ -41,8 +40,7 @@ import {
   normalizeAnalysisFigure,
   normalizeAnalysisLine,
   normalizeAnalysisVertex,
-  removeAnalysisFigureVertex,
-  setAnalysisFigureClosed
+  removeAnalysisFigureVertex
 } from "./analysis-layer.js?v=1";
 import { analyzeLineIntersection, analyzeOpenPath, analyzeSegmentShape, vincentyDistanceMeters } from "./shape-analysis.js?v=1";
 import {
@@ -121,13 +119,16 @@ const CLOUD_ACCESS_TOKEN_KEY = "grid-atlas-cloud-access-token";
 const CLOUD_PASSWORD_SETUP_KEY_PREFIX = "grid-atlas-cloud-password-set:";
 const CLOUD_SIGNUP_PENDING_KEY = "grid-atlas-cloud-signup-pending";
 const CLOUD_PRODUCTION_API_URL = "https://grid-atlas-cloud-staging.kazki1981.workers.dev";
+const CLOUD_SHARE_URL_PARAMETER = "share";
 const CLOUD_AUTO_REFRESH_INTERVAL_MS = 30_000;
 const PASTEL_THEME = "pastel";
 const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
+const KEKKAI_THEME = "kekkai";
+const KEKKAI_MODE = "kekkai";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2062";
+const WEB_VERSION = "0.2113";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -219,6 +220,7 @@ const elements = {
   confirmDialogCancelButton: document.querySelector("#confirmDialogCancelButton"),
   confirmDialogDeleteLinksButton: document.querySelector("#confirmDialogDeleteLinksButton"),
   confirmDialogDeletePointsButton: document.querySelector("#confirmDialogDeletePointsButton"),
+  confirmDialogDeleteFiguresButton: document.querySelector("#confirmDialogDeleteFiguresButton"),
   confirmDialogDeleteAllButton: document.querySelector("#confirmDialogDeleteAllButton"),
   confirmDialogConfirmButton: document.querySelector("#confirmDialogConfirmButton"),
   textInputDialog: document.querySelector("#textInputDialog"),
@@ -231,7 +233,8 @@ const elements = {
   textInputDialogDefaultActions: document.querySelector("#textInputDialogDefaultActions"),
   textInputDialogShareActions: document.querySelector("#textInputDialogShareActions"),
   textInputShareFileButton: document.querySelector("#textInputShareFileButton"),
-  textInputShareUrlButton: document.querySelector("#textInputShareUrlButton"),
+  textInputShareImageButton: document.querySelector("#textInputShareImageButton"),
+  textInputShareCloudButton: document.querySelector("#textInputShareCloudButton"),
   actionCopyToListButton: document.querySelector("#actionCopyToListButton"),
   actionMoveToListButton: document.querySelector("#actionMoveToListButton"),
   actionShareSelectedButton: document.querySelector("#actionShareSelectedButton"),
@@ -255,6 +258,7 @@ const elements = {
   traverseStockValue: document.querySelector("#traverseStockValue"),
   traverseInstalledValue: document.querySelector("#traverseInstalledValue"),
   traverseLocationValue: document.querySelector("#traverseLocationValue"),
+  traverseBarrierRequirement: document.querySelector("#traverseBarrierRequirement"),
   traverseQuantityDialog: document.querySelector("#traverseQuantityDialog"),
   traverseQuantityDialogTitle: document.querySelector("#traverseQuantityDialogTitle"),
   traverseQuantityDialogMessage: document.querySelector("#traverseQuantityDialogMessage"),
@@ -356,8 +360,6 @@ const elements = {
   gridFigureQuickDialog: document.querySelector("#gridFigureQuickDialog"),
   gridFigureQuickName: document.querySelector("#gridFigureQuickName"),
   gridFigureQuickInfo: document.querySelector("#gridFigureQuickInfo"),
-  gridFigureQuickToggleClosedButton: document.querySelector("#gridFigureQuickToggleClosedButton"),
-  gridFigureQuickToggleClosedLabel: document.querySelector("#gridFigureQuickToggleClosedLabel"),
   gridFigureQuickDeleteVertexButton: document.querySelector("#gridFigureQuickDeleteVertexButton"),
   gridFigureQuickDeleteVertexLabel: document.querySelector("#gridFigureQuickDeleteVertexLabel"),
   gridFigureQuickDeleteButton: document.querySelector("#gridFigureQuickDeleteButton"),
@@ -759,6 +761,35 @@ const CANVAS_PALETTES = {
     badgeText: "#24313a",
     badgeStartFill: "#2563eb",
     badgeStartText: "#ffffff"
+  },
+  kekkai: {
+    gridMinor: "rgb(196 132 255 / 0.16)",
+    gridMajor: "rgb(219 169 255 / 0.42)",
+    link: "#d29aff",
+    linkSelected: "#f0d9ff",
+    route: "#d8a8ff",
+    target: "#ff9fce",
+    targetSoft: "rgb(255 159 206 / 0.2)",
+    targetGuide: "rgb(240 217 255 / 0.68)",
+    targetFill: "#ff9fce",
+    observationBaseline: "rgb(240 217 255 / 0.3)",
+    observationTrail: "#ffd166",
+    observationGapLine: "rgb(128 128 128 / 0.72)",
+    currentFill: "#ffd166",
+    currentStale: "#b6a0c4",
+    pendingFill: "rgb(196 132 255 / 0.2)",
+    pendingStroke: "rgb(232 195 255 / 0.78)",
+    pointFill: "#c884ff",
+    pointBaseStroke: "#160c22",
+    routeStart: "#65e0ff",
+    routeSelected: "#e1b7ff",
+    pendingPointStroke: "#f0d9ff",
+    traverseFill: "#c884ff",
+    selected: "#ffffff",
+    badgeFill: "#160c22",
+    badgeText: "#f0d9ff",
+    badgeStartFill: "#c884ff",
+    badgeStartText: "#160c22"
   }
 };
 
@@ -832,8 +863,9 @@ const TRANSLATIONS = {
     "action.invertTitle": "表示中の地点の選択を反転",
     "action.info": "情報",
     "action.delete": "削除",
-    "delete.linksOnly": "線のみ",
-    "delete.pointsOnly": "地点のみ",
+    "delete.linksOnly": "線分",
+    "delete.pointsOnly": "地点",
+    "delete.figuresOnly": "図形",
     "delete.all": "すべて",
     "delete.uneditablePoints": "選択した地点のうち{count}点は編集できないリストに含まれるため削除できません。",
     "action.edit": "編集",
@@ -916,18 +948,12 @@ const TRANSLATIONS = {
     "line.reconnected": "「{old}」を「{new}」へ接続変更しました",
     "line.invalidTarget": "別の地点へドロップしてください",
     "line.duplicateTarget": "その2地点を結ぶ線はすでにあります",
-    "figure.openAction": "図形を開く",
-    "figure.closeAction": "図形を閉じる",
     "figure.deleteVertex": "この頂点を削除",
     "figure.delete": "図形を削除",
     "figure.vertexCount": "{count}頂点",
-    "figure.opened": "図形を開きました",
-    "figure.closed": "図形を閉じました",
     "figure.vertexDeleted": "図形の頂点を削除しました",
-    "figure.demoted": "2頂点になったため独立した線分へ変更しました",
     "figure.deleteConfirm": "この図形を削除しますか？",
     "figure.deleteVertexConfirm": "この頂点を削除しますか？",
-    "figure.closeUnavailable": "図形を閉じるには3頂点以上が必要です",
     "analysis.dialogTitle": "分析結果",
     "analysis.lineTitle": "交差角",
     "analysis.polygonTitle": "図形の分析",
@@ -1110,11 +1136,11 @@ const TRANSLATIONS = {
     "list.exported": "共有ファイルを保存しました",
     "list.exportCompleted": "共有しました",
     "list.exportFailed": "共有ファイルを作成できませんでした。リスト内容を確認してください",
-    "list.exportUrl": "URLをコピー",
-    "list.exportUrlShared": "URLを共有しました",
-    "list.exportUrlCopied": "共有URLをコピーしました",
-    "list.exportUrlCopyFailed": "共有URLをコピーできませんでした",
-    "list.exportUrlTooLong": "URLが長すぎるため、共有ファイルに切り替えます",
+    "list.exportImage": "画像",
+    "list.exportImageShared": "画像を共有しました",
+    "list.exportImageDownloaded": "画像を保存しました",
+    "list.exportCloud": "短縮URL",
+    "list.exportCloudCreated": "短縮URLをコピーしました",
     "list.shareSelectedNamePrompt": "共有するリスト名",
     "list.shareSelectedDefaultName": "選択項目",
     "list.shareSelectedUnavailable": "共有する地点・線・図形を選択してください",
@@ -1234,6 +1260,7 @@ const TRANSLATIONS = {
     "barrier.defaultName": "新しい結界",
     "barrier.created": "結界を張りました",
     "barrier.tooFew": "結界には3箇所以上の結界石が必要です",
+    "barrier.needLocations": "結界を結ぶには、あと{count}箇所に結界石を置いてください。",
     "barrier.tooMany": "結界の頂点は{max}つまでです",
     "barrier.rankVertexLimit": "この段位ではこれ以上の頂点を結べません",
     "barrier.sightExceeded": "見通しの限界（半径{radius}）を超えています。頂点 {vertices} を確認してください",
@@ -1372,8 +1399,9 @@ const TRANSLATIONS = {
     "action.invertTitle": "Invert selection of displayed points",
     "action.info": "Info",
     "action.delete": "Delete",
-    "delete.linksOnly": "Lines only",
-    "delete.pointsOnly": "Points only",
+    "delete.linksOnly": "Lines",
+    "delete.pointsOnly": "Points",
+    "delete.figuresOnly": "Figures",
     "delete.all": "All",
     "delete.uneditablePoints": "{count} selected point(s) cannot be deleted because they belong to a non-editable list.",
     "action.edit": "Edit",
@@ -1456,18 +1484,12 @@ const TRANSLATIONS = {
     "line.reconnected": "Changed the connection from “{old}” to “{new}”",
     "line.invalidTarget": "Drop on a different point",
     "line.duplicateTarget": "A line between those points already exists",
-    "figure.openAction": "Open figure",
-    "figure.closeAction": "Close figure",
     "figure.deleteVertex": "Delete this vertex",
     "figure.delete": "Delete figure",
     "figure.vertexCount": "{count} vertices",
-    "figure.opened": "Figure opened",
-    "figure.closed": "Figure closed",
     "figure.vertexDeleted": "Figure vertex deleted",
-    "figure.demoted": "The figure became an independent line with two vertices",
     "figure.deleteConfirm": "Delete this figure?",
     "figure.deleteVertexConfirm": "Delete this vertex?",
-    "figure.closeUnavailable": "A figure needs at least three vertices to close",
     "analysis.dialogTitle": "Analysis result",
     "analysis.lineTitle": "Crossing angle",
     "analysis.polygonTitle": "Shape analysis",
@@ -1650,11 +1672,11 @@ const TRANSLATIONS = {
     "list.exported": "Saved the shared file",
     "list.exportCompleted": "Shared",
     "list.exportFailed": "Could not create the shared file. Check the list contents",
-    "list.exportUrl": "Copy URL",
-    "list.exportUrlShared": "Shared the URL",
-    "list.exportUrlCopied": "Copied the sharing URL",
-    "list.exportUrlCopyFailed": "Could not copy the sharing URL",
-    "list.exportUrlTooLong": "The URL is too long, so file sharing will be used",
+    "list.exportImage": "Image",
+    "list.exportImageShared": "Image shared",
+    "list.exportImageDownloaded": "Image saved",
+    "list.exportCloud": "Short URL",
+    "list.exportCloudCreated": "Short URL copied",
     "list.shareSelectedNamePrompt": "Name for the shared list",
     "list.shareSelectedDefaultName": "Selected items",
     "list.shareSelectedUnavailable": "Select points, lines, or figures to share",
@@ -1774,6 +1796,7 @@ const TRANSLATIONS = {
     "barrier.defaultName": "New barrier",
     "barrier.created": "Barrier created",
     "barrier.tooFew": "A barrier needs stones at three or more locations",
+    "barrier.needLocations": "Place barrier stones at {count} more locations to bind a barrier.",
     "barrier.tooMany": "A barrier can have at most {max} vertices",
     "barrier.rankVertexLimit": "This rank cannot bind any more vertices",
     "barrier.sightExceeded": "The sight limit (radius {radius}) is exceeded. Check vertices {vertices}",
@@ -1961,7 +1984,7 @@ async function setGpsEnabled(value, options = {}) {
   return true;
 }
 function syncSettingsControls() {
-  elements.settingsThemeSelect.value = currentTheme();
+  elements.settingsThemeSelect.value = currentTheme() === KEKKAI_THEME ? RETRO_THEME : currentTheme();
   elements.settingsLanguageSelect.value = activeLanguage();
   elements.settingsUnitSelect.value = state.distanceUnit;
   elements.settingsGpsEnabled.checked = state.gpsEnabled;
@@ -2507,7 +2530,7 @@ function toggleSettingsMenu() {
 }
 function currentTheme() {
   const theme = document.documentElement.dataset.theme;
-  return theme === RETRO_THEME || theme === BASIC_THEME ? theme : PASTEL_THEME;
+  return theme === RETRO_THEME || theme === BASIC_THEME || theme === KEKKAI_THEME ? theme : PASTEL_THEME;
 }
 
 function canvasPalette() {
@@ -2524,9 +2547,21 @@ function loadTheme() {
 }
 
 function setTheme(theme, options = {}) {
-  const normalized = theme === BASIC_THEME || theme === "atlas-paper" || theme === "paper" ? BASIC_THEME : theme === RETRO_THEME ? RETRO_THEME : PASTEL_THEME;
+  const normalized = theme === KEKKAI_THEME
+    ? KEKKAI_THEME
+    : theme === BASIC_THEME || theme === "atlas-paper" || theme === "paper"
+      ? BASIC_THEME
+      : theme === RETRO_THEME
+        ? RETRO_THEME
+        : PASTEL_THEME;
   document.documentElement.dataset.theme = normalized;
-  const themeColor = normalized === RETRO_THEME ? "#020806" : normalized === BASIC_THEME ? "#f5efe3" : "#d86f9b";
+  const themeColor = normalized === KEKKAI_THEME
+    ? "#5b2a86"
+    : normalized === RETRO_THEME
+      ? "#020806"
+      : normalized === BASIC_THEME
+        ? "#f5efe3"
+        : "#d86f9b";
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColor);
 
   if (options.persist !== false) {
@@ -2542,8 +2577,19 @@ function setTheme(theme, options = {}) {
 }
 
 function toggleTheme() {
-  setTheme(currentTheme() === RETRO_THEME ? PASTEL_THEME : RETRO_THEME);
+  setTheme(currentTheme() === RETRO_THEME || currentTheme() === KEKKAI_THEME ? PASTEL_THEME : RETRO_THEME);
   render();
+}
+
+function hasKekkaishiLaunchMode() {
+  return new URLSearchParams(window.location.search).get("mode") === KEKKAI_MODE;
+}
+
+function applyKekkaishiLaunchMode() {
+  if (!hasKekkaishiLaunchMode()) return false;
+  setTheme(KEKKAI_THEME, { persist: false });
+  setTraverseMode(true);
+  return true;
 }
 
 function createId() {
@@ -4254,16 +4300,12 @@ function drawFigures() {
     context.beginPath();
     context.moveTo(points[0].x, points[0].y);
     for (const point of points.slice(1)) context.lineTo(point.x, point.y);
-    if (figure.closed && points.length >= 3) context.closePath();
-    if (figure.closed && points.length >= 3) {
+    if (points.length >= 3) {
       context.globalAlpha = isSelected ? 0.22 : 0.1;
       context.fillStyle = stroke;
       context.fill();
       context.globalAlpha = 1;
     }
-    context.strokeStyle = stroke;
-    context.lineWidth = isSelected ? 4 : 2;
-    context.stroke();
     context.restore();
   }
 }
@@ -5355,7 +5397,7 @@ function linkSelectionInfo(link) {
 
 function figureSelectionInfo(figure) {
   const segments = figureSegments(figure);
-  const analysis = figure.closed ? analyzeSegmentShape(segments) : null;
+  const analysis = analyzeSegmentShape(segments);
   const name = figure.name || t("analysis.figure");
   if (analysis?.valid) {
     return `${name} | ${analysis.vertexCount}${t("analysis.vertexCount")} | ${t("analysis.area")} ${formatAreaValue(analysis.area)}`;
@@ -5468,10 +5510,18 @@ function renderTraverseActionDialog() {
   };
   const currentTileAtCap = currentCap !== null && stoneDisplayCount(currentStone) >= currentCap;
   const installedEntries = installedBarrierStoneEntries();
+  const availableStoneLocations = availableBarrierStoneIds().length;
+  const missingBarrierLocations = Math.max(0, 3 - availableStoneLocations);
   const installed = installedEntries.reduce((total, [, stone]) => total + stoneDisplayCount(stone), 0);
   if (elements.traverseStockValue) elements.traverseStockValue.textContent = String(amount);
   if (elements.traverseInstalledValue) elements.traverseInstalledValue.textContent = String(installed);
   if (elements.traverseLocationValue) elements.traverseLocationValue.textContent = String(installedEntries.length);
+  if (elements.traverseBarrierRequirement) {
+    elements.traverseBarrierRequirement.hidden = missingBarrierLocations === 0;
+    elements.traverseBarrierRequirement.textContent = missingBarrierLocations > 0
+      ? t("barrier.needLocations").replace("{count}", String(missingBarrierLocations))
+      : "";
+  }
   if (elements.traverseActionDialogTitle) elements.traverseActionDialogTitle.textContent = t("traverse.menuTitle");
   if (elements.traversePlaceButton) {
     elements.traversePlaceButton.textContent = t("traverse.place");
@@ -5487,12 +5537,12 @@ function renderTraverseActionDialog() {
     elements.traversePlacementViewButton.disabled = state.traverseBusy;
   }
   if (elements.traverseCreateBarrierButton) {
-    const enoughStones = availableBarrierStoneIds().length >= 3;
+    const enoughStones = availableStoneLocations >= 3;
     elements.traverseCreateBarrierButton.textContent = t("traverse.connect");
-    elements.traverseCreateBarrierButton.disabled = state.traverseBusy;
+    elements.traverseCreateBarrierButton.disabled = state.traverseBusy || !enoughStones;
     elements.traverseCreateBarrierButton.title = enoughStones
       ? t("traverse.connect")
-      : t("barrier.tooFew");
+      : t("barrier.needLocations").replace("{count}", String(missingBarrierLocations));
   }
   if (elements.traverseDragonEyeButton) {
     elements.traverseDragonEyeButton.textContent = t("dragonEye.open");
@@ -6144,13 +6194,8 @@ function renderGridFigureQuickDialog() {
     && vertexIndex < figure.vertices.length
     && figure.vertices.length > 2;
   const title = figure.name || `${t("analysis.figure")} ${figure.vertices.length}`;
-  const toggleLabel = figure.closed ? t("figure.openAction") : t("figure.closeAction");
   elements.gridFigureQuickName.textContent = title;
   elements.gridFigureQuickInfo.textContent = t("figure.vertexCount").replace("{count}", String(figure.vertices.length));
-  elements.gridFigureQuickToggleClosedLabel.textContent = toggleLabel;
-  elements.gridFigureQuickToggleClosedButton.setAttribute("aria-label", toggleLabel);
-  elements.gridFigureQuickToggleClosedButton.title = toggleLabel;
-  elements.gridFigureQuickToggleClosedButton.disabled = !figure.closed && figure.vertices.length < 3;
   elements.gridFigureQuickDeleteVertexButton.hidden = !hasDeletableVertex;
   elements.gridFigureQuickDeleteVertexButton.disabled = !hasDeletableVertex;
   elements.gridFigureQuickDeleteVertexLabel.textContent = t("figure.deleteVertex");
@@ -6205,7 +6250,7 @@ function selectionAnalysisTarget() {
   if (figures.length === 1 && links.length === 0 && selectedPointIds().length === 0 && selectedObservationIds().length === 0) {
     const figure = figures[0];
     const segments = figureSegments(figure);
-    if (figure.closed && segments.length >= 3) {
+    if (segments.length >= 3) {
       return { type: "polygon", figure, links: segments, segments };
     }
     return null;
@@ -6685,25 +6730,6 @@ async function deleteGridLinkFromQuickDialog() {
   showAppToast(t("line.deleted"));
 }
 
-async function toggleFigureClosedFromQuickDialog() {
-  const figureId = state.gridFigureQuickFigureId;
-  const figure = figureId ? findFigure(figureId) : null;
-  if (!figure) return;
-  const nextClosed = !figure.closed;
-  if (nextClosed && figure.vertices.length < 3) {
-    showAppToast(t("figure.closeUnavailable"), { error: true });
-    return;
-  }
-
-  const updated = setAnalysisFigureClosed(figure, nextClosed);
-  if (!updated) return;
-  state.figures = state.figures.map((candidate) => candidate.id === figureId ? updated : candidate);
-  persistWorkspace();
-  if (elements.gridFigureQuickDialog?.open) elements.gridFigureQuickDialog.close("closed-state");
-  render();
-  showAppToast(t(nextClosed ? "figure.closed" : "figure.opened"));
-}
-
 async function deleteFigureVertexFromQuickDialog() {
   const figureId = state.gridFigureQuickFigureId;
   const vertexIndex = state.gridFigureQuickVertexIndex;
@@ -6718,16 +6744,10 @@ async function deleteFigureVertexFromQuickDialog() {
   });
   if (!confirmed || !findFigure(figureId)) return;
 
-  const result = removeAnalysisFigureVertex(figure, vertexIndex, {
-    lineId: createId(),
-    createdAt: new Date().toISOString()
-  });
-  if (!result.figure && !result.line) return;
-
-  if (result.line) {
+  const result = removeAnalysisFigureVertex(figure, vertexIndex);
+  if (!result.figure && !result.line) {
     state.figures = state.figures.filter((candidate) => candidate.id !== figureId);
-    state.links = [...state.links, result.line];
-    setSelection([{ type: "link", id: result.line.id }], { render: false });
+    removeSelectionEntry("figure", figureId);
   } else {
     state.figures = state.figures.map((candidate) => candidate.id === figureId ? result.figure : candidate);
     setSelection([{ type: "figure", id: figureId }], { render: false });
@@ -6735,7 +6755,7 @@ async function deleteFigureVertexFromQuickDialog() {
   persistWorkspace();
   if (elements.gridFigureQuickDialog?.open) elements.gridFigureQuickDialog.close("vertex-deleted");
   render();
-  showAppToast(result.line ? t("figure.demoted") : t("figure.vertexDeleted"));
+  showAppToast(t("figure.vertexDeleted"));
 }
 
 async function deleteFigureFromQuickDialog() {
@@ -10439,9 +10459,9 @@ function createStoredLink({ id = createId(), aPoint, bPoint, strokeId = "", colo
   });
 }
 
-function createStoredFigure({ id = createId(), points = [], closed = false, name = "", color = "", createdAt = new Date().toISOString() } = {}) {
+function createStoredFigure({ id = createId(), points = [], name = "", color = "", createdAt = new Date().toISOString() } = {}) {
   const vertices = points.map(captureLineEndpoint).filter(Boolean);
-  return createAnalysisFigure({ id, vertices, closed, name, color, createdAt });
+  return createAnalysisFigure({ id, vertices, name, color, createdAt });
 }
 
 function linkTitle(link) {
@@ -11347,7 +11367,7 @@ function findNearestFigure(screenPoint) {
     for (let index = 1; index < points.length; index += 1) {
       distance = Math.min(distance, distanceToSegment(screenPoint, points[index - 1], points[index]));
     }
-    if (figure.closed && points.length >= 3) {
+    if (points.length >= 3) {
       distance = Math.min(distance, distanceToSegment(screenPoint, points.at(-1), points[0]));
       if (pointInPolygon(screenPoint, points)) distance = 0;
     }
@@ -11739,7 +11759,6 @@ async function connectSelectedPoints() {
   if (closeShape) {
     createdFigure = createStoredFigure({
       points: pointIds.map(findPoint).filter(Boolean),
-      closed: true,
       createdAt
     });
     if (createdFigure) {
@@ -14206,6 +14225,7 @@ function requestConfirm(options = {}) {
   const choiceButtons = [
     elements.confirmDialogDeleteLinksButton,
     elements.confirmDialogDeletePointsButton,
+    elements.confirmDialogDeleteFiguresButton,
     elements.confirmDialogDeleteAllButton
   ];
   const choices = Array.isArray(options.choices) ? options.choices : null;
@@ -14259,6 +14279,9 @@ function requestTextInput(options = {}) {
   elements.textInputDialogSubmitButton.textContent = options.submitLabel || cloudText("決定", "Done");
   elements.textInputDialogDefaultActions.hidden = options.shareMode === true;
   elements.textInputDialogShareActions.hidden = options.shareMode !== true;
+  if (elements.textInputShareCloudButton) {
+    elements.textInputShareCloudButton.hidden = options.shareMode !== true || !state.cloud.connected;
+  }
 
   const result = new Promise((resolve) => {
     pendingTextInputResolve = resolve;
@@ -14340,51 +14363,154 @@ async function shareStorageListFile(storageId) {
   await sharePointListFile(entry?.local || entry?.preview);
 }
 
-function gridAtlasShareUrl(list, options = {}) {
-  const document = pointListGridAtlasDocument(list, options);
-  const payload = encodeGridAtlasUrlPayload(document);
-  const url = new URL(window.location.href);
-  url.hash = `${GRIDATLAS_URL_PARAMETER}=${payload}`;
-  return url.toString();
+function shareSnapshotTextColor() {
+  return getComputedStyle(document.documentElement).getPropertyValue("--text").trim() || "#18322b";
 }
 
-async function sharePointListUrl(list, options = {}) {
-  if (!list) {
-    setShareFeedback(t("list.shareUnavailable"), { error: true });
-    return;
+function shareSnapshotSurfaceColor() {
+  return getComputedStyle(document.documentElement).getPropertyValue("--surface").trim() || "#fffdf7";
+}
+
+function drawShareSnapshotGrid(target, palette) {
+  target.fillStyle = shareSnapshotSurfaceColor();
+  target.fillRect(0, 0, 1200, 630);
+  target.strokeStyle = palette.gridMinor || "#d7e4df";
+  target.lineWidth = 1;
+  for (let x = 0; x <= 1200; x += 30) {
+    target.beginPath(); target.moveTo(x, 0); target.lineTo(x, 630); target.stroke();
+  }
+  for (let y = 0; y <= 630; y += 30) {
+    target.beginPath(); target.moveTo(0, y); target.lineTo(1200, y); target.stroke();
+  }
+}
+
+async function renderSelectedShareImage(points, lines, figures) {
+  const vertices = [
+    ...points.map((point) => ({ ...point.geo, name: point.title })),
+    ...lines.flatMap((line) => {
+      const endpoints = linkEndpoints(line);
+      return endpoints ? [endpoints.a, endpoints.b] : [];
+    }),
+    ...figures.flatMap((figure) => figureRuntimeVertices(figure))
+  ].filter((vertex) => validGeo(vertex));
+  if (vertices.length === 0) throw new Error("Snapshot geometry unavailable");
+
+  const minLat = Math.min(...vertices.map((vertex) => vertex.lat));
+  const maxLat = Math.max(...vertices.map((vertex) => vertex.lat));
+  const minLng = Math.min(...vertices.map((vertex) => vertex.lng));
+  const maxLng = Math.max(...vertices.map((vertex) => vertex.lng));
+  const latSpan = Math.max(maxLat - minLat, 0.02);
+  const lngSpan = Math.max(maxLng - minLng, 0.02);
+  const span = Math.max(latSpan, lngSpan);
+  const pad = span * 0.12;
+  const loLat = (minLat + maxLat) / 2 - span / 2 - pad;
+  const loLng = (minLng + maxLng) / 2 - span / 2 - pad;
+  const totalSpan = span + pad * 2;
+  const project = (geo) => ({
+    x: 90 + ((geo.lng - loLng) / totalSpan) * 1020,
+    y: 470 - ((geo.lat - loLat) / totalSpan) * 390
+  });
+  const canvas = document.createElement("canvas");
+  canvas.width = 1200;
+  canvas.height = 630;
+  const target = canvas.getContext("2d");
+  const palette = canvasPalette();
+  const textColor = shareSnapshotTextColor();
+  drawShareSnapshotGrid(target, palette);
+
+  for (const figure of figures) {
+    const projected = figureRuntimeVertices(figure).map((vertex) => project(vertex.geo));
+    if (projected.length < 3) continue;
+    target.save();
+    target.beginPath();
+    target.moveTo(projected[0].x, projected[0].y);
+    for (const point of projected.slice(1)) target.lineTo(point.x, point.y);
+    target.closePath();
+    target.globalAlpha = 0.2;
+    target.fillStyle = normalizeGridAtlasLineColor(figure.color) || palette.link;
+    target.fill();
+    target.restore();
+    if (figure.name) {
+      const center = projected.reduce((sum, point) => ({ x: sum.x + point.x, y: sum.y + point.y }), { x: 0, y: 0 });
+      target.fillStyle = textColor;
+      target.font = "600 20px sans-serif";
+      target.fillText(figure.name, center.x / projected.length + 8, center.y / projected.length);
+    }
   }
 
+  target.lineWidth = 4;
+  for (const line of lines) {
+    const endpoints = linkEndpoints(line);
+    if (!endpoints) continue;
+    const a = project(endpoints.a.geo);
+    const b = project(endpoints.b.geo);
+    target.strokeStyle = normalizeGridAtlasLineColor(line.color) || palette.link;
+    target.beginPath(); target.moveTo(a.x, a.y); target.lineTo(b.x, b.y); target.stroke();
+    const result = analyzeOpenPath([{ a: endpoints.a, b: endpoints.b }]);
+    target.fillStyle = textColor;
+    target.font = "600 17px sans-serif";
+    target.fillText(`${endpoints.a.title} - ${endpoints.b.title}  ${formatDistance(distanceBetween(endpoints.a, endpoints.b))} / ${formatAngle(result.bearingDegrees)}`, (a.x + b.x) / 2 + 8, (a.y + b.y) / 2 - 8);
+  }
+
+  target.fillStyle = palette.pointFill;
+  target.strokeStyle = palette.pointBaseStroke;
+  target.lineWidth = 3;
+  for (const point of points) {
+    const screen = project(point.geo);
+    target.beginPath(); target.arc(screen.x, screen.y, 10, 0, Math.PI * 2); target.fill(); target.stroke();
+    target.fillStyle = textColor;
+    target.font = "700 19px sans-serif";
+    target.fillText(point.title || t("analysis.vertex"), screen.x + 15, screen.y - 12);
+    target.fillStyle = palette.pointFill;
+  }
+
+  const metrics = [];
+  for (const figure of figures) {
+    const result = analyzeSegmentShape(figureSegments(figure));
+    if (result?.valid) metrics.push(`${figure.name || t("analysis.figure")}: ${t("analysis.area")} ${formatAreaValue(result.area)} / ${t("analysis.perimeter")} ${formatDistance(result.perimeter)}`);
+  }
+  target.fillStyle = textColor;
+  target.font = "600 16px sans-serif";
+  target.fillText(`${points.length}${t("label.points")}  ${lines.length}${t("label.links")}  ${figures.length}${t("analysis.figure")}`, 90, 555);
+  metrics.slice(0, 2).forEach((metric, index) => target.fillText(metric, 90, 580 + index * 18));
+  target.textAlign = "right";
+  target.fillText("GRID ATLAS  #GRIDATLAS", 1110, 605);
+  target.textAlign = "left";
+  return canvasToPngBlob(canvas);
+}
+
+async function shareSelectedSnapshot(points, lines, figures, name) {
+  const blob = await renderSelectedShareImage(points, lines, figures);
+  const file = new File([blob], `grid-atlas-${safeFilenamePart(name || "snapshot")}.png`, { type: "image/png" });
+  const canShareFile = typeof navigator.share === "function" && (!navigator.canShare || navigator.canShare({ files: [file] }));
+  if (canShareFile) {
+    try {
+      await navigator.share({ files: [file], title: `GRID ATLAS — ${name}`, text: `GRID ATLAS「${name}」 #GRIDATLAS` });
+      setShareFeedback(t("list.exportImageShared"));
+      return;
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      console.warn("GRID ATLAS snapshot share failed; falling back to download", error);
+    }
+  }
+  downloadGridAtlasFile(file);
+  setShareFeedback(t("list.exportImageDownloaded"));
+}
+
+async function shareSelectedCloud(list) {
   try {
-    const url = gridAtlasShareUrl(list, options);
-    if (new TextEncoder().encode(url).byteLength > 8192) {
-      setShareFeedback(t("list.exportUrlTooLong"));
-      await sharePointListFile(list, { ...options, confirm: false });
-      return;
-    }
-
-    if (typeof navigator.share === "function") {
-      try {
-        await navigator.share({
-          url,
-          title: `GRID ATLAS — ${list.name || "地点リスト"}`,
-          text: cloudText(`GRID ATLAS「${list.name || "地点リスト"}」`, `GRID ATLAS “${list.name || "Point list"}”`)
-        });
-        setShareFeedback(t("list.exportUrlShared"));
-        return;
-      } catch (error) {
-        if (error?.name === "AbortError") return;
-        console.warn("GRID ATLAS URL share failed; falling back to clipboard", error);
-      }
-    }
-
-    if (await writeClipboardText(url)) {
-      setShareFeedback(t("list.exportUrlCopied"));
-      return;
-    }
-    setShareFeedback(t("list.exportUrlCopyFailed"), { error: true });
+    const client = cloudClientFromInputs();
+    const response = await client.createShare(list, list.name, 90);
+    const shareId = response?.share?.id;
+    if (!shareId) throw new Error("共有IDがありません");
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.searchParams.set(CLOUD_SHARE_URL_PARAMETER, shareId);
+    if (!(await writeClipboardText(url))) throw new Error("クリップボードへコピーできませんでした");
+    setShareFeedback(t("list.exportCloudCreated"));
   } catch (error) {
-    console.warn("GRID ATLAS URL export failed", error);
-    setShareFeedback(t("list.exportUrlCopyFailed"), { error: true });
+    console.warn("GRID ATLAS cloud share failed", error);
+    setShareFeedback(error?.message || t("list.shareUnavailable"), { error: true });
   }
 }
 
@@ -14432,7 +14558,8 @@ async function shareSelectedPointsFile() {
   };
   const shareOptions = { confirm: false, includeAnalysisLayer: true };
   if (input.action === "file") await sharePointListFile(list, shareOptions);
-  if (input.action === "url") await sharePointListUrl(list, { includeAnalysisLayer: true });
+  if (input.action === "image") await shareSelectedSnapshot(points, lines, figures, name);
+  if (input.action === "cloud") await shareSelectedCloud(list);
 }
 function gridAtlasFileLikely(file) {
   return Boolean(file) && (
@@ -14859,6 +14986,73 @@ function clearIncomingGridAtlasUrlValue() {
   window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
+function incomingCloudShareId() {
+  return new URLSearchParams(window.location.search).get(CLOUD_SHARE_URL_PARAMETER)?.trim() || "";
+}
+
+function clearIncomingCloudShareId() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete(CLOUD_SHARE_URL_PARAMETER);
+  window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
+function closeCloudSharePreview() {
+  document.querySelector("#cloudSharePreview")?.remove();
+}
+
+async function openCloudShareInGridAtlas(payload) {
+  const document = payload?.type === "place-list"
+    ? payload
+    : pointListGridAtlasDocument(payload, { includeAnalysisLayer: true });
+  await importGridAtlasPackages([{ manifest: null, document, resources: new Map() }], { source: "cloud-share" });
+  clearIncomingCloudShareId();
+  closeCloudSharePreview();
+}
+
+async function handleIncomingCloudShare() {
+  const shareId = incomingCloudShareId();
+  if (!shareId) return false;
+  const panel = document.createElement("section");
+  panel.id = "cloudSharePreview";
+  panel.className = "cloud-share-preview";
+  panel.innerHTML = `<div class="cloud-share-preview-card"><p class="cloud-share-preview-kicker">GRID ATLAS</p><h1 class="cloud-share-preview-title">共有を読み込み中…</h1><p class="cloud-share-preview-notice">これは位置情報を含む共有です。</p></div>`;
+  document.body.append(panel);
+  try {
+    const response = await fetch(new URL("v1/shares/" + encodeURIComponent(shareId), CLOUD_PRODUCTION_API_URL), { cache: "no-store" });
+    const result = await response.json();
+    if (!response.ok || !result?.share?.payload) throw new Error(result?.error || "共有を読み込めませんでした");
+    const share = result.share;
+    const payload = share.payload;
+    const list = payload?.type === "place-list" ? null : payload;
+    const points = list?.points || payload?.places || [];
+    const lines = list?.analysisLayer?.lines || [];
+    const figures = list?.analysisLayer?.figures || [];
+    const card = panel.firstElementChild;
+    card.innerHTML = `<p class="cloud-share-preview-kicker">GRID ATLAS</p><h1 class="cloud-share-preview-title"></h1><p class="cloud-share-preview-notice">これは位置情報を含む共有です。</p><div class="cloud-share-preview-visual"></div><ul class="cloud-share-preview-list"></ul><button class="primary-button cloud-share-preview-open">GRID ATLASで開く</button>`;
+    card.querySelector(".cloud-share-preview-title").textContent = share.name || payload.name || "共有リスト";
+    const visual = card.querySelector(".cloud-share-preview-visual");
+    if (list && points.length > 0) {
+      const blob = await renderSelectedShareImage(points, lines, figures);
+      const image = document.createElement("img");
+      image.alt = share.name || "GRID ATLAS共有スナップショット";
+      image.src = URL.createObjectURL(blob);
+      visual.append(image);
+    }
+    const listElement = card.querySelector(".cloud-share-preview-list");
+    for (const point of points.slice(0, 50)) {
+      const item = document.createElement("li");
+      item.textContent = point.title || point.name || "地点";
+      listElement.append(item);
+    }
+    card.querySelector(".cloud-share-preview-open").addEventListener("click", () => void openCloudShareInGridAtlas(payload));
+  } catch (error) {
+    panel.firstElementChild.innerHTML = `<p class="cloud-share-preview-kicker">GRID ATLAS</p><h1 class="cloud-share-preview-title">共有を開けません</h1><p class="cloud-share-preview-notice"></p><button class="compact-button cloud-share-preview-close">閉じる</button>`;
+    panel.querySelector(".cloud-share-preview-notice").textContent = error?.message || "共有が見つからないか、有効期限切れです。";
+    panel.querySelector(".cloud-share-preview-close").addEventListener("click", () => { clearIncomingCloudShareId(); closeCloudSharePreview(); });
+  }
+  return true;
+}
+
 async function handleIncomingGridAtlasUrl() {
   const value = incomingGridAtlasUrlValue();
   if (!value) return false;
@@ -15057,8 +15251,9 @@ async function deleteSelectedPoint() {
         `Delete the selected ${parts.join(" / ")}?`
       ),
       choices: [
-        { value: "links", label: t("delete.linksOnly") },
-        { value: "points", label: t("delete.pointsOnly") },
+        ...(candidateLinkIdSet.size > 0 ? [{ value: "links", label: t("delete.linksOnly") }] : []),
+        ...(candidatePointIds.length + candidateCloudPointIds.length > 0 ? [{ value: "points", label: t("delete.pointsOnly") }] : []),
+        ...(candidateFigureIdSet.size > 0 ? [{ value: "figures", label: t("delete.figuresOnly") }] : []),
         { value: "all", label: t("delete.all") }
       ],
       danger: true
@@ -15068,7 +15263,7 @@ async function deleteSelectedPoint() {
     return;
   }
 
-  const pointDeletionSelected = deletionMode !== "links";
+  const pointDeletionSelected = deletionMode === "points" || deletionMode === "all";
   if (pointDeletionSelected && uneditablePointIds.length > 0) {
     const message = t("delete.uneditablePoints").replace("{count}", String(uneditablePointIds.length));
     showAppToast(message, { error: true });
@@ -15077,8 +15272,8 @@ async function deleteSelectedPoint() {
   const pointIdSet = pointDeletionSelected ? new Set(candidatePointIds) : new Set();
   const cloudPointIdSet = pointDeletionSelected ? new Set(candidateCloudPointIds) : new Set();
   const deletionPointIdSet = new Set([...pointIdSet, ...cloudPointIdSet]);
-  const linkIdSet = deletionMode === "points" ? new Set() : new Set(candidateLinkIdSet);
-  const figureIdSet = deletionMode === "all" ? new Set(candidateFigureIdSet) : new Set();
+  const linkIdSet = deletionMode === "links" || deletionMode === "all" ? new Set(candidateLinkIdSet) : new Set();
+  const figureIdSet = deletionMode === "figures" || deletionMode === "all" ? new Set(candidateFigureIdSet) : new Set();
   const observationIdSet = deletionMode === "all" ? selectedObservationIdSet : new Set();
 
   if (deletionPointIdSet.size + linkIdSet.size + figureIdSet.size + observationIdSet.size === 0) {
@@ -15359,9 +15554,6 @@ function bindEvents() {
     state.gridFigureQuickFigureId = null;
     state.gridFigureQuickVertexIndex = null;
   });
-  bindPointerActionButton(elements.gridFigureQuickToggleClosedButton, () => {
-    void toggleFigureClosedFromQuickDialog();
-  });
   bindPointerActionButton(elements.gridFigureQuickDeleteVertexButton, () => {
     void deleteFigureVertexFromQuickDialog();
   });
@@ -15466,7 +15658,7 @@ function bindEvents() {
         : elements.textInputDialogValue.value);
       return;
     }
-    if (options.shareMode === true && ["share-file", "share-url"].includes(returnValue)) {
+    if (options.shareMode === true && ["share-file", "share-image", "share-cloud"].includes(returnValue)) {
       resolve({ value: elements.textInputDialogValue.value, action: returnValue.slice("share-".length) });
       return;
     }
@@ -15501,7 +15693,8 @@ function bindEvents() {
   });
   elements.readClipboardButton.addEventListener("click", readClipboardShare);
   elements.textInputShareFileButton.addEventListener("click", () => elements.textInputDialog.close("share-file"));
-  elements.textInputShareUrlButton.addEventListener("click", () => elements.textInputDialog.close("share-url"));
+  elements.textInputShareImageButton.addEventListener("click", () => elements.textInputDialog.close("share-image"));
+  elements.textInputShareCloudButton.addEventListener("click", () => elements.textInputDialog.close("share-cloud"));
   document.querySelector("[data-share-action-cancel]")?.addEventListener("click", () => elements.textInputDialog.close("cancel"));
   window.addEventListener("pointerup", handlePointInfoRelease, true);
   window.addEventListener("pointercancel", () => {
@@ -15842,12 +16035,19 @@ bindEvents();
 void initializeCloudAuth();
 initMobilePages();
 resizeCanvas();
+const kekkaishiLaunch = applyKekkaishiLaunchMode();
 void hydrateWorkspaceAssetPhotos()
   .catch((error) => console.warn("GRID ATLAS asset hydration failed", error))
-  .finally(() => void handleIncomingGridAtlasLink());
+  .finally(() => {
+    void handleIncomingGridAtlasLink();
+    void handleIncomingCloudShare();
+  });
 handleIncomingShare();
 locateOnStartup();
 registerServiceWorker();
 render();
+if (kekkaishiLaunch) {
+  requestAnimationFrame(() => openTraverseActionDialog());
+}
 restorePointInfoMapReturn();
 if (state.cloud.connected && !state.cloud.authConfigured) void refreshCloudLists();

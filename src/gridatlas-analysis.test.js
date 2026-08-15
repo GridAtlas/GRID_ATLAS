@@ -28,7 +28,6 @@ describe("GRID ATLAS analysis extension", () => {
           { lat: 35.1, lng: 135.1, key: "geo:35.1:135.1", name: "B", placeRef: null },
           { lat: 35.2, lng: 135, key: "geo:35.2:135", name: "C", placeRef: null }
         ],
-        closed: true
       }]
     });
   });
@@ -47,7 +46,6 @@ describe("GRID ATLAS analysis extension", () => {
       {
         id: "figure-1",
         vertices: [vertex(35, 135, "A", "place-a"), vertex(35.1, 135.1, "B", "place-b"), vertex(35.2, 135, "C")],
-        closed: true,
         name: "三角形",
         color: "#AABBCC",
         createdAt: "2026-08-11T00:00:00.000Z"
@@ -68,7 +66,6 @@ describe("GRID ATLAS analysis extension", () => {
           { lat: 35.1, lng: 135.1, key: "geo:35.1:135.1", name: "B", placeRef: "place-b" },
           { lat: 35.2, lng: 135, key: "geo:35.2:135", name: "C", placeRef: null }
         ],
-        closed: true,
         name: "三角形",
         color: "#aabbcc",
         createdAt: "2026-08-11T00:00:00.000Z"
@@ -113,7 +110,6 @@ describe("GRID ATLAS analysis extension", () => {
           { lat: 35.1, lng: 135.1, key: "geo:35.1:135.1", name: "B", placeRef: null },
           { lat: 35.2, lng: 135, key: "geo:35.2:135", name: "C", placeRef: null }
         ],
-        closed: true
       }]
     });
   });

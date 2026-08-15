@@ -17,7 +17,11 @@ export function createCloudClient({ baseUrl, getAccessToken, getTesterCode, fetc
   async function request(path, options = {}) {
     const token = String(await getAccessToken?.() || "").trim();
     const testerCode = String(await getTesterCode?.() || "").trim();
-    if (!token && !testerCode) throw new CloudApiError("ログインまたはテスターコードが必要です", { status: 401 });
+    if (!options.requireAuth && !token && !testerCode) {
+      // Public share reads intentionally do not send credentials.
+    } else if (!token && !testerCode) {
+      throw new CloudApiError("ログインまたはテスターコードが必要です", { status: 401 });
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -101,7 +105,14 @@ export function createCloudClient({ baseUrl, getAccessToken, getTesterCode, fetc
     deleteAsset: (listId, assetId) => request(
       "v1/me/lists/" + encodeURIComponent(listId) + "/assets/" + encodeURIComponent(assetId),
       { method: "DELETE" }
-    )
+    ),
+    createShare: (payload, name, expiresInDays = 90) => request("v1/me/shares", {
+      method: "POST",
+      body: { payload, name, expiresInDays }
+    }),
+    listShares: () => request("v1/me/shares"),
+    revokeShare: (shareId) => request("v1/me/shares/" + encodeURIComponent(shareId), { method: "DELETE" }),
+    getShare: (shareId) => request("v1/shares/" + encodeURIComponent(shareId), { requireAuth: false })
   };
 }
 

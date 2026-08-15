@@ -33,8 +33,7 @@ function serializableFigure(figure) {
 
   const result = {
     id: normalized.id,
-    vertices: normalized.vertices,
-    closed: normalized.closed
+    vertices: normalized.vertices
   };
   if (normalized.name) result.name = normalized.name;
   const color = normalizeGridAtlasLineColor(normalized.color);
