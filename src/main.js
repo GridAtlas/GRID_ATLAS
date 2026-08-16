@@ -132,7 +132,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2202";
+const WEB_VERSION = "0.2203";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -1255,7 +1255,7 @@ const TRANSLATIONS = {
     "traverse.connect": "結界を結ぶ",
     "traverse.cancel": "キャンセル",
     "traverse.returnTitle": "タイトルに戻る",
-    "traverse.status": "ステータス確認",
+    "traverse.status": "ステータス",
     "traverse.menuTitle": "結界操作",
     "dragonEye.open": "龍脈眼",
     "dragonEye.title": "龍脈眼の形を選択",
@@ -1808,7 +1808,7 @@ const TRANSLATIONS = {
     "traverse.connect": "Bind barrier",
     "traverse.cancel": "Cancel",
     "traverse.returnTitle": "Back to title",
-    "traverse.status": "Check status",
+    "traverse.status": "Status",
     "traverse.menuTitle": "Barrier operation",
     "dragonEye.open": "Dragon eye",
     "dragonEye.title": "Choose a Dragon Eye shape",
