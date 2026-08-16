@@ -135,7 +135,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2242";
+const WEB_VERSION = "0.2245";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -11222,6 +11222,40 @@ function linkEndpoints(link) {
   return a && b ? { a, b } : null;
 }
 
+function endpointPairKey(a, b) {
+  const keys = [
+    a?.key || a?.endpointKey || canonicalEndpointKey(a),
+    b?.key || b?.endpointKey || canonicalEndpointKey(b)
+  ];
+  return keys.every(Boolean) ? keys.sort().join("\u0000") : "";
+}
+
+function figureIdsMatchingSelectedGeometry(linkIds, pointIds) {
+  const selectedLinkKeys = new Set(
+    linkIds.map(findLink).filter(Boolean).map((link) => {
+      const endpoints = linkEndpoints(link);
+      return endpoints ? endpointPairKey(endpoints.a, endpoints.b) : "";
+    }).filter(Boolean)
+  );
+  if (selectedLinkKeys.size === 0) return [];
+
+  const selectedPointKeys = new Set(
+    pointIds.map(findPoint).filter((point) => point && validGeo(point.geo))
+      .map((point) => canonicalEndpointKey(point.geo))
+  );
+
+  return state.figures
+    .filter((figure) => {
+      const edges = figureEdges(figure);
+      const edgeKeys = edges.map((edge) => endpointPairKey(edge.a, edge.b)).filter(Boolean);
+      if (edgeKeys.length < 3 || edgeKeys.length !== selectedLinkKeys.size) return false;
+      if (!edgeKeys.every((key) => selectedLinkKeys.has(key))) return false;
+      if (selectedPointKeys.size === 0) return true;
+      return figure.vertices.every((vertex) => selectedPointKeys.has(vertex.key || canonicalEndpointKey(vertex)));
+    })
+    .map((figure) => figure.id);
+}
+
 function captureLineEndpoint(point) {
   if (!point || !validGeo(point.geo)) {
     return null;
@@ -15323,8 +15357,8 @@ function requestConfirm(options = {}) {
   ];
   const choices = Array.isArray(options.choices) ? options.choices : null;
   const choiceMode = choices !== null;
-  for (const button of choiceButtons) {
-    button.hidden = !choiceMode;
+  for (const [index, button] of choiceButtons.entries()) {
+    button.hidden = !choiceMode || index >= (choices?.length ?? 0);
   }
   elements.confirmDialogConfirmButton.hidden = choiceMode;
   elements.confirmDialogConfirmButton.textContent = options.confirmLabel || t("action.delete");
@@ -16624,11 +16658,12 @@ async function deleteSelectedPoint() {
   ));
   const explicitLinkIds = selectedLinkIds();
   const explicitFigureIds = selectedFigureIds();
+  const inferredFigureIds = figureIdsMatchingSelectedGeometry(explicitLinkIds, selectedIds);
   const selectedObservations = selectedLoadedObservations();
   const selectedObservationIdSet = new Set(selectedObservations.map((observation) => observation.id));
   const candidatePointIdSet = new Set(candidatePointIds);
   const candidateLinkIdSet = new Set(explicitLinkIds);
-  const candidateFigureIdSet = new Set(explicitFigureIds);
+  const candidateFigureIdSet = new Set([...explicitFigureIds, ...inferredFigureIds]);
 
   if (candidatePointIdSet.size + candidateCloudPointIdSet.size + candidateLinkIdSet.size + candidateFigureIdSet.size + selectedObservationIdSet.size === 0) {
     return;
