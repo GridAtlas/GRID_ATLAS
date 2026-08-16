@@ -1,7 +1,13 @@
-import { BARRIER_CONFIG, appendBarrierEvent, stoneDisplayCount, stoneExactCount } from "./barrier.js";
+import { BARRIER_CONFIG, appendBarrierEvent, barrierStoneIds, stoneDisplayCount, stoneExactCount } from "./barrier.js";
 import { BARRIER_SCORE_CONFIG, scoreBarrier } from "./barrier-score.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+export function barrierSpiritOutput(power, elapsedMs) {
+  const normalizedPower = Math.max(0, Number(power) || 0);
+  const normalizedElapsed = Math.max(0, Number(elapsedMs) || 0);
+  return normalizedPower * normalizedElapsed / DAY_MS;
+}
 
 export const BARRIER_EVALUATION_CONFIG = Object.freeze({
   windowDays: BARRIER_CONFIG.windowDays,
@@ -135,6 +141,13 @@ export function currentBarrierPower(log) {
   }, 0);
 }
 
+function conservativeBarrierPower(log, barrierId, score = scoreBarrier(log, barrierId)) {
+  const powerNow = Math.max(0, Number(score?.power) || 0);
+  const progress = normalizeRankProgress(log?.barriers?.[barrierId]?.rankProgress);
+  const powerPrevious = progress.lastPower === null ? powerNow : Math.max(0, Number(progress.lastPower) || 0);
+  return Math.min(powerPrevious, powerNow);
+}
+
 export function liveCumulativeBarrierSpirit(log, now = Date.now()) {
   const status = log?.kekkaishi;
   const base = Math.max(0, Number(status?.lifetimeOutput) || 0);
@@ -145,16 +158,58 @@ export function liveCumulativeBarrierSpirit(log, now = Date.now()) {
   let total = base;
   for (const [barrierId, barrier] of Object.entries(log?.barriers || {})) {
     const score = scoreBarrier(log, barrierId);
-    const power = Math.max(0, Number(score?.power) || 0);
+    const power = conservativeBarrierPower(log, barrierId, score);
     if (power <= 0) continue;
     const createdAt = Date.parse(barrier?.createdAt);
     const startAt = Number.isFinite(evaluatedAt)
       ? Math.max(evaluatedAt, Number.isFinite(createdAt) ? createdAt : evaluatedAt)
       : createdAt;
     if (!Number.isFinite(startAt) || nowMs <= startAt) continue;
-    total += power * (nowMs - startAt) / DAY_MS;
+    total += barrierSpiritOutput(power, nowMs - startAt);
   }
   return total;
+}
+
+export function settleBarrierSpirit(log, barrierId, at = Date.now(), config = BARRIER_EVALUATION_CONFIG) {
+  const barrier = log?.barriers?.[barrierId];
+  if (!barrier) return { changed: false, amount: 0 };
+
+  const atMs = at instanceof Date ? at.getTime() : Number(at);
+  if (!Number.isFinite(atMs)) return { changed: false, amount: 0 };
+
+  const previousStatus = JSON.stringify(log.kekkaishi);
+  const status = normalizeKekkaishiStatus(
+    log.kekkaishi,
+    atMs,
+    Object.keys(log.barriers || {}).length,
+    config,
+    log.barriers
+  );
+  const evaluatedAt = Date.parse(status.lastEvaluatedAt);
+  const createdAt = Date.parse(barrier.createdAt);
+  const startAt = Number.isFinite(evaluatedAt)
+    ? Math.max(evaluatedAt, Number.isFinite(createdAt) ? createdAt : evaluatedAt)
+    : createdAt;
+  const score = scoreBarrier(log, barrierId);
+  const power = conservativeBarrierPower(log, barrierId, score);
+  const amount = Number.isFinite(startAt) ? barrierSpiritOutput(power, atMs - startAt) : 0;
+
+  if (amount > 0) {
+    status.lifetimeOutput += amount;
+    recordKekkaishiRankAchievements(status, atMs, config);
+    appendBarrierEvent(log, {
+      type: "barrier-spirit-settled",
+      at: new Date(atMs).toISOString(),
+      barrierId,
+      amount,
+      lifetimeOutput: status.lifetimeOutput
+    });
+  }
+  log.kekkaishi = status;
+  return {
+    changed: amount > 0 || previousStatus !== JSON.stringify(status),
+    amount
+  };
 }
 
 export function rankForKekkaishi(status, config = BARRIER_EVALUATION_CONFIG) {
@@ -214,7 +269,7 @@ export function barrierRankStoneProgress(score, barrier, config = BARRIER_EVALUA
   const currentStoneCount = Math.max(0, Number(score.stoneCount) || 0);
   const capIndex = Math.max(0, Math.min(BARRIER_CONFIG.stoneCapVertexByRank.length - 1, Math.floor(Number(rankIndex) || 0)));
   const stoneCap = Number(BARRIER_CONFIG.stoneCapVertexByRank[capIndex]) || BARRIER_CONFIG.stoneCapVertex;
-  const maxStoneCount = Math.max(0, Number(barrier?.vertices?.length) || 0) * Math.max(0, stoneCap);
+  const maxStoneCount = Math.max(0, barrierStoneIds(barrier).length) * Math.max(0, stoneCap);
   const maxPower = maxStoneCount * coefficient;
   return {
     max: false,
@@ -229,7 +284,7 @@ export function barrierRankStoneProgress(score, barrier, config = BARRIER_EVALUA
 }
 
 export function applyWeathering(log, days = 0, eventAt = Date.now(), config = BARRIER_CONFIG) {
-  const vertexIds = new Set(Object.values(log?.barriers || {}).flatMap((barrier) => barrier?.vertices || []));
+  const vertexIds = new Set(Object.values(log?.barriers || {}).flatMap((barrier) => barrierStoneIds(barrier)));
   const elapsedDays = Math.max(0, Math.floor(Number(days) || 0));
   if (elapsedDays < 1) return false;
   const rawRate = Number(config.weatherRate);
@@ -280,8 +335,7 @@ export function evaluateBarrierLog(log, now = Date.now(), config = BARRIER_EVALU
     const score = scoreBarrier(log, barrierId);
     const powerNow = Math.max(0, Number(score?.power) || 0);
     const progress = normalizeRankProgress(barrier.rankProgress);
-    const powerPrevious = progress.lastPower === null ? powerNow : Math.max(0, Number(progress.lastPower) || 0);
-    const conservativePower = Math.min(powerPrevious, powerNow);
+    const conservativePower = conservativeBarrierPower(log, barrierId, score);
     dailyPower += conservativePower;
     for (let rank = 0; rank < config.powerThresholds.length; rank += 1) {
       if (conservativePower >= config.powerThresholds[rank]) progress.activeDays[rank] += days;
@@ -290,7 +344,7 @@ export function evaluateBarrierLog(log, now = Date.now(), config = BARRIER_EVALU
     barrier.rankProgress = progress;
   }
 
-  status.lifetimeOutput += dailyPower * days;
+  status.lifetimeOutput += barrierSpiritOutput(dailyPower, days * DAY_MS);
   recordKekkaishiRankAchievements(status, now, config);
   status.dailyHistory.push(...Array.from({ length: Math.min(days, config.windowDays) }, () => dailyPower));
   status.dailyHistory = status.dailyHistory.slice(-config.windowDays);
@@ -370,7 +424,7 @@ export function resetBarrierRankProgress(barrier, power = 0, now = Date.now()) {
 
 function barrierIdForStone(log, stoneId) {
   return Object.entries(log?.barriers || {})
-    .find(([, barrier]) => Array.isArray(barrier?.vertices) && barrier.vertices.includes(stoneId))?.[0] || null;
+    .find(([, barrier]) => barrierStoneIds(barrier).includes(stoneId))?.[0] || null;
 }
 
 function validIso(value) {

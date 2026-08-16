@@ -46,6 +46,8 @@ import { analyzeLineIntersection, analyzeOpenPath, analyzeSegmentShape, vincenty
 import {
   BARRIER_CONFIG,
   appendBarrierEvent,
+  barrierFigureId,
+  barrierStoneIds,
   createBarrierLog,
   dissolveBarrier,
   grantBarrierStock,
@@ -73,7 +75,8 @@ import {
   barrierRankStoneProgress,
   rankForKekkaishi,
   rankForBarrier,
-  rankAchievementDays
+  rankAchievementDays,
+  settleBarrierSpirit
 } from "./barrier-evaluation.js?v=1";
 
 const STORAGE_KEY = "grid-atlas-workspace-v2";
@@ -132,7 +135,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2224";
+const WEB_VERSION = "0.2241";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -365,9 +368,9 @@ const elements = {
   gridPointQuickTrackLabel: document.querySelector("#gridPointQuickTrackLabel"),
   gridPointQuickInfoButton: document.querySelector("#gridPointQuickInfoButton"),
   gridPointQuickInfoLabel: document.querySelector("#gridPointQuickInfoLabel"),
-  gridBarrierStoneQuickDialog: document.querySelector("#gridBarrierStoneQuickDialog"),
-  gridBarrierStoneQuickName: document.querySelector("#gridBarrierStoneQuickName"),
-  gridBarrierStoneQuickInfo: document.querySelector("#gridBarrierStoneQuickInfo"),
+  gridBarrierStoneQuickDialog: document.querySelector("#gridPointQuickDialog"),
+  gridBarrierStoneQuickName: document.querySelector("#gridPointQuickName"),
+  gridBarrierStoneQuickInfo: document.querySelector("#gridPointQuickList"),
   gridBarrierStoneQuickPlaceButton: document.querySelector("#gridBarrierStoneQuickPlaceButton"),
   gridBarrierStoneQuickPlaceLabel: document.querySelector("#gridBarrierStoneQuickPlaceLabel"),
   gridBarrierStoneQuickPickButton: document.querySelector("#gridBarrierStoneQuickPickButton"),
@@ -596,6 +599,7 @@ const state = {
   pointInfoTargetId: null,
   pointInfoReturnPhase: null,
   gridPointQuickPointId: null,
+  gridPointQuickStoneId: null,
   gridBarrierStoneQuickStoneId: null,
   gridLinkQuickLinkId: null,
   gridFigureQuickFigureId: null,
@@ -2114,8 +2118,55 @@ function loadTraverseLog() {
     result = { log: createBarrierLog(), changed: true };
   }
   state.traverseLog = result.log;
+  const figuresChanged = syncBarrierFiguresFromLog();
   const evaluation = evaluateBarrierLog(state.traverseLog);
   if (result.changed || !raw || evaluation.changed) persistTraverseLog();
+  if (figuresChanged) persistWorkspace();
+}
+
+function barrierFigureForId(barrierId) {
+  const figureId = state.traverseLog?.barriers?.[barrierId]?.figureId || barrierFigureId(barrierId);
+  return figureId ? findFigure(figureId) : null;
+}
+
+function barrierFigureVertices(barrier) {
+  return barrier?.figureId
+    ? state.figures.find((figure) => figure.id === barrier.figureId)?.vertices || []
+    : [];
+}
+
+function syncBarrierFiguresFromLog() {
+  if (!state.traverseLog) return false;
+  const expected = new Map();
+  for (const [barrierId, barrier] of Object.entries(state.traverseLog.barriers || {})) {
+    const figureId = barrier.figureId || barrierFigureId(barrierId);
+    if (!figureId) continue;
+    barrier.figureId = figureId;
+    const vertices = barrierStoneIds(barrier).map((stoneId) => {
+      const geo = tileCenterGeo(state.traverseLog.stones?.[stoneId]?.tile);
+      return geo ? normalizeAnalysisVertex({ ...geo, name: "結界頂点", placeRef: null }) : null;
+    }).filter(Boolean);
+    if (vertices.length < 3) continue;
+    expected.set(figureId, createAnalysisFigure({
+      id: figureId,
+      vertices,
+      createdAt: barrier.createdAt,
+      layer: "barrier",
+      barrierId
+    }));
+  }
+  const nextFigures = state.figures
+    .filter((figure) => figure.layer !== "barrier" && !figure.barrierId && !expected.has(figure.id))
+    .concat([...expected.values()].filter(Boolean));
+  const changed = JSON.stringify(nextFigures) !== JSON.stringify(state.figures);
+  if (changed) state.figures = nextFigures;
+  Object.defineProperty(state.traverseLog, "figures", {
+    configurable: true,
+    enumerable: false,
+    writable: true,
+    value: state.figures
+  });
+  return changed;
 }
 
 function persistTraverseLog() {
@@ -2139,7 +2190,7 @@ function installedBarrierStoneEntries() {
 
 function usedBarrierStoneIds() {
   return new Set(Object.values(state.traverseLog?.barriers || {})
-    .flatMap((barrier) => Array.isArray(barrier?.vertices) ? barrier.vertices : []));
+    .flatMap((barrier) => barrierStoneIds(barrier)));
 }
 
 function availableBarrierStoneIds() {
@@ -2514,7 +2565,7 @@ function beginDirectBarrierLink(drag) {
   if (!availableStoneIds.includes(origin.stoneId)) return false;
   if (availableStoneIds.length < 3) {
     showAppToast(t("barrier.tooFew"), { error: true });
-    drag.barrierDirectLinkReady = false;
+    drag.endpointDragReady = false;
     drag.cancelled = true;
     return false;
   }
@@ -2534,7 +2585,7 @@ function beginDirectBarrierLink(drag) {
   drag.barrierLinkPendingStoneId = null;
   drag.barrierLinkCandidateStoneId = origin.stoneId;
   drag.barrierLinkClosing = false;
-  drag.barrierDirectLinkReady = false;
+  drag.endpointDragReady = false;
   drag.longPressed = true;
   drag.moved = true;
   canvas.classList.add("is-barrier-linking");
@@ -3741,14 +3792,13 @@ function barrierShareColors() {
 function barrierShareGeometry(score) {
   const barrier = state.traverseLog?.barriers?.[score?.barrierId];
   if (!barrier) return [];
-  return (barrier.vertices || [])
-    .map((stoneId) => state.traverseLog?.stones?.[stoneId])
-    .filter(Boolean)
-    .map((stone) => ({
-      geo: tileCenterGeo(stone.tile),
-      count: stoneDisplayCount(stone)
-    }))
-    .filter((vertex) => vertex.geo);
+  const figure = barrierFigureForId(score.barrierId);
+  return barrierStoneIds(barrier).map((stoneId, index) => ({
+    geo: figure?.vertices?.[index]
+      ? { lat: figure.vertices[index].lat, lng: figure.vertices[index].lng }
+      : tileCenterGeo(state.traverseLog?.stones?.[stoneId]?.tile),
+    count: stoneDisplayCount(state.traverseLog?.stones?.[stoneId])
+  })).filter((vertex) => vertex.geo);
 }
 
 function canvasToPngBlob(canvas) {
@@ -4005,6 +4055,7 @@ function workspaceSnapshot() {
 }
 
 function persistWorkspace() {
+  if (state.traverseLog) state.traverseLog.figures = state.figures;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(workspaceSnapshot()));
 }
 
@@ -4141,35 +4192,18 @@ function drawGrid(width, height) {
 function traverseTilePolygon(tileId) {
   const bounds = tileBounds(tileId);
   if (!bounds || bounds.z !== BARRIER_CONFIG.dataZoom) return null;
-  return [
-    projectLatLng(bounds.north, bounds.west),
-    projectLatLng(bounds.north, bounds.east),
-    projectLatLng(bounds.south, bounds.east),
-    projectLatLng(bounds.south, bounds.west)
-  ].map(worldToScreen);
+  return (bounds.corners || [
+    { lat: bounds.north, lng: bounds.west },
+    { lat: bounds.north, lng: bounds.east },
+    { lat: bounds.south, lng: bounds.east },
+    { lat: bounds.south, lng: bounds.west }
+  ]).map((corner) => projectLatLng(corner.lat, corner.lng)).map(worldToScreen);
 }
 
 function displayedTraverseTilePolygon(tileId) {
   const polygon = traverseTilePolygon(tileId);
   if (!polygon) return null;
-
-  const width = Math.max(...polygon.map((point) => point.x)) - Math.min(...polygon.map((point) => point.x));
-  const height = Math.max(...polygon.map((point) => point.y)) - Math.min(...polygon.map((point) => point.y));
-  const scale = Math.max(
-    1,
-    BARRIER_TILE_MIN_SCREEN_SIZE / Math.max(1, width),
-    BARRIER_TILE_MIN_SCREEN_SIZE / Math.max(1, height)
-  );
-  if (scale === 1) return polygon;
-
-  const center = polygon.reduce((sum, point) => ({
-    x: sum.x + point.x / polygon.length,
-    y: sum.y + point.y / polygon.length
-  }), { x: 0, y: 0 });
-  return polygon.map((point) => ({
-    x: center.x + (point.x - center.x) * scale,
-    y: center.y + (point.y - center.y) * scale
-  }));
+  return polygon;
 }
 
 function drawTraversePolygon(points, options = {}) {
@@ -4429,12 +4463,8 @@ function drawTraverseTileCount(polygon, count, colors) {
 function drawTraverseBarriers() {
   const colors = canvasPalette();
   for (const [barrierId, barrier] of Object.entries(state.traverseLog?.barriers || {})) {
-    const vertices = (barrier.vertices || [])
-      .map((stoneId) => state.traverseLog.stones[stoneId])
-      .filter(Boolean)
-      .map((stone) => tileCenterGeo(stone.tile))
-      .filter(Boolean)
-      .map((geo) => projectLatLng(geo.lat, geo.lng))
+    const vertices = barrierFigureVertices(barrier)
+      .map((vertex) => projectLatLng(vertex.lat, vertex.lng))
       .map(worldToScreen);
     if (vertices.length < 3) continue;
     context.save();
@@ -4538,6 +4568,7 @@ function figureSegments(figure) {
 function drawFigures() {
   const colors = canvasPalette();
   for (const figure of state.figures) {
+    if (figure.layer === "barrier" || figure.barrierId) continue;
     const vertices = figureRuntimeVertices(figure);
     if (vertices.length < 2) continue;
 
@@ -5230,6 +5261,7 @@ function draw() {
     return;
   }
   drawTraverseTiles();
+  if (state.traverseMode) drawTraverseBarriers();
   drawDragonEyePreview();
   drawBarrierLinkGesture();
   drawFigures();
@@ -5888,9 +5920,8 @@ function fitBarrierPlacementView(options = {}) {
     .map((stone) => ({ stone, geo: tileCenterGeo(stone.tile) }))
     .filter(({ geo }) => validGeo(geo));
   const barrierGeos = Object.values(state.traverseLog?.barriers || {})
-    .flatMap((barrier) => (barrier?.vertices || [])
-      .map((stoneId) => state.traverseLog?.stones?.[stoneId])
-      .map((stone) => stone ? tileCenterGeo(stone.tile) : null)
+    .flatMap((barrier) => barrierFigureVertices(barrier)
+      .map((vertex) => ({ lat: vertex.lat, lng: vertex.lng }))
       .filter(validGeo));
   const geos = (dissolveOnly ? barrierGeos : visibleStones.map(({ geo }) => geo));
   if (geos.length === 0) {
@@ -5905,13 +5936,8 @@ function fitBarrierPlacementView(options = {}) {
 
   if (geos.length === 1 && !dissolveOnly) {
     const bounds = tileBounds(visibleStones[0]?.stone.tile);
-    const tile = bounds
-      ? [
-        projectLatLng(bounds.north, bounds.west),
-        projectLatLng(bounds.north, bounds.east),
-        projectLatLng(bounds.south, bounds.east),
-        projectLatLng(bounds.south, bounds.west)
-      ]
+    const tile = bounds?.corners
+      ? bounds.corners.map((corner) => projectLatLng(corner.lat, corner.lng))
       : [];
     const tileWidth = tile.length > 0
       ? Math.max(...tile.map((point) => point.x)) - Math.min(...tile.map((point) => point.x))
@@ -6009,10 +6035,14 @@ function commitBarrierDissolve() {
     return;
   }
 
-  const evaluation = evaluateBarrierLog(state.traverseLog);
-  const result = dissolveBarrier(state.traverseLog, barrierId);
+  const dissolveAt = Date.now();
+  const evaluation = evaluateBarrierLog(state.traverseLog, dissolveAt);
+  const settled = settleBarrierSpirit(state.traverseLog, barrierId, dissolveAt);
+  const result = dissolveBarrier(state.traverseLog, barrierId, dissolveAt);
   if (!result.ok) return;
-  if (evaluation.changed || result.ok) persistTraverseLog();
+  syncBarrierFiguresFromLog();
+  persistWorkspace();
+  if (evaluation.changed || settled.changed || result.ok) persistTraverseLog();
   state.barrierDissolveMode = false;
   state.selectedBarrierId = null;
   state.barrierSelection = [];
@@ -6178,7 +6208,7 @@ function performTraverseStoneAction(action, requestedQuantity = 1, targetTileId 
 
 function barrierIdForStone(log, stoneId) {
   return Object.entries(log?.barriers || {})
-    .find(([, barrier]) => Array.isArray(barrier?.vertices) && barrier.vertices.includes(stoneId))?.[0] || null;
+    .find(([, barrier]) => barrierStoneIds(barrier).includes(stoneId))?.[0] || null;
 }
 
 function handleTraverseActionClick() {
@@ -6539,6 +6569,10 @@ function openPointInfoForPoint(point, { fromLongPress = false } = {}) {
 
 function renderGridPointQuickDialog() {
   if (!elements.gridPointQuickDialog?.open) return;
+  if (state.gridPointQuickStoneId) {
+    renderGridBarrierStoneQuickDialog();
+    return;
+  }
   const point = state.gridPointQuickPointId ? findPoint(state.gridPointQuickPointId) : null;
   if (!point) {
     elements.gridPointQuickDialog.close("selection-changed");
@@ -6578,6 +6612,27 @@ function renderGridPointQuickDialog() {
   elements.gridPointQuickTrackButton.setAttribute("aria-pressed", String(state.followCurrentLocation));
   elements.gridPointQuickTrackButton.setAttribute("aria-label", state.followCurrentLocation ? t("button.stopTracking") : t("action.track"));
   elements.gridPointQuickTrackButton.title = state.followCurrentLocation ? t("button.stopTracking") : t("action.track");
+  for (const button of barrierStoneQuickButtons()) button.hidden = true;
+  for (const button of pointQuickButtons()) button.hidden = false;
+}
+
+function pointQuickButtons() {
+  return [
+    elements.gridPointQuickStartButton,
+    elements.gridPointQuickTargetButton,
+    elements.gridPointQuickEditButton,
+    elements.gridPointQuickTrackButton,
+    elements.gridPointQuickInfoButton
+  ].filter(Boolean);
+}
+
+function barrierStoneQuickButtons() {
+  return [
+    elements.gridBarrierStoneQuickPlaceButton,
+    elements.gridBarrierStoneQuickPickButton,
+    elements.gridBarrierStoneQuickEditButton,
+    elements.gridBarrierStoneQuickMapButton
+  ].filter(Boolean);
 }
 
 function findPointOnBarrierStone(stone) {
@@ -6637,6 +6692,8 @@ function renderGridBarrierStoneQuickDialog() {
   elements.gridBarrierStoneQuickEditButton.title = t("action.edit");
   elements.gridBarrierStoneQuickMapButton.setAttribute("aria-label", t("action.map"));
   elements.gridBarrierStoneQuickMapButton.title = t("action.map");
+  for (const button of pointQuickButtons()) button.hidden = true;
+  for (const button of barrierStoneQuickButtons()) button.hidden = false;
 }
 
 function renderGridLinkQuickDialog() {
@@ -6677,7 +6734,7 @@ function renderGridFigureQuickDialog() {
     const title = barrier.name || t("barrier.defaultName");
     const power = score ? ` · ${t("barrier.rankPower")} ${formatScoreValue(score.power)}` : "";
     elements.gridFigureQuickName.textContent = title;
-    elements.gridFigureQuickInfo.textContent = `${t("figure.vertexCount").replace("{count}", String(barrier.vertices.length))}${power}`;
+    elements.gridFigureQuickInfo.textContent = `${t("figure.vertexCount").replace("{count}", String(barrierFigureVertices(barrier).length))}${power}`;
     elements.gridFigureQuickDeleteVertexButton.hidden = true;
     elements.gridFigureQuickDeleteVertexButton.disabled = true;
     elements.gridFigureQuickDeleteLabel.textContent = t("barrier.dissolve");
@@ -7326,10 +7383,14 @@ async function deleteFigureFromQuickDialog() {
     });
     if (!confirmed || !state.traverseLog?.barriers?.[barrierId]) return;
 
-    const evaluation = evaluateBarrierLog(state.traverseLog);
-    const result = dissolveBarrier(state.traverseLog, barrierId);
+    const dissolveAt = Date.now();
+    const evaluation = evaluateBarrierLog(state.traverseLog, dissolveAt);
+    const settled = settleBarrierSpirit(state.traverseLog, barrierId, dissolveAt);
+    const result = dissolveBarrier(state.traverseLog, barrierId, dissolveAt);
     if (!result.ok) return;
-    if (evaluation.changed || result.ok) persistTraverseLog();
+    syncBarrierFiguresFromLog();
+    persistWorkspace();
+    if (evaluation.changed || settled.changed || result.ok) persistTraverseLog();
     if (state.selectedBarrierId === barrierId) state.selectedBarrierId = null;
     state.barrierSelection = [];
     if (elements.gridFigureQuickDialog?.open) elements.gridFigureQuickDialog.close("dissolved");
@@ -7409,6 +7470,7 @@ function openGridPointQuickDialog(point, screenPoint = null) {
   if (!point || !elements.gridPointQuickDialog?.show) return;
   hideGridPointHover();
   state.gridPointQuickPointId = point.id;
+  state.gridPointQuickStoneId = null;
   if (!elements.gridPointQuickDialog.open) elements.gridPointQuickDialog.show();
   renderGridPointQuickDialog();
   positionGridPointQuickDialog(screenPoint);
@@ -7431,19 +7493,20 @@ function positionGridBarrierStoneQuickDialog(screenPoint) {
   const top = aboveTop >= margin
     ? aboveTop
     : Math.min(Math.max(margin, belowTop), Math.max(margin, viewportHeight - dialogRect.height - margin));
-  elements.gridBarrierStoneQuickDialog.style.left = `${left}px`;
-  elements.gridBarrierStoneQuickDialog.style.top = `${top}px`;
+  elements.gridPointQuickDialog.style.left = `${left}px`;
+  elements.gridPointQuickDialog.style.top = `${top}px`;
 }
 
 function openGridBarrierStoneQuickDialog(stoneId, screenPoint = null) {
   const stone = stoneId ? state.traverseLog?.stones?.[stoneId] : null;
-  if (!stone || !elements.gridBarrierStoneQuickDialog?.show) return;
+  if (!stone || !elements.gridPointQuickDialog?.show) return;
   hideGridPointHover();
-  if (elements.gridPointQuickDialog?.open) elements.gridPointQuickDialog.close("barrier-stone");
   if (elements.gridLinkQuickDialog?.open) elements.gridLinkQuickDialog.close("barrier-stone");
   if (elements.gridFigureQuickDialog?.open) elements.gridFigureQuickDialog.close("barrier-stone");
+  state.gridPointQuickPointId = null;
+  state.gridPointQuickStoneId = stoneId;
   state.gridBarrierStoneQuickStoneId = stoneId;
-  if (!elements.gridBarrierStoneQuickDialog.open) elements.gridBarrierStoneQuickDialog.show();
+  if (!elements.gridPointQuickDialog.open) elements.gridPointQuickDialog.show();
   renderGridBarrierStoneQuickDialog();
   positionGridBarrierStoneQuickDialog(screenPoint);
 }
@@ -10151,6 +10214,7 @@ function applyCloudAuthSession(session, options = {}) {
     if (options.refresh !== false && (!hadSession || options.forceRefresh === true)) {
       void refreshCloudLists({ quiet: true });
     }
+    if (elements.cloudDialog?.open) void refreshCloudShares();
   } else if (!state.cloud.testerCode && !elements.cloudAccessToken?.value.trim()) {
     state.cloud.connected = false;
     state.cloud.canUseMine = false;
@@ -11185,6 +11249,7 @@ function remapPointIdInLinks(previousId, nextId) {
     }
   }
   for (const figure of state.figures) {
+    if (figure.layer === "barrier" || figure.barrierId) continue;
     for (const vertex of figure.vertices) {
       if (vertex.placeRef === previousId) vertex.placeRef = nextId;
     }
@@ -11876,6 +11941,11 @@ function findNearestBarrierStone(screenPoint, options = {}) {
   return null;
 }
 
+function resolveDragEndpoint(screenPoint, kind, options = {}) {
+  if (kind === "barrier") return findNearestBarrierStone(screenPoint, options);
+  return findNearestPoint(screenPoint, options);
+}
+
 function clearBarrierLinkHoldVisual() {
   if (state.barrierLinkHoldFrameId !== null) {
     window.cancelAnimationFrame(state.barrierLinkHoldFrameId);
@@ -12040,7 +12110,7 @@ function scheduleBarrierLinkCandidate(drag, stoneId) {
 }
 
 function updateBarrierLinkGesture(drag, point) {
-  const nearest = findNearestBarrierStone(point);
+  const nearest = resolveDragEndpoint(point, "barrier");
   const stoneId = nearest?.stoneId || null;
   if (!stoneId) {
     clearBarrierLinkCandidateTimer(drag);
@@ -12058,7 +12128,7 @@ function finishBarrierLinkGesture(drag, point, allowTap) {
   clearBarrierLinkCandidateTimer(drag);
   const path = [...state.barrierLinkPath];
   const origin = drag?.barrierLinkOriginStoneId;
-  const nearest = findNearestBarrierStone(point)?.stoneId;
+  const nearest = resolveDragEndpoint(point, "barrier")?.stoneId;
   state.barrierLinkPendingStoneId = null;
   if (!drag?.barrierLinkStarted) {
     state.barrierLinkingMode = false;
@@ -12085,12 +12155,8 @@ function finishBarrierLinkGesture(drag, point, allowTap) {
 }
 
 function barrierScreenVertices(barrier) {
-  return (barrier?.vertices || [])
-    .map((stoneId) => state.traverseLog?.stones?.[stoneId])
-    .filter(Boolean)
-    .map((stone) => tileCenterGeo(stone.tile))
-    .filter(Boolean)
-    .map((geo) => projectLatLng(geo.lat, geo.lng))
+  return barrierFigureVertices(barrier)
+    .map((vertex) => projectLatLng(vertex.lat, vertex.lng))
     .map(worldToScreen);
 }
 
@@ -12183,6 +12249,7 @@ function findNearestFigure(screenPoint) {
   let nearestDistance = Infinity;
 
   for (const figure of state.figures) {
+    if (figure.layer === "barrier" || figure.barrierId) continue;
     const points = figureRuntimeVertices(figure).map(worldToScreen);
     if (points.length < 2) continue;
 
@@ -12211,6 +12278,7 @@ function findNearestFigureEdge(screenPoint, options = {}) {
   let nearestDistance = Infinity;
 
   for (const figure of figures) {
+    if (figure.layer === "barrier" || figure.barrierId) continue;
     for (const [edgeIndex, segment] of figureSegments(figure).entries()) {
       const start = worldToScreen(segment.a);
       const end = worldToScreen(segment.b);
@@ -12233,6 +12301,7 @@ function findNearestFigureVertex(screenPoint, options = {}) {
   let nearestDistance = Infinity;
 
   for (const figure of figures) {
+    if (figure.layer === "barrier" || figure.barrierId) continue;
     for (const [index, vertex] of figure.vertices.entries()) {
       const runtime = runtimeAnalysisVertex(vertex);
       if (!runtime) continue;
@@ -12277,7 +12346,7 @@ function updateLineDragTarget(drag, screenPoint) {
   const lineDrag = drag.lineDrag;
   lineDrag.current = { ...screenPoint };
   if (lineDrag.mode === "create") {
-    const candidate = findNearestPoint(screenPoint, {
+    const candidate = resolveDragEndpoint(screenPoint, "point", {
       excludeIds: [lineDrag.startPointId],
       includeCurrent: false
     });
@@ -12288,7 +12357,7 @@ function updateLineDragTarget(drag, screenPoint) {
   const fixedId = lineEndpointPlaceRef(link, lineDrag.fixedSide);
   const replaceSide = lineDrag.fixedSide === "a" ? "b" : "a";
   const replaceId = lineEndpointPlaceRef(link, replaceSide);
-  const candidate = findNearestPoint(screenPoint, {
+  const candidate = resolveDragEndpoint(screenPoint, "point", {
     excludeIds: [fixedId, replaceId]
   });
   lineDrag.targetPointId = candidate?.id || null;
@@ -12326,7 +12395,7 @@ function beginPointLineDrag(drag, screenPoint) {
     current: { ...screenPoint },
     targetPointId: null
   };
-  drag.pointLineDragReady = false;
+  drag.endpointDragReady = false;
   drag.moved = true;
   drag.longPressed = true;
   canvas.classList.add("is-line-dragging");
@@ -12338,7 +12407,7 @@ function beginPointLineDrag(drag, screenPoint) {
 
 function finishPointLineDrag(lineDrag, screenPoint) {
   const source = findPoint(lineDrag?.startPointId);
-  const target = findNearestPoint(screenPoint, {
+  const target = resolveDragEndpoint(screenPoint, "point", {
     excludeIds: [lineDrag?.startPointId],
     includeCurrent: false
   });
@@ -12383,7 +12452,7 @@ function finishLineDrag(lineDrag, screenPoint) {
   const fixedId = lineEndpointPlaceRef(link, lineDrag?.fixedSide);
   const replaceSide = lineDrag?.fixedSide === "a" ? "b" : "a";
   const replaceId = lineEndpointPlaceRef(link, replaceSide);
-  const target = findNearestPoint(screenPoint, {
+  const target = resolveDragEndpoint(screenPoint, "point", {
     excludeIds: [fixedId, replaceId]
   });
   if (!link || !target) {
@@ -12582,6 +12651,8 @@ async function createBarrierFromSelection() {
   }
   state.barrierSelection = [];
   state.selectedBarrierId = barrierId;
+  syncBarrierFiguresFromLog();
+  persistWorkspace();
   persistTraverseLog();
   showAppToast(t("barrier.created"));
   returnToTraverseActionMenu();
@@ -13363,6 +13434,36 @@ function createPointerGestureState() {
   };
 }
 
+function armDragReadyTimer(drag, property, onReady) {
+  if (!drag || !property || typeof onReady !== "function") return;
+  drag[property] = window.setTimeout(() => {
+    if (
+      state.pointer.drag !== drag
+      || state.pointer.active.size !== 1
+      || drag.moved
+      || drag.cancelled
+    ) return;
+    drag[property] = null;
+    onReady();
+  }, LINE_DRAG_LONG_PRESS_MS);
+}
+
+function armEndpointDragReady(drag, kind, available = true) {
+  if (!drag || !kind) return;
+  drag.endpointDragKind = kind;
+  drag.endpointDragReady = false;
+  if (!available) return;
+  armDragReadyTimer(drag, "endpointDragReadyTimerId", () => {
+    drag.endpointDragReady = true;
+  });
+}
+
+function beginEndpointDrag(drag, screenPoint) {
+  if (drag?.endpointDragKind === "barrier") return beginDirectBarrierLink(drag);
+  if (drag?.endpointDragKind === "point") return beginPointLineDrag(drag, screenPoint);
+  return false;
+}
+
 function pointerEntries() {
   return [...state.pointer.active.entries()];
 }
@@ -13395,7 +13496,9 @@ function startDragGesture(pointerId, point, options = {}) {
       barrierDissolveMode: Boolean(state.barrierDissolveMode),
       longPressed: false,
       longPressTimerId: null,
-      lineDragReadyTimerId: null,
+      endpointDragReadyTimerId: null,
+      endpointDragKind: null,
+      endpointDragReady: false,
       lineDrag: null
     };
     return;
@@ -13412,26 +13515,16 @@ function startDragGesture(pointerId, point, options = {}) {
       barrierPlacementView: true,
       longPressed: false,
       longPressBarrierStone,
-      barrierDirectLinkReady: false,
+      endpointDragKind: null,
+      endpointDragReady: false,
       cancelled: false,
       longPressTimerId: null,
-      barrierDirectLinkReadyTimerId: null,
-      lineDragReadyTimerId: null,
+      endpointDragReadyTimerId: null,
       lineDrag: null
     };
     state.pointer.drag = drag;
     if (longPressBarrierStone && !options.moved) {
-      if (availableBarrierStoneIds().includes(longPressBarrierStone.stoneId)) {
-        drag.barrierDirectLinkReadyTimerId = window.setTimeout(() => {
-          if (
-            state.pointer.drag !== drag
-            || state.pointer.active.size !== 1
-            || drag.moved
-            || drag.cancelled
-          ) return;
-          drag.barrierDirectLinkReady = true;
-        }, LINE_DRAG_LONG_PRESS_MS);
-      }
+      armEndpointDragReady(drag, "barrier", availableBarrierStoneIds().includes(longPressBarrierStone.stoneId));
       drag.longPressTimerId = window.setTimeout(() => {
         if (
           state.pointer.drag !== drag
@@ -13439,7 +13532,7 @@ function startDragGesture(pointerId, point, options = {}) {
           || drag.moved
           || drag.cancelled
         ) return;
-        drag.barrierDirectLinkReady = false;
+        drag.endpointDragReady = false;
         drag.longPressed = true;
         openGridBarrierStoneQuickDialog(longPressBarrierStone.stoneId, drag.start);
       }, RANGE_SELECTION_LONG_PRESS_MS);
@@ -13484,9 +13577,9 @@ function startDragGesture(pointerId, point, options = {}) {
     longPressed: false,
     longPressFigure,
     longPressBarrierStone,
-    barrierDirectLinkReady: false,
+    endpointDragKind: null,
+    endpointDragReady: false,
     longPressPoint,
-    pointLineDragReady: false,
     longPressLink,
     longPressBarrier,
     figureDrag: figureVertex
@@ -13500,8 +13593,7 @@ function startDragGesture(pointerId, point, options = {}) {
     lineDrag: null,
     cancelled: false,
     longPressTimerId: null,
-    barrierDirectLinkReadyTimerId: null,
-    pointLineDragReadyTimerId: null,
+    endpointDragReadyTimerId: null,
     lineDragReadyTimerId: null,
     barrierLink: barrierLinkMode,
     barrierLinkStarted: false,
@@ -13514,28 +13606,10 @@ function startDragGesture(pointerId, point, options = {}) {
   };
   state.pointer.drag = drag;
 
-  if (longPressBarrierStone && availableBarrierStoneIds().includes(longPressBarrierStone.stoneId)) {
-    drag.barrierDirectLinkReadyTimerId = window.setTimeout(() => {
-      if (
-        state.pointer.drag !== drag
-        || state.pointer.active.size !== 1
-        || drag.moved
-        || drag.cancelled
-      ) return;
-      drag.barrierDirectLinkReady = true;
-    }, LINE_DRAG_LONG_PRESS_MS);
-  }
-
-  if (longPressPoint && longPressPoint.id !== CURRENT_LOCATION_ID) {
-    drag.pointLineDragReadyTimerId = window.setTimeout(() => {
-      if (
-        state.pointer.drag !== drag
-        || state.pointer.active.size !== 1
-        || drag.moved
-        || drag.cancelled
-      ) return;
-      drag.pointLineDragReady = true;
-    }, LINE_DRAG_LONG_PRESS_MS);
+  if (longPressBarrierStone) {
+    armEndpointDragReady(drag, "barrier", availableBarrierStoneIds().includes(longPressBarrierStone.stoneId));
+  } else if (longPressPoint && longPressPoint.id !== CURRENT_LOCATION_ID) {
+    armEndpointDragReady(drag, "point");
   }
 
   if (longPressFigure || longPressBarrier) {
@@ -13620,8 +13694,7 @@ function startDragGesture(pointerId, point, options = {}) {
       }
 
       drag.lineDragReady = false;
-      drag.barrierDirectLinkReady = false;
-      drag.pointLineDragReady = false;
+        drag.endpointDragReady = false;
       drag.longPressed = true;
       if (drag.longPressPoint) {
         openGridPointQuickDialog(drag.longPressPoint, drag.start);
@@ -13652,16 +13725,13 @@ function clearDragLongPressTimer(drag) {
   }
 
   if (drag.longPressTimerId) window.clearTimeout(drag.longPressTimerId);
-  if (drag.barrierDirectLinkReadyTimerId) window.clearTimeout(drag.barrierDirectLinkReadyTimerId);
-  if (drag.pointLineDragReadyTimerId) window.clearTimeout(drag.pointLineDragReadyTimerId);
+  if (drag.endpointDragReadyTimerId) window.clearTimeout(drag.endpointDragReadyTimerId);
   if (drag.lineDragReadyTimerId) window.clearTimeout(drag.lineDragReadyTimerId);
   clearBarrierLinkCandidateTimer(drag);
   drag.longPressTimerId = null;
-  drag.barrierDirectLinkReadyTimerId = null;
-  drag.pointLineDragReadyTimerId = null;
+  drag.endpointDragReadyTimerId = null;
   drag.lineDragReadyTimerId = null;
-  drag.barrierDirectLinkReady = false;
-  drag.pointLineDragReady = false;
+  drag.endpointDragReady = false;
   drag.lineDragReady = false;
 }
 
@@ -16125,17 +16195,25 @@ function applyImportedPointLists(importedLists, importedAnalysisLayers, successM
   try {
     const existingLineIds = new Set(state.links.map((line) => line.id));
     const existingFigureIds = new Set(state.figures.map((figure) => figure.id));
+    const importedTransientAnalysisIds = new Set();
     state.pointLists = [...state.pointLists, ...importedLists];
     mergeAnalysisLayers(importedAnalysisLayers);
     if (options.persist === false) {
-      const transientAnalysisIds = state.transientAnalysisIds;
       for (const line of state.links) {
-        if (!existingLineIds.has(line.id)) transientAnalysisIds.add(line.id);
+        if (!existingLineIds.has(line.id)) {
+          state.transientAnalysisIds.add(line.id);
+          importedTransientAnalysisIds.add(line.id);
+        }
       }
       for (const figure of state.figures) {
-        if (!existingFigureIds.has(figure.id)) transientAnalysisIds.add(figure.id);
+        if (!existingFigureIds.has(figure.id)) {
+          state.transientAnalysisIds.add(figure.id);
+          importedTransientAnalysisIds.add(figure.id);
+        }
       }
-      for (const list of importedLists) list.transientAnalysisIds = [...transientAnalysisIds];
+      for (const list of importedLists) {
+        list.transientAnalysisIds = [...importedTransientAnalysisIds];
+      }
     }
     if (options.source === "preset") {
       focusPresetVisibility(options.focusLists || importedLists);
@@ -16201,6 +16279,12 @@ async function importGridAtlasPackages(packages, options = {}) {
 
     if (importedLists.length === 0 && duplicates.length > 0) {
       const duplicate = duplicates[0];
+      if (options.persist === false) {
+        elements.shareImportStatus.value = cloudText("このリストは読み込み済みです", "This list is already imported");
+        render();
+        fitToPoints();
+        return true;
+      }
       mergeAnalysisLayers(importedAnalysisLayers);
       if (options.source === "preset") {
         focusPresetVisibility(duplicates);
@@ -16383,6 +16467,7 @@ function documentFromIncomingShareNotice(list) {
     state.figures = state.figures.filter((figure) => !transientAnalysisIds.has(figure.id));
     for (const id of transientAnalysisIds) state.transientAnalysisIds.delete(id);
     refreshVisiblePoints();
+    persistWorkspace();
     render();
     notice.remove();
   });
@@ -16883,6 +16968,7 @@ function bindEvents() {
   });
   elements.gridPointQuickDialog.addEventListener("close", () => {
     state.gridPointQuickPointId = null;
+    state.gridPointQuickStoneId = null;
   });
   elements.gridPointQuickDialog.addEventListener("click", (event) => {
     if (event.target === elements.gridPointQuickDialog) elements.gridPointQuickDialog.close("cancel");
@@ -17296,11 +17382,12 @@ function bindEvents() {
 
     if (
       Math.hypot(dx, dy) > POINTER_MOVE_THRESHOLD
-      && drag.longPressBarrierStone
-      && (drag.barrierDirectLinkReady || drag.longPressed)
+      && (drag.endpointDragKind === "barrier" || drag.endpointDragKind === "point")
+      && (drag.endpointDragReady || drag.longPressed)
       && !drag.barrierLink
+      && !drag.lineDrag
     ) {
-      if (beginDirectBarrierLink(drag)) {
+      if (beginEndpointDrag(drag, point)) {
         event.preventDefault();
         updateBarrierLinkGesture(drag, point);
         drag.last = point;
@@ -17337,20 +17424,6 @@ function bindEvents() {
         updateFigureVertexDrag(drag.figureDrag, point);
         draw();
         renderStatus();
-        drag.last = point;
-        return;
-      }
-    }
-
-    if (
-      Math.hypot(dx, dy) > POINTER_MOVE_THRESHOLD
-      && drag.longPressPoint
-      && (drag.pointLineDragReady || drag.longPressed)
-      && !drag.lineDrag
-    ) {
-      if (beginPointLineDrag(drag, point)) {
-        event.preventDefault();
-        updateLineDragTarget(drag, point);
         drag.last = point;
         return;
       }

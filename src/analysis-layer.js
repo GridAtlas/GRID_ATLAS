@@ -121,16 +121,22 @@ export function normalizeAnalysisFigure(figure) {
   if (name) normalized.name = name;
   if (color) normalized.color = color;
   if (createdAt) normalized.createdAt = createdAt;
+  const layer = cleanText(figure.layer);
+  if (layer) normalized.layer = layer;
+  const barrierId = cleanText(figure.barrierId);
+  if (barrierId) normalized.barrierId = barrierId;
   return normalized;
 }
 
-export function createAnalysisFigure({ id, vertices, name = "", color = "", createdAt = "" } = {}) {
+export function createAnalysisFigure({ id, vertices, name = "", color = "", createdAt = "", layer = "", barrierId = "" } = {}) {
   return normalizeAnalysisFigure({
     id,
     vertices,
     ...(name ? { name } : {}),
     ...(color ? { color } : {}),
-    ...(createdAt ? { createdAt } : {})
+    ...(createdAt ? { createdAt } : {}),
+    ...(layer ? { layer } : {}),
+    ...(barrierId ? { barrierId } : {})
   });
 }
 

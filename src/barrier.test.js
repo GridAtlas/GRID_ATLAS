@@ -3,6 +3,7 @@ import {
   BARRIER_CONFIG,
   BARRIER_LOG_SCHEMA_VERSION,
   appendBarrierEvent,
+  barrierFigureId,
   createBarrierLog,
   dissolveBarrier,
   grantBarrierStock,
@@ -14,6 +15,7 @@ import {
   sanitizeBarrierLog,
   sightRadiusKmForRank,
   stoneIdFromTile,
+  tileCenterGeo,
   tileBounds,
   tileIdFromGeo,
   validateBarrierVertices
@@ -46,6 +48,26 @@ describe("barrier data helpers", () => {
     expect(log.stones[stoneId]).toMatchObject({ tile: tileId, lat: null, lng: null, count: 2 });
     expect(log).not.toHaveProperty("tiles");
     expect(log).not.toHaveProperty("stock.lat");
+  });
+
+  it("uses a rotated Mercator cell grid with unchanged cell area", () => {
+    const tileId = tileIdFromGeo({ lat: 35.681236, lng: 139.767125 });
+    const center = tileCenterGeo(tileId);
+    const bounds = tileBounds(tileId);
+    const mercatorCorners = bounds.corners.map(({ lat, lng }) => ({
+      x: (lng * Math.PI) / 180,
+      y: Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360))
+    }));
+    const area = mercatorCorners.reduce((sum, point, index) => {
+      const next = mercatorCorners[(index + 1) % mercatorCorners.length];
+      return sum + point.x * next.y - next.x * point.y;
+    }, 0) / 2;
+    const cellSide = (2 * Math.PI) / (2 ** BARRIER_CONFIG.dataZoom);
+
+    expect(tileIdFromGeo(center)).toBe(tileId);
+    expect(bounds.corners).toHaveLength(4);
+    expect(Math.abs(area)).toBeCloseTo(cellSide ** 2, 12);
+    expect(new Set(bounds.corners.map((corner) => `${corner.lat}:${corner.lng}`)).size).toBe(4);
   });
 
   it("normalizes stones and rejects invalid or overlapping barriers", () => {
@@ -99,6 +121,41 @@ describe("barrier data helpers", () => {
     }));
     expect(validateBarrierVertices(log, vertices)).toMatchObject({ ok: false, reason: "used" });
     expect(validateBarrierVertices(log, [vertices[0], vertices[0], vertices[1]])).toMatchObject({ ok: false, reason: "duplicate" });
+  });
+
+  it("uses a shared figure reference while replaying cell-center vertices", () => {
+    const log = createBarrierLog();
+    const tiles = ["18/232798/103246", "18/232799/103246", "18/232800/103246"];
+    const vertices = tiles.map(stoneIdFromTile);
+    tiles.forEach((tile, index) => {
+      log.stones[vertices[index]] = { tile, count: 1, countExact: 1 };
+      appendBarrierEvent(log, {
+        type: "stone-placed",
+        at: "2026-08-13T00:00:00Z",
+        tile,
+        stoneId: vertices[index],
+        amount: 1,
+        countExact: 1
+      });
+    });
+
+    registerBarrier(log, { id: "shared", vertices });
+    expect(log.barriers.shared).toMatchObject({
+      figureId: barrierFigureId("shared"),
+      stoneIds: vertices
+    });
+    expect(log.barriers.shared).not.toHaveProperty("vertices");
+
+    const replayed = replayBarrierEvents(log.events);
+    expect(replayed.figures[barrierFigureId("shared")]).toMatchObject({
+      id: barrierFigureId("shared"),
+      layer: "barrier",
+      vertices: [
+        { placeRef: null },
+        { placeRef: null },
+        { placeRef: null }
+      ]
+    });
   });
 
   it("dissolves a barrier while leaving its stones available", () => {

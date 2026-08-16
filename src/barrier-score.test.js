@@ -110,6 +110,13 @@ describe("barrier score helpers", () => {
     }
   });
 
+  it("keeps the octagram area ratio stable at the SSS sight radius", () => {
+    const referenceCoefficient = nonZeroPolygonAreaKm2(regularOctagram(30)) / 30 ** 2;
+    const sssCoefficient = nonZeroPolygonAreaKm2(regularOctagram(300)) / 300 ** 2;
+
+    expect(Math.abs(sssCoefficient - referenceCoefficient) / referenceCoefficient).toBeLessThan(0.02);
+  });
+
   it("keeps perturbed octagram area finite and continuous", () => {
     const areas = [0, 0.03, 0.06, 0.1].map((perturbation) => (
       nonZeroPolygonAreaKm2(irregularOctagram(30, perturbation))

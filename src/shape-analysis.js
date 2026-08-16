@@ -127,7 +127,11 @@ export function analyzeSegmentShape(segments) {
   const maxAngleDeviationPercent = idealAngle > EPSILON ? (maxAngleDeviation / idealAngle) * 100 : 0;
   const angleScore = clamp(100 * (1 - maxAngleDeviationPercent / 25), 0, 100);
   const sideScore = clamp(100 * (1 - sideRangePercent / 25), 0, 100);
-  const area = selfIntersections === 0 ? polygonArea(points) : null;
+  const area = points.every((point) => validGeo(point.geo))
+    ? (selfIntersections === 0
+      ? sphericalPolygonAreaKm2(points.map((point) => point.geo)) * 1e6
+      : nonZeroPolygonAreaKm2(points.map((point) => point.geo)) * 1e6)
+    : (selfIntersections === 0 ? polygonArea(points) : nonZeroPlanarPolygonArea(points));
   const regularityDeviationPercent = regularityPercent(points, k);
 
   return {
@@ -464,6 +468,264 @@ function polygonArea(points) {
     twiceArea += current.x * next.y - next.x * current.y;
   }
   return Math.abs(twiceArea) / 2;
+}
+
+const EARTH_RADIUS_KM = 6371.0088;
+
+export function sphericalPolygonAreaKm2(geos, earthRadiusKm = EARTH_RADIUS_KM) {
+  if (!Array.isArray(geos) || geos.length < 3) return 0;
+  const origin = unitVector3(geos[0]);
+  let signedArea = 0;
+  for (let index = 1; index < geos.length - 1; index += 1) {
+    signedArea += signedTriangleArea3(origin, unitVector3(geos[index]), unitVector3(geos[index + 1]));
+  }
+  return Math.abs(signedArea) * earthRadiusKm ** 2;
+}
+
+// Self-intersecting polygons use the non-zero rule: each bounded face whose
+// winding number is not zero contributes once, without cancelling reversed
+// lobes or counting the center face twice.
+export function nonZeroPolygonAreaKm2(geos, earthRadiusKm = EARTH_RADIUS_KM) {
+  if (!Array.isArray(geos) || geos.length < 3 || geos.some((geo) => !validGeo(geo))) return 0;
+  const vectors = geos.map(unitVector3);
+  const basis = projectionBasis(vectors);
+  if (!basis) return sphericalPolygonAreaKm2(geos, earthRadiusKm);
+  const projectedVertices = vectors.map((vector) => projectUnitVector(vector, basis));
+  if (projectedVertices.some((point) => !point)) return sphericalPolygonAreaKm2(geos, earthRadiusKm);
+
+  let area = 0;
+  for (const face of nonZeroPlanarFaces(projectedVertices, vectors, basis)) {
+    if (face.length < 3) continue;
+    area += sphericalPolygonAreaKm2(face.map((node) => vectorToGeo(node.vector)), earthRadiusKm);
+  }
+  return area;
+}
+
+export function nonZeroPlanarPolygonArea(points) {
+  if (!Array.isArray(points) || points.length < 3) return 0;
+  return nonZeroPlanarFaces(points).reduce((sum, face) => sum + Math.abs(planarSignedArea(face)), 0);
+}
+
+function nonZeroPlanarFaces(projectedVertices, vectors = null, basis = null) {
+  const edgeSplits = projectedVertices.map((point, index) => [
+    { t: 0, x: point.x, y: point.y, vector: vectors?.[index] || null },
+    {
+      t: 1,
+      x: projectedVertices[(index + 1) % projectedVertices.length].x,
+      y: projectedVertices[(index + 1) % projectedVertices.length].y,
+      vector: vectors?.[(index + 1) % projectedVertices.length] || null
+    }
+  ]);
+
+  for (let first = 0; first < projectedVertices.length; first += 1) {
+    const firstNext = (first + 1) % projectedVertices.length;
+    for (let second = first + 1; second < projectedVertices.length; second += 1) {
+      const secondNext = (second + 1) % projectedVertices.length;
+      if (first === second || firstNext === second || secondNext === first) continue;
+      const intersection = planarSegmentIntersection(
+        projectedVertices[first],
+        projectedVertices[firstNext],
+        projectedVertices[second],
+        projectedVertices[secondNext]
+      );
+      if (!intersection) continue;
+      const vector = vectors && basis ? inverseProject(intersection.x, intersection.y, basis) : null;
+      edgeSplits[first].push({ t: intersection.t, x: intersection.x, y: intersection.y, vector });
+      edgeSplits[second].push({ t: intersection.u, x: intersection.x, y: intersection.y, vector });
+    }
+  }
+
+  const nodes = new Map();
+  const adjacency = new Map();
+  const getNode = (point) => {
+    const key = planarPointKey(point.x, point.y);
+    if (!nodes.has(key)) nodes.set(key, { key, x: point.x, y: point.y, vector: point.vector || null });
+    return nodes.get(key);
+  };
+  const addEdge = (from, to) => {
+    if (from.key === to.key) return;
+    if (!adjacency.has(from.key)) adjacency.set(from.key, []);
+    if (!adjacency.has(to.key)) adjacency.set(to.key, []);
+    const outgoing = adjacency.get(from.key);
+    if (!outgoing.some((edge) => edge.to === to.key)) outgoing.push({ to: to.key });
+    const reverse = adjacency.get(to.key);
+    if (!reverse.some((edge) => edge.to === from.key)) reverse.push({ to: from.key });
+  };
+
+  for (const splits of edgeSplits) {
+    const ordered = splits
+      .sort((a, b) => a.t - b.t)
+      .filter((point, index, all) => index === 0 || Math.abs(point.t - all[index - 1].t) > EPSILON);
+    for (let index = 0; index < ordered.length - 1; index += 1) {
+      addEdge(getNode(ordered[index]), getNode(ordered[index + 1]));
+    }
+  }
+
+  for (const [from, outgoing] of adjacency.entries()) {
+    const origin = nodes.get(from);
+    outgoing.sort((left, right) => {
+      const leftNode = nodes.get(left.to);
+      const rightNode = nodes.get(right.to);
+      return Math.atan2(leftNode.y - origin.y, leftNode.x - origin.x)
+        - Math.atan2(rightNode.y - origin.y, rightNode.x - origin.x);
+    });
+  }
+
+  const faces = [];
+  for (const face of extractPlanarFaces(nodes, adjacency)) {
+    if (face.length < 3 || planarSignedArea(face) <= EPSILON) continue;
+    const sample = face.reduce((sum, node) => ({ x: sum.x + node.x, y: sum.y + node.y }), { x: 0, y: 0 });
+    sample.x /= face.length;
+    sample.y /= face.length;
+    if (planarWindingNumber(sample, projectedVertices) !== 0) faces.push(face);
+  }
+  return faces;
+}
+
+function projectionBasis(vectors) {
+  const center = normalizeVector3(vectors.reduce(addVector3, { x: 0, y: 0, z: 0 }));
+  if (!center) return null;
+  const reference = Math.abs(center.z) > 0.9 ? { x: 0, y: 1, z: 0 } : { x: 0, y: 0, z: 1 };
+  const east = normalizeVector3(vectorCross(reference, center));
+  const north = normalizeVector3(vectorCross(center, east));
+  return east && north ? { center, east, north } : null;
+}
+
+function projectUnitVector(vector, basis) {
+  const denominator = vectorDot(vector, basis.center);
+  if (denominator <= EPSILON) return null;
+  return {
+    x: vectorDot(vector, basis.east) / denominator,
+    y: vectorDot(vector, basis.north) / denominator
+  };
+}
+
+function inverseProject(x, y, basis) {
+  return normalizeVector3({
+    x: basis.center.x + x * basis.east.x + y * basis.north.x,
+    y: basis.center.y + x * basis.east.y + y * basis.north.y,
+    z: basis.center.z + x * basis.east.z + y * basis.north.z
+  });
+}
+
+function vectorToGeo(vector) {
+  return {
+    lat: Math.atan2(vector.z, Math.hypot(vector.x, vector.y)) * 180 / Math.PI,
+    lng: Math.atan2(vector.y, vector.x) * 180 / Math.PI
+  };
+}
+
+function extractPlanarFaces(nodes, adjacency) {
+  const visited = new Set();
+  const faces = [];
+  for (const [from, outgoing] of adjacency.entries()) {
+    for (const edge of outgoing) {
+      const startKey = `${from}>${edge.to}`;
+      if (visited.has(startKey)) continue;
+      const face = [];
+      let currentFrom = from;
+      let currentTo = edge.to;
+      let closed = false;
+      for (let step = 0; step <= nodes.size * 4; step += 1) {
+        const key = `${currentFrom}>${currentTo}`;
+        if (visited.has(key)) {
+          closed = currentFrom === from && currentTo === edge.to;
+          break;
+        }
+        visited.add(key);
+        face.push(nodes.get(currentFrom));
+        const next = nextPlanarFaceEdge(currentFrom, currentTo, adjacency);
+        if (!next) break;
+        currentFrom = currentTo;
+        currentTo = next;
+        if (currentFrom === from && currentTo === edge.to) {
+          closed = true;
+          break;
+        }
+      }
+      if (closed) faces.push(face);
+    }
+  }
+  return faces;
+}
+
+function nextPlanarFaceEdge(from, to, adjacency) {
+  const outgoing = adjacency.get(to) || [];
+  const reverseIndex = outgoing.findIndex((edge) => edge.to === from);
+  if (reverseIndex < 0 || outgoing.length < 2) return null;
+  return outgoing[(reverseIndex - 1 + outgoing.length) % outgoing.length].to;
+}
+
+function planarSignedArea(points) {
+  return points.reduce((sum, point, index) => {
+    const next = points[(index + 1) % points.length];
+    return sum + point.x * next.y - next.x * point.y;
+  }, 0) / 2;
+}
+
+function planarWindingNumber(point, polygon) {
+  let winding = 0;
+  for (let index = 0; index < polygon.length; index += 1) {
+    const current = polygon[index];
+    const next = polygon[(index + 1) % polygon.length];
+    const crossing = (next.x - current.x) * (point.y - current.y)
+      - (next.y - current.y) * (point.x - current.x);
+    if (current.y <= point.y) {
+      if (next.y > point.y && crossing > 0) winding += 1;
+    } else if (next.y <= point.y && crossing < 0) {
+      winding -= 1;
+    }
+  }
+  return winding;
+}
+
+function planarSegmentIntersection(a, b, c, d) {
+  const first = { x: b.x - a.x, y: b.y - a.y };
+  const second = { x: d.x - c.x, y: d.y - c.y };
+  const denominator = first.x * second.y - first.y * second.x;
+  if (Math.abs(denominator) <= EPSILON) return null;
+  const offset = { x: c.x - a.x, y: c.y - a.y };
+  const t = (offset.x * second.y - offset.y * second.x) / denominator;
+  const u = (offset.x * first.y - offset.y * first.x) / denominator;
+  if (t <= EPSILON || t >= 1 - EPSILON || u <= EPSILON || u >= 1 - EPSILON) return null;
+  return { t, u, x: a.x + first.x * t, y: a.y + first.y * t };
+}
+
+function planarPointKey(x, y) {
+  return `${x.toFixed(10)}:${y.toFixed(10)}`;
+}
+
+function unitVector3(geo) {
+  const lat = toRadians(geo.lat);
+  const lng = toRadians(geo.lng);
+  const cosLat = Math.cos(lat);
+  return { x: cosLat * Math.cos(lng), y: cosLat * Math.sin(lng), z: Math.sin(lat) };
+}
+
+function normalizeVector3(vector) {
+  const magnitude = Math.hypot(vector.x, vector.y, vector.z);
+  return magnitude > EPSILON
+    ? { x: vector.x / magnitude, y: vector.y / magnitude, z: vector.z / magnitude }
+    : null;
+}
+
+function addVector3(a, b) {
+  return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
+}
+
+function vectorDot(a, b) {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+function vectorCross(a, b) {
+  return { x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x };
+}
+
+function signedTriangleArea3(a, b, c) {
+  const determinant = vectorDot(a, vectorCross(b, c));
+  const denominator = 1 + vectorDot(a, b) + vectorDot(b, c) + vectorDot(c, a);
+  const area = 2 * Math.atan2(Math.abs(determinant), denominator);
+  return Math.sign(determinant || 1) * area;
 }
 
 function projectSegmentsAroundMean(segments) {

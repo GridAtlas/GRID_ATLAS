@@ -23,6 +23,9 @@ export const BARRIER_CONFIG = Object.freeze({
 
 export const BARRIER_LOG_SCHEMA_VERSION = 3;
 
+const WEB_MERCATOR_HALF_WORLD = Math.PI;
+const ROTATED_CELL_AXIS = Math.SQRT1_2;
+
 export function createBarrierLog(now = Date.now()) {
   const startedAt = new Date(now).toISOString();
   return {
@@ -52,6 +55,17 @@ export function createBarrierLog(now = Date.now()) {
 export function stoneIdFromTile(tileId) {
   const parsed = parseTileId(tileId);
   return parsed ? `stone-${formatTileId(parsed.x, parsed.y, parsed.z)}` : null;
+}
+
+export function barrierFigureId(barrierId) {
+  return typeof barrierId === "string" && barrierId ? `barrier-figure-${barrierId}` : null;
+}
+
+export function barrierStoneIds(barrier) {
+  const ids = Array.isArray(barrier?.stoneIds)
+    ? barrier.stoneIds
+    : Array.isArray(barrier?.vertices) ? barrier.vertices : [];
+  return ids.filter((value) => typeof value === "string");
 }
 
 export function sanitizeBarrierLog(raw, now = Date.now()) {
@@ -148,7 +162,7 @@ export function validateBarrierVertices(log, vertices, options = {}) {
   if (vertices.some((stoneId) => !log?.stones?.[stoneId])) {
     return { ok: false, reason: "missing" };
   }
-  const usedStoneIds = new Set(Object.values(log.barriers || {}).flatMap((barrier) => barrier.vertices || []));
+  const usedStoneIds = new Set(Object.values(log.barriers || {}).flatMap((barrier) => barrierStoneIds(barrier)));
   const usedStoneId = vertices.find((stoneId) => usedStoneIds.has(stoneId));
   if (usedStoneId) {
     return { ok: false, reason: "used", stoneId: usedStoneId };
@@ -157,7 +171,7 @@ export function validateBarrierVertices(log, vertices, options = {}) {
 }
 
 export function stoneCapFor(log, stoneId, rankIndex = 0) {
-  const isVertex = Object.values(log?.barriers || {}).some((barrier) => barrier?.vertices?.includes(stoneId));
+  const isVertex = Object.values(log?.barriers || {}).some((barrier) => barrierStoneIds(barrier).includes(stoneId));
   if (!isVertex) return BARRIER_CONFIG.stoneCapLoose;
   const index = Math.max(0, Math.min(BARRIER_CONFIG.stoneCapVertexByRank.length - 1, Math.floor(Number(rankIndex) || 0)));
   return Number(BARRIER_CONFIG.stoneCapVertexByRank[index]) || BARRIER_CONFIG.stoneCapVertex;
@@ -195,9 +209,13 @@ export function registerBarrier(log, barrier) {
   }
   const createdAt = typeof barrier.createdAt === "string" ? barrier.createdAt : new Date().toISOString();
   const rankProgress = normalizeRankProgress(barrier.rankProgress);
+  const figureId = typeof barrier.figureId === "string" && barrier.figureId
+    ? barrier.figureId
+    : barrierFigureId(barrier.id);
   log.barriers[barrier.id] = {
+    figureId,
     name: typeof barrier.name === "string" ? barrier.name : "",
-    vertices: [...barrier.vertices],
+    stoneIds: [...barrier.vertices],
     linkPattern: typeof barrier.linkPattern === "string" ? barrier.linkPattern : "adjacent",
     createdAt,
     guardian: normalizeGuardian(barrier.guardian, createdAt),
@@ -211,7 +229,7 @@ export function registerBarrier(log, barrier) {
     at: log.barriers[barrier.id].createdAt,
     barrierId: barrier.id,
     name: log.barriers[barrier.id].name,
-    vertices: [...log.barriers[barrier.id].vertices],
+    vertices: [...log.barriers[barrier.id].stoneIds],
     linkPattern: log.barriers[barrier.id].linkPattern,
     guardian: log.barriers[barrier.id].guardian,
     rankProgress: log.barriers[barrier.id].rankProgress
@@ -283,8 +301,9 @@ export function replayBarrierEvents(events) {
       }
       for (const [barrierId, barrier] of Object.entries(event.barriers || {})) {
         if (barrier && typeof barrier === "object") barriers[barrierId] = {
+          figureId: typeof barrier.figureId === "string" ? barrier.figureId : barrierFigureId(barrierId),
           name: typeof barrier.name === "string" ? barrier.name : "",
-          vertices: Array.isArray(barrier.vertices) ? [...barrier.vertices] : [],
+          stoneIds: barrierStoneIds(barrier),
           linkPattern: typeof barrier.linkPattern === "string" ? barrier.linkPattern : "adjacent",
           createdAt: typeof barrier.createdAt === "string" ? barrier.createdAt : event.at,
           guardian: normalizeGuardian(barrier.guardian, event.at),
@@ -295,8 +314,9 @@ export function replayBarrierEvents(events) {
     }
     if (event.type === "barrier-created" && typeof event.barrierId === "string") {
       barriers[event.barrierId] = {
+        figureId: barrierFigureId(event.barrierId),
         name: typeof event.name === "string" ? event.name : "",
-        vertices: Array.isArray(event.vertices) ? [...event.vertices] : [],
+        stoneIds: Array.isArray(event.vertices) ? [...event.vertices] : [],
         linkPattern: typeof event.linkPattern === "string" ? event.linkPattern : "adjacent",
         createdAt: event.at,
         guardian: normalizeGuardian(event.guardian, event.at),
@@ -346,7 +366,25 @@ export function replayBarrierEvents(events) {
       else delete stones[event.stoneId];
     }
   }
-  return { stones, barriers };
+  const figures = Object.fromEntries(Object.entries(barriers).flatMap(([barrierId, barrier]) => {
+    const vertices = barrierStoneIds(barrier)
+      .map((stoneId) => {
+        const geo = tileCenterGeo(stones[stoneId]?.tile);
+        return geo ? {
+          lat: geo.lat,
+          lng: geo.lng,
+          key: `geo:${geo.lat}:${geo.lng}`,
+          name: "結界頂点",
+          placeRef: null
+        } : null;
+      })
+      .filter(Boolean);
+    const figureId = barrier.figureId || barrierFigureId(barrierId);
+    return figureId && vertices.length >= 3
+      ? [[figureId, { id: figureId, vertices, layer: "barrier", createdAt: barrier.createdAt }]]
+      : [];
+  }));
+  return { stones, barriers, figures };
 }
 
 export function parseTileId(tileId) {
@@ -354,8 +392,7 @@ export function parseTileId(tileId) {
   const parts = tileId.split("/").map(Number);
   if (parts.length !== 3 || parts.some((part) => !Number.isInteger(part))) return null;
   const [z, x, y] = parts;
-  const scale = 2 ** z;
-  if (z < 0 || z > 24 || x < 0 || x >= scale || y < 0 || y >= scale) return null;
+  if (z < 0 || z > 24) return null;
   return { z, x, y };
 }
 
@@ -367,33 +404,74 @@ export function tileIdFromGeo(geo, zoom = BARRIER_CONFIG.dataZoom) {
   const lat = Math.max(-85.05112878, Math.min(85.05112878, Number(geo?.lat)));
   const lng = Number(geo?.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  const scale = 2 ** zoom;
-  const normalizedLng = ((((lng + 180) % 360) + 360) % 360) - 180;
-  const latRadians = (lat * Math.PI) / 180;
-  const x = Math.floor(((normalizedLng + 180) / 360) * scale);
-  const y = Math.floor(
-    ((1 - Math.log(Math.tan(latRadians) + 1 / Math.cos(latRadians)) / Math.PI) / 2) * scale
-  );
-  return formatTileId(Math.max(0, Math.min(scale - 1, x)), Math.max(0, Math.min(scale - 1, y)), zoom);
+  const cellSize = rotatedCellSize(zoom);
+  const point = geoToMercator({ lat, lng });
+  const u = (point.x - point.y) * ROTATED_CELL_AXIS;
+  const v = (point.x + point.y) * ROTATED_CELL_AXIS;
+  return formatTileId(Math.floor(u / cellSize), Math.floor(v / cellSize), zoom);
 }
 
 export function tileBounds(tileId) {
   const parsed = parseTileId(tileId);
   if (!parsed) return null;
-  const scale = 2 ** parsed.z;
-  const west = (parsed.x / scale) * 360 - 180;
-  const east = ((parsed.x + 1) / scale) * 360 - 180;
-  const north = tileYToLatitude(parsed.y, scale);
-  const south = tileYToLatitude(parsed.y + 1, scale);
-  return { west, east, north, south, z: parsed.z, x: parsed.x, y: parsed.y };
+  const corners = rotatedCellMercatorCorners(parsed).map(mercatorToGeo);
+  const longitudes = corners.map((corner) => corner.lng);
+  const latitudes = corners.map((corner) => corner.lat);
+  return {
+    west: Math.min(...longitudes),
+    east: Math.max(...longitudes),
+    north: Math.max(...latitudes),
+    south: Math.min(...latitudes),
+    corners,
+    z: parsed.z,
+    x: parsed.x,
+    y: parsed.y
+  };
 }
 
 export function tileCenterGeo(tileId) {
-  const bounds = tileBounds(tileId);
-  if (!bounds) return null;
+  const parsed = parseTileId(tileId);
+  if (!parsed) return null;
+  const cellSize = rotatedCellSize(parsed.z);
+  const u = (parsed.x + 0.5) * cellSize;
+  const v = (parsed.y + 0.5) * cellSize;
+  return mercatorToGeo({
+    x: (u + v) * ROTATED_CELL_AXIS,
+    y: (v - u) * ROTATED_CELL_AXIS
+  });
+}
+
+function rotatedCellSize(zoom) {
+  return (WEB_MERCATOR_HALF_WORLD * 2) / (2 ** zoom);
+}
+
+function rotatedCellMercatorCorners({ x, y, z }) {
+  const cellSize = rotatedCellSize(z);
+  const u0 = x * cellSize;
+  const v0 = y * cellSize;
+  const u1 = u0 + cellSize;
+  const v1 = v0 + cellSize;
+  return [
+    { x: (u0 + v0) * ROTATED_CELL_AXIS, y: (v0 - u0) * ROTATED_CELL_AXIS },
+    { x: (u1 + v0) * ROTATED_CELL_AXIS, y: (v0 - u1) * ROTATED_CELL_AXIS },
+    { x: (u1 + v1) * ROTATED_CELL_AXIS, y: (v1 - u1) * ROTATED_CELL_AXIS },
+    { x: (u0 + v1) * ROTATED_CELL_AXIS, y: (v1 - u0) * ROTATED_CELL_AXIS }
+  ];
+}
+
+function geoToMercator({ lat, lng }) {
+  const latRadians = (lat * Math.PI) / 180;
+  const normalizedLng = ((((lng + 180) % 360) + 360) % 360) - 180;
   return {
-    lat: (bounds.north + bounds.south) / 2,
-    lng: (bounds.west + bounds.east) / 2
+    x: (normalizedLng * Math.PI) / 180,
+    y: Math.log(Math.tan(Math.PI / 4 + latRadians / 2))
+  };
+}
+
+function mercatorToGeo({ x, y }) {
+  return {
+    lat: (Math.atan(Math.sinh(y)) * 180) / Math.PI,
+    lng: (x * 180) / Math.PI
   };
 }
 
@@ -489,6 +567,17 @@ function normalizeEvent(event, now, fallbackId = "") {
     if (!event.barrierId) return null;
     return { id, type: event.type, at, barrierId: String(event.barrierId) };
   }
+  if (event.type === "barrier-spirit-settled") {
+    if (!event.barrierId) return null;
+    return {
+      id,
+      type: event.type,
+      at,
+      barrierId: String(event.barrierId),
+      amount: Math.max(0, Number(event.amount) || 0),
+      lifetimeOutput: Math.max(0, Number(event.lifetimeOutput) || 0)
+    };
+  }
   if (event.type === "guardian-placed") {
     const guardian = normalizeGuardian(event.guardian, at);
     if (!event.barrierId || !guardian) return null;
@@ -581,14 +670,15 @@ function normalizeSnapshotBarriers(rawBarriers, now) {
   if (!rawBarriers || typeof rawBarriers !== "object" || Array.isArray(rawBarriers)) return {};
   return Object.fromEntries(Object.entries(rawBarriers).flatMap(([barrierId, barrier]) => {
     if (!barrier || typeof barrier !== "object") return [];
-    const vertices = Array.isArray(barrier.vertices) ? barrier.vertices.filter((value) => typeof value === "string") : [];
+    const vertices = barrierStoneIds(barrier);
     if (vertices.length < 3 || new Set(vertices).size !== vertices.length) return [];
     const createdAt = typeof barrier.createdAt === "string" && Number.isFinite(Date.parse(barrier.createdAt))
       ? barrier.createdAt
       : new Date(now).toISOString();
     return [[barrierId, {
       name: typeof barrier.name === "string" ? barrier.name : "",
-      vertices,
+      figureId: typeof barrier.figureId === "string" ? barrier.figureId : barrierFigureId(barrierId),
+      stoneIds: vertices,
       linkPattern: typeof barrier.linkPattern === "string" ? barrier.linkPattern : "adjacent",
       createdAt,
       guardian: normalizeGuardian(barrier.guardian, createdAt),
@@ -605,7 +695,7 @@ function createMigrationSnapshotEvent(stones, barriers, now) {
     stones: Object.entries(stones).map(([stoneId, stone]) => ({ stoneId, ...stone })),
     barriers: Object.fromEntries(Object.entries(barriers).map(([barrierId, barrier]) => [barrierId, {
       name: barrier.name,
-      vertices: [...barrier.vertices],
+      vertices: [...barrierStoneIds(barrier)],
       linkPattern: typeof barrier.linkPattern === "string" ? barrier.linkPattern : "adjacent",
       createdAt: barrier.createdAt,
       guardian: barrier.guardian,
@@ -620,15 +710,16 @@ function normalizeBarriers(rawBarriers, stones, now) {
   if (!rawBarriers || typeof rawBarriers !== "object" || Array.isArray(rawBarriers)) return barriers;
   for (const [barrierId, rawBarrier] of Object.entries(rawBarriers)) {
     if (!rawBarrier || typeof rawBarrier !== "object") continue;
-    const vertices = Array.isArray(rawBarrier.vertices) ? rawBarrier.vertices.filter((id) => typeof id === "string") : [];
+    const vertices = barrierStoneIds(rawBarrier);
     if (vertices.length < 3 || new Set(vertices).size !== vertices.length) continue;
     if (vertices.some((stoneId) => !stones[stoneId] || usedStoneIds.has(stoneId))) continue;
     const createdAt = typeof rawBarrier.createdAt === "string" && Number.isFinite(Date.parse(rawBarrier.createdAt))
       ? rawBarrier.createdAt
       : new Date(now).toISOString();
     barriers[barrierId] = {
+      figureId: typeof rawBarrier.figureId === "string" ? rawBarrier.figureId : barrierFigureId(barrierId),
       name: typeof rawBarrier.name === "string" ? rawBarrier.name : "",
-      vertices,
+      stoneIds: vertices,
       linkPattern: typeof rawBarrier.linkPattern === "string" ? rawBarrier.linkPattern : "adjacent",
       createdAt,
       guardian: normalizeGuardian(rawBarrier.guardian, createdAt),

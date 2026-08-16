@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { BARRIER_CONFIG, createBarrierLog, registerBarrier, replayBarrierEvents, stoneCapFor, stoneDisplayCount, stoneIdFromTile } from "./barrier.js";
+import { BARRIER_CONFIG, createBarrierLog, dissolveBarrier, registerBarrier, replayBarrierEvents, sanitizeBarrierLog, stoneCapFor, stoneDisplayCount, stoneIdFromTile } from "./barrier.js";
 import {
   BARRIER_EVALUATION_CONFIG,
   applyWeathering,
+  barrierSpiritOutput,
   barrierRankStoneProgress,
   createKekkaishiStatus,
   currentBarrierPower,
@@ -13,7 +14,8 @@ import {
   rankAchievementDays,
   rankForKekkaishi,
   recentAverage,
-  recordKekkaishiRankAchievements
+  recordKekkaishiRankAchievements,
+  settleBarrierSpirit
 } from "./barrier-evaluation.js";
 
 function triangleLog() {
@@ -34,6 +36,8 @@ function triangleLog() {
   registerBarrier(log, { id: "triangle", name: "三角", vertices, createdAt });
   return log;
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 describe("barrier evaluation", () => {
   it("uses the loose cap until a stone becomes a vertex", () => {
@@ -150,6 +154,47 @@ describe("barrier evaluation", () => {
 
     log.barriers.triangle.createdAt = "2026-08-01T06:00:00.000Z";
     expect(liveCumulativeBarrierSpirit(log, halfDay)).toBeCloseTo(power / 4, 8);
+  });
+
+  it("uses one elapsed-time formula for live and daily spirit output", () => {
+    expect(barrierSpiritOutput(37, DAY_MS)).toBe(37);
+
+    const log = triangleLog();
+    const evaluated = evaluateBarrierLog(log, Date.parse("2026-08-02T00:00:00.000Z"));
+    expect(log.kekkaishi.lifetimeOutput).toBeCloseTo(barrierSpiritOutput(evaluated.dailyPower, DAY_MS), 8);
+    expect(liveCumulativeBarrierSpirit(log, Date.parse("2026-08-03T00:00:00.000Z")))
+      .toBeCloseTo(log.kekkaishi.lifetimeOutput + barrierSpiritOutput(evaluated.dailyPower, DAY_MS), 8);
+  });
+
+  it("settles live spirit before a barrier is dissolved so rebinding cannot reset lifetime output", () => {
+    const log = triangleLog();
+    const halfDay = Date.parse("2026-08-01T12:00:00.000Z");
+    const power = currentBarrierPower(log);
+
+    const settled = settleBarrierSpirit(log, "triangle", halfDay);
+    expect(settled.amount).toBeCloseTo(power / 2, 8);
+    expect(log.kekkaishi.lifetimeOutput).toBeCloseTo(power / 2, 8);
+    expect(log.events.at(-1)).toMatchObject({
+      type: "barrier-spirit-settled",
+      barrierId: "triangle",
+      lifetimeOutput: log.kekkaishi.lifetimeOutput
+    });
+
+    expect(dissolveBarrier(log, "triangle", halfDay).ok).toBe(true);
+    expect(liveCumulativeBarrierSpirit(log, halfDay)).toBeCloseTo(power / 2, 8);
+    registerBarrier(log, {
+      id: "triangle-rebound",
+      vertices: [
+        stoneIdFromTile("18/232798/103246"),
+        stoneIdFromTile("18/232799/103246"),
+        stoneIdFromTile("18/232798/103247")
+      ],
+      createdAt: new Date(halfDay).toISOString()
+    });
+    expect(liveCumulativeBarrierSpirit(log, halfDay)).toBeCloseTo(power / 2, 8);
+
+    const restored = sanitizeBarrierLog(JSON.parse(JSON.stringify(log)), halfDay).log;
+    expect(restored.kekkaishi.lifetimeOutput).toBeCloseTo(power / 2, 8);
   });
 
   it("allows E rank on the first evaluated day when lifetime threshold is met", () => {

@@ -74,6 +74,46 @@ describe("shape analysis", () => {
     expect(result.idealDiagonalToSide).toBeCloseTo(0.6180339887, 5);
   });
 
+  it("calculates non-zero area for an eight-vertex star", () => {
+    const points = Array.from({ length: 8 }, (_, index) => {
+      const angle = (index * Math.PI * 2) / 8;
+      return { id: `p${index}`, x: Math.cos(angle), y: Math.sin(angle) };
+    });
+    const segments = [0, 3, 6, 1, 4, 7, 2, 5, 0]
+      .slice(0, -1)
+      .map((_, index, sequence) => ({
+        a: points[sequence[index]],
+        b: points[sequence[index + 1] ?? 0]
+      }));
+
+    const result = analyzeSegmentShape(segments);
+
+    expect(result.valid).toBe(true);
+    expect(result.vertexCount).toBe(8);
+    expect(result.selfIntersections).toBeGreaterThan(0);
+    expect(Number.isFinite(result.area)).toBe(true);
+    expect(result.area).toBeGreaterThan(0);
+  });
+
+  it("keeps both lobes of a self-crossing bow tie in the area", () => {
+    const points = [
+      { id: "a", x: -1, y: -1 },
+      { id: "b", x: 1, y: 1 },
+      { id: "c", x: -1, y: 1 },
+      { id: "d", x: 1, y: -1 }
+    ];
+    const result = analyzeSegmentShape([
+      { a: points[0], b: points[1] },
+      { a: points[1], b: points[2] },
+      { a: points[2], b: points[3] },
+      { a: points[3], b: points[0] }
+    ]);
+
+    expect(result.valid).toBe(true);
+    expect(result.selfIntersections).toBe(1);
+    expect(result.area).toBeGreaterThan(0);
+  });
+
   it("scores the Kinki pentagram with the overlay-distance reference fit", () => {
     const points = [
       [34.4601, 134.8525],
