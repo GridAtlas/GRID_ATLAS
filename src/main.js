@@ -132,7 +132,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2203";
+const WEB_VERSION = "0.2224";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -365,6 +365,17 @@ const elements = {
   gridPointQuickTrackLabel: document.querySelector("#gridPointQuickTrackLabel"),
   gridPointQuickInfoButton: document.querySelector("#gridPointQuickInfoButton"),
   gridPointQuickInfoLabel: document.querySelector("#gridPointQuickInfoLabel"),
+  gridBarrierStoneQuickDialog: document.querySelector("#gridBarrierStoneQuickDialog"),
+  gridBarrierStoneQuickName: document.querySelector("#gridBarrierStoneQuickName"),
+  gridBarrierStoneQuickInfo: document.querySelector("#gridBarrierStoneQuickInfo"),
+  gridBarrierStoneQuickPlaceButton: document.querySelector("#gridBarrierStoneQuickPlaceButton"),
+  gridBarrierStoneQuickPlaceLabel: document.querySelector("#gridBarrierStoneQuickPlaceLabel"),
+  gridBarrierStoneQuickPickButton: document.querySelector("#gridBarrierStoneQuickPickButton"),
+  gridBarrierStoneQuickPickLabel: document.querySelector("#gridBarrierStoneQuickPickLabel"),
+  gridBarrierStoneQuickEditButton: document.querySelector("#gridBarrierStoneQuickEditButton"),
+  gridBarrierStoneQuickEditLabel: document.querySelector("#gridBarrierStoneQuickEditLabel"),
+  gridBarrierStoneQuickMapButton: document.querySelector("#gridBarrierStoneQuickMapButton"),
+  gridBarrierStoneQuickMapLabel: document.querySelector("#gridBarrierStoneQuickMapLabel"),
   gridPointHoverLabel: document.querySelector("#gridPointHoverLabel"),
   gridLinkQuickDialog: document.querySelector("#gridLinkQuickDialog"),
   gridLinkQuickName: document.querySelector("#gridLinkQuickName"),
@@ -585,6 +596,7 @@ const state = {
   pointInfoTargetId: null,
   pointInfoReturnPhase: null,
   gridPointQuickPointId: null,
+  gridBarrierStoneQuickStoneId: null,
   gridLinkQuickLinkId: null,
   gridFigureQuickFigureId: null,
   gridFigureQuickVertexIndex: null,
@@ -632,6 +644,7 @@ const state = {
   barrierLinkAnimation: null,
   barrierLinkCompletion: null,
   traverseQuantityAction: null,
+  traverseQuantityTargetTileId: null,
   traverseQuantity: 1,
   traverseQuantityMax: 1,
   traverseBusy: false,
@@ -980,6 +993,8 @@ const TRANSLATIONS = {
     "line.closeShapeTitle": "図形を閉じますか？",
     "line.closeShapeMessage": "3地点以上が選択されています。最後の地点から起点へ接続して図形を閉じますか？",
     "line.dragStatus": "接続先を変更中：{name} にドロップ",
+    "line.drawStatus": "終点を選択中：{name} にドロップ",
+    "line.created": "線分を描画しました",
     "line.reconnected": "「{old}」を「{new}」へ接続変更しました",
     "line.invalidTarget": "別の地点へドロップしてください",
     "line.duplicateTarget": "その2地点を結ぶ線はすでにあります",
@@ -1248,6 +1263,10 @@ const TRANSLATIONS = {
     "traverse.stockEmpty": "置ける結界石がありません",
     "traverse.noStone": "このタイルに結界石がありません",
     "traverse.stockLabel": "結界石 {amount} / {cap}",
+    "traverse.stoneTile": "結界石タイル",
+    "traverse.stoneCount": "石 {count}個",
+    "traverse.vertex": "頂点",
+    "traverse.tileMismatch": "そのタイルの位置で操作してください",
     "traverse.place": "結界石を置く",
     "traverse.pick": "結界石を拾う",
     "traverse.placementView": "配置をみる",
@@ -1533,6 +1552,8 @@ const TRANSLATIONS = {
     "line.closeShapeTitle": "Close the shape?",
     "line.closeShapeMessage": "Three or more points are selected. Close the shape by connecting the last point back to the first?",
     "line.dragStatus": "Changing connection: drop on {name}",
+    "line.drawStatus": "Choosing endpoint: drop on {name}",
+    "line.created": "Line drawn",
     "line.reconnected": "Changed the connection from “{old}” to “{new}”",
     "line.invalidTarget": "Drop on a different point",
     "line.duplicateTarget": "A line between those points already exists",
@@ -1801,6 +1822,10 @@ const TRANSLATIONS = {
     "traverse.stockEmpty": "No barrier stones available to place",
     "traverse.noStone": "There is no barrier stone on this tile",
     "traverse.stockLabel": "Barrier stones {amount} / {cap}",
+    "traverse.stoneTile": "Barrier stone tile",
+    "traverse.stoneCount": "{count} stone(s)",
+    "traverse.vertex": "Vertex",
+    "traverse.tileMismatch": "Move to this tile to operate it",
     "traverse.place": "Place barrier stone",
     "traverse.pick": "Pick up barrier stone",
     "traverse.placementView": "View placement",
@@ -2135,8 +2160,10 @@ function actionQuantityLimit(action, options = {}) {
   return options.stone && count > 0 ? Math.max(0, Math.min(count, stockRoom)) : 0;
 }
 
-function currentTraverseActionContext() {
-  const currentTile = state.currentGeo ? tileIdFromGeo(state.currentGeo) : null;
+function currentTraverseActionContext(targetTileId = null) {
+  const currentTile = typeof targetTileId === "string" && targetTileId
+    ? targetTileId
+    : state.currentGeo ? tileIdFromGeo(state.currentGeo) : null;
   const stoneId = currentTile ? stoneIdFromTile(currentTile) : null;
   const stone = stoneId ? state.traverseLog?.stones?.[stoneId] : null;
   const stoneCap = stoneId ? stoneCapFor(state.traverseLog, stoneId, currentKekkaishiRankInfo().rank.index) : null;
@@ -2149,8 +2176,8 @@ function currentTraverseActionContext() {
   };
 }
 
-function traverseQuantityLimit(action) {
-  const context = currentTraverseActionContext();
+function traverseQuantityLimit(action, targetTileId = null) {
+  const context = currentTraverseActionContext(targetTileId);
   return actionQuantityLimit(action, {
     amount: context.amount,
     stone: context.stone,
@@ -2181,19 +2208,28 @@ function renderTraverseQuantityDialog() {
 function closeTraverseQuantityDialog() {
   if (elements.traverseQuantityDialog?.open) elements.traverseQuantityDialog.close("cancel");
   state.traverseQuantityAction = null;
+  state.traverseQuantityTargetTileId = null;
   state.traverseQuantity = 1;
   state.traverseQuantityMax = 1;
 }
 
-function openTraverseQuantityDialog(action) {
+function openTraverseQuantityDialog(action, options = {}) {
   if (!state.traverseMode || state.traverseBusy || !elements.traverseQuantityDialog) return false;
-  const max = traverseQuantityLimit(action);
+  const targetTileId = typeof options.targetTileId === "string" && options.targetTileId
+    ? options.targetTileId
+    : null;
+  const context = currentTraverseActionContext(targetTileId);
+  const max = traverseQuantityLimit(action, targetTileId);
   if (max < 1) {
-    showAppToast(action === "place" ? t("traverse.stockEmpty") : t("traverse.noStone"), { error: true });
+    const message = action === "place"
+      ? context.amount < 1 ? t("traverse.stockEmpty") : t("traverse.capReached")
+      : context.stone ? t("traverse.stockFull") : t("traverse.noStone");
+    showAppToast(message, { error: true });
     render();
     return false;
   }
   state.traverseQuantityAction = action;
+  state.traverseQuantityTargetTileId = targetTileId;
   state.traverseQuantityMax = max;
   state.traverseQuantity = 1;
   renderTraverseQuantityDialog();
@@ -2213,10 +2249,11 @@ function adjustTraverseQuantity(delta) {
 
 function confirmTraverseQuantity() {
   const action = state.traverseQuantityAction;
+  const targetTileId = state.traverseQuantityTargetTileId;
   const quantity = state.traverseQuantity;
   if (!action || quantity < 1) return;
   closeTraverseQuantityDialog();
-  void performTraverseStoneAction(action, quantity);
+  void performTraverseStoneAction(action, quantity, targetTileId);
 }
 
 function resetBarrierLinkState() {
@@ -2466,7 +2503,44 @@ function beginBarrierLinking() {
   clearBarrierLinkHoldVisual();
   state.selectedBarrierId = null;
   showAppToast(t("traverse.linkReady"));
-  render();
+  fitBarrierPlacementView({ linkOnly: true });
+  return true;
+}
+
+function beginDirectBarrierLink(drag) {
+  const origin = drag?.longPressBarrierStone;
+  if (!origin) return false;
+  const availableStoneIds = availableBarrierStoneIds();
+  if (!availableStoneIds.includes(origin.stoneId)) return false;
+  if (availableStoneIds.length < 3) {
+    showAppToast(t("barrier.tooFew"), { error: true });
+    drag.barrierDirectLinkReady = false;
+    drag.cancelled = true;
+    return false;
+  }
+
+  if (elements.gridBarrierStoneQuickDialog?.open) elements.gridBarrierStoneQuickDialog.close("drag");
+  clearDragLongPressTimer(drag);
+  clearBarrierLinkHoldVisual();
+  state.barrierLinkingMode = true;
+  state.barrierLinkPath = [origin.stoneId];
+  state.barrierSelection = [origin.stoneId];
+  state.barrierLinkCandidateStoneId = origin.stoneId;
+  state.barrierLinkPendingStoneId = null;
+  state.selectedBarrierId = null;
+  drag.barrierLink = true;
+  drag.barrierLinkStarted = true;
+  drag.barrierLinkOriginStoneId = origin.stoneId;
+  drag.barrierLinkPendingStoneId = null;
+  drag.barrierLinkCandidateStoneId = origin.stoneId;
+  drag.barrierLinkClosing = false;
+  drag.barrierDirectLinkReady = false;
+  drag.longPressed = true;
+  drag.moved = true;
+  canvas.classList.add("is-barrier-linking");
+  showAppToast(t("traverse.linkOriginSelected"));
+  draw();
+  renderStatus();
   return true;
 }
 
@@ -4118,13 +4192,17 @@ function drawTraversePolygon(points, options = {}) {
   if (options.stroke) context.stroke();
 }
 
-function drawTraverseStones() {
+function drawTraverseStones(options = {}) {
   if (!state.traverseMode || !state.traverseLog) return;
   const colors = canvasPalette();
+  const availableOnly = options.availableOnly === true;
+  const availableStoneIds = availableOnly ? new Set(availableBarrierStoneIds()) : null;
   for (const stone of Object.values(state.traverseLog?.stones || {})) {
+    const stoneId = stoneIdFromTile(stone.tile);
+    if (stoneDisplayCount(stone) <= 0) continue;
+    if (availableStoneIds && !availableStoneIds.has(stoneId)) continue;
     const polygon = displayedTraverseTilePolygon(stone.tile);
     if (!polygon) continue;
-    const stoneId = stoneIdFromTile(stone.tile);
     const selected = stoneId
       ? state.barrierSelection.includes(stoneId) || stoneId === state.barrierLinkCandidateStoneId
         || stoneId === state.barrierLinkPendingStoneId
@@ -4506,8 +4584,10 @@ function drawLineDragPreview() {
   const drag = state.pointer.drag?.lineDrag;
   if (!drag) return;
 
-  const link = findLink(drag.linkId);
-  const fixed = link ? linkEndpoint(link, drag.fixedSide) : null;
+  const link = drag.mode === "create" ? null : findLink(drag.linkId);
+  const fixed = drag.mode === "create"
+    ? findPoint(drag.startPointId)
+    : link ? linkEndpoint(link, drag.fixedSide) : null;
   if (!fixed) return;
 
   const start = worldToScreen(fixed);
@@ -5138,6 +5218,12 @@ function draw() {
     drawTraverseBarriers();
     return;
   }
+  if (state.barrierLinkingMode) {
+    drawTraverseStones({ availableOnly: true });
+    drawTraverseBarriers();
+    drawBarrierLinkGesture();
+    return;
+  }
   if (state.barrierPlacementView) {
     drawTraverseStones();
     drawTraverseBarriers();
@@ -5216,6 +5302,7 @@ function render() {
   renderActionButtons();
   renderPointInfoDialog();
   renderGridPointQuickDialog();
+  renderGridBarrierStoneQuickDialog();
   renderGridLinkQuickDialog();
   renderGridFigureQuickDialog();
   renderGridLinkColorDialog();
@@ -5625,7 +5712,8 @@ function renderStatus() {
   const lineDrag = state.pointer.drag?.lineDrag;
   if (lineDrag) {
     const target = lineDrag.targetPointId ? findPoint(lineDrag.targetPointId) : null;
-    elements.statusLine.value = t("line.dragStatus").replace("{name}", target?.title || "…");
+    const statusKey = lineDrag.mode === "create" ? "line.drawStatus" : "line.dragStatus";
+    elements.statusLine.value = t(statusKey).replace("{name}", target?.title || "…");
     return;
   }
 
@@ -5790,10 +5878,13 @@ function returnToTraverseActionMenu() {
 
 function fitBarrierPlacementView(options = {}) {
   const dissolveOnly = options.dissolveOnly === true;
+  const linkOnly = options.linkOnly === true;
   syncCanvasSize();
   pauseLocationFollowForManualView();
+  const availableStoneIds = linkOnly ? new Set(availableBarrierStoneIds()) : null;
   const visibleStones = Object.values(state.traverseLog?.stones || {})
     .filter((stone) => stoneDisplayCount(stone) > 0)
+    .filter((stone) => !availableStoneIds || availableStoneIds.has(stoneIdFromTile(stone.tile)))
     .map((stone) => ({ stone, geo: tileCenterGeo(stone.tile) }))
     .filter(({ geo }) => validGeo(geo));
   const barrierGeos = Object.values(state.traverseLog?.barriers || {})
@@ -5943,7 +6034,7 @@ function returnToKekkaiTitle() {
   window.location.assign(KEKKAI_TITLE_URL);
 }
 
-function performTraverseStoneAction(action, requestedQuantity = 1) {
+function performTraverseStoneAction(action, requestedQuantity = 1, targetTileId = null) {
   if (!state.traverseMode || state.traverseBusy || !state.traverseLog) return;
   if (!navigator.geolocation?.getCurrentPosition) {
     showAppToast(t("traverse.gpsUnavailable"), { error: true });
@@ -5979,6 +6070,13 @@ function performTraverseStoneAction(action, requestedQuantity = 1) {
       if (!tileId) {
         state.traverseBusy = false;
         showAppToast(t("traverse.gpsUnavailable"), { error: true });
+        returnToTraverseActionMenu();
+        return;
+      }
+
+      if (targetTileId && tileId !== targetTileId) {
+        state.traverseBusy = false;
+        showAppToast(t("traverse.tileMismatch"), { error: true });
         returnToTraverseActionMenu();
         return;
       }
@@ -6482,6 +6580,65 @@ function renderGridPointQuickDialog() {
   elements.gridPointQuickTrackButton.title = state.followCurrentLocation ? t("button.stopTracking") : t("action.track");
 }
 
+function findPointOnBarrierStone(stone) {
+  const tileId = typeof stone?.tile === "string" ? stone.tile : null;
+  if (!tileId) return null;
+  const candidates = [
+    ...allPointListPoints(),
+    ...state.cloud.pointLists.flatMap((list) => Array.isArray(list?.points) ? list.points : [])
+  ].filter((point) => {
+    try {
+      return tileIdFromGeo(pointGeo(point)) === tileId;
+    } catch {
+      return false;
+    }
+  });
+  return candidates.find((point) => pointEditable(point.id)) || candidates[0] || null;
+}
+
+function renderGridBarrierStoneQuickDialog() {
+  if (!elements.gridBarrierStoneQuickDialog?.open) return;
+  if (!state.traverseMode || state.barrierLinkingMode || state.barrierDissolveMode) {
+    elements.gridBarrierStoneQuickDialog.close("mode-changed");
+    return;
+  }
+  const stoneId = state.gridBarrierStoneQuickStoneId;
+  const stone = stoneId ? state.traverseLog?.stones?.[stoneId] : null;
+  if (!stone || stoneDisplayCount(stone) <= 0) {
+    elements.gridBarrierStoneQuickDialog.close("selection-changed");
+    return;
+  }
+
+  const barrierId = barrierIdForStone(state.traverseLog, stoneId);
+  const barrier = barrierId ? state.traverseLog?.barriers?.[barrierId] : null;
+  const count = stoneDisplayCount(stone);
+  const barrierLabel = barrier
+    ? ` · ${t("traverse.vertex")}${barrier.name ? `「${barrier.name}」` : ""}`
+    : "";
+  const stoneCap = stoneCapFor(state.traverseLog, stoneId, currentKekkaishiRankInfo().rank.index);
+  const stockAmount = Math.max(0, Math.floor(Number(state.traverseLog?.stock?.amount) || 0));
+  const point = findPointOnBarrierStone(stone);
+
+  elements.gridBarrierStoneQuickName.textContent = t("traverse.stoneTile");
+  elements.gridBarrierStoneQuickInfo.textContent = `${t("traverse.stoneCount").replace("{count}", String(count))}${barrierLabel}`;
+  elements.gridBarrierStoneQuickPlaceLabel.textContent = t("traverse.place");
+  elements.gridBarrierStoneQuickPickLabel.textContent = t("traverse.pick");
+  elements.gridBarrierStoneQuickEditLabel.textContent = t("action.edit");
+  elements.gridBarrierStoneQuickMapLabel.textContent = t("action.map");
+
+  elements.gridBarrierStoneQuickPlaceButton.disabled = stockAmount < 1 || count >= stoneCap;
+  elements.gridBarrierStoneQuickPlaceButton.setAttribute("aria-label", t("traverse.place"));
+  elements.gridBarrierStoneQuickPlaceButton.title = t("traverse.place");
+  elements.gridBarrierStoneQuickPickButton.disabled = count < 1 || stockAmount >= BARRIER_CONFIG.stockCap;
+  elements.gridBarrierStoneQuickPickButton.setAttribute("aria-label", t("traverse.pick"));
+  elements.gridBarrierStoneQuickPickButton.title = t("traverse.pick");
+  elements.gridBarrierStoneQuickEditButton.disabled = Boolean(point && !pointEditable(point.id));
+  elements.gridBarrierStoneQuickEditButton.setAttribute("aria-label", t("action.edit"));
+  elements.gridBarrierStoneQuickEditButton.title = t("action.edit");
+  elements.gridBarrierStoneQuickMapButton.setAttribute("aria-label", t("action.map"));
+  elements.gridBarrierStoneQuickMapButton.title = t("action.map");
+}
+
 function renderGridLinkQuickDialog() {
   if (!elements.gridLinkQuickDialog?.open) return;
   const link = state.gridLinkQuickLinkId ? findLink(state.gridLinkQuickLinkId) : null;
@@ -6980,6 +7137,60 @@ function formatPercent(value) {
   return Number.isFinite(value) ? `${value.toFixed(2)}%` : "-";
 }
 
+function barrierStoneFromQuickDialog() {
+  const stoneId = state.gridBarrierStoneQuickStoneId;
+  return stoneId && state.traverseLog?.stones?.[stoneId]
+    ? { stoneId, stone: state.traverseLog.stones[stoneId] }
+    : null;
+}
+
+function startBarrierStoneQuickAction(action) {
+  const target = barrierStoneFromQuickDialog();
+  const targetTileId = target?.stone?.tile;
+  if (!targetTileId) return;
+  if (elements.gridBarrierStoneQuickDialog?.open) elements.gridBarrierStoneQuickDialog.close(action);
+  openTraverseQuantityDialog(action, { targetTileId });
+}
+
+function editBarrierStonePointFromQuickDialog() {
+  const target = barrierStoneFromQuickDialog();
+  if (!target) return;
+  const point = findPointOnBarrierStone(target.stone);
+  if (point) {
+    if (!pointEditable(point.id)) return;
+    if (elements.gridBarrierStoneQuickDialog?.open) elements.gridBarrierStoneQuickDialog.close("edit");
+    startEditingPoint(point);
+    return;
+  }
+
+  const geo = tileCenterGeo(target.stone.tile);
+  if (!geo) return;
+  if (elements.gridBarrierStoneQuickDialog?.open) elements.gridBarrierStoneQuickDialog.close("edit");
+  state.mode = "add";
+  state.pendingGeo = geo;
+  state.editingPointId = null;
+  state.pointDestinationListId = null;
+  state.pendingLinkPointId = null;
+  elements.pointTitle.value = "";
+  elements.pointNote.value = "";
+  elements.pointPhoto.value = "";
+  elements.shareImportStatus.value = "";
+  fillFormFromGeo(geo);
+  openPointRegistrationDialog();
+  render();
+}
+
+function openBarrierStoneInPreferredMapFromQuickDialog() {
+  const target = barrierStoneFromQuickDialog();
+  const geo = target ? tileCenterGeo(target.stone.tile) : null;
+  if (!geo) return;
+  if (elements.gridBarrierStoneQuickDialog?.open) elements.gridBarrierStoneQuickDialog.close("map");
+  openPointInExternalMap({
+    title: t("traverse.stoneTile"),
+    geo
+  }, preferredMapProvider());
+}
+
 function formatArea(area) {
   if (!Number.isFinite(area) || area < 0) return "-";
   if (state.distanceUnit === IMPERIAL_UNIT) {
@@ -7201,6 +7412,40 @@ function openGridPointQuickDialog(point, screenPoint = null) {
   if (!elements.gridPointQuickDialog.open) elements.gridPointQuickDialog.show();
   renderGridPointQuickDialog();
   positionGridPointQuickDialog(screenPoint);
+}
+
+function positionGridBarrierStoneQuickDialog(screenPoint) {
+  if (!screenPoint || !elements.gridBarrierStoneQuickDialog?.open) return;
+  const canvasRect = canvas.getBoundingClientRect();
+  const dialogRect = elements.gridBarrierStoneQuickDialog.getBoundingClientRect();
+  const viewportWidth = document.documentElement.clientWidth;
+  const viewportHeight = document.documentElement.clientHeight;
+  const pointX = canvasRect.left + screenPoint.x;
+  const pointY = canvasRect.top + screenPoint.y;
+  const margin = 8;
+  const gap = 10;
+  const maxLeft = Math.max(margin, viewportWidth - dialogRect.width - margin);
+  const left = Math.min(Math.max(margin, pointX - dialogRect.width / 2), maxLeft);
+  const aboveTop = pointY - dialogRect.height - gap;
+  const belowTop = pointY + gap;
+  const top = aboveTop >= margin
+    ? aboveTop
+    : Math.min(Math.max(margin, belowTop), Math.max(margin, viewportHeight - dialogRect.height - margin));
+  elements.gridBarrierStoneQuickDialog.style.left = `${left}px`;
+  elements.gridBarrierStoneQuickDialog.style.top = `${top}px`;
+}
+
+function openGridBarrierStoneQuickDialog(stoneId, screenPoint = null) {
+  const stone = stoneId ? state.traverseLog?.stones?.[stoneId] : null;
+  if (!stone || !elements.gridBarrierStoneQuickDialog?.show) return;
+  hideGridPointHover();
+  if (elements.gridPointQuickDialog?.open) elements.gridPointQuickDialog.close("barrier-stone");
+  if (elements.gridLinkQuickDialog?.open) elements.gridLinkQuickDialog.close("barrier-stone");
+  if (elements.gridFigureQuickDialog?.open) elements.gridFigureQuickDialog.close("barrier-stone");
+  state.gridBarrierStoneQuickStoneId = stoneId;
+  if (!elements.gridBarrierStoneQuickDialog.open) elements.gridBarrierStoneQuickDialog.show();
+  renderGridBarrierStoneQuickDialog();
+  positionGridBarrierStoneQuickDialog(screenPoint);
 }
 
 function positionGridLinkQuickDialog(screenPoint) {
@@ -11595,7 +11840,7 @@ function findNearestPoint(screenPoint, options = {}) {
   let nearestDistance = Infinity;
   const excludedIds = new Set(Array.isArray(options.excludeIds) ? options.excludeIds : []);
   const candidates = visibleSelectablePoints();
-  const current = currentLocationPoint();
+  const current = options.includeCurrent === false ? null : currentLocationPoint();
 
   if (current) {
     candidates.push(current);
@@ -11614,9 +11859,15 @@ function findNearestPoint(screenPoint, options = {}) {
   return nearestDistance <= POINT_RADIUS + 12 ? nearest : null;
 }
 
-function findNearestBarrierStone(screenPoint) {
+function findNearestBarrierStone(screenPoint, options = {}) {
   if (!state.traverseMode || !state.traverseLog) return null;
+  const availableOnly = options.availableOnly === true || state.barrierLinkingMode;
+  const availableStoneIds = availableOnly
+    ? new Set(availableBarrierStoneIds())
+    : null;
   for (const [stoneId, stone] of Object.entries(state.traverseLog?.stones || {})) {
+    if (stoneDisplayCount(stone) <= 0) continue;
+    if (availableStoneIds && !availableStoneIds.has(stoneId)) continue;
     const polygon = displayedTraverseTilePolygon(stone.tile);
     if (polygon && pointInPolygon(screenPoint, polygon)) {
       return { stoneId, stone };
@@ -12025,6 +12276,14 @@ function updateLineDragTarget(drag, screenPoint) {
   if (!drag?.lineDrag) return;
   const lineDrag = drag.lineDrag;
   lineDrag.current = { ...screenPoint };
+  if (lineDrag.mode === "create") {
+    const candidate = findNearestPoint(screenPoint, {
+      excludeIds: [lineDrag.startPointId],
+      includeCurrent: false
+    });
+    lineDrag.targetPointId = candidate?.id || null;
+    return;
+  }
   const link = findLink(lineDrag.linkId);
   const fixedId = lineEndpointPlaceRef(link, lineDrag.fixedSide);
   const replaceSide = lineDrag.fixedSide === "a" ? "b" : "a";
@@ -12055,8 +12314,71 @@ function beginLineDrag(drag, screenPoint) {
   renderStatus();
 }
 
+function beginPointLineDrag(drag, screenPoint) {
+  const point = drag?.longPressPoint;
+  if (!point || point.id === CURRENT_LOCATION_ID || drag.lineDrag) return false;
+
+  if (elements.gridPointQuickDialog?.open) elements.gridPointQuickDialog.close("drag");
+  clearDragLongPressTimer(drag);
+  drag.lineDrag = {
+    mode: "create",
+    startPointId: point.id,
+    current: { ...screenPoint },
+    targetPointId: null
+  };
+  drag.pointLineDragReady = false;
+  drag.moved = true;
+  drag.longPressed = true;
+  canvas.classList.add("is-line-dragging");
+  updateLineDragTarget(drag, screenPoint);
+  draw();
+  renderStatus();
+  return true;
+}
+
+function finishPointLineDrag(lineDrag, screenPoint) {
+  const source = findPoint(lineDrag?.startPointId);
+  const target = findNearestPoint(screenPoint, {
+    excludeIds: [lineDrag?.startPointId],
+    includeCurrent: false
+  });
+  if (!source || !target || source.id === target.id) {
+    showAppToast(t("line.invalidTarget"), { error: true });
+    render();
+    return;
+  }
+
+  if (findLinkBetween(source.id, target.id)) {
+    showAppToast(t("line.duplicateTarget"), { error: true });
+    render();
+    return;
+  }
+
+  const link = createStoredLink({
+    id: createId(),
+    aPoint: source,
+    bPoint: target,
+    strokeId: createId(),
+    createdAt: new Date().toISOString()
+  });
+  if (!link) {
+    showAppToast(t("line.invalidTarget"), { error: true });
+    render();
+    return;
+  }
+
+  state.links.push(link);
+  persistWorkspace();
+  selectLink(link.id, { expandLinkGroups: false });
+  showAppToast(t("line.created"));
+}
+
 function finishLineDrag(lineDrag, screenPoint) {
   canvas.classList.remove("is-line-dragging");
+  if (lineDrag?.mode === "create") {
+    finishPointLineDrag(lineDrag, screenPoint);
+    return;
+  }
   const link = findLink(lineDrag?.linkId);
   const fixedId = lineEndpointPlaceRef(link, lineDrag?.fixedSide);
   const replaceSide = lineDrag?.fixedSide === "a" ? "b" : "a";
@@ -12515,10 +12837,13 @@ function handleCanvasClick(screenPoint) {
   }
   if (state.barrierLinkingMode) return;
 
-  const nearest = findNearestPoint(screenPoint);
-  const nearestLink = nearest ? null : findNearestLink(screenPoint);
-  const nearestFigure = nearest || nearestLink ? null : findNearestFigure(screenPoint);
-  const nearestObservation = nearest || nearestLink || nearestFigure ? null : findNearestLoadedObservation(screenPoint);
+  const nearestBarrierStone = state.traverseMode ? findNearestBarrierStone(screenPoint) : null;
+  const nearest = nearestBarrierStone ? null : findNearestPoint(screenPoint);
+  const nearestLink = nearest || nearestBarrierStone ? null : findNearestLink(screenPoint);
+  const nearestFigure = nearest || nearestBarrierStone || nearestLink ? null : findNearestFigure(screenPoint);
+  const nearestObservation = nearest || nearestBarrierStone || nearestLink || nearestFigure
+    ? null
+    : findNearestLoadedObservation(screenPoint);
 
   if (nearest) {
     state.barrierSelection = [];
@@ -12549,10 +12874,9 @@ function handleCanvasClick(screenPoint) {
   }
 
   if (state.traverseMode) {
-    const barrierStone = findNearestBarrierStone(screenPoint);
-    if (barrierStone) {
+    if (nearestBarrierStone) {
       state.selectedBarrierId = null;
-      toggleBarrierStoneSelection(barrierStone.stoneId);
+      toggleBarrierStoneSelection(nearestBarrierStone.stoneId);
       return;
     }
     const barrier = findNearestBarrier(screenPoint);
@@ -13059,7 +13383,7 @@ function pointerAngle(a, b) {
 }
 
 function startDragGesture(pointerId, point, options = {}) {
-  if (state.barrierPlacementView || state.barrierDissolveMode) {
+  if (state.barrierDissolveMode) {
     state.pointer.drag = {
       id: pointerId,
       start: point,
@@ -13076,6 +13400,52 @@ function startDragGesture(pointerId, point, options = {}) {
     };
     return;
   }
+  if (state.barrierPlacementView) {
+    const longPressBarrierStone = options.moved ? null : findNearestBarrierStone(point);
+    const drag = {
+      id: pointerId,
+      start: point,
+      last: point,
+      viewportX: state.viewport.x,
+      viewportY: state.viewport.y,
+      moved: Boolean(options.moved),
+      barrierPlacementView: true,
+      longPressed: false,
+      longPressBarrierStone,
+      barrierDirectLinkReady: false,
+      cancelled: false,
+      longPressTimerId: null,
+      barrierDirectLinkReadyTimerId: null,
+      lineDragReadyTimerId: null,
+      lineDrag: null
+    };
+    state.pointer.drag = drag;
+    if (longPressBarrierStone && !options.moved) {
+      if (availableBarrierStoneIds().includes(longPressBarrierStone.stoneId)) {
+        drag.barrierDirectLinkReadyTimerId = window.setTimeout(() => {
+          if (
+            state.pointer.drag !== drag
+            || state.pointer.active.size !== 1
+            || drag.moved
+            || drag.cancelled
+          ) return;
+          drag.barrierDirectLinkReady = true;
+        }, LINE_DRAG_LONG_PRESS_MS);
+      }
+      drag.longPressTimerId = window.setTimeout(() => {
+        if (
+          state.pointer.drag !== drag
+          || state.pointer.active.size !== 1
+          || drag.moved
+          || drag.cancelled
+        ) return;
+        drag.barrierDirectLinkReady = false;
+        drag.longPressed = true;
+        openGridBarrierStoneQuickDialog(longPressBarrierStone.stoneId, drag.start);
+      }, RANGE_SELECTION_LONG_PRESS_MS);
+    }
+    return;
+  }
   const barrierLinkMode = state.traverseMode && state.barrierLinkingMode;
   if (state.dragonEye.active && isInsideDragonEye(point)) {
     state.pointer.drag = {
@@ -13090,13 +13460,18 @@ function startDragGesture(pointerId, point, options = {}) {
     return;
   }
   const barrierOrigin = barrierLinkMode && !options.moved ? findNearestBarrierStone(point) : null;
-  const figureVertex = options.moved ? null : findNearestFigureVertex(point);
+  const longPressBarrierStone = state.traverseMode && !barrierLinkMode && !options.moved
+    ? findNearestBarrierStone(point)
+    : null;
+  const figureVertex = longPressBarrierStone ? null : options.moved ? null : findNearestFigureVertex(point);
   const figureEdge = figureVertex || options.moved ? null : findNearestFigureEdge(point);
   const figureSurface = figureVertex || figureEdge ? null : options.moved ? null : findNearestFigure(point);
   const longPressFigure = figureVertex || figureEdge || (figureSurface ? { figureId: figureSurface.id } : null);
-  const longPressPoint = longPressFigure ? null : options.moved ? null : findNearestPoint(point);
-  const longPressLink = longPressFigure || options.moved || longPressPoint ? null : findNearestLink(point);
-  const longPressBarrier = longPressFigure || longPressPoint || longPressLink || barrierLinkMode || options.moved
+  const longPressPoint = longPressFigure || longPressBarrierStone ? null : options.moved ? null : findNearestPoint(point);
+  const longPressLink = longPressFigure || longPressBarrierStone || options.moved || longPressPoint
+    ? null
+    : findNearestLink(point);
+  const longPressBarrier = longPressFigure || longPressBarrierStone || longPressPoint || longPressLink || barrierLinkMode || options.moved
     ? null
     : findNearestBarrier(point);
   const drag = {
@@ -13108,7 +13483,10 @@ function startDragGesture(pointerId, point, options = {}) {
     moved: Boolean(options.moved),
     longPressed: false,
     longPressFigure,
+    longPressBarrierStone,
+    barrierDirectLinkReady: false,
     longPressPoint,
+    pointLineDragReady: false,
     longPressLink,
     longPressBarrier,
     figureDrag: figureVertex
@@ -13122,6 +13500,8 @@ function startDragGesture(pointerId, point, options = {}) {
     lineDrag: null,
     cancelled: false,
     longPressTimerId: null,
+    barrierDirectLinkReadyTimerId: null,
+    pointLineDragReadyTimerId: null,
     lineDragReadyTimerId: null,
     barrierLink: barrierLinkMode,
     barrierLinkStarted: false,
@@ -13133,6 +13513,30 @@ function startDragGesture(pointerId, point, options = {}) {
     dragonEye: false
   };
   state.pointer.drag = drag;
+
+  if (longPressBarrierStone && availableBarrierStoneIds().includes(longPressBarrierStone.stoneId)) {
+    drag.barrierDirectLinkReadyTimerId = window.setTimeout(() => {
+      if (
+        state.pointer.drag !== drag
+        || state.pointer.active.size !== 1
+        || drag.moved
+        || drag.cancelled
+      ) return;
+      drag.barrierDirectLinkReady = true;
+    }, LINE_DRAG_LONG_PRESS_MS);
+  }
+
+  if (longPressPoint && longPressPoint.id !== CURRENT_LOCATION_ID) {
+    drag.pointLineDragReadyTimerId = window.setTimeout(() => {
+      if (
+        state.pointer.drag !== drag
+        || state.pointer.active.size !== 1
+        || drag.moved
+        || drag.cancelled
+      ) return;
+      drag.pointLineDragReady = true;
+    }, LINE_DRAG_LONG_PRESS_MS);
+  }
 
   if (longPressFigure || longPressBarrier) {
     if (!options.moved) {
@@ -13216,9 +13620,15 @@ function startDragGesture(pointerId, point, options = {}) {
       }
 
       drag.lineDragReady = false;
+      drag.barrierDirectLinkReady = false;
+      drag.pointLineDragReady = false;
       drag.longPressed = true;
       if (drag.longPressPoint) {
         openGridPointQuickDialog(drag.longPressPoint, drag.start);
+        return;
+      }
+      if (drag.longPressBarrierStone) {
+        openGridBarrierStoneQuickDialog(drag.longPressBarrierStone.stoneId, drag.start);
         return;
       }
       if (drag.longPressLink) {
@@ -13242,10 +13652,16 @@ function clearDragLongPressTimer(drag) {
   }
 
   if (drag.longPressTimerId) window.clearTimeout(drag.longPressTimerId);
+  if (drag.barrierDirectLinkReadyTimerId) window.clearTimeout(drag.barrierDirectLinkReadyTimerId);
+  if (drag.pointLineDragReadyTimerId) window.clearTimeout(drag.pointLineDragReadyTimerId);
   if (drag.lineDragReadyTimerId) window.clearTimeout(drag.lineDragReadyTimerId);
   clearBarrierLinkCandidateTimer(drag);
   drag.longPressTimerId = null;
+  drag.barrierDirectLinkReadyTimerId = null;
+  drag.pointLineDragReadyTimerId = null;
   drag.lineDragReadyTimerId = null;
+  drag.barrierDirectLinkReady = false;
+  drag.pointLineDragReady = false;
   drag.lineDragReady = false;
 }
 
@@ -13516,7 +13932,7 @@ function removePointer(event, options = {}) {
   }
 
   if (drag?.longPressed) {
-    if (drag.longPressFigure || drag.longPressBarrier || drag.longPressPoint || drag.longPressLink) {
+    if (drag.longPressFigure || drag.longPressBarrierStone || drag.longPressBarrier || drag.longPressPoint || drag.longPressLink) {
       return;
     }
     if (allowTap) {
@@ -15310,12 +15726,12 @@ async function renderSelectedShareImage(points, lines, figures, visiblePoints = 
   if (analyses.length > 0) {
     const { result } = analyses[0];
     target.save();
-    const right = 1130;
+    const analysisRight = 1130;
     const scoreCenter = 1040;
     const scoreY = 1088;
+    const scoreLabelY = 1014;
     const displayFont = "'Avenir Next', 'Helvetica Neue', 'Trebuchet MS', 'Segoe UI', sans-serif";
     const textFont = "'Yu Gothic', 'Hiragino Sans', 'Segoe UI', sans-serif";
-    target.textAlign = "right";
     target.textBaseline = "alphabetic";
     target.shadowColor = "rgb(0 0 0 / 52%)";
     target.shadowBlur = 4;
@@ -15323,37 +15739,46 @@ async function renderSelectedShareImage(points, lines, figures, visiblePoints = 
     target.fillStyle = textColor;
     target.globalAlpha = 0.88;
     target.font = `500 13px ${textFont}`;
-    target.textAlign = "center";
-    target.fillText(`${t("analysis.area")} ${formatShareSnapshotArea(result.area)}   ${t("analysis.perimeterDisplay")} ${formatShareSnapshotPerimeter(result.perimeter)}`, scoreCenter, 1122);
+    target.textAlign = "right";
+    target.fillText(`${t("analysis.area")} ${formatShareSnapshotArea(result.area)}   ${t("analysis.perimeterDisplay")} ${formatShareSnapshotPerimeter(result.perimeter)}`, analysisRight, 1122);
+
+    const scoreText = String(Math.round(result.referenceScore));
+    const scoreSuffix = "/100";
+    const scoreGap = 14;
+    const scoreFont = `600 78px ${displayFont}`;
+    const scoreSuffixFont = `500 22px ${displayFont}`;
+    target.font = scoreFont;
+    const scoreWidth = target.measureText(scoreText).width;
+    target.font = scoreSuffixFont;
+    const suffixWidth = target.measureText(scoreSuffix).width;
+    const scoreLeft = scoreCenter - (scoreWidth + scoreGap + suffixWidth) / 2;
+    const scoreNumberCenter = scoreLeft + scoreWidth / 2;
+
     target.globalAlpha = 0.9;
     target.font = `500 18px ${textFont}`;
-    target.fillText(t("analysis.regularityScore"), scoreCenter, 1014);
+    target.textAlign = "center";
+    target.fillText(t("analysis.regularityScore"), scoreNumberCenter, scoreLabelY);
     target.fillStyle = palette.pointFill || palette.link || textColor;
     target.globalAlpha = 1;
-    target.font = `600 78px ${displayFont}`;
-    const scoreText = String(Math.round(result.referenceScore));
     target.fillStyle = textColor;
     target.globalAlpha = 0.82;
-    target.font = `500 22px ${displayFont}`;
-    const scoreSuffix = "/100";
-    const suffixWidth = target.measureText(scoreSuffix).width;
-    const scoreRight = scoreCenter - (suffixWidth + 14) / 2;
+    target.textAlign = "left";
     target.fillStyle = palette.pointFill || palette.link || textColor;
     target.globalAlpha = 1;
-    target.font = `600 78px ${displayFont}`;
-    target.fillText(scoreText, scoreRight, scoreY);
+    target.font = scoreFont;
+    target.fillText(scoreText, scoreLeft, scoreY);
     target.fillStyle = textColor;
     target.globalAlpha = 0.82;
-    target.font = `500 22px ${displayFont}`;
-    target.fillText(scoreSuffix, scoreCenter + (suffixWidth + 14) / 2, scoreY - 4);
+    target.font = scoreSuffixFont;
+    target.fillText(scoreSuffix, scoreLeft + scoreWidth + scoreGap, scoreY - 4);
     target.globalAlpha = 0.9;
     target.fillStyle = textColor;
     target.font = `500 14px ${textFont}`;
     target.textAlign = "right";
-    target.fillText(`${t("analysis.angleVariation")} ${formatAngle(result.maxAngleDeviation)} (${formatPercent(result.maxAngleDeviationPercent)})   ${t("analysis.sideVariation")} ${formatPercent(result.sideRangePercent)}`, right, 1150);
+    target.fillText(`${t("analysis.angleVariation")} ${formatAngle(result.maxAngleDeviation)} (${formatPercent(result.maxAngleDeviationPercent)})   ${t("analysis.sideVariation")} ${formatPercent(result.sideRangePercent)}`, analysisRight, 1150);
     target.globalAlpha = 0.72;
     target.font = `400 12px ${textFont}`;
-    target.fillText(t("analysis.referenceScoreDefinition"), right, 1180);
+    target.fillText(t("analysis.referenceScoreDefinition"), analysisRight, 1180);
     target.restore();
   }
   drawShareSnapshotBrand(target, palette, textColor);
@@ -16462,6 +16887,24 @@ function bindEvents() {
   elements.gridPointQuickDialog.addEventListener("click", (event) => {
     if (event.target === elements.gridPointQuickDialog) elements.gridPointQuickDialog.close("cancel");
   });
+  elements.gridBarrierStoneQuickDialog.addEventListener("close", () => {
+    state.gridBarrierStoneQuickStoneId = null;
+  });
+  bindPointerActionButton(elements.gridBarrierStoneQuickPlaceButton, () => {
+    startBarrierStoneQuickAction("place");
+  });
+  bindPointerActionButton(elements.gridBarrierStoneQuickPickButton, () => {
+    startBarrierStoneQuickAction("pick");
+  });
+  bindPointerActionButton(elements.gridBarrierStoneQuickEditButton, () => {
+    editBarrierStonePointFromQuickDialog();
+  });
+  bindPointerActionButton(elements.gridBarrierStoneQuickMapButton, () => {
+    openBarrierStoneInPreferredMapFromQuickDialog();
+  });
+  elements.gridBarrierStoneQuickDialog.addEventListener("click", (event) => {
+    if (event.target === elements.gridBarrierStoneQuickDialog) elements.gridBarrierStoneQuickDialog.close("cancel");
+  });
   elements.gridLinkQuickDialog.addEventListener("close", () => {
     state.gridLinkQuickLinkId = null;
   });
@@ -16510,6 +16953,11 @@ function bindEvents() {
     elements.gridPointQuickDialog.close("outside");
   }, true);
   document.addEventListener("pointerdown", (event) => {
+    if (!elements.gridBarrierStoneQuickDialog.open) return;
+    if (event.target instanceof Node && elements.gridBarrierStoneQuickDialog.contains(event.target)) return;
+    elements.gridBarrierStoneQuickDialog.close("outside");
+  }, true);
+  document.addEventListener("pointerdown", (event) => {
     if (!elements.gridLinkQuickDialog.open) return;
     if (event.target instanceof Node && elements.gridLinkQuickDialog.contains(event.target)) return;
     elements.gridLinkQuickDialog.close("outside");
@@ -16526,6 +16974,14 @@ function bindEvents() {
       ? event.target.closest("button, a, input, select, textarea, summary")
       : null;
     if (target) elements.gridPointQuickDialog.close("outside-control");
+  }, true);
+  document.addEventListener("click", (event) => {
+    if (!elements.gridBarrierStoneQuickDialog.open) return;
+    if (event.target instanceof Node && elements.gridBarrierStoneQuickDialog.contains(event.target)) return;
+    const target = event.target instanceof Element
+      ? event.target.closest("button, a, input, select, textarea, summary")
+      : null;
+    if (target) elements.gridBarrierStoneQuickDialog.close("outside-control");
   }, true);
   document.addEventListener("click", (event) => {
     if (!elements.gridFigureQuickDialog.open) return;
@@ -16838,6 +17294,20 @@ function bindEvents() {
       return;
     }
 
+    if (
+      Math.hypot(dx, dy) > POINTER_MOVE_THRESHOLD
+      && drag.longPressBarrierStone
+      && (drag.barrierDirectLinkReady || drag.longPressed)
+      && !drag.barrierLink
+    ) {
+      if (beginDirectBarrierLink(drag)) {
+        event.preventDefault();
+        updateBarrierLinkGesture(drag, point);
+        drag.last = point;
+        return;
+      }
+    }
+
     if (drag.barrierLink) {
       if (!drag.barrierLinkStarted) {
         if (Math.hypot(dx, dy) > POINTER_MOVE_THRESHOLD) {
@@ -16872,6 +17342,20 @@ function bindEvents() {
       }
     }
 
+    if (
+      Math.hypot(dx, dy) > POINTER_MOVE_THRESHOLD
+      && drag.longPressPoint
+      && (drag.pointLineDragReady || drag.longPressed)
+      && !drag.lineDrag
+    ) {
+      if (beginPointLineDrag(drag, point)) {
+        event.preventDefault();
+        updateLineDragTarget(drag, point);
+        drag.last = point;
+        return;
+      }
+    }
+
     if (Math.hypot(dx, dy) > POINTER_MOVE_THRESHOLD) {
       if (drag.longPressFigure) {
         if (drag.longPressed) {
@@ -16890,6 +17374,15 @@ function bindEvents() {
         clearDragLongPressTimer(drag);
         drag.cancelled = true;
         drag.longPressBarrier = null;
+      }
+      if (drag.longPressBarrierStone) {
+        if (drag.longPressed) {
+          drag.last = point;
+          return;
+        }
+        clearDragLongPressTimer(drag);
+        drag.cancelled = true;
+        drag.longPressBarrierStone = null;
       }
       if (drag.lineDrag) {
         updateLineDragTarget(drag, point);
@@ -16920,7 +17413,7 @@ function bindEvents() {
         clearDragLongPressTimer(drag);
       }
       if (drag.longPressed) {
-        if (drag.longPressPoint) {
+        if (drag.longPressPoint || drag.longPressBarrierStone) {
           drag.last = point;
           return;
         }

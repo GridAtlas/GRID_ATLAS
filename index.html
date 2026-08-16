@@ -29,8 +29,8 @@
     <link rel="icon" href="assets/icon-grid.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=81">
-    <script src="src/main.js?v=476" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=84">
+    <script src="src/main.js?v=479" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -735,6 +735,20 @@
           <button id="gridPointQuickEditButton" class="grid-point-quick-role-button" type="button" aria-label="編集" title="編集"><svg class="ui-icon" aria-hidden="true"><use href="#icon-edit"></use></svg><span id="gridPointQuickEditLabel">編集</span></button>
           <button id="gridPointQuickTrackButton" class="grid-point-quick-role-button" type="button" aria-label="追跡" title="追跡" hidden><svg class="ui-icon" aria-hidden="true"><use href="#icon-current"></use></svg><span id="gridPointQuickTrackLabel">追跡</span></button>
           <button id="gridPointQuickInfoButton" class="grid-point-quick-role-button" type="button" aria-label="情報を表示" title="情報を表示"><svg class="ui-icon" aria-hidden="true"><use href="#icon-info"></use></svg><span id="gridPointQuickInfoLabel">情報</span></button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="gridBarrierStoneQuickDialog" class="grid-point-quick-dialog grid-barrier-stone-quick-dialog" aria-labelledby="gridBarrierStoneQuickName" tabindex="-1">
+      <form class="grid-point-quick-dialog-form" method="dialog">
+        <div class="grid-point-quick-heading">
+          <strong id="gridBarrierStoneQuickName" class="grid-point-quick-name" tabindex="-1"></strong>
+          <span id="gridBarrierStoneQuickInfo" class="grid-point-quick-list"></span>
+        </div>
+        <div class="grid-point-quick-actions grid-barrier-stone-quick-actions" aria-label="結界石タイルのクイック操作">
+          <button id="gridBarrierStoneQuickPlaceButton" class="grid-point-quick-role-button" type="button" aria-label="結界石を置く" title="結界石を置く"><svg class="ui-icon" aria-hidden="true"><use href="#icon-plus"></use></svg><span id="gridBarrierStoneQuickPlaceLabel">置く</span></button>
+          <button id="gridBarrierStoneQuickPickButton" class="grid-point-quick-role-button" type="button" aria-label="結界石を拾う" title="結界石を拾う"><svg class="ui-icon" aria-hidden="true"><use href="#icon-drop"></use></svg><span id="gridBarrierStoneQuickPickLabel">拾う</span></button>
+          <button id="gridBarrierStoneQuickEditButton" class="grid-point-quick-role-button" type="button" aria-label="編集" title="編集"><svg class="ui-icon" aria-hidden="true"><use href="#icon-edit"></use></svg><span id="gridBarrierStoneQuickEditLabel">編集</span></button>
+          <button id="gridBarrierStoneQuickMapButton" class="grid-point-quick-role-button" type="button" aria-label="地図" title="地図"><svg class="ui-icon" aria-hidden="true"><use href="#icon-map"></use></svg><span id="gridBarrierStoneQuickMapLabel">地図</span></button>
         </div>
       </form>
     </dialog>
