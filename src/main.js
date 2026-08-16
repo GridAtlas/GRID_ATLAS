@@ -135,7 +135,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2246";
+const WEB_VERSION = "0.2247";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -4192,12 +4192,18 @@ function drawGrid(width, height) {
 function traverseTilePolygon(tileId) {
   const bounds = tileBounds(tileId);
   if (!bounds || bounds.z !== BARRIER_CONFIG.dataZoom) return null;
+  return tileBoundaryGeos(tileId).map((corner) => projectLatLng(corner.lat, corner.lng)).map(worldToScreen);
+}
+
+function tileBoundaryGeos(tileId) {
+  const bounds = tileBounds(tileId);
+  if (!bounds) return [];
   return (bounds.corners || [
     { lat: bounds.north, lng: bounds.west },
     { lat: bounds.north, lng: bounds.east },
     { lat: bounds.south, lng: bounds.east },
     { lat: bounds.south, lng: bounds.west }
-  ]).map((corner) => projectLatLng(corner.lat, corner.lng)).map(worldToScreen);
+  ]).filter(validGeo);
 }
 
 function displayedTraverseTilePolygon(tileId) {
@@ -5245,15 +5251,22 @@ function draw() {
   const size = canvasSize();
   context.clearRect(0, 0, size.width, size.height);
   drawGrid(size.width, size.height);
+  if (state.barrierDissolveMode) {
+    drawTraverseBarriers();
+    return;
+  }
+  if (state.barrierLinkingMode) {
+    drawTraverseStones({ availableOnly: true });
+    drawBarrierLinkGesture();
+    return;
+  }
+  if (state.barrierPlacementView) {
+    drawTraverseTiles();
+    return;
+  }
   if (state.traverseMode) {
-    if (state.barrierLinkingMode) {
-      drawTraverseStones({ availableOnly: true });
-      drawTraverseBarriers();
-    } else {
-      // Barrier mode is an overlay on the normal atlas. Keep both layers
-      // visible even while placing, linking, or dissolving a barrier.
-      drawTraverseTiles();
-    }
+    // Barrier mode is an overlay on the normal atlas outside the special views.
+    drawTraverseTiles();
   }
   drawDragonEyePreview();
   drawBarrierLinkGesture();
@@ -5912,18 +5925,16 @@ function fitBarrierPlacementView(options = {}) {
     .filter((stone) => !availableStoneIds || availableStoneIds.has(stoneIdFromTile(stone.tile)))
     .map((stone) => ({ stone, geo: tileCenterGeo(stone.tile) }))
     .filter(({ geo }) => validGeo(geo));
-  const cellGeos = visibleStones.flatMap(({ stone }) => tileBounds(stone.tile)?.corners || [])
-    .filter(validGeo);
+  const cellGeos = visibleStones.flatMap(({ stone }) => tileBoundaryGeos(stone.tile));
   const barrierGeos = Object.values(state.traverseLog?.barriers || {})
     .flatMap((barrier) => barrierFigureVertices(barrier)
       .map((vertex) => ({ lat: vertex.lat, lng: vertex.lng }))
       .filter(validGeo));
-  const normalFitGeos = fitTargetPoints().map(pointGeo).filter(validGeo);
-  const geos = [
-    ...cellGeos,
-    ...barrierGeos,
-    ...normalFitGeos
-  ];
+  const geos = dissolveOnly
+    ? barrierGeos
+    : linkOnly
+      ? cellGeos
+      : [...cellGeos, ...barrierGeos];
   if (geos.length === 0) {
     render();
     return;
@@ -5934,11 +5945,10 @@ function fitBarrierPlacementView(options = {}) {
   const projected = geos.map((geo) => projectGeo(geo));
   const size = canvasSize();
 
-  if (visibleStones.length === 1 && !dissolveOnly && normalFitGeos.length === 0) {
+  if (visibleStones.length === 1 && !dissolveOnly) {
     const bounds = tileBounds(visibleStones[0]?.stone.tile);
-    const tile = bounds?.corners
-      ? bounds.corners.map((corner) => projectLatLng(corner.lat, corner.lng))
-      : [];
+    const tile = bounds ? tileBoundaryGeos(visibleStones[0].stone.tile)
+      .map((corner) => projectLatLng(corner.lat, corner.lng)) : [];
     const tileWidth = tile.length > 0
       ? Math.max(...tile.map((point) => point.x)) - Math.min(...tile.map((point) => point.x))
       : 0;
@@ -13233,8 +13243,7 @@ function barrierCellFitPoints() {
   if (!state.traverseMode || !state.traverseLog) return [];
   return Object.values(state.traverseLog.stones || {})
     .filter((stone) => stoneDisplayCount(stone) > 0)
-    .flatMap((stone) => tileBounds(stone.tile)?.corners || [])
-    .filter(validGeo)
+    .flatMap((stone) => tileBoundaryGeos(stone.tile))
     .map((geo) => ({
       ...projectLatLng(geo.lat, geo.lng),
       geo
