@@ -135,7 +135,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2245";
+const WEB_VERSION = "0.2246";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -5245,23 +5245,16 @@ function draw() {
   const size = canvasSize();
   context.clearRect(0, 0, size.width, size.height);
   drawGrid(size.width, size.height);
-  if (state.barrierDissolveMode) {
-    drawTraverseBarriers();
-    return;
+  if (state.traverseMode) {
+    if (state.barrierLinkingMode) {
+      drawTraverseStones({ availableOnly: true });
+      drawTraverseBarriers();
+    } else {
+      // Barrier mode is an overlay on the normal atlas. Keep both layers
+      // visible even while placing, linking, or dissolving a barrier.
+      drawTraverseTiles();
+    }
   }
-  if (state.barrierLinkingMode) {
-    drawTraverseStones({ availableOnly: true });
-    drawTraverseBarriers();
-    drawBarrierLinkGesture();
-    return;
-  }
-  if (state.barrierPlacementView) {
-    drawTraverseStones();
-    drawTraverseBarriers();
-    return;
-  }
-  drawTraverseTiles();
-  if (state.traverseMode) drawTraverseBarriers();
   drawDragonEyePreview();
   drawBarrierLinkGesture();
   drawFigures();
@@ -5919,11 +5912,18 @@ function fitBarrierPlacementView(options = {}) {
     .filter((stone) => !availableStoneIds || availableStoneIds.has(stoneIdFromTile(stone.tile)))
     .map((stone) => ({ stone, geo: tileCenterGeo(stone.tile) }))
     .filter(({ geo }) => validGeo(geo));
+  const cellGeos = visibleStones.flatMap(({ stone }) => tileBounds(stone.tile)?.corners || [])
+    .filter(validGeo);
   const barrierGeos = Object.values(state.traverseLog?.barriers || {})
     .flatMap((barrier) => barrierFigureVertices(barrier)
       .map((vertex) => ({ lat: vertex.lat, lng: vertex.lng }))
       .filter(validGeo));
-  const geos = (dissolveOnly ? barrierGeos : visibleStones.map(({ geo }) => geo));
+  const normalFitGeos = fitTargetPoints().map(pointGeo).filter(validGeo);
+  const geos = [
+    ...cellGeos,
+    ...barrierGeos,
+    ...normalFitGeos
+  ];
   if (geos.length === 0) {
     render();
     return;
@@ -5934,7 +5934,7 @@ function fitBarrierPlacementView(options = {}) {
   const projected = geos.map((geo) => projectGeo(geo));
   const size = canvasSize();
 
-  if (geos.length === 1 && !dissolveOnly) {
+  if (visibleStones.length === 1 && !dissolveOnly && normalFitGeos.length === 0) {
     const bounds = tileBounds(visibleStones[0]?.stone.tile);
     const tile = bounds?.corners
       ? bounds.corners.map((corner) => projectLatLng(corner.lat, corner.lng))
@@ -5951,8 +5951,9 @@ function fitBarrierPlacementView(options = {}) {
     );
 
     if (tileWidth > 0 && tileHeight > 0) {
-      state.viewport.x = projected[0].x;
-      state.viewport.y = projected[0].y;
+      const center = projectGeo(visibleStones[0].geo);
+      state.viewport.x = center.x;
+      state.viewport.y = center.y;
       state.viewport.scale = clampScale(targetSize / Math.max(tileWidth, tileHeight));
       render();
       return;
@@ -13228,12 +13229,37 @@ function zoomAt(screenPoint, factor) {
   render();
 }
 
-function fitToPoints(fitPointsOverride = null) {
+function barrierCellFitPoints() {
+  if (!state.traverseMode || !state.traverseLog) return [];
+  return Object.values(state.traverseLog.stones || {})
+    .filter((stone) => stoneDisplayCount(stone) > 0)
+    .flatMap((stone) => tileBounds(stone.tile)?.corners || [])
+    .filter(validGeo)
+    .map((geo) => ({
+      ...projectLatLng(geo.lat, geo.lng),
+      geo
+    }));
+}
+
+function reprojectFitPoints(points) {
+  return points.map((point) => {
+    const geo = pointGeo(point);
+    return validGeo(geo)
+      ? { ...point, ...projectLatLng(geo.lat, geo.lng), geo }
+      : point;
+  });
+}
+
+function fitToPoints(fitPointsOverride = null, options = {}) {
   syncCanvasSize();
   pauseLocationFollowForManualView();
 
   const overridePoints = Array.isArray(fitPointsOverride) ? fitPointsOverride.filter(Boolean) : null;
-  let fitPoints = overridePoints ?? fitTargetPoints();
+  const includeBarrierCells = options.includeBarrierCells === true;
+  let fitPoints = [
+    ...(overridePoints ?? fitTargetPoints()),
+    ...(includeBarrierCells ? barrierCellFitPoints() : [])
+  ];
 
   if (fitPoints.length === 0) {
     setProjectionCenterGeo(DEFAULT_GEO);
@@ -13247,7 +13273,10 @@ function fitToPoints(fitPointsOverride = null) {
   const centerGeo = geographicCenter(fitPoints);
   if (centerGeo) {
     setProjectionCenterGeo(centerGeo);
-    fitPoints = overridePoints ?? fitTargetPoints();
+    fitPoints = reprojectFitPoints([
+      ...(overridePoints ?? fitTargetPoints()),
+      ...(includeBarrierCells ? barrierCellFitPoints() : [])
+    ]);
   }
 
   const size = canvasSize();
@@ -17287,6 +17316,10 @@ function bindEvents() {
     }
     if (state.barrierPlacementView) {
       fitBarrierPlacementView();
+      return;
+    }
+    if (state.traverseMode) {
+      fitToPoints(null, { includeBarrierCells: true });
       return;
     }
     fitToPoints();
