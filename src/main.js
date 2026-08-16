@@ -47,6 +47,7 @@ import {
   BARRIER_CONFIG,
   appendBarrierEvent,
   createBarrierLog,
+  dissolveBarrier,
   grantBarrierStock,
   maxVerticesForRank,
   registerBarrier,
@@ -66,7 +67,9 @@ import { barrierFitsSightRadius, polygonSelfIntersects, scoreBarrier } from "./b
 import {
   BARRIER_EVALUATION_CONFIG,
   createKekkaishiStatus,
+  currentBarrierPower,
   evaluateBarrierLog,
+  liveCumulativeBarrierSpirit,
   barrierRankStoneProgress,
   rankForKekkaishi,
   rankForBarrier,
@@ -126,9 +129,10 @@ const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
 const KEKKAI_THEME = "kekkai";
 const KEKKAI_MODE = "kekkai";
+const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2172";
+const WEB_VERSION = "0.2202";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -261,7 +265,9 @@ const elements = {
   traversePickButton: document.querySelector("#traversePickButton"),
   traversePlacementViewButton: document.querySelector("#traversePlacementViewButton"),
   traverseCreateBarrierButton: document.querySelector("#traverseCreateBarrierButton"),
+  traverseDissolveBarrierButton: document.querySelector("#traverseDissolveBarrierButton"),
   traverseStatusButton: document.querySelector("#traverseStatusButton"),
+  traverseReturnTitleButton: document.querySelector("#traverseReturnTitleButton"),
   traverseStockValue: document.querySelector("#traverseStockValue"),
   traverseInstalledValue: document.querySelector("#traverseInstalledValue"),
   traverseLocationValue: document.querySelector("#traverseLocationValue"),
@@ -375,6 +381,7 @@ const elements = {
   gridFigureQuickDeleteVertexButton: document.querySelector("#gridFigureQuickDeleteVertexButton"),
   gridFigureQuickDeleteVertexLabel: document.querySelector("#gridFigureQuickDeleteVertexLabel"),
   gridFigureQuickDeleteButton: document.querySelector("#gridFigureQuickDeleteButton"),
+  gridFigureQuickDeleteIcon: document.querySelector("#gridFigureQuickDeleteIcon"),
   gridFigureQuickDeleteLabel: document.querySelector("#gridFigureQuickDeleteLabel"),
   gridLinkColorDialog: document.querySelector("#gridLinkColorDialog"),
   gridLinkColorDialogTitle: document.querySelector("#gridLinkColorDialogTitle"),
@@ -410,6 +417,7 @@ const elements = {
   kekkaishiStatusDialog: document.querySelector("#kekkaishiStatusDialog"),
   kekkaishiStatusRank: document.querySelector("#kekkaishiStatusRank"),
   kekkaishiStatusLifetime: document.querySelector("#kekkaishiStatusLifetime"),
+  kekkaishiStatusCurrentPower: document.querySelector("#kekkaishiStatusCurrentPower"),
   kekkaishiStatusDailyPower: document.querySelector("#kekkaishiStatusDailyPower"),
   kekkaishiStatusCount: document.querySelector("#kekkaishiStatusCount"),
   kekkaishiStatusCurrentRank: document.querySelector("#kekkaishiStatusCurrentRank"),
@@ -580,6 +588,14 @@ const state = {
   gridLinkQuickLinkId: null,
   gridFigureQuickFigureId: null,
   gridFigureQuickVertexIndex: null,
+  gridFigureQuickBarrierId: null,
+  kekkaishiStatusAnimation: {
+    frameId: null,
+    current: null,
+    target: null,
+    startedAt: null,
+    lastPainted: ""
+  },
   gridLinkColorLinkId: null,
   gridPointHoverPointId: null,
   pointInfoBackdropClickPending: false,
@@ -605,6 +621,7 @@ const state = {
   barrierSelection: [],
   selectedBarrierId: null,
   barrierPlacementView: false,
+  barrierDissolveMode: false,
   barrierLinkingMode: false,
   barrierLinkPath: [],
   barrierLinkCandidateStoneId: null,
@@ -972,6 +989,9 @@ const TRANSLATIONS = {
     "figure.vertexDeleted": "図形の頂点を削除しました",
     "figure.deleteConfirm": "この図形を削除しますか？",
     "figure.deleteVertexConfirm": "この頂点を削除しますか？",
+    "barrier.dissolve": "結界を解く",
+    "barrier.dissolveConfirm": "この結界を解きますか？結界石はその場に残ります。",
+    "barrier.dissolved": "結界を解きました",
     "analysis.dialogTitle": "分析結果",
     "analysis.lineTitle": "交差角",
     "analysis.polygonTitle": "図形の分析",
@@ -1233,6 +1253,8 @@ const TRANSLATIONS = {
     "traverse.placementView": "配置をみる",
     "traverse.placementViewExit": "結界メニューへ戻る",
     "traverse.connect": "結界を結ぶ",
+    "traverse.cancel": "キャンセル",
+    "traverse.returnTitle": "タイトルに戻る",
     "traverse.status": "ステータス確認",
     "traverse.menuTitle": "結界操作",
     "dragonEye.open": "龍脈眼",
@@ -1283,6 +1305,8 @@ const TRANSLATIONS = {
     "barrier.nameLabel": "結界名",
     "barrier.defaultName": "新しい結界",
     "barrier.created": "結界を張りました",
+    "barrier.dissolveHint": "解く結界を選択してください",
+    "barrier.selectToDissolve": "結界を選択してください",
     "barrier.tooFew": "結界には3箇所以上の結界石が必要です",
     "barrier.needLocations": "結界を結ぶには、あと{count}箇所に結界石を置いてください。",
     "barrier.tooMany": "結界の頂点は{max}つまでです",
@@ -1328,7 +1352,9 @@ const TRANSLATIONS = {
     ,"kekkaishi.rank": "結界師ランク"
     ,"kekkaishi.achievedDays": "（{days}日で到達）"
     ,"kekkaishi.lifetime": "累積結界霊量"
+    ,"kekkaishi.currentDailyPower": "現在の総結界霊量"
     ,"kekkaishi.createdCount": "作成した結界"
+    ,"kekkaishi.activeCount": "発動中の結界数"
     ,"kekkaishi.next": "次のランクまで"
     ,"kekkaishi.shapesTitle": "結界術と能力"
     ,"kekkaishi.shapesHint": "使用できる結界術と、次のクラスで追加される結界術。"
@@ -1343,6 +1369,7 @@ const TRANSLATIONS = {
     ,"kekkaishi.edgeGuide": "1辺目安"
     ,"kekkaishi.progressLifetime": "累積"
     ,"kekkaishi.dailyPower": "前日の結界霊量"
+    ,"kekkaishi.dailyUnit": "Pt/日"
     ,"kekkaishi.progressDays": "現在のペースであと{days}日"
     ,"kekkaishi.noDailyPower": "結界を張ると進みます"
     ,"kekkaishi.unlocks": "使用できる結界術: {shapes} / 見通し半径{radius} / 1辺目安{edges} / 最大{vertices}頂点 / 石上限{stones} / 龍脈眼精度 誤差{scatter}%"
@@ -1515,6 +1542,9 @@ const TRANSLATIONS = {
     "figure.vertexDeleted": "Figure vertex deleted",
     "figure.deleteConfirm": "Delete this figure?",
     "figure.deleteVertexConfirm": "Delete this vertex?",
+    "barrier.dissolve": "Dissolve barrier",
+    "barrier.dissolveConfirm": "Dissolve this barrier? The barrier stones will remain in place.",
+    "barrier.dissolved": "Barrier dissolved",
     "analysis.dialogTitle": "Analysis result",
     "analysis.lineTitle": "Crossing angle",
     "analysis.polygonTitle": "Shape analysis",
@@ -1776,6 +1806,8 @@ const TRANSLATIONS = {
     "traverse.placementView": "View placement",
     "traverse.placementViewExit": "Back to barrier menu",
     "traverse.connect": "Bind barrier",
+    "traverse.cancel": "Cancel",
+    "traverse.returnTitle": "Back to title",
     "traverse.status": "Check status",
     "traverse.menuTitle": "Barrier operation",
     "dragonEye.open": "Dragon eye",
@@ -1826,6 +1858,8 @@ const TRANSLATIONS = {
     "barrier.nameLabel": "Barrier name",
     "barrier.defaultName": "New barrier",
     "barrier.created": "Barrier created",
+    "barrier.dissolveHint": "Select a barrier to dissolve",
+    "barrier.selectToDissolve": "Select a barrier first",
     "barrier.tooFew": "A barrier needs stones at three or more locations",
     "barrier.needLocations": "Place barrier stones at {count} more locations to bind a barrier.",
     "barrier.tooMany": "A barrier can have at most {max} vertices",
@@ -1871,7 +1905,9 @@ const TRANSLATIONS = {
     ,"kekkaishi.rank": "Kekkaishi rank"
     ,"kekkaishi.achievedDays": "({days} days to reach)"
     ,"kekkaishi.lifetime": "Cumulative barrier spirit"
+    ,"kekkaishi.currentDailyPower": "Current total barrier spirit"
     ,"kekkaishi.createdCount": "Barriers created"
+    ,"kekkaishi.activeCount": "Active barriers"
     ,"kekkaishi.next": "To the next rank"
     ,"kekkaishi.shapesTitle": "Barrier techniques and abilities"
     ,"kekkaishi.shapesHint": "Usable barrier techniques and those added by the next class."
@@ -1886,6 +1922,7 @@ const TRANSLATIONS = {
     ,"kekkaishi.edgeGuide": "Edge guide"
     ,"kekkaishi.progressLifetime": "Lifetime"
     ,"kekkaishi.dailyPower": "Previous day's barrier spirit"
+    ,"kekkaishi.dailyUnit": "Pt/day"
     ,"kekkaishi.progressDays": "At this pace: {days} more days"
     ,"kekkaishi.noDailyPower": "Create a barrier to make progress"
     ,"kekkaishi.unlocks": "Usable barrier techniques: {shapes} / sight radius {radius} / edge guide {edges} / max {vertices} vertices / stone cap {stones} / Dragon Eye accuracy {scatter}% error"
@@ -2462,6 +2499,7 @@ function setTraverseMode(enabled) {
     setMobileGridPage("grid");
   }
   state.barrierPlacementView = false;
+  state.barrierDissolveMode = false;
   resetBarrierLinkState();
   resetDragonEyeState();
   state.barrierSelection = [];
@@ -5096,6 +5134,10 @@ function draw() {
   const size = canvasSize();
   context.clearRect(0, 0, size.width, size.height);
   drawGrid(size.width, size.height);
+  if (state.barrierDissolveMode) {
+    drawTraverseBarriers();
+    return;
+  }
   if (state.barrierPlacementView) {
     drawTraverseStones();
     drawTraverseBarriers();
@@ -5555,6 +5597,15 @@ function selectedLinksDistance(links) {
 }
 
 function renderStatus() {
+  if (state.barrierDissolveMode) {
+    const selectedBarrier = state.selectedBarrierId
+      ? state.traverseLog?.barriers?.[state.selectedBarrierId]
+      : null;
+    elements.statusLine.value = selectedBarrier
+      ? `${selectedBarrier.name || t("barrier.defaultName")} · ${t("barrier.dissolve")}`
+      : t("barrier.dissolveHint");
+    return;
+  }
   if (state.barrierLinkingMode) {
     elements.statusLine.value = state.barrierLinkPath.length > 0
       ? t("traverse.linkReturnHint")
@@ -5602,7 +5653,7 @@ function syncTraverseActionControlsVisibility(visible) {
   setTraverseActionControlVisibility(elements.traverseActionButton, visible);
   setTraverseActionControlVisibility(
     elements.traverseDragonEyeCancelButton,
-    visible && Boolean(state.dragonEye.active)
+    visible && (Boolean(state.dragonEye.active) || Boolean(state.barrierDissolveMode))
   );
 }
 
@@ -5619,7 +5670,7 @@ function renderTraverseActionButton() {
   const visible = state.traverseMode && isTraverseGridSurfaceActive();
   syncTraverseActionControlsVisibility(visible);
   const cancelButton = elements.traverseDragonEyeCancelButton;
-  const cancelLabel = t("dragonEye.cancel");
+  const cancelLabel = state.barrierDissolveMode ? t("traverse.cancel") : t("dragonEye.cancel");
   const cancelLabelNode = cancelButton?.querySelector(".traverse-action-label");
   if (cancelLabelNode) cancelLabelNode.textContent = cancelLabel;
   if (cancelButton) {
@@ -5629,21 +5680,25 @@ function renderTraverseActionButton() {
   }
   if (!visible) {
     button.disabled = false;
-    button.classList.remove("is-dragon-eye-active", "is-placement-view-active");
+    button.classList.remove("is-dragon-eye-active", "is-placement-view-active", "is-barrier-dissolve-active");
     return;
   }
 
   refreshTraverseStock();
   const dragonEyeActive = Boolean(state.dragonEye.active);
-  const buttonLabel = state.barrierPlacementView
-    ? t("traverse.placementViewExit")
-    : dragonEyeActive
-      ? t("dragonEye.confirm")
-      : t("traverse.menuTitle");
+  const barrierDissolveActive = Boolean(state.barrierDissolveMode);
+  const buttonLabel = barrierDissolveActive
+    ? t("barrier.dissolve")
+    : state.barrierPlacementView
+      ? t("traverse.placementViewExit")
+      : dragonEyeActive
+        ? t("dragonEye.confirm")
+        : t("traverse.menuTitle");
   elements.traverseActionLabel.textContent = buttonLabel;
-  button.disabled = state.traverseBusy && !state.barrierPlacementView;
+  button.disabled = state.traverseBusy || (barrierDissolveActive && !state.selectedBarrierId);
   button.classList.toggle("is-dragon-eye-active", dragonEyeActive);
   button.classList.toggle("is-placement-view-active", state.barrierPlacementView);
+  button.classList.toggle("is-barrier-dissolve-active", barrierDissolveActive);
   button.setAttribute("aria-label", buttonLabel);
   button.title = buttonLabel;
 }
@@ -5695,6 +5750,14 @@ function renderTraverseActionDialog() {
       ? t("traverse.connect")
       : t("barrier.needLocations").replace("{count}", String(missingBarrierLocations));
   }
+  if (elements.traverseDissolveBarrierButton) {
+    const barrierCount = Object.keys(state.traverseLog?.barriers || {}).length;
+    elements.traverseDissolveBarrierButton.textContent = t("barrier.dissolve");
+    elements.traverseDissolveBarrierButton.disabled = state.traverseBusy || barrierCount === 0;
+    elements.traverseDissolveBarrierButton.title = barrierCount > 0
+      ? t("barrier.dissolve")
+      : t("barrier.selectToDissolve");
+  }
   if (elements.traverseDragonEyeButton) {
     elements.traverseDragonEyeButton.textContent = t("dragonEye.open");
     elements.traverseDragonEyeButton.disabled = state.traverseBusy || state.dragonEye.active;
@@ -5702,6 +5765,10 @@ function renderTraverseActionDialog() {
   if (elements.traverseStatusButton) {
     elements.traverseStatusButton.textContent = t("traverse.status");
     elements.traverseStatusButton.disabled = state.traverseBusy;
+  }
+  if (elements.traverseReturnTitleButton) {
+    elements.traverseReturnTitleButton.textContent = t("traverse.returnTitle");
+    elements.traverseReturnTitleButton.disabled = state.traverseBusy;
   }
 }
 
@@ -5721,14 +5788,20 @@ function returnToTraverseActionMenu() {
   openTraverseActionDialog();
 }
 
-function fitBarrierPlacementView() {
+function fitBarrierPlacementView(options = {}) {
+  const dissolveOnly = options.dissolveOnly === true;
   syncCanvasSize();
   pauseLocationFollowForManualView();
   const visibleStones = Object.values(state.traverseLog?.stones || {})
     .filter((stone) => stoneDisplayCount(stone) > 0)
     .map((stone) => ({ stone, geo: tileCenterGeo(stone.tile) }))
     .filter(({ geo }) => validGeo(geo));
-  const geos = visibleStones.map(({ geo }) => geo);
+  const barrierGeos = Object.values(state.traverseLog?.barriers || {})
+    .flatMap((barrier) => (barrier?.vertices || [])
+      .map((stoneId) => state.traverseLog?.stones?.[stoneId])
+      .map((stone) => stone ? tileCenterGeo(stone.tile) : null)
+      .filter(validGeo));
+  const geos = (dissolveOnly ? barrierGeos : visibleStones.map(({ geo }) => geo));
   if (geos.length === 0) {
     render();
     return;
@@ -5739,7 +5812,7 @@ function fitBarrierPlacementView() {
   const projected = geos.map((geo) => projectGeo(geo));
   const size = canvasSize();
 
-  if (geos.length === 1) {
+  if (geos.length === 1 && !dissolveOnly) {
     const bounds = tileBounds(visibleStones[0]?.stone.tile);
     const tile = bounds
       ? [
@@ -5794,6 +5867,7 @@ function enterBarrierPlacementView() {
   closeTraverseActionDialog();
   resetBarrierLinkState();
   resetDragonEyeState();
+  state.barrierDissolveMode = false;
   state.barrierPlacementView = true;
   fitBarrierPlacementView();
 }
@@ -5804,6 +5878,69 @@ function exitBarrierPlacementView() {
   state.pointer.drag = null;
   render();
   openTraverseActionDialog();
+}
+
+function enterBarrierDissolveMode() {
+  if (!state.traverseMode || state.traverseBusy) return;
+  if (Object.keys(state.traverseLog?.barriers || {}).length === 0) {
+    showAppToast(t("barrier.selectToDissolve"), { error: true });
+    return;
+  }
+  if (!isTraverseGridSurfaceActive()) {
+    setMobilePage("map");
+    setMobileGridPage("grid");
+  }
+  closeTraverseActionDialog();
+  resetBarrierLinkState();
+  resetDragonEyeState();
+  state.barrierPlacementView = false;
+  state.barrierDissolveMode = true;
+  state.barrierSelection = [];
+  state.selectedBarrierId = null;
+  fitBarrierPlacementView({ dissolveOnly: true });
+}
+
+function cancelBarrierDissolveMode() {
+  if (!state.barrierDissolveMode) return;
+  state.barrierDissolveMode = false;
+  state.selectedBarrierId = null;
+  state.barrierSelection = [];
+  state.pointer.drag = null;
+  render();
+  openTraverseActionDialog();
+}
+
+function commitBarrierDissolve() {
+  if (!state.barrierDissolveMode) return;
+  const barrierId = state.selectedBarrierId;
+  if (!barrierId || !state.traverseLog?.barriers?.[barrierId]) {
+    showAppToast(t("barrier.selectToDissolve"), { error: true });
+    return;
+  }
+
+  const evaluation = evaluateBarrierLog(state.traverseLog);
+  const result = dissolveBarrier(state.traverseLog, barrierId);
+  if (!result.ok) return;
+  if (evaluation.changed || result.ok) persistTraverseLog();
+  state.barrierDissolveMode = false;
+  state.selectedBarrierId = null;
+  state.barrierSelection = [];
+  state.pointer.drag = null;
+  render();
+  showAppToast(t("barrier.dissolved"));
+  openTraverseActionDialog();
+}
+
+function cancelTraverseAction() {
+  if (state.barrierDissolveMode) {
+    cancelBarrierDissolveMode();
+    return;
+  }
+  cancelDragonEye();
+}
+
+function returnToKekkaiTitle() {
+  window.location.assign(KEKKAI_TITLE_URL);
 }
 
 function performTraverseStoneAction(action, requestedQuantity = 1) {
@@ -5947,6 +6084,10 @@ function barrierIdForStone(log, stoneId) {
 }
 
 function handleTraverseActionClick() {
+  if (state.barrierDissolveMode) {
+    commitBarrierDissolve();
+    return;
+  }
   if (state.barrierPlacementView) {
     exitBarrierPlacementView();
     return;
@@ -6366,8 +6507,26 @@ function renderGridLinkQuickDialog() {
 function renderGridFigureQuickDialog() {
   if (!elements.gridFigureQuickDialog?.open) return;
   const figure = state.gridFigureQuickFigureId ? findFigure(state.gridFigureQuickFigureId) : null;
-  if (!figure) {
+  const barrier = state.gridFigureQuickBarrierId
+    ? state.traverseLog?.barriers?.[state.gridFigureQuickBarrierId]
+    : null;
+  if (!figure && !barrier) {
     elements.gridFigureQuickDialog.close("selection-changed");
+    return;
+  }
+
+  if (barrier) {
+    const score = scoreBarrier(state.traverseLog, state.gridFigureQuickBarrierId);
+    const title = barrier.name || t("barrier.defaultName");
+    const power = score ? ` · ${t("barrier.rankPower")} ${formatScoreValue(score.power)}` : "";
+    elements.gridFigureQuickName.textContent = title;
+    elements.gridFigureQuickInfo.textContent = `${t("figure.vertexCount").replace("{count}", String(barrier.vertices.length))}${power}`;
+    elements.gridFigureQuickDeleteVertexButton.hidden = true;
+    elements.gridFigureQuickDeleteVertexButton.disabled = true;
+    elements.gridFigureQuickDeleteLabel.textContent = t("barrier.dissolve");
+    elements.gridFigureQuickDeleteButton.setAttribute("aria-label", t("barrier.dissolve"));
+    elements.gridFigureQuickDeleteButton.title = t("barrier.dissolve");
+    elements.gridFigureQuickDeleteIcon?.setAttribute("href", "#icon-clear");
     return;
   }
 
@@ -6387,6 +6546,7 @@ function renderGridFigureQuickDialog() {
   elements.gridFigureQuickDeleteLabel.textContent = t("figure.delete");
   elements.gridFigureQuickDeleteButton.setAttribute("aria-label", t("figure.delete"));
   elements.gridFigureQuickDeleteButton.title = t("figure.delete");
+  elements.gridFigureQuickDeleteIcon?.setAttribute("href", "#icon-trash");
 }
 
 function renderGridLinkColorDialog() {
@@ -6942,6 +7102,31 @@ async function deleteFigureVertexFromQuickDialog() {
 }
 
 async function deleteFigureFromQuickDialog() {
+  const barrierId = state.gridFigureQuickBarrierId;
+  if (barrierId) {
+    const barrier = state.traverseLog?.barriers?.[barrierId];
+    if (!barrier) return;
+
+    const confirmed = await requestConfirm({
+      title: t("barrier.dissolve"),
+      message: t("barrier.dissolveConfirm"),
+      confirmLabel: t("barrier.dissolve"),
+      danger: true
+    });
+    if (!confirmed || !state.traverseLog?.barriers?.[barrierId]) return;
+
+    const evaluation = evaluateBarrierLog(state.traverseLog);
+    const result = dissolveBarrier(state.traverseLog, barrierId);
+    if (!result.ok) return;
+    if (evaluation.changed || result.ok) persistTraverseLog();
+    if (state.selectedBarrierId === barrierId) state.selectedBarrierId = null;
+    state.barrierSelection = [];
+    if (elements.gridFigureQuickDialog?.open) elements.gridFigureQuickDialog.close("dissolved");
+    render();
+    showAppToast(t("barrier.dissolved"));
+    return;
+  }
+
   const figureId = state.gridFigureQuickFigureId;
   const figure = figureId ? findFigure(figureId) : null;
   if (!figure) return;
@@ -7070,12 +7255,15 @@ function openGridLinkQuickDialog(link, screenPoint = null) {
 }
 
 function openGridFigureQuickDialog(figure, options = {}) {
-  if (!figure || !elements.gridFigureQuickDialog?.show) return;
+  const barrierId = typeof options.barrierId === "string" ? options.barrierId : null;
+  const barrier = barrierId ? state.traverseLog?.barriers?.[barrierId] : null;
+  if ((!figure && !barrier) || !elements.gridFigureQuickDialog?.show) return;
   hideGridPointHover();
   if (elements.gridPointQuickDialog?.open) elements.gridPointQuickDialog.close("figure");
   if (elements.gridLinkQuickDialog?.open) elements.gridLinkQuickDialog.close("figure");
-  state.gridFigureQuickFigureId = figure.id;
+  state.gridFigureQuickFigureId = figure?.id || null;
   state.gridFigureQuickVertexIndex = Number.isInteger(options.vertexIndex) ? options.vertexIndex : null;
+  state.gridFigureQuickBarrierId = barrierId;
   if (!elements.gridFigureQuickDialog.open) elements.gridFigureQuickDialog.show();
   renderGridFigureQuickDialog();
   positionGridFigureQuickDialog(options.screenPoint || null);
@@ -7247,10 +7435,91 @@ function renderKekkaishiShapeCards(container, shapes, locked = false) {
   }
 }
 
+function formatLiveSpiritValue(value, digits = 4) {
+  return Math.max(0, Number(value) || 0).toLocaleString(localeName(), {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits
+  });
+}
+
+function renderKekkaishiLiveLifetime(value, rank, atMaxRank, options = {}) {
+  const normalized = Math.max(0, Number(value) || 0);
+  const text = `${formatLiveSpiritValue(normalized)} Pt`;
+  const lifetime = elements.kekkaishiStatusLifetime;
+  if (lifetime && lifetime.textContent !== text) {
+    lifetime.textContent = text;
+    if (options.animate && !window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) {
+      lifetime.classList.remove("is-ticking");
+      void lifetime.offsetWidth;
+      lifetime.classList.add("is-ticking");
+    }
+  }
+  if (elements.kekkaishiStatusProgressValue) {
+    elements.kekkaishiStatusProgressValue.textContent = atMaxRank
+      ? `${formatLiveSpiritValue(normalized)} Pt`
+      : `${formatLiveSpiritValue(normalized)} / ${formatScoreValue(rank.nextLifetime)} Pt`;
+  }
+  if (elements.kekkaishiStatusProgressBar) {
+    const progress = atMaxRank ? 1 : Math.min(1, Math.max(0, normalized / Math.max(1, rank.nextLifetime)));
+    elements.kekkaishiStatusProgressBar.style.width = `${Math.round(progress * 100)}%`;
+  }
+}
+
+function stopKekkaishiStatusAnimation() {
+  const animation = state.kekkaishiStatusAnimation;
+  if (animation.frameId !== null) window.cancelAnimationFrame(animation.frameId);
+  animation.frameId = null;
+  animation.current = null;
+  animation.target = null;
+  animation.startedAt = null;
+  animation.lastPainted = "";
+}
+
+function startKekkaishiStatusAnimation() {
+  if (!state.traverseMode || !state.traverseLog || !elements.kekkaishiStatusDialog?.open) return;
+  stopKekkaishiStatusAnimation();
+
+  const animation = state.kekkaishiStatusAnimation;
+  const status = state.traverseLog.kekkaishi || createKekkaishiStatus();
+  const baseline = Math.max(0, Number(status.lifetimeOutput) || 0);
+  animation.current = baseline;
+  animation.target = Math.max(baseline, liveCumulativeBarrierSpirit(state.traverseLog));
+  animation.startedAt = performance.now();
+
+  const tick = (frameTime) => {
+    if (!elements.kekkaishiStatusDialog?.open || !state.traverseMode || !state.traverseLog) {
+      stopKekkaishiStatusAnimation();
+      return;
+    }
+    const calculated = liveCumulativeBarrierSpirit(state.traverseLog, Date.now());
+    animation.target = Math.max(animation.target ?? baseline, calculated, baseline);
+    const elapsed = Math.max(0, frameTime - animation.startedAt);
+    const progress = Math.min(1, elapsed / 900);
+    const eased = 1 - ((1 - progress) ** 3);
+    animation.current = elapsed < 900
+      ? baseline + (animation.target - baseline) * eased
+      : animation.target;
+    const rank = rankForKekkaishi(status);
+    renderKekkaishiLiveLifetime(animation.current, rank, rank.index >= BARRIER_EVALUATION_CONFIG.kekkaishiRankNames.length - 1, { animate: elapsed >= 900 });
+    animation.frameId = window.requestAnimationFrame(tick);
+  };
+
+  animation.frameId = window.requestAnimationFrame(tick);
+}
+
 function renderKekkaishiStatusDialog() {
   if (!state.traverseLog || !elements.kekkaishiStatusDialog) return;
   const status = state.traverseLog.kekkaishi || createKekkaishiStatus(Date.now(), Object.keys(state.traverseLog.barriers || {}).length);
   const rank = rankForKekkaishi(status);
+  const currentPower = currentBarrierPower(state.traverseLog);
+  const dailyUnit = t("kekkaishi.dailyUnit");
+  const activeBarrierCount = Object.keys(state.traverseLog.barriers || {}).length;
+  const liveLifetime = liveCumulativeBarrierSpirit(state.traverseLog);
+  const animation = state.kekkaishiStatusAnimation;
+  if (animation.frameId !== null) animation.target = Math.max(animation.target ?? liveLifetime, liveLifetime);
+  const displayedLifetime = animation.frameId !== null && Number.isFinite(animation.current)
+    ? animation.current
+    : liveLifetime;
   const achievedDays = rank.index > 0 ? rankAchievementDays(status, rank.index) : null;
   const maxRankIndex = BARRIER_EVALUATION_CONFIG.kekkaishiRankNames.length - 1;
   const atMaxRank = rank.index >= maxRankIndex;
@@ -7262,9 +7531,11 @@ function renderKekkaishiStatusDialog() {
   if (elements.kekkaishiStatusRank) {
     elements.kekkaishiStatusRank.textContent = `${rank.name}${achievedDays === null ? "" : ` ${t("kekkaishi.achievedDays").replace("{days}", String(achievedDays))}`}`;
   }
-  if (elements.kekkaishiStatusLifetime) elements.kekkaishiStatusLifetime.textContent = `${formatScoreValue(rank.lifetime)} Pt`;
-  if (elements.kekkaishiStatusCount) elements.kekkaishiStatusCount.textContent = String(Math.max(0, Number(status.kekkaiCreatedCount) || 0));
-  if (elements.kekkaishiStatusDailyPower) elements.kekkaishiStatusDailyPower.textContent = `${formatScoreValue(status.lastDailyPower)} Pt`;
+  elements.kekkaishiStatusLifetime?.parentElement?.classList.toggle("is-producing", activeBarrierCount > 0);
+  renderKekkaishiLiveLifetime(displayedLifetime, rank, atMaxRank);
+  if (elements.kekkaishiStatusCurrentPower) elements.kekkaishiStatusCurrentPower.textContent = `${formatScoreValue(currentPower)} ${dailyUnit}`;
+  if (elements.kekkaishiStatusCount) elements.kekkaishiStatusCount.textContent = String(activeBarrierCount);
+  if (elements.kekkaishiStatusDailyPower) elements.kekkaishiStatusDailyPower.textContent = `${formatScoreValue(status.lastDailyPower)} ${dailyUnit}`;
   if (elements.kekkaishiStatusCurrentRank) elements.kekkaishiStatusCurrentRank.textContent = rank.name;
   renderKekkaishiUnlockDetails(elements.kekkaishiStatusCurrentDetails, rank.index);
   renderKekkaishiShapeCards(elements.kekkaishiStatusCurrentShapes, currentShapes);
@@ -7281,15 +7552,6 @@ function renderKekkaishiStatusDialog() {
     elements.kekkaishiStatusProgressNextRank.textContent = atMaxRank
       ? t("kekkaishi.rankMax")
       : BARRIER_EVALUATION_CONFIG.kekkaishiRankNames[nextIndex];
-  }
-  if (elements.kekkaishiStatusProgressValue) {
-    elements.kekkaishiStatusProgressValue.textContent = atMaxRank
-      ? `${formatScoreValue(rank.lifetime)} Pt`
-      : `${formatScoreValue(rank.lifetime)} / ${formatScoreValue(rank.nextLifetime)} Pt`;
-  }
-  if (elements.kekkaishiStatusProgressBar) {
-    const progress = atMaxRank ? 1 : Math.min(1, Math.max(0, rank.lifetime / Math.max(1, rank.nextLifetime)));
-    elements.kekkaishiStatusProgressBar.style.width = `${Math.round(progress * 100)}%`;
   }
   if (elements.kekkaishiStatusProgress) {
     if (atMaxRank) {
@@ -7308,13 +7570,18 @@ function openKekkaishiStatusDialog() {
   if (!state.traverseMode || !elements.kekkaishiStatusDialog) return;
   const evaluation = evaluateBarrierLog(state.traverseLog);
   if (evaluation.changed) persistTraverseLog();
-  renderKekkaishiStatusDialog();
   if (!elements.kekkaishiStatusDialog.open) elements.kekkaishiStatusDialog.showModal();
+  startKekkaishiStatusAnimation();
+  renderKekkaishiStatusDialog();
 }
 
 async function renderKekkaishiStatusShareImage() {
   const status = state.traverseLog?.kekkaishi || createKekkaishiStatus();
   const rank = rankForKekkaishi(status);
+  const liveLifetime = liveCumulativeBarrierSpirit(state.traverseLog);
+  const currentPower = currentBarrierPower(state.traverseLog);
+  const dailyUnit = t("kekkaishi.dailyUnit");
+  const activeBarrierCount = Object.keys(state.traverseLog?.barriers || {}).length;
   const canvas = document.createElement("canvas");
   canvas.width = 1200;
   canvas.height = 820;
@@ -7333,19 +7600,25 @@ async function renderKekkaishiStatusShareImage() {
   context.fillStyle = colors.text;
   context.font = "800 54px system-ui, sans-serif";
   context.fillText(t("kekkaishi.title"), 120, 214);
+  context.fillStyle = colors.muted;
+  context.font = "600 18px system-ui, sans-serif";
+  context.fillText(t("kekkaishi.rank"), 120, 282);
   context.fillStyle = colors.accent;
   context.font = "900 128px system-ui, sans-serif";
-  context.fillText(rank.name, 120, 380);
+  context.fillText(rank.name, 120, 410);
+  context.fillStyle = colors.muted;
+  context.font = "600 18px system-ui, sans-serif";
+  context.fillText(t("kekkaishi.lifetime"), 320, 282);
   context.fillStyle = colors.text;
-  context.font = "700 26px system-ui, sans-serif";
-  context.fillText(`${t("kekkaishi.rank")}  ${rank.name}`, 320, 282);
+  context.font = "800 38px system-ui, sans-serif";
+  context.fillText(`${formatLiveSpiritValue(liveLifetime, 2)} Pt`, 320, 410);
   const stats = [
-    [t("kekkaishi.lifetime"), `${formatScoreValue(rank.lifetime)} Pt`],
-    [t("kekkaishi.dailyPower"), `${formatScoreValue(status.lastDailyPower)} Pt`],
-    [t("kekkaishi.createdCount"), String(Math.max(0, Number(status.kekkaiCreatedCount) || 0))]
+    [t("kekkaishi.currentDailyPower"), `${formatScoreValue(currentPower)} ${dailyUnit}`],
+    [t("kekkaishi.dailyPower"), `${formatScoreValue(status.lastDailyPower)} ${dailyUnit}`],
+    [t("kekkaishi.activeCount"), String(activeBarrierCount)]
   ];
   stats.forEach(([label, value], index) => {
-    const x = 520 + (index % 2) * 280;
+    const x = 620 + (index % 2) * 250;
     const y = 360 + Math.floor(index / 2) * 106;
     context.fillStyle = colors.muted;
     context.font = "600 18px system-ui, sans-serif";
@@ -7372,7 +7645,7 @@ async function shareKekkaishiStatus() {
     const canShareFile = typeof navigator.share === "function" && (!navigator.canShare || navigator.canShare({ files: [file] }));
     if (canShareFile) {
       try {
-        await navigator.share({ files: [file], title: t("kekkaishi.title"), text: t("kekkaishi.shareText").replace("{rank}", rank.name).replace("{power}", `${formatScoreValue(rank.lifetime)} Pt`) });
+        await navigator.share({ files: [file], title: t("kekkaishi.title"), text: t("kekkaishi.shareText").replace("{rank}", rank.name).replace("{power}", `${formatLiveSpiritValue(liveCumulativeBarrierSpirit(state.traverseLog), 2)} Pt`) });
         setShareFeedback(t("kekkaishi.shared"));
         return;
       } catch (error) {
@@ -12197,6 +12470,14 @@ function selectLink(linkId, options = {}) {
   setSelection([{ type: "link", id: linkId }], options);
 }
 
+function selectBarrierForDissolve(screenPoint) {
+  if (!state.barrierDissolveMode) return;
+  const barrier = findNearestBarrier(screenPoint);
+  state.barrierSelection = [];
+  state.selectedBarrierId = barrier?.barrierId || null;
+  render();
+}
+
 function findNearestLoadedObservation(screenPoint) {
   let nearestId = null;
   let nearestDistance = Infinity;
@@ -12224,6 +12505,10 @@ function findNearestLoadedObservation(screenPoint) {
 }
 
 function handleCanvasClick(screenPoint) {
+  if (state.barrierDissolveMode) {
+    selectBarrierForDissolve(screenPoint);
+    return;
+  }
   if (state.guardianPlacementMode) {
     void placeGuardianAtScreen(screenPoint);
     return;
@@ -12774,7 +13059,7 @@ function pointerAngle(a, b) {
 }
 
 function startDragGesture(pointerId, point, options = {}) {
-  if (state.barrierPlacementView) {
+  if (state.barrierPlacementView || state.barrierDissolveMode) {
     state.pointer.drag = {
       id: pointerId,
       start: point,
@@ -12782,7 +13067,8 @@ function startDragGesture(pointerId, point, options = {}) {
       viewportX: state.viewport.x,
       viewportY: state.viewport.y,
       moved: Boolean(options.moved),
-      barrierPlacementView: true,
+      barrierPlacementView: Boolean(state.barrierPlacementView),
+      barrierDissolveMode: Boolean(state.barrierDissolveMode),
       longPressed: false,
       longPressTimerId: null,
       lineDragReadyTimerId: null,
@@ -12806,9 +13092,13 @@ function startDragGesture(pointerId, point, options = {}) {
   const barrierOrigin = barrierLinkMode && !options.moved ? findNearestBarrierStone(point) : null;
   const figureVertex = options.moved ? null : findNearestFigureVertex(point);
   const figureEdge = figureVertex || options.moved ? null : findNearestFigureEdge(point);
-  const longPressFigure = figureVertex || figureEdge;
+  const figureSurface = figureVertex || figureEdge ? null : options.moved ? null : findNearestFigure(point);
+  const longPressFigure = figureVertex || figureEdge || (figureSurface ? { figureId: figureSurface.id } : null);
   const longPressPoint = longPressFigure ? null : options.moved ? null : findNearestPoint(point);
   const longPressLink = longPressFigure || options.moved || longPressPoint ? null : findNearestLink(point);
+  const longPressBarrier = longPressFigure || longPressPoint || longPressLink || barrierLinkMode || options.moved
+    ? null
+    : findNearestBarrier(point);
   const drag = {
     id: pointerId,
     start: point,
@@ -12820,6 +13110,7 @@ function startDragGesture(pointerId, point, options = {}) {
     longPressFigure,
     longPressPoint,
     longPressLink,
+    longPressBarrier,
     figureDrag: figureVertex
       ? {
         ...figureVertex,
@@ -12843,7 +13134,7 @@ function startDragGesture(pointerId, point, options = {}) {
   };
   state.pointer.drag = drag;
 
-  if (longPressFigure) {
+  if (longPressFigure || longPressBarrier) {
     if (!options.moved) {
       drag.longPressTimerId = window.setTimeout(() => {
         if (
@@ -12853,10 +13144,17 @@ function startDragGesture(pointerId, point, options = {}) {
           || drag.cancelled
         ) return;
         drag.longPressed = true;
-        openGridFigureQuickDialog(findFigure(longPressFigure.figureId), {
-          vertexIndex: Number.isInteger(longPressFigure.vertexIndex) ? longPressFigure.vertexIndex : null,
-          screenPoint: drag.start
-        });
+        if (longPressFigure) {
+          openGridFigureQuickDialog(findFigure(longPressFigure.figureId), {
+            vertexIndex: Number.isInteger(longPressFigure.vertexIndex) ? longPressFigure.vertexIndex : null,
+            screenPoint: drag.start
+          });
+        } else if (longPressBarrier) {
+          openGridFigureQuickDialog(null, {
+            barrierId: longPressBarrier.barrierId,
+            screenPoint: drag.start
+          });
+        }
       }, LINE_INFO_LONG_PRESS_MS);
     }
     return;
@@ -12891,7 +13189,7 @@ function startDragGesture(pointerId, point, options = {}) {
   }
 
   if (!options.moved) {
-    const longPressDelay = longPressLink ? LINE_INFO_LONG_PRESS_MS : RANGE_SELECTION_LONG_PRESS_MS;
+    const longPressDelay = longPressLink || longPressBarrier ? LINE_INFO_LONG_PRESS_MS : RANGE_SELECTION_LONG_PRESS_MS;
     if (longPressLink) {
       drag.lineDragReadyTimerId = window.setTimeout(() => {
         if (
@@ -13173,6 +13471,12 @@ function removePointer(event, options = {}) {
     return;
   }
 
+  if (drag?.barrierDissolveMode) {
+    state.pointer.drag = null;
+    if (wasTap) handleCanvasClick(point);
+    return;
+  }
+
   if (drag?.barrierPlacementView) {
     state.pointer.drag = null;
     return;
@@ -13212,7 +13516,7 @@ function removePointer(event, options = {}) {
   }
 
   if (drag?.longPressed) {
-    if (drag.longPressFigure || drag.longPressPoint || drag.longPressLink) {
+    if (drag.longPressFigure || drag.longPressBarrier || drag.longPressPoint || drag.longPressLink) {
       return;
     }
     if (allowTap) {
@@ -16040,6 +16344,7 @@ function bindEvents() {
     if (event.target === elements.kekkaishiStatusDialog) elements.kekkaishiStatusDialog.close("cancel");
   });
   elements.kekkaishiStatusDialog?.addEventListener("close", () => {
+    stopKekkaishiStatusAnimation();
     if (!reopenTraverseActionMenuAfterStatus) return;
     reopenTraverseActionMenuAfterStatus = false;
     returnToTraverseActionMenu();
@@ -16175,6 +16480,7 @@ function bindEvents() {
   elements.gridFigureQuickDialog.addEventListener("close", () => {
     state.gridFigureQuickFigureId = null;
     state.gridFigureQuickVertexIndex = null;
+    state.gridFigureQuickBarrierId = null;
   });
   bindPointerActionButton(elements.gridFigureQuickDeleteVertexButton, () => {
     void deleteFigureVertexFromQuickDialog();
@@ -16350,7 +16656,7 @@ function bindEvents() {
   elements.traverseActionButton.addEventListener("contextmenu", (event) => event.preventDefault());
   elements.traverseActionButton.addEventListener("click", handleTraverseActionClick);
   elements.traverseDragonEyeCancelButton?.addEventListener("contextmenu", (event) => event.preventDefault());
-  elements.traverseDragonEyeCancelButton?.addEventListener("click", cancelDragonEye);
+  elements.traverseDragonEyeCancelButton?.addEventListener("click", cancelTraverseAction);
   elements.traversePlaceButton.addEventListener("click", () => {
     if (openTraverseQuantityDialog("place")) closeTraverseActionDialog();
   });
@@ -16361,6 +16667,7 @@ function bindEvents() {
   elements.traverseCreateBarrierButton.addEventListener("click", () => {
     if (beginBarrierLinking()) closeTraverseActionDialog();
   });
+  elements.traverseDissolveBarrierButton?.addEventListener("click", enterBarrierDissolveMode);
   elements.traverseDragonEyeButton?.addEventListener("click", () => {
     openDragonEyeDialog();
   });
@@ -16374,6 +16681,7 @@ function bindEvents() {
     closeTraverseActionDialog();
     openKekkaishiStatusDialog();
   });
+  elements.traverseReturnTitleButton?.addEventListener("click", returnToKekkaiTitle);
   elements.traverseQuantityDecreaseButton?.addEventListener("click", () => adjustTraverseQuantity(-1));
   elements.traverseQuantityIncreaseButton?.addEventListener("click", () => adjustTraverseQuantity(1));
   elements.traverseQuantityCancelButton?.addEventListener("click", () => {
@@ -16396,6 +16704,10 @@ function bindEvents() {
   elements.zoomInButton.addEventListener("click", () => zoomAt({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 1.25));
   elements.zoomOutButton.addEventListener("click", () => zoomAt({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 0.8));
   elements.fitButton.addEventListener("click", () => {
+    if (state.barrierDissolveMode) {
+      fitBarrierPlacementView({ dissolveOnly: true });
+      return;
+    }
     if (state.barrierPlacementView) {
       fitBarrierPlacementView();
       return;
@@ -16460,7 +16772,7 @@ function bindEvents() {
   }
 
   canvas.addEventListener("pointerdown", (event) => {
-    if (state.barrierPlacementView) {
+    if (state.barrierPlacementView || state.barrierDissolveMode) {
       event.preventDefault();
     }
     if (event.button === 2 && !mobilePageUiActive()) {
@@ -16569,6 +16881,15 @@ function bindEvents() {
         clearDragLongPressTimer(drag);
         drag.cancelled = true;
         drag.longPressFigure = null;
+      }
+      if (drag.longPressBarrier) {
+        if (drag.longPressed) {
+          drag.last = point;
+          return;
+        }
+        clearDragLongPressTimer(drag);
+        drag.cancelled = true;
+        drag.longPressBarrier = null;
       }
       if (drag.lineDrag) {
         updateLineDragTarget(drag, point);

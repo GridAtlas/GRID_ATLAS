@@ -1310,6 +1310,16 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
   background: rgb(204 126 255 / 0.62);
 }
 
+.traverse-action-button.is-barrier-dissolve-active {
+  background: rgb(190 63 90 / 0.72);
+  color: #ffe1e7;
+  box-shadow: 0 0 10px rgb(190 63 90 / 0.66), 0 0 24px rgb(190 63 90 / 0.34);
+}
+
+.traverse-action-button.is-barrier-dissolve-active:hover:not(:disabled) {
+  background: rgb(214 77 105 / 0.84);
+}
+
 @keyframes dragon-eye-action-pulse {
   0%, 100% {
     filter: brightness(0.96);
@@ -1678,8 +1688,9 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
 }
 
 .kekkaishi-status-hero {
-  display: flex;
-  align-items: baseline;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
   justify-content: space-between;
   gap: 12px;
   padding: 12px 14px;
@@ -1688,10 +1699,100 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
   background: var(--surface-strong);
 }
 
-.kekkaishi-status-hero strong {
+.kekkaishi-status-hero-metric,
+.kekkaishi-status-hero-rank {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.kekkaishi-status-hero-metric > span,
+.kekkaishi-status-hero-rank > span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kekkaishi-status-hero-metric strong {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  font-size: 30px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform-origin: 50% 100%;
+}
+
+.kekkaishi-status-hero-metric.is-producing::after {
+  display: block;
+  width: 38px;
+  height: 2px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  content: "";
+  opacity: 0.72;
+  animation: kekkaishi-spirit-flow 1.8s ease-in-out infinite;
+}
+
+.kekkaishi-status-hero-metric strong.is-ticking {
+  color: var(--accent-strong);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 42%, transparent);
+  animation: kekkaishi-spirit-tick 460ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes kekkaishi-spirit-tick {
+  0% {
+    filter: blur(0.35px);
+    opacity: 0.66;
+    transform: translateY(4px) scale(0.98);
+  }
+  52% {
+    filter: blur(0);
+    opacity: 1;
+    transform: translateY(-1px) scale(1.015);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes kekkaishi-spirit-flow {
+  0%,
+  100% {
+    opacity: 0.28;
+    transform: scaleX(0.55);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scaleX(1);
+  }
+}
+
+.kekkaishi-status-hero-rank {
+  justify-items: end;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+  text-align: right;
+}
+
+.kekkaishi-status-hero-rank strong {
   font-size: 36px;
   line-height: 1;
   letter-spacing: 0.08em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kekkaishi-status-hero-metric.is-producing::after,
+  .kekkaishi-status-hero-metric strong.is-ticking {
+    animation: none;
+  }
 }
 
 .kekkaishi-status-list {
@@ -1727,7 +1828,7 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
 .kekkaishi-status-list dd {
   margin: 0;
   overflow: hidden;
-  font-size: 13px;
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   text-overflow: ellipsis;
@@ -1961,6 +2062,17 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
 :root[data-theme="kekkai"] .traverse-action-button:not(.traverse-action-button-cancel):not(.is-dragon-eye-active):hover:not(:disabled),
 :root[data-theme="kekkai"] .traverse-action-button:not(.traverse-action-button-cancel):not(.is-dragon-eye-active).is-placement-view-active {
   background: rgb(255 169 77 / 0.94);
+}
+
+:root[data-theme="kekkai"] .traverse-action-button.is-barrier-dissolve-active {
+  background: rgb(190 63 90 / 0.86);
+  color: #ffe1e7;
+  box-shadow: 0 0 14px rgb(190 63 90 / 0.82), 0 0 34px rgb(190 63 90 / 0.42);
+  animation: none;
+}
+
+:root[data-theme="kekkai"] .traverse-action-button.is-barrier-dissolve-active:hover:not(:disabled) {
+  background: rgb(214 77 105 / 0.96);
 }
 
 canvas.is-barrier-linking {

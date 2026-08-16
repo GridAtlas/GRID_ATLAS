@@ -29,8 +29,8 @@
     <link rel="icon" href="assets/icon-grid.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=77">
-    <script src="src/main.js?v=472" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=80">
+    <script src="src/main.js?v=475" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -527,8 +527,10 @@
           <button id="traversePickButton" type="button" data-i18n="traverse.pick">拾う</button>
           <button id="traversePlacementViewButton" type="button" data-i18n="traverse.placementView">配置をみる</button>
           <button id="traverseCreateBarrierButton" type="button" data-i18n="traverse.connect">結界を結ぶ</button>
+          <button id="traverseDissolveBarrierButton" class="danger-button" type="button" data-i18n="barrier.dissolve">結界を解く</button>
           <button id="traverseDragonEyeButton" type="button" data-i18n="dragonEye.open">龍脈眼</button>
           <button id="traverseStatusButton" type="button" data-i18n="traverse.status">ステータス確認</button>
+          <button id="traverseReturnTitleButton" type="button" data-i18n="traverse.returnTitle">タイトルに戻る</button>
         </div>
       </form>
     </dialog>
@@ -578,13 +580,19 @@
           <button id="closeKekkaishiStatusButton" class="share-link-close" type="submit" value="cancel" aria-label="閉じる" title="閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
         </div>
         <div class="kekkaishi-status-hero">
-          <span data-i18n="kekkaishi.rank">結界師ランク</span>
-          <strong id="kekkaishiStatusRank">F</strong>
+          <div class="kekkaishi-status-hero-metric">
+            <span data-i18n="kekkaishi.lifetime">累積結界霊量</span>
+            <strong id="kekkaishiStatusLifetime"></strong>
+          </div>
+          <div class="kekkaishi-status-hero-rank">
+            <span data-i18n="kekkaishi.rank">結界師ランク</span>
+            <strong id="kekkaishiStatusRank">F</strong>
+          </div>
         </div>
         <dl class="kekkaishi-status-list kekkaishi-status-card">
-          <div><dt data-i18n="kekkaishi.lifetime">累積結界霊量</dt><dd id="kekkaishiStatusLifetime"></dd></div>
+          <div><dt data-i18n="kekkaishi.currentDailyPower">現在の総結界霊量</dt><dd id="kekkaishiStatusCurrentPower"></dd></div>
           <div><dt data-i18n="kekkaishi.dailyPower">前日の結界霊量</dt><dd id="kekkaishiStatusDailyPower"></dd></div>
-          <div><dt data-i18n="kekkaishi.createdCount">作成した結界</dt><dd id="kekkaishiStatusCount"></dd></div>
+          <div><dt data-i18n="kekkaishi.activeCount">発動中の結界数</dt><dd id="kekkaishiStatusCount"></dd></div>
         </dl>
         <section class="kekkaishi-status-card kekkaishi-status-shapes-panel" aria-labelledby="kekkaishiStatusShapesTitle">
           <div class="kekkaishi-status-section-heading">
@@ -751,7 +759,7 @@
         </div>
         <div class="grid-point-quick-actions grid-figure-quick-actions" aria-label="図形のクイック操作">
           <button id="gridFigureQuickDeleteVertexButton" class="grid-point-quick-role-button" type="button" aria-label="この頂点を削除" title="この頂点を削除"><svg class="ui-icon" aria-hidden="true"><use href="#icon-trash"></use></svg><span id="gridFigureQuickDeleteVertexLabel">この頂点を削除</span></button>
-          <button id="gridFigureQuickDeleteButton" class="grid-point-quick-role-button danger-button" type="button" aria-label="図形を削除" title="図形を削除"><svg class="ui-icon" aria-hidden="true"><use href="#icon-trash"></use></svg><span id="gridFigureQuickDeleteLabel">図形を削除</span></button>
+          <button id="gridFigureQuickDeleteButton" class="grid-point-quick-role-button danger-button" type="button" aria-label="図形を削除" title="図形を削除"><svg class="ui-icon" aria-hidden="true"><use id="gridFigureQuickDeleteIcon" href="#icon-trash"></use></svg><span id="gridFigureQuickDeleteLabel">図形を削除</span></button>
         </div>
       </form>
     </dialog>

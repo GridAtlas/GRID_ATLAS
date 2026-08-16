@@ -5,8 +5,10 @@ import {
   applyWeathering,
   barrierRankStoneProgress,
   createKekkaishiStatus,
+  currentBarrierPower,
   evaluationSettingsSnapshot,
   evaluateBarrierLog,
+  liveCumulativeBarrierSpirit,
   normalizeKekkaishiStatus,
   rankAchievementDays,
   rankForKekkaishi,
@@ -130,6 +132,24 @@ describe("barrier evaluation", () => {
     expect(rankForKekkaishi(status).name).toBe("D");
     expect(recentAverage(status)).toBeCloseTo(5 / BARRIER_EVALUATION_CONFIG.windowDays);
     expect(BARRIER_EVALUATION_CONFIG.kekkaishiRankNames).toHaveLength(9);
+  });
+
+  it("sums the current power of active barriers", () => {
+    const log = triangleLog();
+    const current = currentBarrierPower(log);
+    expect(current).toBeGreaterThan(0);
+    log.barriers.invalid = { vertices: [] };
+    expect(currentBarrierPower(log)).toBe(current);
+  });
+
+  it("derives fractional cumulative spirit from the last evaluation", () => {
+    const log = triangleLog();
+    const power = currentBarrierPower(log);
+    const halfDay = Date.parse("2026-08-01T12:00:00.000Z");
+    expect(liveCumulativeBarrierSpirit(log, halfDay)).toBeCloseTo(power / 2, 8);
+
+    log.barriers.triangle.createdAt = "2026-08-01T06:00:00.000Z";
+    expect(liveCumulativeBarrierSpirit(log, halfDay)).toBeCloseTo(power / 4, 8);
   });
 
   it("allows E rank on the first evaluated day when lifetime threshold is met", () => {

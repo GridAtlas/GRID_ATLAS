@@ -128,6 +128,35 @@ export function recentAverage(status, config = BARRIER_EVALUATION_CONFIG) {
   return history.reduce((sum, value) => sum + (Number(value) || 0), 0) / config.windowDays;
 }
 
+export function currentBarrierPower(log) {
+  return Object.keys(log?.barriers || {}).reduce((total, barrierId) => {
+    const score = scoreBarrier(log, barrierId);
+    return total + Math.max(0, Number(score?.power) || 0);
+  }, 0);
+}
+
+export function liveCumulativeBarrierSpirit(log, now = Date.now()) {
+  const status = log?.kekkaishi;
+  const base = Math.max(0, Number(status?.lifetimeOutput) || 0);
+  const nowMs = now instanceof Date ? now.getTime() : Number(now);
+  if (!Number.isFinite(nowMs)) return base;
+
+  const evaluatedAt = Date.parse(status?.lastEvaluatedAt);
+  let total = base;
+  for (const [barrierId, barrier] of Object.entries(log?.barriers || {})) {
+    const score = scoreBarrier(log, barrierId);
+    const power = Math.max(0, Number(score?.power) || 0);
+    if (power <= 0) continue;
+    const createdAt = Date.parse(barrier?.createdAt);
+    const startAt = Number.isFinite(evaluatedAt)
+      ? Math.max(evaluatedAt, Number.isFinite(createdAt) ? createdAt : evaluatedAt)
+      : createdAt;
+    if (!Number.isFinite(startAt) || nowMs <= startAt) continue;
+    total += power * (nowMs - startAt) / DAY_MS;
+  }
+  return total;
+}
+
 export function rankForKekkaishi(status, config = BARRIER_EVALUATION_CONFIG) {
   const lifetime = Math.max(0, Number(status?.lifetimeOutput) || 0);
   const peak = Math.max(0, Number(status?.peakAverage) || 0);

@@ -219,6 +219,19 @@ export function registerBarrier(log, barrier) {
   return { ok: true, barrier: log.barriers[barrier.id] };
 }
 
+export function dissolveBarrier(log, barrierId, at = Date.now()) {
+  const barrier = log?.barriers?.[barrierId];
+  if (!barrier) return { ok: false, reason: "missing" };
+
+  delete log.barriers[barrierId];
+  appendBarrierEvent(log, {
+    type: "barrier-dissolved",
+    at: new Date(at).toISOString(),
+    barrierId
+  });
+  return { ok: true, barrier };
+}
+
 export function appendBarrierEvent(log, event) {
   if (!log || typeof log !== "object") return null;
   if (!Array.isArray(log.events)) log.events = [];
@@ -289,6 +302,10 @@ export function replayBarrierEvents(events) {
         guardian: normalizeGuardian(event.guardian, event.at),
         rankProgress: normalizeRankProgress(event.rankProgress)
       };
+      continue;
+    }
+    if (event.type === "barrier-dissolved" && typeof event.barrierId === "string") {
+      delete barriers[event.barrierId];
       continue;
     }
     if (event.type === "guardian-placed" && typeof event.barrierId === "string") {
@@ -467,6 +484,10 @@ function normalizeEvent(event, now, fallbackId = "") {
       guardian: normalizeGuardian(event.guardian, at),
       rankProgress: normalizeRankProgress(event.rankProgress)
     };
+  }
+  if (event.type === "barrier-dissolved") {
+    if (!event.barrierId) return null;
+    return { id, type: event.type, at, barrierId: String(event.barrierId) };
   }
   if (event.type === "guardian-placed") {
     const guardian = normalizeGuardian(event.guardian, at);

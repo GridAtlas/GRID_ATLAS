@@ -4,6 +4,7 @@ import {
   BARRIER_LOG_SCHEMA_VERSION,
   appendBarrierEvent,
   createBarrierLog,
+  dissolveBarrier,
   grantBarrierStock,
   replayBarrierEvents,
   normalizeGuardian,
@@ -98,6 +99,28 @@ describe("barrier data helpers", () => {
     }));
     expect(validateBarrierVertices(log, vertices)).toMatchObject({ ok: false, reason: "used" });
     expect(validateBarrierVertices(log, [vertices[0], vertices[0], vertices[1]])).toMatchObject({ ok: false, reason: "duplicate" });
+  });
+
+  it("dissolves a barrier while leaving its stones available", () => {
+    const log = createBarrierLog();
+    const vertices = ["18/232798/103246", "18/232799/103246", "18/232800/103246"]
+      .map(stoneIdFromTile);
+    vertices.forEach((stoneId, index) => {
+      log.stones[stoneId] = {
+        tile: `18/${232798 + index}/103246`,
+        count: 1,
+        countExact: 1,
+        firstAt: "2026-08-13T00:00:00Z",
+        lastAt: "2026-08-13T00:00:00Z"
+      };
+    });
+    registerBarrier(log, { id: "first", vertices });
+
+    expect(dissolveBarrier(log, "first", Date.parse("2026-08-14T00:00:00Z"))).toMatchObject({ ok: true });
+    expect(log.barriers).toEqual({});
+    expect(Object.keys(log.stones)).toHaveLength(3);
+    expect(log.events.at(-1)).toMatchObject({ type: "barrier-dissolved", barrierId: "first" });
+    expect(replayBarrierEvents(log.events).barriers).toEqual({});
   });
 
   it("limits newly created barriers to the configured vertex cap", () => {
