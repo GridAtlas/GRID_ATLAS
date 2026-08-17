@@ -136,7 +136,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2257";
+const WEB_VERSION = "0.2267";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -166,6 +166,9 @@ const BARRIER_LINK_COMPLETION_MS = 1100;
 const BARRIER_LINK_ORANGE = "#f28a2e";
 const BARRIER_LINK_CORE = "#fff0cc";
 const BARRIER_LINK_GLOW = "rgb(255 138 46 / 0.98)";
+const BARRIER_LINK_ROOM_BG = "#160c22";
+const BARRIER_LINK_ROOM_BORDER = "#7d3bb0";
+const BARRIER_LINK_ROOM_INNER_BORDER = "#b56be5";
 const POINT_SELECTION_RING_RADIUS = POINT_RADIUS + 2;
 const LINE_SELECTION_HIT_RADIUS = 16;
 const POINT_SELECTION_RING_WIDTH = 4;
@@ -259,6 +262,7 @@ const elements = {
   traverseActionButton: document.querySelector("#traverseActionButton"),
   traverseActionLabel: document.querySelector("#traverseActionLabel"),
   traverseDragonEyeCancelButton: document.querySelector("#traverseDragonEyeCancelButton"),
+  traverseBarrierUndoButton: document.querySelector("#traverseBarrierUndoButton"),
   dragonEyeDialog: document.querySelector("#dragonEyeDialog"),
   dragonEyeAvailability: document.querySelector("#dragonEyeAvailability"),
   dragonEyeShapeOptions: document.querySelector("#dragonEyeShapeOptions"),
@@ -644,6 +648,7 @@ const state = {
   barrierLinkAnimation: null,
   barrierLinkCompletion: null,
   barrierLinkPreview: false,
+  barrierLinkSourceSelection: [],
   barrierStoneGlyphMode: new Set(),
   traverseQuantityAction: null,
   traverseQuantityTargetTileId: null,
@@ -1318,6 +1323,7 @@ const TRANSLATIONS = {
     "traverse.linkReturnHint": "起点に戻って指を離すと結界が完成します",
     "traverse.linkReturnRequired": "最後は起点に戻って指を離してください",
     "traverse.linkDwell": "次の結界石で2秒待っています…",
+    "traverse.undo": "ひとつ戻す",
     "traverse.stockFull": "結界石ストックが満タンです",
     "traverse.capReached": "このタイルの結界石は上限です",
     "traverse.barrier": "結界",
@@ -1878,6 +1884,7 @@ const TRANSLATIONS = {
     "traverse.linkReturnHint": "Return to the origin and release to complete the barrier",
     "traverse.linkReturnRequired": "Return to the origin before releasing",
     "traverse.linkDwell": "Holding on the next barrier stone for 2 seconds…",
+    "traverse.undo": "Undo last segment",
     "traverse.stockFull": "Barrier stone stock is full",
     "traverse.capReached": "This tile has reached its barrier-stone cap",
     "traverse.barrier": "Barrier",
@@ -2621,6 +2628,7 @@ function setTraverseMode(enabled) {
   state.barrierPlacementView = false;
   state.barrierDissolveMode = false;
   resetBarrierLinkState();
+  state.barrierLinkSourceSelection = [];
   resetDragonEyeState();
   state.barrierSelection = [];
   state.selectedBarrierId = null;
@@ -4229,14 +4237,25 @@ function drawTraverseStones(options = {}) {
   if (!state.traverseMode || !state.traverseLog) return;
   const colors = canvasPalette();
   const availableOnly = options.availableOnly === true;
-  const availableStoneIds = availableOnly ? new Set(availableBarrierStoneIds()) : null;
+  const roomStoneIds = state.barrierLinkPreview
+    ? new Set(state.barrierLinkSourceSelection.length > 0
+      ? state.barrierLinkSourceSelection
+      : state.barrierSelection)
+    : null;
+  const availableStoneIds = availableOnly
+    ? (roomStoneIds || new Set(availableBarrierStoneIds()))
+    : null;
   for (const stone of Object.values(state.traverseLog?.stones || {})) {
     const stoneId = stoneIdFromTile(stone.tile);
     if (stoneDisplayCount(stone) <= 0) continue;
     if (availableStoneIds && !availableStoneIds.has(stoneId)) continue;
+    if (roomStoneIds && !roomStoneIds.has(stoneId)) continue;
     const polygon = displayedTraverseTilePolygon(stone.tile);
     if (!polygon) continue;
-    if (state.barrierLinkPreview && !state.barrierSelection.includes(stoneId)) continue;
+    if (state.barrierLinkPreview) {
+      drawBarrierLinkRoomStone(barrierStoneScreenCenter(stoneId));
+      continue;
+    }
     const selected = stoneId
       ? state.barrierSelection.includes(stoneId) || stoneId === state.barrierLinkCandidateStoneId
         || stoneId === state.barrierLinkPendingStoneId
@@ -4319,6 +4338,74 @@ function barrierStoneScreenCenter(stoneId) {
   const geo = stone ? tileCenterGeo(stone.tile) : null;
   const projected = geo ? projectLatLng(geo.lat, geo.lng) : null;
   return projected ? worldToScreen(projected) : null;
+}
+
+function barrierLinkRoomFrame(size = canvasSize()) {
+  const margin = Math.max(18, Math.min(34, Math.min(size.width, size.height) * 0.05));
+  return {
+    x: margin,
+    y: margin,
+    width: Math.max(1, size.width - margin * 2),
+    height: Math.max(1, size.height - margin * 2)
+  };
+}
+
+function isInsideBarrierLinkRoom(point, size = canvasSize()) {
+  const frame = barrierLinkRoomFrame(size);
+  return point.x >= frame.x
+    && point.x <= frame.x + frame.width
+    && point.y >= frame.y
+    && point.y <= frame.y + frame.height;
+}
+
+function drawBarrierLinkRoom(size) {
+  const frame = barrierLinkRoomFrame(size);
+  context.save();
+  context.fillStyle = BARRIER_LINK_ROOM_BG;
+  context.fillRect(0, 0, size.width, size.height);
+  context.strokeStyle = BARRIER_LINK_ROOM_BORDER;
+  context.lineWidth = 2.5;
+  context.shadowColor = "rgb(125 59 176 / 0.52)";
+  context.shadowBlur = 18;
+  context.strokeRect(frame.x, frame.y, frame.width, frame.height);
+  context.shadowBlur = 0;
+  const inset = 10;
+  context.strokeStyle = BARRIER_LINK_ROOM_INNER_BORDER;
+  context.lineWidth = 1.5;
+  context.globalAlpha = 0.9;
+  context.strokeRect(
+    frame.x + inset,
+    frame.y + inset,
+    Math.max(1, frame.width - inset * 2),
+    Math.max(1, frame.height - inset * 2)
+  );
+  context.restore();
+}
+
+function drawBarrierLinkRoomStone(center) {
+  if (!center) return;
+  const radius = Math.max(10, Math.min(17, Math.min(canvas.width, canvas.height) * 0.024));
+  const points = [
+    { x: center.x, y: center.y - radius },
+    { x: center.x + radius, y: center.y },
+    { x: center.x, y: center.y + radius },
+    { x: center.x - radius, y: center.y }
+  ];
+  context.save();
+  context.beginPath();
+  context.moveTo(points[0].x, points[0].y);
+  for (const point of points.slice(1)) context.lineTo(point.x, point.y);
+  context.closePath();
+  context.fillStyle = "#8f49c6";
+  context.globalAlpha = 0.96;
+  context.shadowColor = "rgb(181 107 229 / 0.96)";
+  context.shadowBlur = 20;
+  context.fill();
+  context.shadowBlur = 0;
+  context.strokeStyle = "#edc9ff";
+  context.lineWidth = 2.2;
+  context.stroke();
+  context.restore();
 }
 
 function strokeBarrierLinkPoints(points, options = {}) {
@@ -5264,6 +5351,12 @@ function drawRouteBadges() {
 function draw() {
   const size = canvasSize();
   context.clearRect(0, 0, size.width, size.height);
+  if (state.barrierLinkPreview) {
+    drawBarrierLinkRoom(size);
+    drawTraverseStones({ availableOnly: true });
+    drawBarrierLinkGesture();
+    return;
+  }
   drawGrid(size.width, size.height);
   if (state.barrierDissolveMode) {
     drawTraverseBarriers();
@@ -5792,8 +5885,16 @@ function syncTraverseActionControlsVisibility(visible) {
   setTraverseActionControlVisibility(elements.traverseActionControls, visible);
   setTraverseActionControlVisibility(elements.traverseActionButton, visible);
   setTraverseActionControlVisibility(
+    elements.traverseBarrierUndoButton,
+    visible && Boolean(state.barrierLinkPreview)
+  );
+  setTraverseActionControlVisibility(
     elements.traverseDragonEyeCancelButton,
-    visible && (Boolean(state.dragonEye.active) || Boolean(state.barrierDissolveMode))
+    visible && (
+      Boolean(state.dragonEye.active)
+      || Boolean(state.barrierDissolveMode)
+      || Boolean(state.barrierLinkPreview)
+    )
   );
 }
 
@@ -5820,6 +5921,13 @@ function renderTraverseActionButton() {
     cancelButton.disabled = state.traverseBusy;
     cancelButton.setAttribute("aria-label", cancelLabel);
     cancelButton.title = cancelLabel;
+  }
+  if (elements.traverseBarrierUndoButton) {
+    elements.traverseBarrierUndoButton.disabled = state.barrierLinkPath.length <= 1
+      || Boolean(state.barrierLinkAnimation)
+      || state.traverseBusy;
+    elements.traverseBarrierUndoButton.setAttribute("aria-label", t("traverse.undo"));
+    elements.traverseBarrierUndoButton.title = t("traverse.undo");
   }
   button.hidden = true;
   button.disabled = true;
@@ -5854,10 +5962,14 @@ function fitBarrierPlacementView(options = {}) {
   const dissolveOnly = options.dissolveOnly === true;
   const linkOnly = options.linkOnly === true;
   const selectedOnly = options.selectedOnly === true;
+  const room = options.room === true;
   syncCanvasSize();
   pauseLocationFollowForManualView();
+  const selectedLinkStoneIds = room && state.barrierLinkSourceSelection.length > 0
+    ? state.barrierLinkSourceSelection
+    : state.barrierSelection;
   const availableStoneIds = linkOnly
-    ? new Set(selectedOnly ? state.barrierSelection : availableBarrierStoneIds())
+    ? new Set(selectedOnly ? selectedLinkStoneIds : availableBarrierStoneIds())
     : null;
   const visibleStones = Object.values(state.traverseLog?.stones || {})
     .filter((stone) => stoneDisplayCount(stone) > 0)
@@ -5913,9 +6025,12 @@ function fitBarrierPlacementView(options = {}) {
   const maxX = Math.max(...projected.map((point) => point.x));
   const minY = Math.min(...projected.map((point) => point.y));
   const maxY = Math.max(...projected.map((point) => point.y));
-  const padding = Math.min(110, Math.max(34, Math.min(size.width, size.height) * 0.16));
-  const availableWidth = Math.max(64, size.width - padding * 2);
-  const availableHeight = Math.max(64, size.height - padding * 2);
+  const frame = room ? barrierLinkRoomFrame(size) : null;
+  const padding = room
+    ? Math.min(92, Math.max(48, Math.min(frame.width, frame.height) * 0.12))
+    : Math.min(110, Math.max(34, Math.min(size.width, size.height) * 0.16));
+  const availableWidth = Math.max(64, (frame?.width || size.width) - padding * 2);
+  const availableHeight = Math.max(64, (frame?.height || size.height) - padding * 2);
   const spanX = Math.max(60, maxX - minX);
   const spanY = Math.max(60, maxY - minY);
 
@@ -5932,6 +6047,7 @@ function enterBarrierPlacementView() {
     setMobileGridPage("grid");
   }
   resetBarrierLinkState();
+  state.barrierLinkSourceSelection = [];
   resetDragonEyeState();
   state.barrierDissolveMode = false;
   state.barrierPlacementView = true;
@@ -5956,6 +6072,7 @@ function enterBarrierDissolveMode() {
     setMobileGridPage("grid");
   }
   resetBarrierLinkState();
+  state.barrierLinkSourceSelection = [];
   resetDragonEyeState();
   state.barrierPlacementView = false;
   state.barrierDissolveMode = true;
@@ -6162,25 +6279,51 @@ function barrierIdForStone(log, stoneId) {
 
 function beginBarrierSelectionPreview() {
   if (!state.traverseMode || state.traverseBusy || state.barrierSelection.length < 2) return false;
+  state.barrierLinkSourceSelection = [...state.barrierSelection];
   state.barrierLinkPreview = true;
-  state.barrierLinkPath = [...state.barrierSelection];
-  state.barrierLinkingMode = false;
+  state.barrierLinkPath = [];
+  state.barrierLinkingMode = true;
+  state.barrierLinkCandidateStoneId = null;
+  state.barrierLinkPendingStoneId = null;
   state.selectedBarrierId = null;
-  fitBarrierPlacementView({ linkOnly: true, selectedOnly: true });
+  canvas.classList.add("is-barrier-linking");
+  showAppToast(t("traverse.linkReady"));
+  fitBarrierPlacementView({ linkOnly: true, selectedOnly: true, room: true });
   render();
   return true;
 }
 
 function confirmBarrierSelectionPreview() {
-  if (!state.barrierLinkPreview || state.barrierSelection.length < 2) return;
-  animateBarrierLinkCompletion(state.barrierSelection);
+  return Boolean(state.barrierLinkPreview);
 }
 
 function cancelBarrierSelectionPreview() {
   if (!state.barrierLinkPreview) return;
+  const sourceSelection = [...state.barrierLinkSourceSelection];
   resetBarrierLinkState();
-  state.barrierSelection = [];
+  state.barrierLinkSourceSelection = [];
+  state.barrierSelection = sourceSelection;
   state.pointer.drag = null;
+  render();
+}
+
+function undoBarrierLinkSegment() {
+  if (!state.barrierLinkPreview || state.barrierLinkPath.length <= 1 || state.barrierLinkAnimation) return;
+  clearBarrierLinkHoldVisual();
+  state.barrierLinkPath = state.barrierLinkPath.slice(0, -1);
+  state.barrierSelection = state.barrierLinkPath.length > 0
+    ? [...state.barrierLinkPath]
+    : [...state.barrierLinkSourceSelection];
+  state.barrierLinkCandidateStoneId = null;
+  state.barrierLinkPendingStoneId = null;
+  if (state.pointer.drag?.barrierLink) {
+    state.pointer.drag.barrierLinkStarted = false;
+    state.pointer.drag.barrierLink = false;
+    state.pointer.drag = null;
+  }
+  state.barrierLinkingMode = true;
+  canvas.classList.add("is-barrier-linking");
+  showAppToast(t("traverse.linkReady"));
   render();
 }
 
@@ -6193,8 +6336,7 @@ function handleBarrierQuickAction(action) {
   if (!state.traverseMode) return false;
   if (action === "place") return openTraverseQuantityDialog("place");
   if (action === "connect") {
-    if (state.barrierLinkPreview) confirmBarrierSelectionPreview();
-    else beginBarrierSelectionPreview();
+    if (!state.barrierLinkPreview) beginBarrierSelectionPreview();
     return true;
   }
   if (action === "dragon-eye") {
@@ -11794,6 +11936,7 @@ function invertVisiblePointSelection() {
 function clearSelection(options = {}) {
   state.mode = "inspect";
   if (state.barrierLinkPreview) resetBarrierLinkState();
+  state.barrierLinkSourceSelection = [];
   state.selection = [];
   state.barrierSelection = [];
   state.selectedBarrierId = null;
@@ -12026,8 +12169,13 @@ function findNearestPoint(screenPoint, options = {}) {
 function findNearestBarrierStone(screenPoint, options = {}) {
   if (!state.traverseMode || !state.traverseLog) return null;
   const availableOnly = options.availableOnly === true || state.barrierLinkingMode;
+  const roomStoneIds = state.barrierLinkPreview
+    ? new Set(state.barrierLinkSourceSelection.length > 0
+      ? state.barrierLinkSourceSelection
+      : state.barrierSelection)
+    : null;
   const availableStoneIds = availableOnly
-    ? new Set(availableBarrierStoneIds())
+    ? (roomStoneIds || new Set(availableBarrierStoneIds()))
     : null;
   for (const [stoneId, stone] of Object.entries(state.traverseLog?.stones || {})) {
     if (stoneDisplayCount(stone) <= 0) continue;
@@ -12090,9 +12238,11 @@ function finishBarrierLinkCompletion() {
   if (!completion) return;
   const vertices = [...completion.path];
   state.barrierLinkCompletion = null;
-  state.barrierLinkPreview = false;
+  state.barrierLinkPreview = true;
+  state.barrierLinkingMode = false;
   state.barrierLinkPath = [];
   state.barrierSelection = vertices;
+  canvas.classList.remove("is-barrier-linking");
   render();
   void createBarrierFromSelection();
 }
@@ -12225,8 +12375,33 @@ function updateBarrierLinkGesture(drag, point) {
   scheduleBarrierLinkCandidate(drag, stoneId);
 }
 
+function resumeBarrierLinkRoom() {
+  const sourceSelection = [...state.barrierLinkSourceSelection];
+  if (!state.traverseMode || sourceSelection.length < 2) return false;
+  clearBarrierLinkHoldVisual();
+  state.barrierLinkPreview = true;
+  state.barrierLinkingMode = true;
+  state.barrierLinkPath = [];
+  state.barrierSelection = sourceSelection;
+  state.barrierLinkCandidateStoneId = null;
+  state.barrierLinkPendingStoneId = null;
+  state.barrierLinkAnimation = null;
+  state.barrierLinkCompletion = null;
+  canvas.classList.add("is-barrier-linking");
+  fitBarrierPlacementView({ linkOnly: true, selectedOnly: true, room: true });
+  render();
+  return true;
+}
+
 function finishBarrierLinkGesture(drag, point, allowTap) {
   clearBarrierLinkCandidateTimer(drag);
+  if (state.barrierLinkPreview && state.barrierLinkAnimation) {
+    const pendingSegment = state.barrierLinkAnimation;
+    state.barrierLinkAnimation = null;
+    if (!state.barrierLinkPath.includes(pendingSegment.to)) {
+      state.barrierLinkPath.push(pendingSegment.to);
+    }
+  }
   const path = [...state.barrierLinkPath];
   const origin = drag?.barrierLinkOriginStoneId;
   const nearest = resolveDragEndpoint(point, "barrier")?.stoneId;
@@ -12244,6 +12419,16 @@ function finishBarrierLinkGesture(drag, point, allowTap) {
   }
   if (allowTap && path.length >= 3 && nearest === origin && !state.barrierLinkAnimation) {
     animateBarrierLinkCompletion(path);
+    return;
+  }
+  if (state.barrierLinkPreview) {
+    state.barrierLinkingMode = true;
+    state.barrierLinkCandidateStoneId = null;
+    state.barrierLinkPath = path;
+    state.barrierSelection = path.length > 0 ? path : [...state.barrierLinkSourceSelection];
+    canvas.classList.add("is-barrier-linking");
+    if (allowTap) showAppToast(t("traverse.linkReturnRequired"), { error: true });
+    render();
     return;
   }
   state.barrierLinkingMode = false;
@@ -12731,6 +12916,7 @@ async function createBarrierFromSelection() {
         ? t("barrier.missingStone")
         : t("barrier.tooFew");
     showAppToast(message, { error: true });
+    resumeBarrierLinkRoom();
     return;
   }
 
@@ -12741,6 +12927,7 @@ async function createBarrierFromSelection() {
     showAppToast(t("barrier.sightExceeded")
       .replace("{radius}", formatBarrierRadius(sight.radiusKm))
       .replace("{vertices}", exceeded), { error: true });
+    resumeBarrierLinkRoom();
     return;
   }
   const selfIntersecting = polygonSelfIntersects(geos);
@@ -12751,10 +12938,12 @@ async function createBarrierFromSelection() {
       : "adjacent";
   if (linkPattern === "pentagram" && rankInfo.rank.index < BARRIER_CONFIG.crossLinkFromRank) {
     showAppToast(t("barrier.crossLinkLocked").replace("{rank}", "S"), { error: true });
+    resumeBarrierLinkRoom();
     return;
   }
   if (linkPattern === "octagram" && rankInfo.rank.index < 8) {
     showAppToast(t("barrier.crossLinkLocked").replace("{rank}", "SSS"), { error: true });
+    resumeBarrierLinkRoom();
     return;
   }
 
@@ -12766,7 +12955,10 @@ async function createBarrierFromSelection() {
     defaultValue: defaultName,
     submitLabel: t("action.apply")
   });
-  if (input === null) return;
+  if (input === null) {
+    resumeBarrierLinkRoom();
+    return;
+  }
   const name = input.trim() || defaultName;
   const barrierId = createId();
   const evaluation = evaluateBarrierLog(state.traverseLog);
@@ -12784,9 +12976,11 @@ async function createBarrierFromSelection() {
       ? t("barrier.tooMany").replace("{max}", String(rankInfo.maxVertices))
       : result.reason === "used" ? t("barrier.stoneUsed") : t("barrier.missingStone");
     showAppToast(message, { error: true });
-    render();
+    resumeBarrierLinkRoom();
     return;
   }
+  resetBarrierLinkState();
+  state.barrierLinkSourceSelection = [];
   state.barrierSelection = [];
   state.selectedBarrierId = barrierId;
   syncBarrierFiguresFromLog();
@@ -13649,6 +13843,21 @@ function pointerAngle(a, b) {
 }
 
 function startDragGesture(pointerId, point, options = {}) {
+  if (state.barrierLinkPreview && !isInsideBarrierLinkRoom(point)) {
+    state.pointer.drag = {
+      id: pointerId,
+      start: point,
+      last: point,
+      moved: true,
+      barrierLinkRoomOutside: true,
+      barrierLink: false,
+      longPressTimerId: null,
+      endpointDragReadyTimerId: null,
+      lineDragReadyTimerId: null,
+      lineDrag: null
+    };
+    return;
+  }
   if (state.barrierDissolveMode) {
     state.pointer.drag = {
       id: pointerId,
@@ -14131,6 +14340,11 @@ function removePointer(event, options = {}) {
   if (drag?.barrierLink) {
     state.pointer.drag = null;
     finishBarrierLinkGesture(drag, point, allowTap);
+    return;
+  }
+
+  if (drag?.barrierLinkRoomOutside) {
+    state.pointer.drag = null;
     return;
   }
 
@@ -17433,6 +17647,8 @@ function bindEvents() {
   elements.useLocationButton.addEventListener("click", useCurrentLocation);
   elements.traverseDragonEyeCancelButton?.addEventListener("contextmenu", (event) => event.preventDefault());
   elements.traverseDragonEyeCancelButton?.addEventListener("click", cancelTraverseAction);
+  elements.traverseBarrierUndoButton?.addEventListener("contextmenu", (event) => event.preventDefault());
+  elements.traverseBarrierUndoButton?.addEventListener("click", undoBarrierLinkSegment);
   elements.dragonEyeShapeOptions?.addEventListener("click", (event) => {
     const option = event.target.closest("[data-dragon-eye-shape]");
     if (!option) return;
@@ -17580,6 +17796,11 @@ function bindEvents() {
 
     const drag = state.pointer.drag;
     if (!drag || drag.id !== event.pointerId) {
+      return;
+    }
+
+    if (drag.barrierLinkRoomOutside) {
+      drag.last = point;
       return;
     }
 
