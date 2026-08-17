@@ -4,8 +4,12 @@ import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const port = Number.parseInt(process.env.PORT ?? "5177", 10);
+const requestedPort = Number.parseInt(process.env.PORT ?? "5177", 10);
 const host = process.env.HOST ?? "127.0.0.1";
+
+if (!Number.isInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535) {
+  throw new Error(`Invalid PORT: ${process.env.PORT}`);
+}
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -21,7 +25,7 @@ const mimeTypes = new Map([
 ]);
 
 function resolveRequestPath(requestUrl) {
-  const url = new URL(requestUrl, `http://${host}:${port}`);
+  const url = new URL(requestUrl, `http://${host}:${requestedPort}`);
   const decoded = decodeURIComponent(url.pathname);
   const normalized = path.normalize(decoded).replace(/^([/\\])+/, "");
   const target = path.resolve(root, normalized);
@@ -70,7 +74,23 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
-server.listen(port, host, () => {
-  console.log(`GRID ATLAS dev server: http://${host}:${port}/`);
-});
+function listenOnAvailablePort(port) {
+  const onError = (error) => {
+    server.removeListener("listening", onListening);
+    if (error.code !== "EADDRINUSE" || port >= 65535) {
+      throw error;
+    }
+    listenOnAvailablePort(port + 1);
+  };
+  const onListening = () => {
+    server.removeListener("error", onError);
+    console.log(`GRID ATLAS dev server: http://${host}:${port}/`);
+  };
+
+  server.once("error", onError);
+  server.once("listening", onListening);
+  server.listen(port, host);
+}
+
+listenOnAvailablePort(requestedPort);
 
