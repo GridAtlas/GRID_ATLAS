@@ -29,8 +29,8 @@
     <link rel="icon" href="assets/icon-grid.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=98">
-    <script src="src/main.js?v=493" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=99">
+    <script src="src/main.js?v=494" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -118,6 +118,7 @@
               </label>
               <div class="settings-nav settings-nav-subtle">
                 <button id="openGridAtlasButton" class="settings-nav-button" type="button" data-i18n="settings.openGridAtlas">.gridatlasを開く</button>
+                <button id="kekkaiReturnTitleButton" class="settings-nav-button" type="button" data-i18n="traverse.returnTitle" hidden>タイトルに戻る</button>
               </div>
               <section class="settings-nav settings-update">
                 <div class="system-update-row">
@@ -506,33 +507,6 @@
           </section>
         </div>
       </div>
-    </dialog>
-    <dialog id="traverseActionDialog" class="traverse-action-dialog" aria-labelledby="traverseActionDialogTitle" tabindex="-1">
-      <form class="traverse-action-dialog-form" method="dialog">
-        <div class="traverse-action-dialog-heading">
-          <h2 id="traverseActionDialogTitle" data-i18n="traverse.menuTitle" tabindex="-1">結界操作</h2>
-          <button class="share-link-close" type="submit" value="cancel" aria-label="閉じる" title="閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
-        </div>
-        <section class="traverse-action-dialog-status" aria-labelledby="traverseStoneStatusTitle">
-          <h3 id="traverseStoneStatusTitle" data-i18n="traverse.stoneStatus">結界石の状況</h3>
-          <div class="traverse-stone-status-grid">
-            <div><span data-i18n="traverse.stockShort">手持ち</span><strong id="traverseStockValue">0</strong></div>
-            <div><span data-i18n="traverse.installedShort">設置済み</span><strong id="traverseInstalledValue">0</strong></div>
-            <div><span data-i18n="traverse.locationsShort">箇所</span><strong id="traverseLocationValue">0</strong></div>
-          </div>
-        </section>
-        <p id="traverseBarrierRequirement" class="traverse-action-dialog-requirement" role="status" aria-live="polite" hidden></p>
-        <div class="traverse-action-dialog-actions">
-          <button id="traversePickButton" type="button" data-i18n="traverse.pick">拾う</button>
-          <button id="traversePlaceButton" class="primary-button" type="button" data-i18n="traverse.place">置く</button>
-          <button id="traverseDissolveBarrierButton" class="danger-button" type="button" data-i18n="barrier.dissolve">結界を解く</button>
-          <button id="traverseCreateBarrierButton" type="button" data-i18n="traverse.connect">結界を結ぶ</button>
-          <button id="traverseDragonEyeButton" type="button" data-i18n="dragonEye.open">龍脈眼</button>
-          <button id="traversePlacementViewButton" type="button" data-i18n="traverse.placementView">配置をみる</button>
-          <button id="traverseReturnTitleButton" type="button" data-i18n="traverse.returnTitle">タイトルに戻る</button>
-          <button id="traverseStatusButton" type="button" data-i18n="traverse.status">ステータス</button>
-        </div>
-      </form>
     </dialog>
     <dialog id="dragonEyeDialog" class="dragon-eye-dialog" aria-labelledby="dragonEyeDialogTitle" tabindex="-1">
       <form class="dragon-eye-dialog-form" method="dialog">

@@ -42,6 +42,7 @@ import {
   normalizeAnalysisVertex,
   removeAnalysisFigureVertex
 } from "./analysis-layer.js?v=1";
+import { chooseAnalysisHit } from "./analysis-hit-priority.js?v=1";
 import { analyzeLineIntersection, analyzeOpenPath, analyzeSegmentShape, vincentyDistanceMeters } from "./shape-analysis.js?v=1";
 import {
   BARRIER_CONFIG,
@@ -135,7 +136,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2247";
+const WEB_VERSION = "0.2257";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -262,15 +263,9 @@ const elements = {
   dragonEyeAvailability: document.querySelector("#dragonEyeAvailability"),
   dragonEyeShapeOptions: document.querySelector("#dragonEyeShapeOptions"),
   traverseDragonEyeButton: document.querySelector("#traverseDragonEyeButton"),
-  traverseActionDialog: document.querySelector("#traverseActionDialog"),
-  traverseActionDialogTitle: document.querySelector("#traverseActionDialogTitle"),
-  traversePlaceButton: document.querySelector("#traversePlaceButton"),
-  traversePickButton: document.querySelector("#traversePickButton"),
   traversePlacementViewButton: document.querySelector("#traversePlacementViewButton"),
   traverseCreateBarrierButton: document.querySelector("#traverseCreateBarrierButton"),
   traverseDissolveBarrierButton: document.querySelector("#traverseDissolveBarrierButton"),
-  traverseStatusButton: document.querySelector("#traverseStatusButton"),
-  traverseReturnTitleButton: document.querySelector("#traverseReturnTitleButton"),
   traverseStockValue: document.querySelector("#traverseStockValue"),
   traverseInstalledValue: document.querySelector("#traverseInstalledValue"),
   traverseLocationValue: document.querySelector("#traverseLocationValue"),
@@ -288,6 +283,7 @@ const elements = {
   settingsMenu: document.querySelector("#settingsMenu"),
   settingsMenuButton: document.querySelector("#settingsMenuButton"),
   openGridAtlasButton: document.querySelector("#openGridAtlasButton"),
+  kekkaiReturnTitleButton: document.querySelector("#kekkaiReturnTitleButton"),
   openCloudButton: document.querySelector("#openCloudButton"),
   settingsPanel: document.querySelector("#settingsPanel"),
   cloudDialog: document.querySelector("#cloudDialog"),
@@ -647,6 +643,8 @@ const state = {
   barrierLinkHoldFrameId: null,
   barrierLinkAnimation: null,
   barrierLinkCompletion: null,
+  barrierLinkPreview: false,
+  barrierStoneGlyphMode: new Set(),
   traverseQuantityAction: null,
   traverseQuantityTargetTileId: null,
   traverseQuantity: 1,
@@ -698,7 +696,6 @@ let pendingTextInputOptions = null;
 let pointSubmitInFlight = null;
 let activeStorageListDrag = null;
 let activePointIndexDrag = null;
-let reopenTraverseActionMenuAfterStatus = false;
 let gridModePressTimerId = 0;
 let gridModePressPointerId = null;
 let gridModePressTab = null;
@@ -921,6 +918,7 @@ const TRANSLATIONS = {
     "delete.all": "すべて",
     "delete.uneditablePoints": "選択した地点のうち{count}点は編集できないリストに含まれるため削除できません。",
     "action.edit": "編集",
+    "action.rename": "命名",
     "action.map": "地図",
     "section.pointSource": "地点取得",
     "button.clipboard": "クリップボード",
@@ -1480,6 +1478,7 @@ const TRANSLATIONS = {
     "delete.all": "All",
     "delete.uneditablePoints": "{count} selected point(s) cannot be deleted because they belong to a non-editable list.",
     "action.edit": "Edit",
+    "action.rename": "Name",
     "action.map": "Map",
     "section.pointSource": "Get location",
     "button.clipboard": "Clipboard",
@@ -2319,6 +2318,7 @@ function resetBarrierLinkState() {
   state.barrierLinkPendingDurationMs = null;
   state.barrierLinkAnimation = null;
   state.barrierLinkCompletion = null;
+  state.barrierLinkPreview = false;
   canvas?.classList.remove("is-barrier-linking");
 }
 
@@ -2473,12 +2473,7 @@ function beginDragonEye(shape) {
 function openDragonEyeDialog() {
   if (!state.traverseMode || state.traverseBusy || !elements.dragonEyeDialog) return;
   renderDragonEyeShapeOptions();
-  if (!elements.traverseActionDialog?.open && !elements.dragonEyeDialog.open) {
-    elements.dragonEyeDialog.showModal();
-  } else if (!elements.dragonEyeDialog.open) {
-    elements.traverseActionDialog?.close("dragon-eye");
-    elements.dragonEyeDialog.showModal();
-  }
+  if (!elements.dragonEyeDialog.open) elements.dragonEyeDialog.showModal();
 }
 
 function cancelDragonEye() {
@@ -2629,8 +2624,6 @@ function setTraverseMode(enabled) {
   resetDragonEyeState();
   state.barrierSelection = [];
   state.selectedBarrierId = null;
-  reopenTraverseActionMenuAfterStatus = false;
-  if (!state.traverseMode) closeTraverseActionDialog();
   if (state.traverseMode) {
     if (evaluateBarrierLog(state.traverseLog).changed) persistTraverseLog();
     refreshTraverseStock();
@@ -4243,11 +4236,32 @@ function drawTraverseStones(options = {}) {
     if (availableStoneIds && !availableStoneIds.has(stoneId)) continue;
     const polygon = displayedTraverseTilePolygon(stone.tile);
     if (!polygon) continue;
+    if (state.barrierLinkPreview && !state.barrierSelection.includes(stoneId)) continue;
     const selected = stoneId
       ? state.barrierSelection.includes(stoneId) || stoneId === state.barrierLinkCandidateStoneId
         || stoneId === state.barrierLinkPendingStoneId
       : false;
+    const diagonal = Math.hypot(polygon[2].x - polygon[0].x, polygon[2].y - polygon[0].y);
+    const glyphMode = state.barrierStoneGlyphMode.has(stoneId);
+    if (glyphMode ? diagonal > BARRIER_TILE_MIN_SCREEN_SIZE * 1.2 : diagonal < BARRIER_TILE_MIN_SCREEN_SIZE * 0.8) {
+      if (glyphMode) state.barrierStoneGlyphMode.delete(stoneId);
+      else state.barrierStoneGlyphMode.add(stoneId);
+    }
+    const useGlyph = state.barrierStoneGlyphMode.has(stoneId);
     context.save();
+    if (useGlyph) {
+      const center = polygon.reduce((sum, point) => ({
+        x: sum.x + point.x / polygon.length,
+        y: sum.y + point.y / polygon.length
+      }), { x: 0, y: 0 });
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.font = "18px sans-serif";
+      context.globalAlpha = 1;
+      context.fillText("🔶", center.x, center.y);
+      context.restore();
+      continue;
+    }
     context.fillStyle = selected ? BARRIER_LINK_ORANGE : colors.traverseFill;
     context.globalAlpha = selected ? 0.32 : 0.2;
     drawTraversePolygon(polygon, { fill: true });
@@ -5785,18 +5799,21 @@ function syncTraverseActionControlsVisibility(visible) {
 
 function syncTraverseModeUi() {
   const enabled = Boolean(state.traverseMode);
-  const visible = enabled && isTraverseGridSurfaceActive();
+  const visible = enabled && state.barrierLinkPreview && isTraverseGridSurfaceActive();
   syncTraverseActionControlsVisibility(visible);
   document.documentElement.classList.toggle("is-traverse-mode", enabled);
+  if (elements.kekkaiReturnTitleButton) elements.kekkaiReturnTitleButton.hidden = !enabled;
 }
 
 function renderTraverseActionButton() {
   const button = elements.traverseActionButton;
   if (!button) return;
-  const visible = state.traverseMode && isTraverseGridSurfaceActive();
+  const visible = state.traverseMode && state.barrierLinkPreview && isTraverseGridSurfaceActive();
   syncTraverseActionControlsVisibility(visible);
   const cancelButton = elements.traverseDragonEyeCancelButton;
-  const cancelLabel = state.barrierDissolveMode ? t("traverse.cancel") : t("dragonEye.cancel");
+  const cancelLabel = state.barrierLinkPreview
+    ? t("action.cancel")
+    : state.barrierDissolveMode ? t("traverse.cancel") : t("dragonEye.cancel");
   const cancelLabelNode = cancelButton?.querySelector(".traverse-action-label");
   if (cancelLabelNode) cancelLabelNode.textContent = cancelLabel;
   if (cancelButton) {
@@ -5804,11 +5821,10 @@ function renderTraverseActionButton() {
     cancelButton.setAttribute("aria-label", cancelLabel);
     cancelButton.title = cancelLabel;
   }
-  if (!visible) {
-    button.disabled = false;
-    button.classList.remove("is-dragon-eye-active", "is-placement-view-active", "is-barrier-dissolve-active");
-    return;
-  }
+  button.hidden = true;
+  button.disabled = true;
+  button.classList.remove("is-dragon-eye-active", "is-placement-view-active", "is-barrier-dissolve-active");
+  if (!visible) return;
 
   refreshTraverseStock();
   const dragonEyeActive = Boolean(state.dragonEye.active);
@@ -5829,97 +5845,20 @@ function renderTraverseActionButton() {
   button.title = buttonLabel;
 }
 
-function renderTraverseActionDialog() {
-  if (!elements.traverseActionDialog) return;
-  refreshTraverseStock();
-  const currentContext = currentTraverseActionContext();
-  const { amount, currentTile, currentStoneId, currentStone, currentCap } = {
-    amount: currentContext.amount,
-    currentTile: currentContext.currentTile,
-    currentStoneId: currentContext.stoneId,
-    currentStone: currentContext.stone,
-    currentCap: currentContext.stoneCap
-  };
-  const currentTileAtCap = currentCap !== null && stoneDisplayCount(currentStone) >= currentCap;
-  const installedEntries = installedBarrierStoneEntries();
-  const availableStoneLocations = availableBarrierStoneIds().length;
-  const missingBarrierLocations = Math.max(0, 3 - availableStoneLocations);
-  const installed = installedEntries.reduce((total, [, stone]) => total + stoneDisplayCount(stone), 0);
-  if (elements.traverseStockValue) elements.traverseStockValue.textContent = String(amount);
-  if (elements.traverseInstalledValue) elements.traverseInstalledValue.textContent = String(installed);
-  if (elements.traverseLocationValue) elements.traverseLocationValue.textContent = String(installedEntries.length);
-  if (elements.traverseBarrierRequirement) {
-    elements.traverseBarrierRequirement.hidden = missingBarrierLocations === 0;
-    elements.traverseBarrierRequirement.textContent = missingBarrierLocations > 0
-      ? t("barrier.needLocations").replace("{count}", String(missingBarrierLocations))
-      : "";
-  }
-  if (elements.traverseActionDialogTitle) elements.traverseActionDialogTitle.textContent = t("traverse.menuTitle");
-  if (elements.traversePlaceButton) {
-    elements.traversePlaceButton.textContent = t("traverse.place");
-    elements.traversePlaceButton.disabled = state.traverseBusy || traverseQuantityLimit("place") <= 0 || currentTileAtCap;
-    elements.traversePlaceButton.title = currentTileAtCap ? t("traverse.capReached") : "";
-  }
-  if (elements.traversePickButton) {
-    elements.traversePickButton.textContent = t("traverse.pick");
-    elements.traversePickButton.disabled = state.traverseBusy || traverseQuantityLimit("pick") <= 0;
-  }
-  if (elements.traversePlacementViewButton) {
-    elements.traversePlacementViewButton.textContent = t("traverse.placementView");
-    elements.traversePlacementViewButton.disabled = state.traverseBusy;
-  }
-  if (elements.traverseCreateBarrierButton) {
-    const enoughStones = availableStoneLocations >= 3;
-    elements.traverseCreateBarrierButton.textContent = t("traverse.connect");
-    elements.traverseCreateBarrierButton.disabled = state.traverseBusy || !enoughStones;
-    elements.traverseCreateBarrierButton.title = enoughStones
-      ? t("traverse.connect")
-      : t("barrier.needLocations").replace("{count}", String(missingBarrierLocations));
-  }
-  if (elements.traverseDissolveBarrierButton) {
-    const barrierCount = Object.keys(state.traverseLog?.barriers || {}).length;
-    elements.traverseDissolveBarrierButton.textContent = t("barrier.dissolve");
-    elements.traverseDissolveBarrierButton.disabled = state.traverseBusy || barrierCount === 0;
-    elements.traverseDissolveBarrierButton.title = barrierCount > 0
-      ? t("barrier.dissolve")
-      : t("barrier.selectToDissolve");
-  }
-  if (elements.traverseDragonEyeButton) {
-    elements.traverseDragonEyeButton.textContent = t("dragonEye.open");
-    elements.traverseDragonEyeButton.disabled = state.traverseBusy || state.dragonEye.active;
-  }
-  if (elements.traverseStatusButton) {
-    elements.traverseStatusButton.textContent = t("traverse.status");
-    elements.traverseStatusButton.disabled = state.traverseBusy;
-  }
-  if (elements.traverseReturnTitleButton) {
-    elements.traverseReturnTitleButton.textContent = t("traverse.returnTitle");
-    elements.traverseReturnTitleButton.disabled = state.traverseBusy;
-  }
-}
-
-function openTraverseActionDialog() {
-  if (!state.traverseMode || state.traverseBusy || !elements.traverseActionDialog) return;
-  renderTraverseActionDialog();
-  if (!elements.traverseActionDialog.open) elements.traverseActionDialog.showModal();
-}
-
-function closeTraverseActionDialog() {
-  if (elements.traverseActionDialog?.open) elements.traverseActionDialog.close("cancel");
-}
-
 function returnToTraverseActionMenu() {
   if (!state.traverseMode || state.traverseBusy) return;
   render();
-  openTraverseActionDialog();
 }
 
 function fitBarrierPlacementView(options = {}) {
   const dissolveOnly = options.dissolveOnly === true;
   const linkOnly = options.linkOnly === true;
+  const selectedOnly = options.selectedOnly === true;
   syncCanvasSize();
   pauseLocationFollowForManualView();
-  const availableStoneIds = linkOnly ? new Set(availableBarrierStoneIds()) : null;
+  const availableStoneIds = linkOnly
+    ? new Set(selectedOnly ? state.barrierSelection : availableBarrierStoneIds())
+    : null;
   const visibleStones = Object.values(state.traverseLog?.stones || {})
     .filter((stone) => stoneDisplayCount(stone) > 0)
     .filter((stone) => !availableStoneIds || availableStoneIds.has(stoneIdFromTile(stone.tile)))
@@ -5992,7 +5931,6 @@ function enterBarrierPlacementView() {
     setMobilePage("map");
     setMobileGridPage("grid");
   }
-  closeTraverseActionDialog();
   resetBarrierLinkState();
   resetDragonEyeState();
   state.barrierDissolveMode = false;
@@ -6005,7 +5943,6 @@ function exitBarrierPlacementView() {
   state.barrierPlacementView = false;
   state.pointer.drag = null;
   render();
-  openTraverseActionDialog();
 }
 
 function enterBarrierDissolveMode() {
@@ -6018,7 +5955,6 @@ function enterBarrierDissolveMode() {
     setMobilePage("map");
     setMobileGridPage("grid");
   }
-  closeTraverseActionDialog();
   resetBarrierLinkState();
   resetDragonEyeState();
   state.barrierPlacementView = false;
@@ -6035,7 +5971,6 @@ function cancelBarrierDissolveMode() {
   state.barrierSelection = [];
   state.pointer.drag = null;
   render();
-  openTraverseActionDialog();
 }
 
 function commitBarrierDissolve() {
@@ -6060,10 +5995,13 @@ function commitBarrierDissolve() {
   state.pointer.drag = null;
   render();
   showAppToast(t("barrier.dissolved"));
-  openTraverseActionDialog();
 }
 
 function cancelTraverseAction() {
+  if (state.barrierLinkPreview) {
+    cancelBarrierSelectionPreview();
+    return;
+  }
   if (state.barrierDissolveMode) {
     cancelBarrierDissolveMode();
     return;
@@ -6222,20 +6160,89 @@ function barrierIdForStone(log, stoneId) {
     .find(([, barrier]) => barrierStoneIds(barrier).includes(stoneId))?.[0] || null;
 }
 
-function handleTraverseActionClick() {
-  if (state.barrierDissolveMode) {
-    commitBarrierDissolve();
-    return;
+function beginBarrierSelectionPreview() {
+  if (!state.traverseMode || state.traverseBusy || state.barrierSelection.length < 2) return false;
+  state.barrierLinkPreview = true;
+  state.barrierLinkPath = [...state.barrierSelection];
+  state.barrierLinkingMode = false;
+  state.selectedBarrierId = null;
+  fitBarrierPlacementView({ linkOnly: true, selectedOnly: true });
+  render();
+  return true;
+}
+
+function confirmBarrierSelectionPreview() {
+  if (!state.barrierLinkPreview || state.barrierSelection.length < 2) return;
+  animateBarrierLinkCompletion(state.barrierSelection);
+}
+
+function cancelBarrierSelectionPreview() {
+  if (!state.barrierLinkPreview) return;
+  resetBarrierLinkState();
+  state.barrierSelection = [];
+  state.pointer.drag = null;
+  render();
+}
+
+function selectedBarrierStoneTile() {
+  const stoneId = state.barrierSelection[0];
+  return stoneId ? state.traverseLog?.stones?.[stoneId]?.tile || null : null;
+}
+
+function handleBarrierQuickAction(action) {
+  if (!state.traverseMode) return false;
+  if (action === "place") return openTraverseQuantityDialog("place");
+  if (action === "connect") {
+    if (state.barrierLinkPreview) confirmBarrierSelectionPreview();
+    else beginBarrierSelectionPreview();
+    return true;
   }
-  if (state.barrierPlacementView) {
-    exitBarrierPlacementView();
-    return;
+  if (action === "dragon-eye") {
+    openDragonEyeDialog();
+    return true;
   }
-  if (state.dragonEye.active) {
-    commitDragonEye();
-    return;
+  if (action === "invert") {
+    const visibleIds = Object.values(state.traverseLog?.stones || {})
+      .filter((stone) => stoneDisplayCount(stone) > 0)
+      .map((stone) => stoneIdFromTile(stone.tile))
+      .filter(Boolean);
+    const selected = new Set(state.barrierSelection);
+    state.barrierSelection = visibleIds.filter((id) => !selected.has(id));
+    render();
+    return true;
   }
-  openTraverseActionDialog();
+  if (action === "analyze") {
+    if (state.selectedBarrierId) {
+      renderBarrierDetails();
+      return true;
+    }
+    showAppToast(t("barrier.selection").replace("{count}", String(state.barrierSelection.length)));
+    return true;
+  }
+  if (action === "share") {
+    if (state.selectedBarrierId) void shareSelectedBarrierImage();
+    else showAppToast(t("barrier.selectToDissolve"), { error: true });
+    return true;
+  }
+  if (action === "pick") {
+    const tile = selectedBarrierStoneTile();
+    return openTraverseQuantityDialog("pick", tile ? { targetTileId: tile } : {});
+  }
+  if (action === "dissolve") {
+    enterBarrierDissolveMode();
+    return true;
+  }
+  if (action === "placement") {
+    enterBarrierPlacementView();
+    return true;
+  }
+  if (action === "map") {
+    const tile = selectedBarrierStoneTile();
+    const geo = tile ? tileCenterGeo(tile) : null;
+    if (geo) openPointInExternalMap({ title: t("traverse.stoneTile"), geo }, preferredMapProvider());
+    return true;
+  }
+  return false;
 }
 
 function renderActionButtons() {
@@ -6339,6 +6346,56 @@ function renderActionButtons() {
   elements.pointSubmitButton.textContent = state.editingPointId ? t("button.update") : t("button.submitRegister");
   elements.actionRouteLabel.textContent = t("action.route");
   renderLocationFollowButton();
+  if (state.traverseMode) renderTraverseQuickActions();
+}
+
+function setActionButtonLabel(button, label) {
+  const node = button?.querySelector("span");
+  if (node) node.textContent = label;
+}
+
+function renderTraverseQuickActions() {
+  const selectedCount = state.barrierSelection.length;
+  const preview = state.barrierLinkPreview;
+  const canPlace = !state.traverseBusy && traverseQuantityLimit("place") > 0;
+  const canPick = !state.traverseBusy && traverseQuantityLimit("pick") > 0;
+  setActionButtonLabel(elements.actionRegisterButton, t("traverse.place"));
+  setActionButtonLabel(elements.actionLinkButton, t("traverse.connect"));
+  setActionButtonLabel(elements.actionCenterButton, t("dragonEye.open"));
+  setActionButtonLabel(elements.deletePointButton, t("traverse.pick"));
+  setActionButtonLabel(elements.actionCopyToListButton, t("barrier.dissolve"));
+  setActionButtonLabel(elements.actionMoveToListButton, t("traverse.placementView"));
+  setActionButtonLabel(elements.actionMapButton, t("action.map"));
+  elements.actionRegisterButton.disabled = !canPlace;
+  elements.actionLinkButton.disabled = state.traverseBusy || (!preview && selectedCount < 2);
+  elements.actionCenterButton.disabled = state.traverseBusy;
+  elements.actionRouteButton.disabled = state.traverseBusy || selectedCount < 2;
+  elements.actionAnalyzeButton.disabled = state.traverseBusy || (selectedCount === 0 && !state.selectedBarrierId);
+  elements.actionShareSelectedButton.disabled = state.traverseBusy || !state.selectedBarrierId;
+  elements.deletePointButton.disabled = !canPick || selectedCount === 0;
+  elements.actionCopyToListButton.disabled = state.traverseBusy || !state.selectedBarrierId;
+  elements.actionMoveToListButton.disabled = state.traverseBusy;
+  elements.actionMapButton.disabled = selectedCount === 0;
+  elements.clearSelectionButton.disabled = selectedCount === 0 && !state.selectedBarrierId;
+  elements.actionInvertButton.disabled = state.traverseBusy;
+  elements.actionRegisterButton.title = t("traverse.place");
+  elements.actionLinkButton.title = preview ? t("traverse.connect") : t("barrier.selection").replace("{count}", String(selectedCount));
+  elements.actionCenterButton.title = t("dragonEye.open");
+  elements.actionRouteButton.title = t("action.route");
+  elements.actionAnalyzeButton.title = t("action.analyze");
+  elements.actionShareSelectedButton.title = t("barrier.share");
+  elements.deletePointButton.title = t("traverse.pick");
+  elements.actionCopyToListButton.title = t("barrier.dissolve");
+  elements.actionMoveToListButton.title = t("traverse.placementView");
+  elements.actionMapButton.title = t("action.map");
+  elements.actionRegisterButton.classList.toggle("is-active", false);
+  elements.actionLinkButton.classList.toggle("is-active", preview);
+  elements.actionCenterButton.classList.toggle("is-active", state.dragonEye.active);
+  elements.actionRouteButton.classList.toggle("is-active", state.barrierPlacementView);
+  elements.actionShareSelectedButton.classList.toggle("is-active", false);
+  elements.deletePointButton.classList.toggle("is-active", false);
+  elements.actionCopyToListButton.classList.toggle("is-active", state.barrierDissolveMode);
+  elements.actionMoveToListButton.classList.toggle("is-active", state.barrierPlacementView);
 }
 
 function renderPointInfoDialog() {
@@ -6683,13 +6740,11 @@ function renderGridBarrierStoneQuickDialog() {
     : "";
   const stoneCap = stoneCapFor(state.traverseLog, stoneId, currentKekkaishiRankInfo().rank.index);
   const stockAmount = Math.max(0, Math.floor(Number(state.traverseLog?.stock?.amount) || 0));
-  const point = findPointOnBarrierStone(stone);
-
-  elements.gridBarrierStoneQuickName.textContent = t("traverse.stoneTile");
-  elements.gridBarrierStoneQuickInfo.textContent = `${t("traverse.stoneCount").replace("{count}", String(count))}${barrierLabel}`;
+  elements.gridBarrierStoneQuickName.textContent = stone.name || t("traverse.stoneTile");
+  elements.gridBarrierStoneQuickInfo.textContent = `${t("traverse.stoneCount").replace("{count}", String(count))} · ${stone.tile}${barrierLabel}`;
   elements.gridBarrierStoneQuickPlaceLabel.textContent = t("traverse.place");
   elements.gridBarrierStoneQuickPickLabel.textContent = t("traverse.pick");
-  elements.gridBarrierStoneQuickEditLabel.textContent = t("action.edit");
+  elements.gridBarrierStoneQuickEditLabel.textContent = t("action.rename");
   elements.gridBarrierStoneQuickMapLabel.textContent = t("action.map");
 
   elements.gridBarrierStoneQuickPlaceButton.disabled = stockAmount < 1 || count >= stoneCap;
@@ -6698,9 +6753,9 @@ function renderGridBarrierStoneQuickDialog() {
   elements.gridBarrierStoneQuickPickButton.disabled = count < 1 || stockAmount >= BARRIER_CONFIG.stockCap;
   elements.gridBarrierStoneQuickPickButton.setAttribute("aria-label", t("traverse.pick"));
   elements.gridBarrierStoneQuickPickButton.title = t("traverse.pick");
-  elements.gridBarrierStoneQuickEditButton.disabled = Boolean(point && !pointEditable(point.id));
-  elements.gridBarrierStoneQuickEditButton.setAttribute("aria-label", t("action.edit"));
-  elements.gridBarrierStoneQuickEditButton.title = t("action.edit");
+  elements.gridBarrierStoneQuickEditButton.disabled = false;
+  elements.gridBarrierStoneQuickEditButton.setAttribute("aria-label", t("action.rename"));
+  elements.gridBarrierStoneQuickEditButton.title = t("action.rename");
   elements.gridBarrierStoneQuickMapButton.setAttribute("aria-label", t("action.map"));
   elements.gridBarrierStoneQuickMapButton.title = t("action.map");
   for (const button of pointQuickButtons()) button.hidden = true;
@@ -7220,31 +7275,29 @@ function startBarrierStoneQuickAction(action) {
   openTraverseQuantityDialog(action, { targetTileId });
 }
 
-function editBarrierStonePointFromQuickDialog() {
+async function renameBarrierStoneFromQuickDialog() {
   const target = barrierStoneFromQuickDialog();
   if (!target) return;
-  const point = findPointOnBarrierStone(target.stone);
-  if (point) {
-    if (!pointEditable(point.id)) return;
-    if (elements.gridBarrierStoneQuickDialog?.open) elements.gridBarrierStoneQuickDialog.close("edit");
-    startEditingPoint(point);
-    return;
-  }
-
-  const geo = tileCenterGeo(target.stone.tile);
-  if (!geo) return;
-  if (elements.gridBarrierStoneQuickDialog?.open) elements.gridBarrierStoneQuickDialog.close("edit");
-  state.mode = "add";
-  state.pendingGeo = geo;
-  state.editingPointId = null;
-  state.pointDestinationListId = null;
-  state.pendingLinkPointId = null;
-  elements.pointTitle.value = "";
-  elements.pointNote.value = "";
-  elements.pointPhoto.value = "";
-  elements.shareImportStatus.value = "";
-  fillFormFromGeo(geo);
-  openPointRegistrationDialog();
+  const input = await requestTextInput({
+    title: t("action.rename"),
+    message: target.stone.tile,
+    label: t("action.rename"),
+    defaultValue: target.stone.name || "",
+    maxLength: 80,
+    submitLabel: t("action.apply")
+  });
+  if (input === null) return;
+  const name = input.trim().slice(0, 80);
+  target.stone.name = name;
+  appendBarrierEvent(state.traverseLog, {
+    type: "stone-renamed",
+    at: new Date().toISOString(),
+    tile: target.stone.tile,
+    stoneId: target.stoneId,
+    name
+  });
+  persistTraverseLog();
+  if (elements.gridBarrierStoneQuickDialog?.open) elements.gridBarrierStoneQuickDialog.close("rename");
   render();
 }
 
@@ -11740,6 +11793,7 @@ function invertVisiblePointSelection() {
 
 function clearSelection(options = {}) {
   state.mode = "inspect";
+  if (state.barrierLinkPreview) resetBarrierLinkState();
   state.selection = [];
   state.barrierSelection = [];
   state.selectedBarrierId = null;
@@ -12036,6 +12090,7 @@ function finishBarrierLinkCompletion() {
   if (!completion) return;
   const vertices = [...completion.path];
   state.barrierLinkCompletion = null;
+  state.barrierLinkPreview = false;
   state.barrierLinkPath = [];
   state.barrierSelection = vertices;
   render();
@@ -12048,6 +12103,7 @@ function animateBarrierLinkCompletion(vertices) {
     path: [...vertices],
     startedAt: performance.now()
   };
+  state.barrierLinkPreview = true;
   state.barrierLinkingMode = false;
   state.barrierLinkCandidateStoneId = null;
   state.barrierLinkPendingStoneId = null;
@@ -12287,6 +12343,24 @@ function findNearestLink(screenPoint) {
   }
 
   return nearestDistance <= LINE_SELECTION_HIT_RADIUS ? nearest : null;
+}
+
+function findNearestLineEndpoint(screenPoint) {
+  let nearest = null;
+  let nearestDistance = Infinity;
+  for (const link of state.links) {
+    for (const side of ["a", "b"]) {
+      const endpoint = linkEndpoint(link, side);
+      if (!endpoint) continue;
+      const screen = worldToScreen(endpoint);
+      const distance = Math.hypot(screen.x - screenPoint.x, screen.y - screenPoint.y);
+      if (distance < nearestDistance) {
+        nearest = { link, side };
+        nearestDistance = distance;
+      }
+    }
+  }
+  return nearestDistance <= POINT_SELECTION_RING_RADIUS + 6 ? nearest : null;
 }
 
 function findNearestFigure(screenPoint) {
@@ -12536,6 +12610,7 @@ function finishLineDrag(lineDrag, screenPoint) {
     [replaceSide]: targetVertex,
     updatedAt: new Date().toISOString()
   };
+  updateFiguresAfterLineEndpointChange(link, previous, targetVertex);
   state.links = state.links.map((candidate) => candidate.id === link.id ? normalizeStoredLink(next) : candidate);
   splitDisconnectedStrokeGroups();
   persistWorkspace();
@@ -12543,6 +12618,24 @@ function finishLineDrag(lineDrag, screenPoint) {
   showAppToast(t("line.reconnected")
     .replace("{old}", previous?.title || "線")
     .replace("{new}", target.title));
+}
+
+function updateFiguresAfterLineEndpointChange(link, previous, next) {
+  if (!link || !previous || !next) return;
+  const oldPair = endpointPairKey(linkEndpoint(link, "a"), linkEndpoint(link, "b"));
+  if (!oldPair) return;
+  state.figures = state.figures.map((figure) => {
+    if (figure.layer === "barrier" || figure.barrierId) return figure;
+    const belongsToLine = figureEdges(figure)
+      .some((edge) => endpointPairKey(edge.a, edge.b) === oldPair);
+    if (!belongsToLine) return figure;
+    const vertices = figure.vertices.map((vertex) => (
+      (vertex.key === previous.endpointKey || vertex.placeRef === previous.id)
+        ? { ...next }
+        : vertex
+    ));
+    return { ...figure, vertices };
+  });
 }
 
 function distanceToSegment(point, start, end) {
@@ -13628,14 +13721,26 @@ function startDragGesture(pointerId, point, options = {}) {
   const longPressBarrierStone = state.traverseMode && !barrierLinkMode && !options.moved
     ? findNearestBarrierStone(point)
     : null;
-  const figureVertex = longPressBarrierStone ? null : options.moved ? null : findNearestFigureVertex(point);
-  const figureEdge = figureVertex || options.moved ? null : findNearestFigureEdge(point);
-  const figureSurface = figureVertex || figureEdge ? null : options.moved ? null : findNearestFigure(point);
+  const lineEndpoint = longPressBarrierStone || options.moved ? null : findNearestLineEndpoint(point);
+  const figureVertexCandidate = longPressBarrierStone || options.moved ? null : findNearestFigureVertex(point);
+  const prioritizedVertex = chooseAnalysisHit([
+    { kind: "line-endpoint", value: lineEndpoint },
+    { kind: "figure-vertex", value: figureVertexCandidate }
+  ]);
+  const figureVertex = prioritizedVertex?.kind === "figure-vertex" ? prioritizedVertex.value : null;
+  const figureEdge = lineEndpoint || figureVertex || options.moved ? null : findNearestFigureEdge(point);
+  const figureSurface = lineEndpoint || figureVertex || figureEdge ? null : options.moved ? null : findNearestFigure(point);
   const longPressFigure = figureVertex || figureEdge || (figureSurface ? { figureId: figureSurface.id } : null);
-  const longPressPoint = longPressFigure || longPressBarrierStone ? null : options.moved ? null : findNearestPoint(point);
+  const pointCandidate = longPressFigure || longPressBarrierStone || lineEndpoint ? null : options.moved ? null : findNearestPoint(point);
+  const prioritizedPoint = chooseAnalysisHit([
+    { kind: "line-endpoint", value: lineEndpoint },
+    { kind: "figure-vertex", value: figureVertex },
+    { kind: "point", value: pointCandidate }
+  ]);
+  const longPressPoint = prioritizedPoint?.kind === "point" ? prioritizedPoint.value : null;
   const longPressLink = longPressFigure || longPressBarrierStone || options.moved || longPressPoint
     ? null
-    : findNearestLink(point);
+    : lineEndpoint?.link || findNearestLink(point);
   const longPressBarrier = longPressFigure || longPressBarrierStone || longPressPoint || longPressLink || barrierLinkMode || options.moved
     ? null
     : findNearestBarrier(point);
@@ -16928,9 +17033,6 @@ function bindEvents() {
   });
   elements.kekkaishiStatusDialog?.addEventListener("close", () => {
     stopKekkaishiStatusAnimation();
-    if (!reopenTraverseActionMenuAfterStatus) return;
-    reopenTraverseActionMenuAfterStatus = false;
-    returnToTraverseActionMenu();
   });
   elements.systemUpdateButton.addEventListener("click", () => void requestSystemUpdate());
   elements.cloudSignUpButton?.addEventListener("click", () => void signUpCloud());
@@ -16987,21 +17089,82 @@ function bindEvents() {
       setSettingsMenuOpen(false);
     }
   });
-  elements.actionLinkButton.addEventListener("click", handleLinkAction);
+  elements.actionLinkButton.addEventListener("click", () => {
+    if (state.traverseMode) {
+      handleBarrierQuickAction("connect");
+      return;
+    }
+    handleLinkAction();
+  });
+  elements.kekkaiReturnTitleButton?.addEventListener("click", returnToKekkaiTitle);
   elements.barrierShareButton?.addEventListener("click", () => {
     void shareSelectedBarrierImage();
   });
-  elements.actionAnalyzeButton.addEventListener("click", openSelectionAnalysis);
-  elements.actionRegisterButton.addEventListener("click", submitPendingPoint);
+  elements.actionAnalyzeButton.addEventListener("click", () => {
+    if (state.traverseMode) {
+      handleBarrierQuickAction("analyze");
+      return;
+    }
+    openSelectionAnalysis();
+  });
+  elements.actionRegisterButton.addEventListener("click", () => {
+    if (state.traverseMode) {
+      handleBarrierQuickAction("place");
+      return;
+    }
+    submitPendingPoint();
+  });
   elements.closePointRegistrationButton.addEventListener("click", closePointRegistration);
-  elements.actionRouteButton.addEventListener("click", setRouteFromSelectedPoints);
+  elements.actionRouteButton.addEventListener("click", () => {
+    if (state.traverseMode) {
+      handleBarrierQuickAction("placement");
+      return;
+    }
+    setRouteFromSelectedPoints();
+  });
   elements.clearSelectionButton.addEventListener("click", () => clearSelection());
-  elements.actionCenterButton.addEventListener("click", createCenterPendingPoint);
-  elements.actionCopyToListButton.addEventListener("click", () => beginPointTransfer("copy"));
-  elements.actionMoveToListButton.addEventListener("click", () => beginPointTransfer("move"));
-  elements.actionShareSelectedButton.addEventListener("click", () => void shareSelectedPointsFile());
-  elements.actionInvertButton.addEventListener("click", invertVisiblePointSelection);
-  elements.actionMapButton.addEventListener("click", openSelectedPointInPreferredMap);
+  elements.actionCenterButton.addEventListener("click", () => {
+    if (state.traverseMode) {
+      handleBarrierQuickAction("dragon-eye");
+      return;
+    }
+    createCenterPendingPoint();
+  });
+  elements.actionCopyToListButton.addEventListener("click", () => {
+    if (state.traverseMode) {
+      handleBarrierQuickAction("dissolve");
+      return;
+    }
+    beginPointTransfer("copy");
+  });
+  elements.actionMoveToListButton.addEventListener("click", () => {
+    if (state.traverseMode) {
+      handleBarrierQuickAction("placement");
+      return;
+    }
+    beginPointTransfer("move");
+  });
+  elements.actionShareSelectedButton.addEventListener("click", () => {
+    if (state.traverseMode) {
+      handleBarrierQuickAction("share");
+      return;
+    }
+    void shareSelectedPointsFile();
+  });
+  elements.actionInvertButton.addEventListener("click", () => {
+    if (state.traverseMode) {
+      handleBarrierQuickAction("invert");
+      return;
+    }
+    invertVisiblePointSelection();
+  });
+  elements.actionMapButton.addEventListener("click", () => {
+    if (state.traverseMode) {
+      handleBarrierQuickAction("map");
+      return;
+    }
+    openSelectedPointInPreferredMap();
+  });
   elements.pointInfoEditButton.addEventListener("click", () => {
     if (elements.pointInfoEditButton.disabled) return;
     const point = findPointAny(elements.pointInfoDialog.dataset.pointId || state.pointInfoTargetId || state.pointInfoReturnContext?.pointId) || singleSelectedPoint();
@@ -17056,7 +17219,7 @@ function bindEvents() {
     startBarrierStoneQuickAction("pick");
   });
   bindPointerActionButton(elements.gridBarrierStoneQuickEditButton, () => {
-    editBarrierStonePointFromQuickDialog();
+    void renameBarrierStoneFromQuickDialog();
   });
   bindPointerActionButton(elements.gridBarrierStoneQuickMapButton, () => {
     openBarrierStoneInPreferredMapFromQuickDialog();
@@ -17268,35 +17431,13 @@ function bindEvents() {
     if (event.target === elements.pointListPreviewDialog) elements.pointListPreviewDialog.close("cancel");
   });
   elements.useLocationButton.addEventListener("click", useCurrentLocation);
-  elements.traverseActionButton.addEventListener("contextmenu", (event) => event.preventDefault());
-  elements.traverseActionButton.addEventListener("click", handleTraverseActionClick);
   elements.traverseDragonEyeCancelButton?.addEventListener("contextmenu", (event) => event.preventDefault());
   elements.traverseDragonEyeCancelButton?.addEventListener("click", cancelTraverseAction);
-  elements.traversePlaceButton.addEventListener("click", () => {
-    if (openTraverseQuantityDialog("place")) closeTraverseActionDialog();
-  });
-  elements.traversePickButton.addEventListener("click", () => {
-    if (openTraverseQuantityDialog("pick")) closeTraverseActionDialog();
-  });
-  elements.traversePlacementViewButton?.addEventListener("click", enterBarrierPlacementView);
-  elements.traverseCreateBarrierButton.addEventListener("click", () => {
-    if (beginBarrierLinking()) closeTraverseActionDialog();
-  });
-  elements.traverseDissolveBarrierButton?.addEventListener("click", enterBarrierDissolveMode);
-  elements.traverseDragonEyeButton?.addEventListener("click", () => {
-    openDragonEyeDialog();
-  });
   elements.dragonEyeShapeOptions?.addEventListener("click", (event) => {
     const option = event.target.closest("[data-dragon-eye-shape]");
     if (!option) return;
     beginDragonEye(option.dataset.dragonEyeShape);
   });
-  elements.traverseStatusButton?.addEventListener("click", () => {
-    reopenTraverseActionMenuAfterStatus = true;
-    closeTraverseActionDialog();
-    openKekkaishiStatusDialog();
-  });
-  elements.traverseReturnTitleButton?.addEventListener("click", returnToKekkaiTitle);
   elements.traverseQuantityDecreaseButton?.addEventListener("click", () => adjustTraverseQuantity(-1));
   elements.traverseQuantityIncreaseButton?.addEventListener("click", () => adjustTraverseQuantity(1));
   elements.traverseQuantityCancelButton?.addEventListener("click", () => {
@@ -17304,9 +17445,6 @@ function bindEvents() {
     returnToTraverseActionMenu();
   });
   elements.traverseQuantityConfirmButton?.addEventListener("click", confirmTraverseQuantity);
-  elements.traverseActionDialog.addEventListener("click", (event) => {
-    if (event.target === elements.traverseActionDialog) closeTraverseActionDialog();
-  });
   elements.dragonEyeDialog?.addEventListener("click", (event) => {
     if (event.target === elements.dragonEyeDialog) elements.dragonEyeDialog.close("cancel");
   });
@@ -17345,7 +17483,13 @@ function bindEvents() {
   elements.openGoogleMapsButton.addEventListener("click", () => openSelectedPointInExternalMap("google"));
   elements.routeStartPointButton.addEventListener("click", () => void setRouteStartForPoint(singleSelectedPoint()));
   elements.targetPointButton.addEventListener("click", () => void toggleTargetForSelection());
-  elements.deletePointButton.addEventListener("click", deleteSelectedPoint);
+  elements.deletePointButton.addEventListener("click", () => {
+    if (state.traverseMode) {
+      handleBarrierQuickAction("pick");
+      return;
+    }
+    deleteSelectedPoint();
+  });
   for (const button of elements.newPointListButtons) {
     button.addEventListener("click", () => void createNewPointList());
   }
@@ -17635,7 +17779,7 @@ locateOnStartup();
 registerServiceWorker();
 render();
 if (kekkaishiLaunch) {
-  requestAnimationFrame(() => openTraverseActionDialog());
+  requestAnimationFrame(() => render());
 }
 restorePointInfoMapReturn();
 if (state.cloud.connected && !state.cloud.authConfigured) void refreshCloudLists();

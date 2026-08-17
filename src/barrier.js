@@ -354,6 +354,10 @@ export function replayBarrierEvents(events) {
       stone.firstAt ||= event.at;
       stone.lastAt = event.at;
       stones[event.stoneId] = stone;
+    } else if (event.type === "stone-renamed") {
+      if (stones[event.stoneId]) {
+        stones[event.stoneId].name = typeof event.name === "string" ? event.name.slice(0, 80) : "";
+      }
     } else if (event.type === "stone-picked" || event.type === "stone-weathered") {
       if (Number.isFinite(Number(event.countExact))) {
         stone.countExact = Math.max(0, Number(event.countExact));
@@ -519,6 +523,7 @@ function normalizeStone(stoneId, tileId, countExact, source, now) {
     tile: tileId,
     lat: null,
     lng: null,
+    name: typeof source.name === "string" ? source.name.slice(0, 80) : "",
     countExact,
     count: Math.floor(countExact),
     firstAt,
@@ -566,6 +571,19 @@ function normalizeEvent(event, now, fallbackId = "") {
   if (event.type === "barrier-dissolved") {
     if (!event.barrierId) return null;
     return { id, type: event.type, at, barrierId: String(event.barrierId) };
+  }
+  if (event.type === "stone-renamed") {
+    const parsed = parseTileId(event.tile);
+    const stoneId = stoneIdFromTile(event.tile);
+    if (!parsed || !stoneId || event.stoneId !== stoneId) return null;
+    return {
+      id,
+      type: event.type,
+      at,
+      tile: formatTileId(parsed.x, parsed.y, parsed.z),
+      stoneId,
+      name: typeof event.name === "string" ? event.name.slice(0, 80) : ""
+    };
   }
   if (event.type === "barrier-spirit-settled") {
     if (!event.barrierId) return null;
