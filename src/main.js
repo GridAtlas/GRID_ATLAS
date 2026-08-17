@@ -43,6 +43,7 @@ import {
   removeAnalysisFigureVertex
 } from "./analysis-layer.js?v=1";
 import { chooseAnalysisHit } from "./analysis-hit-priority.js?v=1";
+import { resolveLineBodyDragCandidate } from "./drag-hit-testing.js?v=1";
 import { analyzeLineIntersection, analyzeOpenPath, analyzeSegmentShape, vincentyDistanceMeters } from "./shape-analysis.js?v=1";
 import {
   BARRIER_CONFIG,
@@ -136,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2287";
+const WEB_VERSION = "0.2288";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -5840,6 +5841,13 @@ function setTraverseBottomVisibility(element, visible) {
   element.setAttribute("aria-hidden", String(!visible));
 }
 
+function setTraverseBottomButtonVisibility(element, visible) {
+  if (!element) return;
+  element.hidden = !visible;
+  element.style.display = visible ? "" : "none";
+  element.style.visibility = visible ? "visible" : "hidden";
+}
+
 function syncTraverseBottomActionVisibility(visible) {
   setTraverseBottomVisibility(elements.traverseActionBar, visible);
 }
@@ -5859,9 +5867,17 @@ function renderTraverseBottomActions() {
 
   const visible = state.traverseMode && mobilePageUiActive();
   syncTraverseBottomActionVisibility(visible);
+  const contextActive = visible && (
+    state.dragonEye.active
+    || state.barrierLinkPreview
+    || state.barrierDissolveMode
+    || state.barrierPlacementView
+  );
+  setTraverseBottomButtonVisibility(cancelButton, contextActive);
+  setTraverseBottomButtonVisibility(confirmButton, contextActive);
   cancelButton.classList.remove("is-dragon-eye-active", "is-placement-view-active", "is-barrier-dissolve-active");
   confirmButton.classList.remove("is-dragon-eye-active", "is-placement-view-active", "is-barrier-dissolve-active");
-  if (!visible) return;
+  if (!contextActive) return;
 
   refreshTraverseStock();
   const dragonEyeActive = Boolean(state.dragonEye.active);
@@ -13792,7 +13808,12 @@ function startDragGesture(pointerId, point, options = {}) {
     { kind: "figure-vertex", value: figureVertexCandidate }
   ]);
   const figureVertex = prioritizedVertex?.kind === "figure-vertex" ? prioritizedVertex.value : null;
-  const lineBodyCandidate = lineEndpoint || figureVertex || options.moved ? null : findNearestLink(point);
+  const lineBodyCandidate = resolveLineBodyDragCandidate({
+    point,
+    lineEndpoint,
+    moved: options.moved,
+    findNearestLink
+  });
   const figureEdge = lineEndpoint || figureVertex || lineBodyCandidate || options.moved
     ? null
     : findNearestFigureEdge(point);
@@ -13805,7 +13826,7 @@ function startDragGesture(pointerId, point, options = {}) {
     { kind: "point", value: pointCandidate }
   ]);
   const longPressPoint = prioritizedPoint?.kind === "point" ? prioritizedPoint.value : null;
-  const longPressLink = longPressFigure || longPressBarrierStone || options.moved || longPressPoint
+  const longPressLink = longPressBarrierStone || options.moved || longPressPoint || lineEndpoint
     ? null
     : lineBodyCandidate;
   const longPressBarrier = longPressFigure || longPressBarrierStone || longPressPoint || longPressLink || barrierLinkMode || options.moved
@@ -13839,6 +13860,22 @@ function startDragGesture(pointerId, point, options = {}) {
     dragonEye: false
   };
   state.pointer.drag = drag;
+
+  if (longPressLink) {
+    drag.lineDragReadyTimerId = window.setTimeout(() => {
+      if (
+        state.pointer.drag !== drag
+        || state.pointer.active.size !== 1
+        || drag.moved
+        || drag.cancelled
+        || drag.longPressed
+      ) {
+        return;
+      }
+
+      drag.lineDragReady = true;
+    }, LINE_DRAG_LONG_PRESS_MS);
+  }
 
   if (longPressFigure || longPressBarrier) {
     if (!options.moved) {
@@ -13896,21 +13933,6 @@ function startDragGesture(pointerId, point, options = {}) {
 
   if (!options.moved) {
     const longPressDelay = longPressLink || longPressBarrier ? LINE_INFO_LONG_PRESS_MS : RANGE_SELECTION_LONG_PRESS_MS;
-    if (longPressLink) {
-      drag.lineDragReadyTimerId = window.setTimeout(() => {
-        if (
-          state.pointer.drag !== drag
-          || state.pointer.active.size !== 1
-          || drag.moved
-          || drag.cancelled
-          || drag.longPressed
-        ) {
-          return;
-        }
-
-        drag.lineDragReady = true;
-      }, LINE_DRAG_LONG_PRESS_MS);
-    }
     drag.longPressTimerId = window.setTimeout(() => {
       if (
         state.pointer.drag !== drag
@@ -17670,7 +17692,12 @@ function bindEvents() {
           drag.last = point;
           return;
         }
-        clearDragLongPressTimer(drag);
+        if (drag.longPressLink) {
+          if (drag.longPressTimerId) window.clearTimeout(drag.longPressTimerId);
+          drag.longPressTimerId = null;
+        } else {
+          clearDragLongPressTimer(drag);
+        }
         drag.cancelled = true;
         drag.longPressFigure = null;
       }

@@ -1239,6 +1239,7 @@ button {
   width: 100%;
   gap: 8px;
   padding: 8px 14px max(24px, calc(12px + env(safe-area-inset-bottom)));
+  min-height: calc(64px + max(24px, calc(12px + env(safe-area-inset-bottom))));
   border-top: 1px solid var(--line);
   background: var(--surface);
   pointer-events: auto;
