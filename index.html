@@ -29,8 +29,8 @@
     <link rel="icon" href="assets/icon-grid.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=100">
-    <script src="src/main.js?v=495" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=102">
+    <script src="src/main.js?v=497" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -261,17 +261,6 @@
               </div>
               <div id="mobilePointListItems" class="storage-list-items" data-storage-list-items></div>
             </section>
-            <div id="traverseActionControls" class="traverse-action-controls" hidden>
-              <button id="traverseDragonEyeCancelButton" class="traverse-action-button traverse-action-button-cancel" type="button" hidden>
-                <span class="traverse-action-label" data-i18n="dragonEye.cancel">解除</span>
-              </button>
-              <button id="traverseBarrierUndoButton" class="traverse-action-button" type="button" hidden>
-                <span class="traverse-action-label" data-i18n="traverse.undo">ひとつ戻す</span>
-              </button>
-              <button id="traverseActionButton" class="traverse-action-button" type="button" hidden>
-                <span id="traverseActionLabel" class="traverse-action-label" data-i18n="traverse.menuTitle">結界操作</span>
-              </button>
-            </div>
           </div>
 
           <nav class="actionbar" aria-label="地点操作">
@@ -328,6 +317,14 @@
             <button class="mobile-grid-tab" type="button" data-mobile-grid-page="points" aria-pressed="false" data-i18n="page.points">地点</button>
             <button class="mobile-grid-tab is-active" type="button" data-mobile-grid-page="grid" aria-pressed="true" data-i18n="page.grid">グリッド</button>
             <button class="mobile-grid-tab" type="button" data-mobile-grid-page="lists" aria-pressed="false" data-i18n="page.lists">リスト</button>
+          </nav>
+          <nav id="traverseActionBar" class="traverse-action-bar" aria-label="結界操作" hidden>
+            <button id="traverseBottomCancelButton" class="traverse-action-button traverse-action-button-cancel" type="button">
+              <span id="traverseBottomCancelLabel" class="traverse-action-label">やめる</span>
+            </button>
+            <button id="traverseBottomConfirmButton" class="traverse-action-button" type="button">
+              <span id="traverseBottomConfirmLabel" class="traverse-action-label">進める</span>
+            </button>
           </nav>
         </div>
 

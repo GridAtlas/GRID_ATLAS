@@ -136,7 +136,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2267";
+const WEB_VERSION = "0.2287";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -258,11 +258,11 @@ const elements = {
   clearSelectionButton: document.querySelector("#clearSelectionButton"),
   actionCenterButton: document.querySelector("#actionCenterButton"),
   actionMapButton: document.querySelector("#actionMapButton"),
-  traverseActionControls: document.querySelector("#traverseActionControls"),
-  traverseActionButton: document.querySelector("#traverseActionButton"),
-  traverseActionLabel: document.querySelector("#traverseActionLabel"),
-  traverseDragonEyeCancelButton: document.querySelector("#traverseDragonEyeCancelButton"),
-  traverseBarrierUndoButton: document.querySelector("#traverseBarrierUndoButton"),
+  traverseActionBar: document.querySelector("#traverseActionBar"),
+  traverseBottomCancelButton: document.querySelector("#traverseBottomCancelButton"),
+  traverseBottomCancelLabel: document.querySelector("#traverseBottomCancelLabel"),
+  traverseBottomConfirmButton: document.querySelector("#traverseBottomConfirmButton"),
+  traverseBottomConfirmLabel: document.querySelector("#traverseBottomConfirmLabel"),
   dragonEyeDialog: document.querySelector("#dragonEyeDialog"),
   dragonEyeAvailability: document.querySelector("#dragonEyeAvailability"),
   dragonEyeShapeOptions: document.querySelector("#dragonEyeShapeOptions"),
@@ -906,6 +906,13 @@ const TRANSLATIONS = {
     "action.barrier": "結界を張る",
 
     "action.cancel": "キャンセル",
+    "traverse.bottomCancel": "やめる",
+    "traverse.bottomClear": "選択解除",
+    "traverse.bottomPlace": "この形で置く",
+    "traverse.bottomUndo": "1本もどる",
+    "traverse.bottomMake": "結界にする",
+    "traverse.bottomDissolve": "解く",
+    "traverse.bottomConfirm": "確定",
     "action.done": "決定",
     "action.apply": "適用",
     "action.copyToList": "コピー",
@@ -1000,8 +1007,6 @@ const TRANSLATIONS = {
     "line.closeShapeTitle": "図形を閉じますか？",
     "line.closeShapeMessage": "3地点以上が選択されています。最後の地点から起点へ接続して図形を閉じますか？",
     "line.dragStatus": "接続先を変更中：{name} にドロップ",
-    "line.drawStatus": "終点を選択中：{name} にドロップ",
-    "line.created": "線分を描画しました",
     "line.reconnected": "「{old}」を「{new}」へ接続変更しました",
     "line.invalidTarget": "別の地点へドロップしてください",
     "line.duplicateTarget": "その2地点を結ぶ線はすでにあります",
@@ -1467,6 +1472,13 @@ const TRANSLATIONS = {
     "action.barrier": "Create barrier",
 
     "action.cancel": "Cancel",
+    "traverse.bottomCancel": "Stop",
+    "traverse.bottomClear": "Clear selection",
+    "traverse.bottomPlace": "Place this shape",
+    "traverse.bottomUndo": "Undo one line",
+    "traverse.bottomMake": "Make barrier",
+    "traverse.bottomDissolve": "Dissolve",
+    "traverse.bottomConfirm": "Confirm",
     "action.done": "Done",
     "action.apply": "Apply",
     "action.copyToList": "Copy",
@@ -1561,8 +1573,6 @@ const TRANSLATIONS = {
     "line.closeShapeTitle": "Close the shape?",
     "line.closeShapeMessage": "Three or more points are selected. Close the shape by connecting the last point back to the first?",
     "line.dragStatus": "Changing connection: drop on {name}",
-    "line.drawStatus": "Choosing endpoint: drop on {name}",
-    "line.created": "Line drawn",
     "line.reconnected": "Changed the connection from “{old}” to “{new}”",
     "line.invalidTarget": "Drop on a different point",
     "line.duplicateTarget": "A line between those points already exists",
@@ -2560,43 +2570,6 @@ function beginBarrierLinking() {
   return true;
 }
 
-function beginDirectBarrierLink(drag) {
-  const origin = drag?.longPressBarrierStone;
-  if (!origin) return false;
-  const availableStoneIds = availableBarrierStoneIds();
-  if (!availableStoneIds.includes(origin.stoneId)) return false;
-  if (availableStoneIds.length < 3) {
-    showAppToast(t("barrier.tooFew"), { error: true });
-    drag.endpointDragReady = false;
-    drag.cancelled = true;
-    return false;
-  }
-
-  if (elements.gridBarrierStoneQuickDialog?.open) elements.gridBarrierStoneQuickDialog.close("drag");
-  clearDragLongPressTimer(drag);
-  clearBarrierLinkHoldVisual();
-  state.barrierLinkingMode = true;
-  state.barrierLinkPath = [origin.stoneId];
-  state.barrierSelection = [origin.stoneId];
-  state.barrierLinkCandidateStoneId = origin.stoneId;
-  state.barrierLinkPendingStoneId = null;
-  state.selectedBarrierId = null;
-  drag.barrierLink = true;
-  drag.barrierLinkStarted = true;
-  drag.barrierLinkOriginStoneId = origin.stoneId;
-  drag.barrierLinkPendingStoneId = null;
-  drag.barrierLinkCandidateStoneId = origin.stoneId;
-  drag.barrierLinkClosing = false;
-  drag.endpointDragReady = false;
-  drag.longPressed = true;
-  drag.moved = true;
-  canvas.classList.add("is-barrier-linking");
-  showAppToast(t("traverse.linkOriginSelected"));
-  draw();
-  renderStatus();
-  return true;
-}
-
 function applyTraverseModeToggle(enabled) {
   const nextMode = Boolean(enabled);
   if (state.traverseMode !== nextMode) {
@@ -2607,10 +2580,10 @@ function applyTraverseModeToggle(enabled) {
     // mode flag was already set by the confirm-button handler.
     setMobilePage("map");
     setMobileGridPage("grid");
-    renderTraverseActionButton();
+    renderTraverseBottomActions();
     syncTraverseModeUi();
   } else {
-    renderTraverseActionButton();
+    renderTraverseBottomActions();
     syncTraverseModeUi();
   }
   syncSettingsControls();
@@ -2645,7 +2618,7 @@ function setTraverseMode(enabled) {
   const settledMode = state.traverseMode;
   window.requestAnimationFrame(() => {
     if (state.traverseMode !== settledMode) return;
-    renderTraverseActionButton();
+    renderTraverseBottomActions();
     syncTraverseModeUi();
   });
 }
@@ -4722,10 +4695,8 @@ function drawLineDragPreview() {
   const drag = state.pointer.drag?.lineDrag;
   if (!drag) return;
 
-  const link = drag.mode === "create" ? null : findLink(drag.linkId);
-  const fixed = drag.mode === "create"
-    ? findPoint(drag.startPointId)
-    : link ? linkEndpoint(link, drag.fixedSide) : null;
+  const link = findLink(drag.linkId);
+  const fixed = link ? linkEndpoint(link, drag.fixedSide) : null;
   if (!fixed) return;
 
   const start = worldToScreen(fixed);
@@ -5421,7 +5392,7 @@ function drawRangeSelection() {
 function render() {
   // Keep the barrier control authoritative even when a cloud/tester list
   // refresh causes additional rendering work below it.
-  renderTraverseActionButton();
+  renderTraverseBottomActions();
   syncTraverseModeUi();
   refreshVisiblePoints();
   pruneHiddenPointReferences();
@@ -5441,7 +5412,7 @@ function render() {
   renderMobileOverview();
   renderSelectionInfo();
   renderStatus();
-  renderTraverseActionButton();
+  renderTraverseBottomActions();
   syncTraverseModeUi();
   renderWebVersion();
   renderActionButtons();
@@ -5559,7 +5530,7 @@ function setMobilePage(name) {
   }
 
   syncMobileGridTabSelection();
-  renderTraverseActionButton();
+  renderTraverseBottomActions();
 
   if (mapActive) {
     scheduleCanvasResize();
@@ -5579,7 +5550,7 @@ function syncMobileGridTabSelection() {
   );
 
   for (const tab of elements.mobileGridTabs) {
-    const active = mapActive && tab.dataset.mobileGridPage === state.mobileGridPage;
+    const active = !state.traverseMode && mapActive && tab.dataset.mobileGridPage === state.mobileGridPage;
     tab.classList.toggle("is-active", active);
     tab.setAttribute("aria-pressed", String(active));
   }
@@ -5591,14 +5562,16 @@ function isTraverseGridSurfaceActive() {
 }
 
 function setMobileGridPage(name) {
-  const pageName = validMobileGridPageName(name) ? name : "grid";
+  const pageName = state.traverseMode
+    ? "grid"
+    : validMobileGridPageName(name) ? name : "grid";
   state.mobileGridPage = pageName;
   syncMobileGridTabSelection();
 
   for (const panel of elements.mobileGridPanels) {
     panel.classList.toggle("is-mobile-grid-active", panel.dataset.mobileGridPanel === pageName);
   }
-  renderTraverseActionButton();
+  renderTraverseBottomActions();
 
   if (pageName === "grid") {
     scheduleCanvasResize();
@@ -5849,108 +5822,88 @@ function renderStatus() {
     return;
   }
 
-  if (state.pointer.drag?.figureDrag?.active) {
-    elements.statusLine.value = "図形の頂点を移動中";
-    return;
-  }
-
   const lineDrag = state.pointer.drag?.lineDrag;
   if (lineDrag) {
     const target = lineDrag.targetPointId ? findPoint(lineDrag.targetPointId) : null;
-    const statusKey = lineDrag.mode === "create" ? "line.drawStatus" : "line.dragStatus";
-    elements.statusLine.value = t(statusKey).replace("{name}", target?.title || "…");
+    elements.statusLine.value = t("line.dragStatus").replace("{name}", target?.title || "…");
     return;
   }
 
   elements.statusLine.value = formatDistance(chooseGridStep());
 }
 
-function ensureTraverseActionButtonPlacement() {
-  const controls = elements.traverseActionControls || elements.traverseActionButton;
-  const mapContent = document.querySelector(".map-content");
-  if (controls && mapContent && controls.parentElement !== mapContent) {
-    mapContent.append(controls);
-  }
-}
-
-function setTraverseActionControlVisibility(element, visible) {
+function setTraverseBottomVisibility(element, visible) {
   if (!element) return;
   element.hidden = !visible;
-  element.style.display = visible ? "inline-flex" : "none";
+  element.style.display = visible ? "grid" : "none";
   element.style.visibility = visible ? "visible" : "hidden";
   element.setAttribute("aria-hidden", String(!visible));
 }
 
-function syncTraverseActionControlsVisibility(visible) {
-  setTraverseActionControlVisibility(elements.traverseActionControls, visible);
-  setTraverseActionControlVisibility(elements.traverseActionButton, visible);
-  setTraverseActionControlVisibility(
-    elements.traverseBarrierUndoButton,
-    visible && Boolean(state.barrierLinkPreview)
-  );
-  setTraverseActionControlVisibility(
-    elements.traverseDragonEyeCancelButton,
-    visible && (
-      Boolean(state.dragonEye.active)
-      || Boolean(state.barrierDissolveMode)
-      || Boolean(state.barrierLinkPreview)
-    )
-  );
+function syncTraverseBottomActionVisibility(visible) {
+  setTraverseBottomVisibility(elements.traverseActionBar, visible);
 }
 
 function syncTraverseModeUi() {
   const enabled = Boolean(state.traverseMode);
-  const visible = enabled && state.barrierLinkPreview && isTraverseGridSurfaceActive();
-  syncTraverseActionControlsVisibility(visible);
+  const visible = enabled && mobilePageUiActive();
+  syncTraverseBottomActionVisibility(visible);
   document.documentElement.classList.toggle("is-traverse-mode", enabled);
   if (elements.kekkaiReturnTitleButton) elements.kekkaiReturnTitleButton.hidden = !enabled;
 }
 
-function renderTraverseActionButton() {
-  const button = elements.traverseActionButton;
-  if (!button) return;
-  const visible = state.traverseMode && state.barrierLinkPreview && isTraverseGridSurfaceActive();
-  syncTraverseActionControlsVisibility(visible);
-  const cancelButton = elements.traverseDragonEyeCancelButton;
-  const cancelLabel = state.barrierLinkPreview
-    ? t("action.cancel")
-    : state.barrierDissolveMode ? t("traverse.cancel") : t("dragonEye.cancel");
-  const cancelLabelNode = cancelButton?.querySelector(".traverse-action-label");
-  if (cancelLabelNode) cancelLabelNode.textContent = cancelLabel;
-  if (cancelButton) {
-    cancelButton.disabled = state.traverseBusy;
-    cancelButton.setAttribute("aria-label", cancelLabel);
-    cancelButton.title = cancelLabel;
-  }
-  if (elements.traverseBarrierUndoButton) {
-    elements.traverseBarrierUndoButton.disabled = state.barrierLinkPath.length <= 1
-      || Boolean(state.barrierLinkAnimation)
-      || state.traverseBusy;
-    elements.traverseBarrierUndoButton.setAttribute("aria-label", t("traverse.undo"));
-    elements.traverseBarrierUndoButton.title = t("traverse.undo");
-  }
-  button.hidden = true;
-  button.disabled = true;
-  button.classList.remove("is-dragon-eye-active", "is-placement-view-active", "is-barrier-dissolve-active");
+function renderTraverseBottomActions() {
+  const cancelButton = elements.traverseBottomCancelButton;
+  const confirmButton = elements.traverseBottomConfirmButton;
+  if (!cancelButton || !confirmButton) return;
+
+  const visible = state.traverseMode && mobilePageUiActive();
+  syncTraverseBottomActionVisibility(visible);
+  cancelButton.classList.remove("is-dragon-eye-active", "is-placement-view-active", "is-barrier-dissolve-active");
+  confirmButton.classList.remove("is-dragon-eye-active", "is-placement-view-active", "is-barrier-dissolve-active");
   if (!visible) return;
 
   refreshTraverseStock();
   const dragonEyeActive = Boolean(state.dragonEye.active);
+  const barrierLinkActive = Boolean(state.barrierLinkPreview);
   const barrierDissolveActive = Boolean(state.barrierDissolveMode);
-  const buttonLabel = barrierDissolveActive
-    ? t("barrier.dissolve")
-    : state.barrierPlacementView
-      ? t("traverse.placementViewExit")
-      : dragonEyeActive
-        ? t("dragonEye.confirm")
-        : t("traverse.menuTitle");
-  elements.traverseActionLabel.textContent = buttonLabel;
-  button.disabled = state.traverseBusy || (barrierDissolveActive && !state.selectedBarrierId);
-  button.classList.toggle("is-dragon-eye-active", dragonEyeActive);
-  button.classList.toggle("is-placement-view-active", state.barrierPlacementView);
-  button.classList.toggle("is-barrier-dissolve-active", barrierDissolveActive);
-  button.setAttribute("aria-label", buttonLabel);
-  button.title = buttonLabel;
+  const placementActive = Boolean(state.barrierPlacementView);
+  const linkCanUndo = barrierLinkActive && state.barrierLinkPath.length > 1;
+  const linkCanConfirm = barrierLinkActive
+    && !state.barrierLinkingMode
+    && !state.barrierLinkCompletion
+    && state.barrierSelection.length >= 3;
+
+  let cancelLabel = t("traverse.bottomClear");
+  let confirmLabel = t("traverse.bottomConfirm");
+  if (dragonEyeActive) {
+    cancelLabel = t("traverse.bottomCancel");
+    confirmLabel = t("traverse.bottomPlace");
+  } else if (barrierLinkActive) {
+    cancelLabel = linkCanUndo ? t("traverse.bottomUndo") : t("traverse.bottomCancel");
+    confirmLabel = t("traverse.bottomMake");
+  } else if (barrierDissolveActive) {
+    cancelLabel = t("traverse.bottomCancel");
+    confirmLabel = t("traverse.bottomDissolve");
+  } else if (placementActive) {
+    cancelLabel = t("traverse.bottomCancel");
+    confirmLabel = t("traverse.bottomConfirm");
+  }
+
+  elements.traverseBottomCancelLabel.textContent = cancelLabel;
+  elements.traverseBottomConfirmLabel.textContent = confirmLabel;
+  cancelButton.disabled = state.traverseBusy || (barrierLinkActive && Boolean(state.barrierLinkAnimation));
+  confirmButton.disabled = state.traverseBusy
+    || (barrierDissolveActive && !state.selectedBarrierId)
+    || (barrierLinkActive && !linkCanConfirm)
+    || !dragonEyeActive && !barrierLinkActive && !barrierDissolveActive && !placementActive;
+  cancelButton.setAttribute("aria-label", cancelLabel);
+  cancelButton.title = cancelLabel;
+  confirmButton.setAttribute("aria-label", confirmLabel);
+  confirmButton.title = confirmLabel;
+  confirmButton.classList.toggle("is-dragon-eye-active", dragonEyeActive);
+  confirmButton.classList.toggle("is-placement-view-active", placementActive);
+  confirmButton.classList.toggle("is-barrier-dissolve-active", barrierDissolveActive);
 }
 
 function returnToTraverseActionMenu() {
@@ -6114,16 +6067,45 @@ function commitBarrierDissolve() {
   showAppToast(t("barrier.dissolved"));
 }
 
-function cancelTraverseAction() {
+function handleTraverseBottomCancel() {
+  if (state.dragonEye.active) {
+    cancelDragonEye();
+    return;
+  }
   if (state.barrierLinkPreview) {
-    cancelBarrierSelectionPreview();
+    if (state.barrierLinkPath.length > 1) {
+      undoBarrierLinkSegment();
+    } else {
+      cancelBarrierSelectionPreview();
+    }
     return;
   }
   if (state.barrierDissolveMode) {
     cancelBarrierDissolveMode();
     return;
   }
-  cancelDragonEye();
+  if (state.barrierPlacementView) {
+    exitBarrierPlacementView();
+    return;
+  }
+  clearSelection();
+}
+
+function handleTraverseBottomConfirm() {
+  if (state.dragonEye.active) {
+    commitDragonEye();
+    return;
+  }
+  if (state.barrierLinkPreview) {
+    const canConfirm = !state.barrierLinkingMode
+      && !state.barrierLinkCompletion
+      && state.barrierSelection.length >= 3;
+    if (canConfirm) void createBarrierFromSelection();
+    return;
+  }
+  if (state.barrierDissolveMode) {
+    commitBarrierDissolve();
+  }
 }
 
 function returnToKekkaiTitle() {
@@ -12621,19 +12603,6 @@ function findNearestFigureVertex(screenPoint, options = {}) {
   return nearestDistance <= POINT_SELECTION_RING_RADIUS + 6 ? nearest : null;
 }
 
-function updateFigureVertexDrag(figureDrag, screenPoint) {
-  const figure = findFigure(figureDrag?.figureId);
-  const vertex = figure?.vertices?.[figureDrag?.vertexIndex];
-  if (!vertex) return false;
-
-  const world = screenToWorld(screenPoint);
-  const geo = unprojectWorld(world.x, world.y);
-  const next = normalizeAnalysisVertex({ ...vertex, lat: geo.lat, lng: geo.lng });
-  if (!next) return false;
-  figure.vertices[figureDrag.vertexIndex] = next;
-  return true;
-}
-
 function lineDragSideAtPoint(link, screenPoint) {
   const endpoints = linkEndpoints(link);
   if (!endpoints) return null;
@@ -12649,20 +12618,13 @@ function updateLineDragTarget(drag, screenPoint) {
   if (!drag?.lineDrag) return;
   const lineDrag = drag.lineDrag;
   lineDrag.current = { ...screenPoint };
-  if (lineDrag.mode === "create") {
-    const candidate = resolveDragEndpoint(screenPoint, "point", {
-      excludeIds: [lineDrag.startPointId],
-      includeCurrent: false
-    });
-    lineDrag.targetPointId = candidate?.id || null;
-    return;
-  }
   const link = findLink(lineDrag.linkId);
   const fixedId = lineEndpointPlaceRef(link, lineDrag.fixedSide);
   const replaceSide = lineDrag.fixedSide === "a" ? "b" : "a";
   const replaceId = lineEndpointPlaceRef(link, replaceSide);
   const candidate = resolveDragEndpoint(screenPoint, "point", {
-    excludeIds: [fixedId, replaceId]
+    excludeIds: [fixedId, replaceId],
+    includeCurrent: false
   });
   lineDrag.targetPointId = candidate?.id || null;
 }
@@ -12687,80 +12649,17 @@ function beginLineDrag(drag, screenPoint) {
   renderStatus();
 }
 
-function beginPointLineDrag(drag, screenPoint) {
-  const point = drag?.longPressPoint;
-  if (!point || point.id === CURRENT_LOCATION_ID || drag.lineDrag) return false;
-
-  if (elements.gridPointQuickDialog?.open) elements.gridPointQuickDialog.close("drag");
-  clearDragLongPressTimer(drag);
-  drag.lineDrag = {
-    mode: "create",
-    startPointId: point.id,
-    current: { ...screenPoint },
-    targetPointId: null
-  };
-  drag.endpointDragReady = false;
-  drag.moved = true;
-  drag.longPressed = true;
-  canvas.classList.add("is-line-dragging");
-  updateLineDragTarget(drag, screenPoint);
-  draw();
-  renderStatus();
-  return true;
-}
-
-function finishPointLineDrag(lineDrag, screenPoint) {
-  const source = findPoint(lineDrag?.startPointId);
-  const target = resolveDragEndpoint(screenPoint, "point", {
-    excludeIds: [lineDrag?.startPointId],
-    includeCurrent: false
-  });
-  if (!source || !target || source.id === target.id) {
-    showAppToast(t("line.invalidTarget"), { error: true });
-    render();
-    return;
-  }
-
-  if (findLinkBetween(source.id, target.id)) {
-    showAppToast(t("line.duplicateTarget"), { error: true });
-    render();
-    return;
-  }
-
-  const link = createStoredLink({
-    id: createId(),
-    aPoint: source,
-    bPoint: target,
-    strokeId: createId(),
-    createdAt: new Date().toISOString()
-  });
-  if (!link) {
-    showAppToast(t("line.invalidTarget"), { error: true });
-    render();
-    return;
-  }
-
-  state.links.push(link);
-  persistWorkspace();
-  selectLink(link.id, { expandLinkGroups: false });
-  showAppToast(t("line.created"));
-}
-
 function finishLineDrag(lineDrag, screenPoint) {
   canvas.classList.remove("is-line-dragging");
-  if (lineDrag?.mode === "create") {
-    finishPointLineDrag(lineDrag, screenPoint);
-    return;
-  }
   const link = findLink(lineDrag?.linkId);
   const fixedId = lineEndpointPlaceRef(link, lineDrag?.fixedSide);
   const replaceSide = lineDrag?.fixedSide === "a" ? "b" : "a";
   const replaceId = lineEndpointPlaceRef(link, replaceSide);
   const target = resolveDragEndpoint(screenPoint, "point", {
-    excludeIds: [fixedId, replaceId]
+    excludeIds: [fixedId, replaceId],
+    includeCurrent: false
   });
   if (!link || !target) {
-    showAppToast(t("line.invalidTarget"), { error: true });
     render();
     return;
   }
@@ -12795,7 +12694,6 @@ function finishLineDrag(lineDrag, screenPoint) {
     [replaceSide]: targetVertex,
     updatedAt: new Date().toISOString()
   };
-  updateFiguresAfterLineEndpointChange(link, previous, targetVertex);
   state.links = state.links.map((candidate) => candidate.id === link.id ? normalizeStoredLink(next) : candidate);
   splitDisconnectedStrokeGroups();
   persistWorkspace();
@@ -12803,24 +12701,6 @@ function finishLineDrag(lineDrag, screenPoint) {
   showAppToast(t("line.reconnected")
     .replace("{old}", previous?.title || "線")
     .replace("{new}", target.title));
-}
-
-function updateFiguresAfterLineEndpointChange(link, previous, next) {
-  if (!link || !previous || !next) return;
-  const oldPair = endpointPairKey(linkEndpoint(link, "a"), linkEndpoint(link, "b"));
-  if (!oldPair) return;
-  state.figures = state.figures.map((figure) => {
-    if (figure.layer === "barrier" || figure.barrierId) return figure;
-    const belongsToLine = figureEdges(figure)
-      .some((edge) => endpointPairKey(edge.a, edge.b) === oldPair);
-    if (!belongsToLine) return figure;
-    const vertices = figure.vertices.map((vertex) => (
-      (vertex.key === previous.endpointKey || vertex.placeRef === previous.id)
-        ? { ...next }
-        : vertex
-    ));
-    return { ...figure, vertices };
-  });
 }
 
 function distanceToSegment(point, start, end) {
@@ -13807,22 +13687,6 @@ function armDragReadyTimer(drag, property, onReady) {
   }, LINE_DRAG_LONG_PRESS_MS);
 }
 
-function armEndpointDragReady(drag, kind, available = true) {
-  if (!drag || !kind) return;
-  drag.endpointDragKind = kind;
-  drag.endpointDragReady = false;
-  if (!available) return;
-  armDragReadyTimer(drag, "endpointDragReadyTimerId", () => {
-    drag.endpointDragReady = true;
-  });
-}
-
-function beginEndpointDrag(drag, screenPoint) {
-  if (drag?.endpointDragKind === "barrier") return beginDirectBarrierLink(drag);
-  if (drag?.endpointDragKind === "point") return beginPointLineDrag(drag, screenPoint);
-  return false;
-}
-
 function pointerEntries() {
   return [...state.pointer.active.entries()];
 }
@@ -13852,7 +13716,6 @@ function startDragGesture(pointerId, point, options = {}) {
       barrierLinkRoomOutside: true,
       barrierLink: false,
       longPressTimerId: null,
-      endpointDragReadyTimerId: null,
       lineDragReadyTimerId: null,
       lineDrag: null
     };
@@ -13870,9 +13733,6 @@ function startDragGesture(pointerId, point, options = {}) {
       barrierDissolveMode: Boolean(state.barrierDissolveMode),
       longPressed: false,
       longPressTimerId: null,
-      endpointDragReadyTimerId: null,
-      endpointDragKind: null,
-      endpointDragReady: false,
       lineDrag: null
     };
     return;
@@ -13889,16 +13749,12 @@ function startDragGesture(pointerId, point, options = {}) {
       barrierPlacementView: true,
       longPressed: false,
       longPressBarrierStone,
-      endpointDragKind: null,
-      endpointDragReady: false,
       cancelled: false,
       longPressTimerId: null,
-      endpointDragReadyTimerId: null,
       lineDrag: null
     };
     state.pointer.drag = drag;
     if (longPressBarrierStone && !options.moved) {
-      armEndpointDragReady(drag, "barrier", availableBarrierStoneIds().includes(longPressBarrierStone.stoneId));
       drag.longPressTimerId = window.setTimeout(() => {
         if (
           state.pointer.drag !== drag
@@ -13906,7 +13762,6 @@ function startDragGesture(pointerId, point, options = {}) {
           || drag.moved
           || drag.cancelled
         ) return;
-        drag.endpointDragReady = false;
         drag.longPressed = true;
         openGridBarrierStoneQuickDialog(longPressBarrierStone.stoneId, drag.start);
       }, RANGE_SELECTION_LONG_PRESS_MS);
@@ -13937,7 +13792,10 @@ function startDragGesture(pointerId, point, options = {}) {
     { kind: "figure-vertex", value: figureVertexCandidate }
   ]);
   const figureVertex = prioritizedVertex?.kind === "figure-vertex" ? prioritizedVertex.value : null;
-  const figureEdge = lineEndpoint || figureVertex || options.moved ? null : findNearestFigureEdge(point);
+  const lineBodyCandidate = lineEndpoint || figureVertex || options.moved ? null : findNearestLink(point);
+  const figureEdge = lineEndpoint || figureVertex || lineBodyCandidate || options.moved
+    ? null
+    : findNearestFigureEdge(point);
   const figureSurface = lineEndpoint || figureVertex || figureEdge ? null : options.moved ? null : findNearestFigure(point);
   const longPressFigure = figureVertex || figureEdge || (figureSurface ? { figureId: figureSurface.id } : null);
   const pointCandidate = longPressFigure || longPressBarrierStone || lineEndpoint ? null : options.moved ? null : findNearestPoint(point);
@@ -13949,7 +13807,7 @@ function startDragGesture(pointerId, point, options = {}) {
   const longPressPoint = prioritizedPoint?.kind === "point" ? prioritizedPoint.value : null;
   const longPressLink = longPressFigure || longPressBarrierStone || options.moved || longPressPoint
     ? null
-    : lineEndpoint?.link || findNearestLink(point);
+    : lineBodyCandidate;
   const longPressBarrier = longPressFigure || longPressBarrierStone || longPressPoint || longPressLink || barrierLinkMode || options.moved
     ? null
     : findNearestBarrier(point);
@@ -13963,23 +13821,13 @@ function startDragGesture(pointerId, point, options = {}) {
     longPressed: false,
     longPressFigure,
     longPressBarrierStone,
-    endpointDragKind: null,
-    endpointDragReady: false,
     longPressPoint,
     longPressLink,
     longPressBarrier,
-    figureDrag: figureVertex
-      ? {
-        ...figureVertex,
-        active: false,
-        originalVertex: { ...state.figures.find((figure) => figure.id === figureVertex.figureId)?.vertices?.[figureVertex.vertexIndex] }
-      }
-      : null,
     lineDragReady: false,
     lineDrag: null,
     cancelled: false,
     longPressTimerId: null,
-    endpointDragReadyTimerId: null,
     lineDragReadyTimerId: null,
     barrierLink: barrierLinkMode,
     barrierLinkStarted: false,
@@ -13991,12 +13839,6 @@ function startDragGesture(pointerId, point, options = {}) {
     dragonEye: false
   };
   state.pointer.drag = drag;
-
-  if (longPressBarrierStone) {
-    armEndpointDragReady(drag, "barrier", availableBarrierStoneIds().includes(longPressBarrierStone.stoneId));
-  } else if (longPressPoint && longPressPoint.id !== CURRENT_LOCATION_ID) {
-    armEndpointDragReady(drag, "point");
-  }
 
   if (longPressFigure || longPressBarrier) {
     if (!options.moved) {
@@ -14080,7 +13922,6 @@ function startDragGesture(pointerId, point, options = {}) {
       }
 
       drag.lineDragReady = false;
-        drag.endpointDragReady = false;
       drag.longPressed = true;
       if (drag.longPressPoint) {
         openGridPointQuickDialog(drag.longPressPoint, drag.start);
@@ -14111,13 +13952,10 @@ function clearDragLongPressTimer(drag) {
   }
 
   if (drag.longPressTimerId) window.clearTimeout(drag.longPressTimerId);
-  if (drag.endpointDragReadyTimerId) window.clearTimeout(drag.endpointDragReadyTimerId);
   if (drag.lineDragReadyTimerId) window.clearTimeout(drag.lineDragReadyTimerId);
   clearBarrierLinkCandidateTimer(drag);
   drag.longPressTimerId = null;
-  drag.endpointDragReadyTimerId = null;
   drag.lineDragReadyTimerId = null;
-  drag.endpointDragReady = false;
   drag.lineDragReady = false;
 }
 
@@ -14365,22 +14203,8 @@ function removePointer(event, options = {}) {
     return;
   }
 
-  const figureDrag = drag?.figureDrag;
   const lineDrag = drag?.lineDrag;
   state.pointer.drag = null;
-
-  if (figureDrag) {
-    const figure = findFigure(figureDrag.figureId);
-    if (!allowTap && figureDrag.active && figure?.vertices?.[figureDrag.vertexIndex]) {
-      figure.vertices[figureDrag.vertexIndex] = figureDrag.originalVertex;
-    }
-    if (allowTap && figureDrag.active) {
-      persistWorkspace();
-      normalizeSelection();
-    }
-    render();
-    if (figureDrag.active) return;
-  }
 
   if (lineDrag) {
     if (allowTap) {
@@ -17645,10 +17469,10 @@ function bindEvents() {
     if (event.target === elements.pointListPreviewDialog) elements.pointListPreviewDialog.close("cancel");
   });
   elements.useLocationButton.addEventListener("click", useCurrentLocation);
-  elements.traverseDragonEyeCancelButton?.addEventListener("contextmenu", (event) => event.preventDefault());
-  elements.traverseDragonEyeCancelButton?.addEventListener("click", cancelTraverseAction);
-  elements.traverseBarrierUndoButton?.addEventListener("contextmenu", (event) => event.preventDefault());
-  elements.traverseBarrierUndoButton?.addEventListener("click", undoBarrierLinkSegment);
+  elements.traverseBottomCancelButton?.addEventListener("contextmenu", (event) => event.preventDefault());
+  elements.traverseBottomCancelButton?.addEventListener("click", handleTraverseBottomCancel);
+  elements.traverseBottomConfirmButton?.addEventListener("contextmenu", (event) => event.preventDefault());
+  elements.traverseBottomConfirmButton?.addEventListener("click", handleTraverseBottomConfirm);
   elements.dragonEyeShapeOptions?.addEventListener("click", (event) => {
     const option = event.target.closest("[data-dragon-eye-shape]");
     if (!option) return;
@@ -17822,21 +17646,6 @@ function bindEvents() {
       return;
     }
 
-    if (
-      Math.hypot(dx, dy) > POINTER_MOVE_THRESHOLD
-      && (drag.endpointDragKind === "barrier" || drag.endpointDragKind === "point")
-      && (drag.endpointDragReady || drag.longPressed)
-      && !drag.barrierLink
-      && !drag.lineDrag
-    ) {
-      if (beginEndpointDrag(drag, point)) {
-        event.preventDefault();
-        updateBarrierLinkGesture(drag, point);
-        drag.last = point;
-        return;
-      }
-    }
-
     if (drag.barrierLink) {
       if (!drag.barrierLinkStarted) {
         if (Math.hypot(dx, dy) > POINTER_MOVE_THRESHOLD) {
@@ -17850,22 +17659,6 @@ function bindEvents() {
       } else {
         event.preventDefault();
         updateBarrierLinkGesture(drag, point);
-        drag.last = point;
-        return;
-      }
-    }
-
-    if (drag.figureDrag) {
-      if (Math.hypot(dx, dy) > POINTER_MOVE_THRESHOLD) {
-        clearDragLongPressTimer(drag);
-        drag.moved = true;
-        drag.figureDrag.active = true;
-      }
-      if (drag.figureDrag.active) {
-        event.preventDefault();
-        updateFigureVertexDrag(drag.figureDrag, point);
-        draw();
-        renderStatus();
         drag.last = point;
         return;
       }
@@ -17982,7 +17775,6 @@ loadPreferences();
 loadCloudSettings();
 moveCloudAuthPanelToDialog();
 moveCloudPasswordPanelToAuth();
-ensureTraverseActionButtonPlacement();
 registerGridAtlasFileLaunchHandler();
 bindEvents();
 void initializeCloudAuth();

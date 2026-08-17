@@ -1234,22 +1234,19 @@ button {
   box-shadow: var(--shadow);
 }
 
-.traverse-action-controls {
-  position: absolute;
-  left: 50%;
-  bottom: 14px;
-  z-index: 10;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  transform: translateX(-50%);
+.traverse-action-bar {
+  display: none;
+  width: 100%;
+  gap: 8px;
+  padding: 8px 14px max(24px, calc(12px + env(safe-area-inset-bottom)));
+  border-top: 1px solid var(--line);
+  background: var(--surface);
   pointer-events: auto;
   touch-action: manipulation;
   user-select: none;
 }
 
-.traverse-action-controls[hidden] {
+.traverse-action-bar[hidden] {
   display: none !important;
 }
 
@@ -1259,8 +1256,8 @@ button {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  width: auto;
-  min-width: 76px;
+  width: 100%;
+  min-width: 0;
   min-height: 36px;
   padding: 0 12px;
   border: 0;
@@ -3187,6 +3184,15 @@ textarea {
     padding: 8px 14px max(24px, calc(12px + env(safe-area-inset-bottom)));
     border-top: 1px solid var(--line);
     background: var(--surface);
+  }
+
+  html.is-traverse-mode .mobile-grid-tabs {
+    display: none;
+  }
+
+  .traverse-action-bar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .mobile-grid-tab {
