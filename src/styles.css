@@ -1126,6 +1126,28 @@ button {
   color: var(--accent-strong);
 }
 
+:root.is-traverse-mode .actionbar #actionRegisterButton { order: 1; }
+:root.is-traverse-mode .actionbar #actionCenterButton { order: 2; }
+:root.is-traverse-mode .actionbar #actionLinkButton { order: 3; }
+:root.is-traverse-mode .actionbar #clearSelectionButton { order: 4; }
+:root.is-traverse-mode .actionbar #actionInvertButton { order: 5; }
+:root.is-traverse-mode .actionbar #actionShareSelectedButton { order: 6; }
+:root.is-traverse-mode .actionbar #actionMapButton { order: 7; }
+:root.is-traverse-mode .actionbar #actionAnalyzeButton { order: 8; }
+:root.is-traverse-mode .actionbar #deletePointButton { order: 9; }
+:root.is-traverse-mode .actionbar #actionCopyToListButton { order: 10; }
+:root.is-traverse-mode .actionbar #actionMoveToListButton { order: 11; }
+:root.is-traverse-mode .actionbar #actionRouteButton { order: 12; }
+
+.action-button.is-barrier-placeholder {
+  cursor: default;
+  opacity: 0.28;
+}
+
+.action-button.is-barrier-placeholder .ui-icon {
+  visibility: hidden;
+}
+
 .workspace {
   min-width: 0;
   min-height: 0;
@@ -2075,6 +2097,16 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
 
 canvas.is-barrier-linking {
   cursor: crosshair;
+}
+
+:root.is-traverse-mode .action-button.is-barrier-placeholder,
+:root.is-traverse-mode .action-button.is-barrier-placeholder:hover:not(:disabled) {
+  background: var(--surface);
+  border-color: var(--line);
+  box-shadow: none;
+  color: transparent;
+  animation: none;
+  opacity: 0.55;
 }
 
 .sidebar {

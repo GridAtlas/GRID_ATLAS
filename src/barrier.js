@@ -215,6 +215,7 @@ export function registerBarrier(log, barrier) {
   log.barriers[barrier.id] = {
     figureId,
     name: typeof barrier.name === "string" ? barrier.name : "",
+    note: typeof barrier.note === "string" ? barrier.note.slice(0, 500) : "",
     stoneIds: [...barrier.vertices],
     linkPattern: typeof barrier.linkPattern === "string" ? barrier.linkPattern : "adjacent",
     createdAt,
@@ -229,6 +230,7 @@ export function registerBarrier(log, barrier) {
     at: log.barriers[barrier.id].createdAt,
     barrierId: barrier.id,
     name: log.barriers[barrier.id].name,
+    note: log.barriers[barrier.id].note,
     vertices: [...log.barriers[barrier.id].stoneIds],
     linkPattern: log.barriers[barrier.id].linkPattern,
     guardian: log.barriers[barrier.id].guardian,
@@ -303,6 +305,7 @@ export function replayBarrierEvents(events) {
         if (barrier && typeof barrier === "object") barriers[barrierId] = {
           figureId: typeof barrier.figureId === "string" ? barrier.figureId : barrierFigureId(barrierId),
           name: typeof barrier.name === "string" ? barrier.name : "",
+          note: typeof barrier.note === "string" ? barrier.note.slice(0, 500) : "",
           stoneIds: barrierStoneIds(barrier),
           linkPattern: typeof barrier.linkPattern === "string" ? barrier.linkPattern : "adjacent",
           createdAt: typeof barrier.createdAt === "string" ? barrier.createdAt : event.at,
@@ -316,6 +319,7 @@ export function replayBarrierEvents(events) {
       barriers[event.barrierId] = {
         figureId: barrierFigureId(event.barrierId),
         name: typeof event.name === "string" ? event.name : "",
+        note: typeof event.note === "string" ? event.note.slice(0, 500) : "",
         stoneIds: Array.isArray(event.vertices) ? [...event.vertices] : [],
         linkPattern: typeof event.linkPattern === "string" ? event.linkPattern : "adjacent",
         createdAt: event.at,
@@ -326,6 +330,12 @@ export function replayBarrierEvents(events) {
     }
     if (event.type === "barrier-dissolved" && typeof event.barrierId === "string") {
       delete barriers[event.barrierId];
+      continue;
+    }
+    if (event.type === "barrier-memo-updated" && typeof event.barrierId === "string") {
+      if (barriers[event.barrierId]) {
+        barriers[event.barrierId].note = typeof event.note === "string" ? event.note.slice(0, 500) : "";
+      }
       continue;
     }
     if (event.type === "guardian-placed" && typeof event.barrierId === "string") {
@@ -358,6 +368,10 @@ export function replayBarrierEvents(events) {
       if (stones[event.stoneId]) {
         stones[event.stoneId].name = typeof event.name === "string" ? event.name.slice(0, 80) : "";
       }
+    } else if (event.type === "stone-memo-updated") {
+      if (stones[event.stoneId]) {
+        stones[event.stoneId].note = typeof event.note === "string" ? event.note.slice(0, 500) : "";
+      }
     } else if (event.type === "stone-picked" || event.type === "stone-weathered") {
       if (Number.isFinite(Number(event.countExact))) {
         stone.countExact = Math.max(0, Number(event.countExact));
@@ -379,13 +393,14 @@ export function replayBarrierEvents(events) {
           lng: geo.lng,
           key: `geo:${geo.lat}:${geo.lng}`,
           name: "結界頂点",
+          note: stones[stoneId]?.note || "",
           placeRef: null
         } : null;
       })
       .filter(Boolean);
     const figureId = barrier.figureId || barrierFigureId(barrierId);
     return figureId && vertices.length >= 3
-      ? [[figureId, { id: figureId, vertices, layer: "barrier", createdAt: barrier.createdAt }]]
+      ? [[figureId, { id: figureId, vertices, note: barrier.note || "", layer: "barrier", barrierId, createdAt: barrier.createdAt }]]
       : [];
   }));
   return { stones, barriers, figures };
@@ -524,6 +539,7 @@ function normalizeStone(stoneId, tileId, countExact, source, now) {
     lat: null,
     lng: null,
     name: typeof source.name === "string" ? source.name.slice(0, 80) : "",
+    note: typeof source.note === "string" ? source.note.slice(0, 500) : "",
     countExact,
     count: Math.floor(countExact),
     firstAt,
@@ -562,6 +578,7 @@ function normalizeEvent(event, now, fallbackId = "") {
       at,
       barrierId: String(event.barrierId),
       name: typeof event.name === "string" ? event.name : "",
+      note: typeof event.note === "string" ? event.note.slice(0, 500) : "",
       vertices,
       linkPattern: typeof event.linkPattern === "string" ? event.linkPattern : "adjacent",
       guardian: normalizeGuardian(event.guardian, at),
@@ -571,6 +588,16 @@ function normalizeEvent(event, now, fallbackId = "") {
   if (event.type === "barrier-dissolved") {
     if (!event.barrierId) return null;
     return { id, type: event.type, at, barrierId: String(event.barrierId) };
+  }
+  if (event.type === "barrier-memo-updated") {
+    if (!event.barrierId) return null;
+    return {
+      id,
+      type: event.type,
+      at,
+      barrierId: String(event.barrierId),
+      note: typeof event.note === "string" ? event.note.slice(0, 500) : ""
+    };
   }
   if (event.type === "stone-renamed") {
     const parsed = parseTileId(event.tile);
@@ -583,6 +610,19 @@ function normalizeEvent(event, now, fallbackId = "") {
       tile: formatTileId(parsed.x, parsed.y, parsed.z),
       stoneId,
       name: typeof event.name === "string" ? event.name.slice(0, 80) : ""
+    };
+  }
+  if (event.type === "stone-memo-updated") {
+    const parsed = parseTileId(event.tile);
+    const stoneId = stoneIdFromTile(event.tile);
+    if (!parsed || !stoneId || event.stoneId !== stoneId) return null;
+    return {
+      id,
+      type: event.type,
+      at,
+      tile: formatTileId(parsed.x, parsed.y, parsed.z),
+      stoneId,
+      note: typeof event.note === "string" ? event.note.slice(0, 500) : ""
     };
   }
   if (event.type === "barrier-spirit-settled") {
@@ -695,6 +735,7 @@ function normalizeSnapshotBarriers(rawBarriers, now) {
       : new Date(now).toISOString();
     return [[barrierId, {
       name: typeof barrier.name === "string" ? barrier.name : "",
+      note: typeof barrier.note === "string" ? barrier.note.slice(0, 500) : "",
       figureId: typeof barrier.figureId === "string" ? barrier.figureId : barrierFigureId(barrierId),
       stoneIds: vertices,
       linkPattern: typeof barrier.linkPattern === "string" ? barrier.linkPattern : "adjacent",
@@ -713,6 +754,7 @@ function createMigrationSnapshotEvent(stones, barriers, now) {
     stones: Object.entries(stones).map(([stoneId, stone]) => ({ stoneId, ...stone })),
     barriers: Object.fromEntries(Object.entries(barriers).map(([barrierId, barrier]) => [barrierId, {
       name: barrier.name,
+      note: barrier.note,
       vertices: [...barrierStoneIds(barrier)],
       linkPattern: typeof barrier.linkPattern === "string" ? barrier.linkPattern : "adjacent",
       createdAt: barrier.createdAt,
@@ -737,6 +779,7 @@ function normalizeBarriers(rawBarriers, stones, now) {
     barriers[barrierId] = {
       figureId: typeof rawBarrier.figureId === "string" ? rawBarrier.figureId : barrierFigureId(barrierId),
       name: typeof rawBarrier.name === "string" ? rawBarrier.name : "",
+      note: typeof rawBarrier.note === "string" ? rawBarrier.note.slice(0, 500) : "",
       stoneIds: vertices,
       linkPattern: typeof rawBarrier.linkPattern === "string" ? rawBarrier.linkPattern : "adjacent",
       createdAt,

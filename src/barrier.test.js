@@ -123,6 +123,28 @@ describe("barrier data helpers", () => {
     expect(validateBarrierVertices(log, [vertices[0], vertices[0], vertices[1]])).toMatchObject({ ok: false, reason: "duplicate" });
   });
 
+  it("replays cell and barrier memo events", () => {
+    const tileA = "18/232798/103246";
+    const tileB = "18/232799/103246";
+    const tileC = "18/232800/103246";
+    const stoneA = stoneIdFromTile(tileA);
+    const stoneB = stoneIdFromTile(tileB);
+    const stoneC = stoneIdFromTile(tileC);
+    const replayed = replayBarrierEvents([
+      { type: "stone-placed", at: "2026-08-13T00:00:00Z", tile: tileA, stoneId: stoneA, amount: 1 },
+      { type: "stone-placed", at: "2026-08-13T00:00:01Z", tile: tileB, stoneId: stoneB, amount: 1 },
+      { type: "stone-placed", at: "2026-08-13T00:00:02Z", tile: tileC, stoneId: stoneC, amount: 1 },
+      { type: "stone-memo-updated", at: "2026-08-13T00:00:03Z", tile: tileA, stoneId: stoneA, note: "セルのメモ" },
+      { type: "barrier-created", at: "2026-08-13T00:00:04Z", barrierId: "memo-barrier", vertices: [stoneA, stoneB, stoneC] },
+      { type: "barrier-memo-updated", at: "2026-08-13T00:00:05Z", barrierId: "memo-barrier", note: "図形のメモ" }
+    ]);
+
+    expect(replayed.stones[stoneA]).toMatchObject({ note: "セルのメモ" });
+    expect(replayed.barriers["memo-barrier"]).toMatchObject({ note: "図形のメモ" });
+    expect(replayed.figures["barrier-figure-memo-barrier"]).toMatchObject({ note: "図形のメモ" });
+    expect(replayed.figures["barrier-figure-memo-barrier"].vertices[0]).toMatchObject({ note: "セルのメモ" });
+  });
+
   it("uses a shared figure reference while replaying cell-center vertices", () => {
     const log = createBarrierLog();
     const tiles = ["18/232798/103246", "18/232799/103246", "18/232800/103246"];

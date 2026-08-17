@@ -29,8 +29,8 @@
     <link rel="icon" href="assets/icon-grid.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=103">
-    <script src="src/main.js?v=498" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=104">
+    <script src="src/main.js?v=499" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -712,6 +712,7 @@
           <button id="gridBarrierStoneQuickPlaceButton" class="grid-point-quick-role-button" type="button" aria-label="結界石を置く" title="結界石を置く" hidden><svg class="ui-icon" aria-hidden="true"><use href="#icon-plus"></use></svg><span id="gridBarrierStoneQuickPlaceLabel">置く</span></button>
           <button id="gridBarrierStoneQuickPickButton" class="grid-point-quick-role-button" type="button" aria-label="結界石を拾う" title="結界石を拾う" hidden><svg class="ui-icon" aria-hidden="true"><use href="#icon-drop"></use></svg><span id="gridBarrierStoneQuickPickLabel">拾う</span></button>
           <button id="gridBarrierStoneQuickEditButton" class="grid-point-quick-role-button" type="button" aria-label="編集" title="編集" hidden><svg class="ui-icon" aria-hidden="true"><use href="#icon-edit"></use></svg><span id="gridBarrierStoneQuickEditLabel">編集</span></button>
+          <button id="gridBarrierStoneQuickMemoButton" class="grid-point-quick-role-button" type="button" aria-label="メモ" title="メモ" hidden><svg class="ui-icon" aria-hidden="true"><use href="#icon-edit"></use></svg><span id="gridBarrierStoneQuickMemoLabel">メモ</span></button>
           <button id="gridBarrierStoneQuickMapButton" class="grid-point-quick-role-button" type="button" aria-label="地図" title="地図" hidden><svg class="ui-icon" aria-hidden="true"><use href="#icon-map"></use></svg><span id="gridBarrierStoneQuickMapLabel">地図</span></button>
         </div>
       </form>
@@ -736,6 +737,7 @@
           <span id="gridFigureQuickInfo" class="grid-point-quick-list"></span>
         </div>
         <div class="grid-point-quick-actions grid-figure-quick-actions" aria-label="図形のクイック操作">
+          <button id="gridFigureQuickMemoButton" class="grid-point-quick-role-button" type="button" aria-label="メモ" title="メモ"><svg class="ui-icon" aria-hidden="true"><use href="#icon-edit"></use></svg><span id="gridFigureQuickMemoLabel">メモ</span></button>
           <button id="gridFigureQuickDeleteVertexButton" class="grid-point-quick-role-button" type="button" aria-label="この頂点を削除" title="この頂点を削除"><svg class="ui-icon" aria-hidden="true"><use href="#icon-trash"></use></svg><span id="gridFigureQuickDeleteVertexLabel">この頂点を削除</span></button>
           <button id="gridFigureQuickDeleteButton" class="grid-point-quick-role-button danger-button" type="button" aria-label="図形を削除" title="図形を削除"><svg class="ui-icon" aria-hidden="true"><use id="gridFigureQuickDeleteIcon" href="#icon-trash"></use></svg><span id="gridFigureQuickDeleteLabel">図形を削除</span></button>
         </div>
@@ -895,6 +897,7 @@
         <label>
           <span id="textInputDialogLabel">名前</span>
           <input id="textInputDialogValue" type="text" autocomplete="off" maxlength="80">
+          <textarea id="textInputDialogText" rows="5" autocomplete="off" hidden></textarea>
         </label>
         <div id="textInputDialogDefaultActions" class="text-input-dialog-actions">
           <button id="textInputDialogCancelButton" class="compact-button" type="submit" value="cancel" data-i18n="action.cancel">キャンセル</button>

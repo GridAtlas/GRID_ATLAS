@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2288";
+const WEB_VERSION = "0.2298";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -245,6 +245,7 @@ const elements = {
   textInputDialogMessage: document.querySelector("#textInputDialogMessage"),
   textInputDialogLabel: document.querySelector("#textInputDialogLabel"),
   textInputDialogValue: document.querySelector("#textInputDialogValue"),
+  textInputDialogText: document.querySelector("#textInputDialogText"),
   textInputDialogCancelButton: document.querySelector("#textInputDialogCancelButton"),
   textInputDialogSubmitButton: document.querySelector("#textInputDialogSubmitButton"),
   textInputDialogDefaultActions: document.querySelector("#textInputDialogDefaultActions"),
@@ -378,6 +379,8 @@ const elements = {
   gridBarrierStoneQuickPickLabel: document.querySelector("#gridBarrierStoneQuickPickLabel"),
   gridBarrierStoneQuickEditButton: document.querySelector("#gridBarrierStoneQuickEditButton"),
   gridBarrierStoneQuickEditLabel: document.querySelector("#gridBarrierStoneQuickEditLabel"),
+  gridBarrierStoneQuickMemoButton: document.querySelector("#gridBarrierStoneQuickMemoButton"),
+  gridBarrierStoneQuickMemoLabel: document.querySelector("#gridBarrierStoneQuickMemoLabel"),
   gridBarrierStoneQuickMapButton: document.querySelector("#gridBarrierStoneQuickMapButton"),
   gridBarrierStoneQuickMapLabel: document.querySelector("#gridBarrierStoneQuickMapLabel"),
   gridPointHoverLabel: document.querySelector("#gridPointHoverLabel"),
@@ -393,6 +396,8 @@ const elements = {
   gridFigureQuickDialog: document.querySelector("#gridFigureQuickDialog"),
   gridFigureQuickName: document.querySelector("#gridFigureQuickName"),
   gridFigureQuickInfo: document.querySelector("#gridFigureQuickInfo"),
+  gridFigureQuickMemoButton: document.querySelector("#gridFigureQuickMemoButton"),
+  gridFigureQuickMemoLabel: document.querySelector("#gridFigureQuickMemoLabel"),
   gridFigureQuickDeleteVertexButton: document.querySelector("#gridFigureQuickDeleteVertexButton"),
   gridFigureQuickDeleteVertexLabel: document.querySelector("#gridFigureQuickDeleteVertexLabel"),
   gridFigureQuickDeleteButton: document.querySelector("#gridFigureQuickDeleteButton"),
@@ -638,6 +643,7 @@ const state = {
   barrierSelection: [],
   selectedBarrierId: null,
   barrierPlacementView: false,
+  barrierPinMode: false,
   barrierDissolveMode: false,
   barrierLinkingMode: false,
   barrierLinkPath: [],
@@ -932,6 +938,7 @@ const TRANSLATIONS = {
     "delete.uneditablePoints": "選択した地点のうち{count}点は編集できないリストに含まれるため削除できません。",
     "action.edit": "編集",
     "action.rename": "命名",
+    "action.memo": "メモ",
     "action.map": "地図",
     "section.pointSource": "地点取得",
     "button.clipboard": "クリップボード",
@@ -1498,6 +1505,7 @@ const TRANSLATIONS = {
     "delete.uneditablePoints": "{count} selected point(s) cannot be deleted because they belong to a non-editable list.",
     "action.edit": "Edit",
     "action.rename": "Name",
+    "action.memo": "Memo",
     "action.map": "Map",
     "section.pointSource": "Get location",
     "button.clipboard": "Clipboard",
@@ -2161,12 +2169,18 @@ function syncBarrierFiguresFromLog() {
     barrier.figureId = figureId;
     const vertices = barrierStoneIds(barrier).map((stoneId) => {
       const geo = tileCenterGeo(state.traverseLog.stones?.[stoneId]?.tile);
-      return geo ? normalizeAnalysisVertex({ ...geo, name: "結界頂点", placeRef: null }) : null;
+      return geo ? normalizeAnalysisVertex({
+        ...geo,
+        name: "結界頂点",
+        note: state.traverseLog.stones?.[stoneId]?.note || "",
+        placeRef: null
+      }) : null;
     }).filter(Boolean);
     if (vertices.length < 3) continue;
     expected.set(figureId, createAnalysisFigure({
       id: figureId,
       vertices,
+      note: barrier.note || "",
       createdAt: barrier.createdAt,
       layer: "barrier",
       barrierId
@@ -2601,6 +2615,7 @@ function setTraverseMode(enabled) {
   }
   state.barrierPlacementView = false;
   state.barrierDissolveMode = false;
+  state.barrierPinMode = false;
   resetBarrierLinkState();
   state.barrierLinkSourceSelection = [];
   resetDragonEyeState();
@@ -6330,8 +6345,42 @@ function selectedBarrierStoneTile() {
   return stoneId ? state.traverseLog?.stones?.[stoneId]?.tile || null : null;
 }
 
+function enterBarrierPinMode() {
+  if (!state.traverseMode || state.traverseBusy) return false;
+  state.barrierPinMode = !state.barrierPinMode;
+  if (state.barrierPinMode) {
+    resetBarrierLinkState();
+    resetDragonEyeState();
+    state.barrierPlacementView = false;
+    state.barrierDissolveMode = false;
+    showAppToast("グリッドをタップしてピンを打つ場所を選択");
+  }
+  render();
+  return true;
+}
+
+function placeBarrierPinAtScreen(screenPoint) {
+  if (!state.barrierPinMode) return;
+  state.barrierPinMode = false;
+  pauseLocationFollowForManualView();
+  state.mode = "add";
+  const worldPoint = screenToWorld(screenPoint);
+  state.pendingGeo = unprojectWorld(worldPoint.x, worldPoint.y);
+  state.editingPointId = null;
+  state.pointDestinationListId = null;
+  state.pendingLinkPointId = null;
+  elements.pointTitle.value = "結界ピン";
+  elements.pointNote.value = "";
+  elements.pointPhoto.value = "";
+  fillFormFromGeo(state.pendingGeo);
+  setSelection([], { clearPending: false, render: false });
+  openPointRegistrationDialog();
+  render();
+}
+
 function handleBarrierQuickAction(action) {
   if (!state.traverseMode) return false;
+  if (action === "pin") return enterBarrierPinMode();
   if (action === "place") return openTraverseQuantityDialog("place");
   if (action === "connect") {
     if (!state.barrierLinkPreview) beginBarrierSelectionPreview();
@@ -6382,7 +6431,28 @@ function handleBarrierQuickAction(action) {
     if (geo) openPointInExternalMap({ title: t("traverse.stoneTile"), geo }, preferredMapProvider());
     return true;
   }
+  if (action === "clear") {
+    state.barrierPinMode = false;
+    clearSelection();
+    return true;
+  }
   return false;
+}
+
+function setActionButtonIcon(button, iconId) {
+  const icon = button?.querySelector("use");
+  if (icon && iconId) icon.setAttribute("href", `#${iconId}`);
+}
+
+function setBarrierPlaceholder(button, placeholder) {
+  if (!button) return;
+  button.classList.toggle("is-barrier-placeholder", placeholder);
+  if (placeholder) {
+    setActionButtonLabel(button, "");
+    button.title = "";
+    button.setAttribute("aria-label", "空き枠");
+    button.disabled = true;
+  }
 }
 
 function renderActionButtons() {
@@ -6484,6 +6554,29 @@ function renderActionButtons() {
     ? t("action.invertTitle")
     : t("state.noPoints");
   elements.pointSubmitButton.textContent = state.editingPointId ? t("button.update") : t("button.submitRegister");
+  for (const [button, iconId] of [
+    [elements.actionRegisterButton, "icon-plus-circle"],
+    [elements.actionLinkButton, "icon-connect"],
+    [elements.actionCenterButton, "icon-center"],
+    [elements.clearSelectionButton, "icon-clear"],
+    [elements.actionInvertButton, "icon-invert"],
+    [elements.actionRouteButton, "icon-route"],
+    [elements.actionAnalyzeButton, "icon-analysis"],
+    [elements.actionShareSelectedButton, "icon-share"],
+    [elements.deletePointButton, "icon-trash"],
+    [elements.actionCopyToListButton, "icon-copy"],
+    [elements.actionMoveToListButton, "icon-move"],
+    [elements.actionMapButton, "icon-map"]
+  ]) {
+    setBarrierPlaceholder(button, false);
+    setActionButtonIcon(button, iconId);
+  }
+  setActionButtonLabel(elements.actionRegisterButton, t("action.register"));
+  setActionButtonLabel(elements.clearSelectionButton, t("action.clear"));
+  setActionButtonLabel(elements.actionInvertButton, t("action.invert"));
+  setActionButtonLabel(elements.actionAnalyzeButton, t("action.analyze"));
+  setActionButtonLabel(elements.actionShareSelectedButton, t("action.shareSelected"));
+  setActionButtonLabel(elements.actionMapButton, t("action.map"));
   elements.actionRouteLabel.textContent = t("action.route");
   renderLocationFollowButton();
   if (state.traverseMode) renderTraverseQuickActions();
@@ -6498,44 +6591,55 @@ function renderTraverseQuickActions() {
   const selectedCount = state.barrierSelection.length;
   const preview = state.barrierLinkPreview;
   const canPlace = !state.traverseBusy && traverseQuantityLimit("place") > 0;
-  const canPick = !state.traverseBusy && traverseQuantityLimit("pick") > 0;
-  setActionButtonLabel(elements.actionRegisterButton, t("traverse.place"));
-  setActionButtonLabel(elements.actionLinkButton, t("traverse.connect"));
-  setActionButtonLabel(elements.actionCenterButton, t("dragonEye.open"));
-  setActionButtonLabel(elements.deletePointButton, t("traverse.pick"));
-  setActionButtonLabel(elements.actionCopyToListButton, t("barrier.dissolve"));
-  setActionButtonLabel(elements.actionMoveToListButton, t("traverse.placementView"));
+  const blankButtons = [elements.deletePointButton, elements.actionCopyToListButton, elements.actionMoveToListButton, elements.actionRouteButton];
+  const activeButtons = [
+    elements.actionRegisterButton,
+    elements.actionCenterButton,
+    elements.actionLinkButton,
+    elements.clearSelectionButton,
+    elements.actionInvertButton,
+    elements.actionShareSelectedButton,
+    elements.actionMapButton,
+    elements.actionAnalyzeButton
+  ];
+  for (const button of [...activeButtons, ...blankButtons]) setBarrierPlaceholder(button, false);
+  setActionButtonIcon(elements.actionRegisterButton, "icon-plus-circle");
+  setActionButtonIcon(elements.actionCenterButton, "icon-center");
+  setActionButtonIcon(elements.actionLinkButton, "icon-plus-circle");
+  setActionButtonIcon(elements.clearSelectionButton, "icon-connect");
+  setActionButtonIcon(elements.actionInvertButton, "icon-clear");
+  setActionButtonLabel(elements.actionRegisterButton, "打つ");
+  setActionButtonLabel(elements.actionCenterButton, "測る");
+  setActionButtonLabel(elements.actionLinkButton, "置く");
+  setActionButtonLabel(elements.clearSelectionButton, "結ぶ");
+  setActionButtonLabel(elements.actionInvertButton, "解除");
+  setActionButtonLabel(elements.actionShareSelectedButton, t("action.shareSelected"));
   setActionButtonLabel(elements.actionMapButton, t("action.map"));
-  elements.actionRegisterButton.disabled = !canPlace;
-  elements.actionLinkButton.disabled = state.traverseBusy || (!preview && selectedCount < 2);
+  setActionButtonLabel(elements.actionAnalyzeButton, t("action.analyze"));
+  for (const button of blankButtons) setBarrierPlaceholder(button, true);
+
+  elements.actionRegisterButton.disabled = state.traverseBusy;
   elements.actionCenterButton.disabled = state.traverseBusy;
-  elements.actionRouteButton.disabled = state.traverseBusy || selectedCount < 2;
-  elements.actionAnalyzeButton.disabled = state.traverseBusy || (selectedCount === 0 && !state.selectedBarrierId);
+  elements.actionLinkButton.disabled = state.traverseBusy || !canPlace;
+  elements.clearSelectionButton.disabled = state.traverseBusy || (!preview && selectedCount < 2);
+  elements.actionInvertButton.disabled = state.traverseBusy || (selectedCount === 0 && !state.selectedBarrierId && !state.barrierPinMode);
   elements.actionShareSelectedButton.disabled = state.traverseBusy || !state.selectedBarrierId;
-  elements.deletePointButton.disabled = !canPick || selectedCount === 0;
-  elements.actionCopyToListButton.disabled = state.traverseBusy || !state.selectedBarrierId;
-  elements.actionMoveToListButton.disabled = state.traverseBusy;
   elements.actionMapButton.disabled = selectedCount === 0;
-  elements.clearSelectionButton.disabled = selectedCount === 0 && !state.selectedBarrierId;
-  elements.actionInvertButton.disabled = state.traverseBusy;
-  elements.actionRegisterButton.title = t("traverse.place");
-  elements.actionLinkButton.title = preview ? t("traverse.connect") : t("barrier.selection").replace("{count}", String(selectedCount));
-  elements.actionCenterButton.title = t("dragonEye.open");
-  elements.actionRouteButton.title = t("action.route");
-  elements.actionAnalyzeButton.title = t("action.analyze");
+  elements.actionAnalyzeButton.disabled = state.traverseBusy || (selectedCount === 0 && !state.selectedBarrierId);
+  elements.actionRegisterButton.title = state.barrierPinMode ? "ピンを打つ場所をタップ" : "ピンを打つ";
+  elements.actionCenterButton.title = "龍脈眼で測る";
+  elements.actionLinkButton.title = "結界石を置く";
+  elements.clearSelectionButton.title = preview ? t("traverse.connect") : "2つ以上の石を選択すると結べます";
+  elements.actionInvertButton.title = "選択を解除";
   elements.actionShareSelectedButton.title = t("barrier.share");
-  elements.deletePointButton.title = t("traverse.pick");
-  elements.actionCopyToListButton.title = t("barrier.dissolve");
-  elements.actionMoveToListButton.title = t("traverse.placementView");
   elements.actionMapButton.title = t("action.map");
-  elements.actionRegisterButton.classList.toggle("is-active", false);
-  elements.actionLinkButton.classList.toggle("is-active", preview);
+  elements.actionAnalyzeButton.title = t("action.analyze");
+  elements.actionRegisterButton.classList.toggle("is-active", state.barrierPinMode);
   elements.actionCenterButton.classList.toggle("is-active", state.dragonEye.active);
-  elements.actionRouteButton.classList.toggle("is-active", state.barrierPlacementView);
+  elements.clearSelectionButton.classList.toggle("is-active", preview);
   elements.actionShareSelectedButton.classList.toggle("is-active", false);
-  elements.deletePointButton.classList.toggle("is-active", false);
-  elements.actionCopyToListButton.classList.toggle("is-active", state.barrierDissolveMode);
-  elements.actionMoveToListButton.classList.toggle("is-active", state.barrierPlacementView);
+  elements.actionMapButton.classList.toggle("is-active", false);
+  elements.actionAnalyzeButton.classList.toggle("is-active", false);
 }
 
 function renderPointInfoDialog() {
@@ -6839,6 +6943,7 @@ function barrierStoneQuickButtons() {
     elements.gridBarrierStoneQuickPlaceButton,
     elements.gridBarrierStoneQuickPickButton,
     elements.gridBarrierStoneQuickEditButton,
+    elements.gridBarrierStoneQuickMemoButton,
     elements.gridBarrierStoneQuickMapButton
   ].filter(Boolean);
 }
@@ -6881,10 +6986,12 @@ function renderGridBarrierStoneQuickDialog() {
   const stoneCap = stoneCapFor(state.traverseLog, stoneId, currentKekkaishiRankInfo().rank.index);
   const stockAmount = Math.max(0, Math.floor(Number(state.traverseLog?.stock?.amount) || 0));
   elements.gridBarrierStoneQuickName.textContent = stone.name || t("traverse.stoneTile");
-  elements.gridBarrierStoneQuickInfo.textContent = `${t("traverse.stoneCount").replace("{count}", String(count))} · ${stone.tile}${barrierLabel}`;
+  const memo = stone.note ? ` · ${t("action.memo")}` : "";
+  elements.gridBarrierStoneQuickInfo.textContent = `${t("traverse.stoneCount").replace("{count}", String(count))} · ${stone.tile}${barrierLabel}${memo}`;
   elements.gridBarrierStoneQuickPlaceLabel.textContent = t("traverse.place");
   elements.gridBarrierStoneQuickPickLabel.textContent = t("traverse.pick");
   elements.gridBarrierStoneQuickEditLabel.textContent = t("action.rename");
+  elements.gridBarrierStoneQuickMemoLabel.textContent = t("action.memo");
   elements.gridBarrierStoneQuickMapLabel.textContent = t("action.map");
 
   elements.gridBarrierStoneQuickPlaceButton.disabled = stockAmount < 1 || count >= stoneCap;
@@ -6896,6 +7003,9 @@ function renderGridBarrierStoneQuickDialog() {
   elements.gridBarrierStoneQuickEditButton.disabled = false;
   elements.gridBarrierStoneQuickEditButton.setAttribute("aria-label", t("action.rename"));
   elements.gridBarrierStoneQuickEditButton.title = t("action.rename");
+  elements.gridBarrierStoneQuickMemoButton.disabled = false;
+  elements.gridBarrierStoneQuickMemoButton.setAttribute("aria-label", t("action.memo"));
+  elements.gridBarrierStoneQuickMemoButton.title = t("action.memo");
   elements.gridBarrierStoneQuickMapButton.setAttribute("aria-label", t("action.map"));
   elements.gridBarrierStoneQuickMapButton.title = t("action.map");
   for (const button of pointQuickButtons()) button.hidden = true;
@@ -6940,7 +7050,11 @@ function renderGridFigureQuickDialog() {
     const title = barrier.name || t("barrier.defaultName");
     const power = score ? ` · ${t("barrier.rankPower")} ${formatScoreValue(score.power)}` : "";
     elements.gridFigureQuickName.textContent = title;
-    elements.gridFigureQuickInfo.textContent = `${t("figure.vertexCount").replace("{count}", String(barrierFigureVertices(barrier).length))}${power}`;
+    const memo = barrier.note ? ` · ${t("action.memo")}` : "";
+    elements.gridFigureQuickInfo.textContent = `${t("figure.vertexCount").replace("{count}", String(barrierFigureVertices(barrier).length))}${power}${memo}`;
+    elements.gridFigureQuickMemoLabel.textContent = t("action.memo");
+    elements.gridFigureQuickMemoButton.setAttribute("aria-label", t("action.memo"));
+    elements.gridFigureQuickMemoButton.title = t("action.memo");
     elements.gridFigureQuickDeleteVertexButton.hidden = true;
     elements.gridFigureQuickDeleteVertexButton.disabled = true;
     elements.gridFigureQuickDeleteLabel.textContent = t("barrier.dissolve");
@@ -6957,7 +7071,12 @@ function renderGridFigureQuickDialog() {
     && figure.vertices.length > 2;
   const title = figure.name || `${t("analysis.figure")} ${figure.vertices.length}`;
   elements.gridFigureQuickName.textContent = title;
-  elements.gridFigureQuickInfo.textContent = t("figure.vertexCount").replace("{count}", String(figure.vertices.length));
+  const memoTarget = Number.isInteger(vertexIndex) ? figure.vertices[vertexIndex] : figure;
+  const memo = memoTarget?.note ? ` · ${t("action.memo")}` : "";
+  elements.gridFigureQuickInfo.textContent = `${t("figure.vertexCount").replace("{count}", String(figure.vertices.length))}${memo}`;
+  elements.gridFigureQuickMemoLabel.textContent = t("action.memo");
+  elements.gridFigureQuickMemoButton.setAttribute("aria-label", t("action.memo"));
+  elements.gridFigureQuickMemoButton.title = t("action.memo");
   elements.gridFigureQuickDeleteVertexButton.hidden = !hasDeletableVertex;
   elements.gridFigureQuickDeleteVertexButton.disabled = !hasDeletableVertex;
   elements.gridFigureQuickDeleteVertexLabel.textContent = t("figure.deleteVertex");
@@ -7438,6 +7557,97 @@ async function renameBarrierStoneFromQuickDialog() {
   });
   persistTraverseLog();
   if (elements.gridBarrierStoneQuickDialog?.open) elements.gridBarrierStoneQuickDialog.close("rename");
+  render();
+}
+
+async function editBarrierStoneMemoFromQuickDialog() {
+  const target = barrierStoneFromQuickDialog();
+  if (!target) return;
+  const input = await requestTextInput({
+    title: t("action.memo"),
+    message: target.stone.tile,
+    label: t("action.memo"),
+    defaultValue: target.stone.note || "",
+    maxLength: 500,
+    multiline: true,
+    submitLabel: t("action.apply")
+  });
+  if (input === null) return;
+  const note = input.trim().slice(0, 500);
+  target.stone.note = note;
+  appendBarrierEvent(state.traverseLog, {
+    type: "stone-memo-updated",
+    at: new Date().toISOString(),
+    tile: target.stone.tile,
+    stoneId: target.stoneId,
+    note
+  });
+  syncBarrierFiguresFromLog();
+  persistTraverseLog();
+  if (elements.gridBarrierStoneQuickDialog?.open) elements.gridBarrierStoneQuickDialog.close("memo");
+  render();
+}
+
+async function editFigureMemoFromQuickDialog() {
+  const figure = state.gridFigureQuickFigureId ? findFigure(state.gridFigureQuickFigureId) : null;
+  const barrierId = state.gridFigureQuickBarrierId || figure?.barrierId || null;
+  const barrier = barrierId ? state.traverseLog?.barriers?.[barrierId] : null;
+  const vertexIndex = state.gridFigureQuickVertexIndex;
+  const vertex = figure && Number.isInteger(vertexIndex) ? figure.vertices[vertexIndex] : null;
+  const currentNote = barrier && !vertex
+    ? barrier.note || ""
+    : vertex?.note || figure?.note || "";
+  if (!figure && !barrier) return;
+
+  const input = await requestTextInput({
+    title: t("action.memo"),
+    message: Number.isInteger(vertexIndex) ? "頂点" : "結界図形",
+    label: t("action.memo"),
+    defaultValue: currentNote,
+    maxLength: 500,
+    multiline: true,
+    submitLabel: t("action.apply")
+  });
+  if (input === null) return;
+  const note = input.trim().slice(0, 500);
+
+  if (barrierId && barrier) {
+    if (Number.isInteger(vertexIndex)) {
+      const stoneId = barrierStoneIds(barrier)[vertexIndex];
+      const stone = stoneId ? state.traverseLog?.stones?.[stoneId] : null;
+      if (stone) {
+        stone.note = note;
+        appendBarrierEvent(state.traverseLog, {
+          type: "stone-memo-updated",
+          at: new Date().toISOString(),
+          tile: stone.tile,
+          stoneId,
+          note
+        });
+      }
+    } else {
+      barrier.note = note;
+      appendBarrierEvent(state.traverseLog, {
+        type: "barrier-memo-updated",
+        at: new Date().toISOString(),
+        barrierId,
+        note
+      });
+    }
+    syncBarrierFiguresFromLog();
+    persistTraverseLog();
+  } else if (figure) {
+    const nextFigure = normalizeAnalysisFigure({
+      ...figure,
+      ...(Number.isInteger(vertexIndex)
+        ? { vertices: figure.vertices.map((candidate, index) => index === vertexIndex ? { ...candidate, note } : candidate) }
+        : { note })
+    });
+    state.figures = state.figures.map((candidate) => candidate.id === figure.id ? nextFigure : candidate);
+    persistWorkspace();
+  }
+
+  if (elements.gridFigureQuickDialog?.open) elements.gridFigureQuickDialog.close("memo");
   render();
 }
 
@@ -13126,6 +13336,10 @@ function findNearestLoadedObservation(screenPoint) {
 }
 
 function handleCanvasClick(screenPoint) {
+  if (state.barrierPinMode) {
+    placeBarrierPinAtScreen(screenPoint);
+    return;
+  }
   if (state.barrierDissolveMode) {
     selectBarrierForDissolve(screenPoint);
     return;
@@ -15604,8 +15818,16 @@ function requestTextInput(options = {}) {
   elements.textInputDialogMessage.textContent = options.message || "";
   elements.textInputDialogMessage.hidden = !options.message;
   elements.textInputDialogLabel.textContent = options.label || cloudText("名前", "Name");
-  elements.textInputDialogValue.value = options.defaultValue ?? "";
-  elements.textInputDialogValue.maxLength = options.maxLength ?? 80;
+  const multiline = options.multiline === true && elements.textInputDialogText;
+  elements.textInputDialogValue.hidden = Boolean(multiline);
+  elements.textInputDialogText.hidden = !multiline;
+  if (multiline) {
+    elements.textInputDialogText.value = options.defaultValue ?? "";
+    elements.textInputDialogText.maxLength = options.maxLength ?? 500;
+  } else {
+    elements.textInputDialogValue.value = options.defaultValue ?? "";
+    elements.textInputDialogValue.maxLength = options.maxLength ?? 80;
+  }
   elements.textInputDialogSubmitButton.textContent = options.submitLabel || cloudText("決定", "Done");
   elements.textInputDialogDefaultActions.hidden = options.shareMode === true;
   elements.textInputDialogShareActions.hidden = options.shareMode !== true;
@@ -15618,9 +15840,16 @@ function requestTextInput(options = {}) {
     pendingTextInputOptions = options;
   });
   dialog.showModal();
-  elements.textInputDialogValue.focus();
-  elements.textInputDialogValue.select();
+  const inputElement = multiline ? elements.textInputDialogText : elements.textInputDialogValue;
+  inputElement.focus();
+  inputElement.select();
   return result;
+}
+
+function textInputDialogValue(options = {}) {
+  return options.multiline && elements.textInputDialogText
+    ? elements.textInputDialogText.value
+    : elements.textInputDialogValue.value;
 }
 
 function showAppToast(message, options = {}) {
@@ -17151,7 +17380,7 @@ function bindEvents() {
   });
   elements.actionLinkButton.addEventListener("click", () => {
     if (state.traverseMode) {
-      handleBarrierQuickAction("connect");
+      handleBarrierQuickAction("place");
       return;
     }
     handleLinkAction();
@@ -17169,7 +17398,7 @@ function bindEvents() {
   });
   elements.actionRegisterButton.addEventListener("click", () => {
     if (state.traverseMode) {
-      handleBarrierQuickAction("place");
+      handleBarrierQuickAction("pin");
       return;
     }
     submitPendingPoint();
@@ -17182,7 +17411,13 @@ function bindEvents() {
     }
     setRouteFromSelectedPoints();
   });
-  elements.clearSelectionButton.addEventListener("click", () => clearSelection());
+  elements.clearSelectionButton.addEventListener("click", () => {
+    if (state.traverseMode) {
+      handleBarrierQuickAction("connect");
+      return;
+    }
+    clearSelection();
+  });
   elements.actionCenterButton.addEventListener("click", () => {
     if (state.traverseMode) {
       handleBarrierQuickAction("dragon-eye");
@@ -17213,7 +17448,7 @@ function bindEvents() {
   });
   elements.actionInvertButton.addEventListener("click", () => {
     if (state.traverseMode) {
-      handleBarrierQuickAction("invert");
+      handleBarrierQuickAction("clear");
       return;
     }
     invertVisiblePointSelection();
@@ -17281,6 +17516,9 @@ function bindEvents() {
   bindPointerActionButton(elements.gridBarrierStoneQuickEditButton, () => {
     void renameBarrierStoneFromQuickDialog();
   });
+  bindPointerActionButton(elements.gridBarrierStoneQuickMemoButton, () => {
+    void editBarrierStoneMemoFromQuickDialog();
+  });
   bindPointerActionButton(elements.gridBarrierStoneQuickMapButton, () => {
     openBarrierStoneInPreferredMapFromQuickDialog();
   });
@@ -17309,6 +17547,9 @@ function bindEvents() {
   });
   bindPointerActionButton(elements.gridFigureQuickDeleteVertexButton, () => {
     void deleteFigureVertexFromQuickDialog();
+  });
+  bindPointerActionButton(elements.gridFigureQuickMemoButton, () => {
+    void editFigureMemoFromQuickDialog();
   });
   bindPointerActionButton(elements.gridFigureQuickDeleteButton, () => {
     void deleteFigureFromQuickDialog();
@@ -17420,12 +17661,12 @@ function bindEvents() {
     if (!resolve) return;
     if (returnValue === "submit") {
       resolve(options.shareMode === true
-        ? { value: elements.textInputDialogValue.value, action: "submit" }
-        : elements.textInputDialogValue.value);
+        ? { value: textInputDialogValue(options), action: "submit" }
+        : textInputDialogValue(options));
       return;
     }
     if (options.shareMode === true && ["share-file", "share-image", "share-cloud"].includes(returnValue)) {
-      resolve({ value: elements.textInputDialogValue.value, action: returnValue.slice("share-".length) });
+      resolve({ value: textInputDialogValue(options), action: returnValue.slice("share-".length) });
       return;
     }
     resolve(null);

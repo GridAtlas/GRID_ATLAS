@@ -61,6 +61,22 @@ describe("analysis layer model", () => {
     expect(result.a.key).not.toBe(result.b.key);
   });
 
+  it("keeps notes on figure vertices and figures", () => {
+    const figure = createAnalysisFigure({
+      id: "memo-figure",
+      note: "全体の観察メモ",
+      vertices: [
+        { lat: 35, lng: 135, name: "A", note: "頂点メモ" },
+        { lat: 35, lng: 135.1, name: "B" },
+        { lat: 35.1, lng: 135, name: "C" }
+      ]
+    });
+
+    expect(figure).toMatchObject({ note: "全体の観察メモ" });
+    expect(figure.vertices[0]).toMatchObject({ note: "頂点メモ" });
+    expect(figure.vertices[1]).not.toHaveProperty("note");
+  });
+
   it("does not change a line snapshot when the source point is moved or renamed", () => {
     const sourceA = vertex(35, 135, "A", "a");
     const sourceB = vertex(35.1, 135.1, "B", "b");

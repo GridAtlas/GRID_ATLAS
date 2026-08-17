@@ -47,6 +47,9 @@ export function normalizeAnalysisVertex(input, options = {}) {
     name
   };
 
+  const note = cleanText(input.note);
+  if (note) vertex.note = note.slice(0, 500);
+
   if (hasOwn(input, "placeRef") || legacyPlaceRef) {
     vertex.placeRef = placeRef || null;
   } else if (options.placeRef !== undefined) {
@@ -116,9 +119,11 @@ export function normalizeAnalysisFigure(figure) {
 
   const normalized = { id, vertices };
   const name = cleanText(figure.name);
+  const note = cleanText(figure.note);
   const color = normalizeColor(figure.color);
   const createdAt = cleanText(figure.createdAt);
   if (name) normalized.name = name;
+  if (note) normalized.note = note.slice(0, 500);
   if (color) normalized.color = color;
   if (createdAt) normalized.createdAt = createdAt;
   const layer = cleanText(figure.layer);
@@ -128,11 +133,12 @@ export function normalizeAnalysisFigure(figure) {
   return normalized;
 }
 
-export function createAnalysisFigure({ id, vertices, name = "", color = "", createdAt = "", layer = "", barrierId = "" } = {}) {
+export function createAnalysisFigure({ id, vertices, name = "", note = "", color = "", createdAt = "", layer = "", barrierId = "" } = {}) {
   return normalizeAnalysisFigure({
     id,
     vertices,
     ...(name ? { name } : {}),
+    ...(note ? { note } : {}),
     ...(color ? { color } : {}),
     ...(createdAt ? { createdAt } : {}),
     ...(layer ? { layer } : {}),
