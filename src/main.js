@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2337";
+const WEB_VERSION = "0.2338";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -13841,12 +13841,22 @@ function barrierCellFitPoints(options = {}) {
   if (!state.traverseMode || !state.traverseLog) return [];
   const verticesOnly = options.verticesOnly === true;
   const vertexStoneIds = verticesOnly
-    ? new Set(Object.values(state.traverseLog.barriers || {}).flatMap((barrier) => barrierStoneIds(barrier)))
+    ? new Set(Object.values(state.traverseLog.barriers || {}).flatMap((barrier) => [
+      ...barrierStoneIds(barrier),
+      ...(Array.isArray(barrier?.vertices) ? barrier.vertices : [])
+    ]))
     : null;
-  return Object.values(state.traverseLog.stones || {})
-    .filter((stone) => stoneDisplayCount(stone) > 0)
-    .filter((stone) => !vertexStoneIds || vertexStoneIds.has(stoneIdFromTile(stone.tile)))
-    .flatMap((stone) => tileBoundaryGeos(stone.tile))
+  return Object.entries(state.traverseLog.stones || {})
+    .filter(([, stone]) => stoneDisplayCount(stone) > 0)
+    .filter(([stoneId, stone]) => !vertexStoneIds
+      || vertexStoneIds.has(stoneId)
+      || vertexStoneIds.has(stoneIdFromTile(stone.tile)))
+    .flatMap(([, stone]) => {
+      const boundaryGeos = tileBoundaryGeos(stone.tile);
+      if (boundaryGeos.length > 0) return boundaryGeos;
+      const centerGeo = tileCenterGeo(stone.tile);
+      return centerGeo ? [centerGeo] : [];
+    })
     .map((geo) => ({
       ...projectLatLng(geo.lat, geo.lng),
       geo
@@ -13930,11 +13940,20 @@ function fitTraverseView() {
   if (fitVertices) {
     const vertexCellFitPoints = barrierCellFitPoints({ verticesOnly: true });
     if (vertexCellFitPoints.length === 0) {
-      showAppToast(t("traverse.vertexFitUnavailable"), { error: true });
+      state.barrierFitStage = "all";
+      fitToPoints(null, { includeBarrierCells: true });
+      restoreSelectionAfterFit();
       return;
     }
     state.barrierFitStage = "all";
     fitToPoints(vertexCellFitPoints);
+    restoreSelectionAfterFit();
+    return;
+  }
+
+  if (barrierCellFitPoints({ verticesOnly: true }).length === 0) {
+    state.barrierFitStage = "all";
+    fitToPoints(null, { includeBarrierCells: true });
     restoreSelectionAfterFit();
     return;
   }
@@ -13947,7 +13966,8 @@ function fitTraverseView() {
 function renderFitButton() {
   const button = elements.fitButton;
   if (!button) return;
-  const nextTarget = state.traverseMode && state.barrierFitStage === "vertices"
+  const hasVertexCells = state.traverseMode && barrierCellFitPoints({ verticesOnly: true }).length > 0;
+  const nextTarget = hasVertexCells && state.barrierFitStage === "vertices"
     ? "頂点セル（千里眼）"
     : "全体";
   const title = state.traverseMode ? `次のパン対象：${nextTarget}` : "全体表示";
