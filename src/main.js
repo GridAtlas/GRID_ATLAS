@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2320";
+const WEB_VERSION = "0.2321";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -13525,8 +13525,8 @@ function handleCanvasClick(screenPoint) {
   }
   if (state.barrierLinkingMode) return;
 
-  const nearestBarrierStone = state.traverseMode ? findNearestBarrierStone(screenPoint) : null;
-  const nearest = nearestBarrierStone ? null : findNearestPoint(screenPoint);
+  const nearest = findNearestPoint(screenPoint);
+  const nearestBarrierStone = state.traverseMode && !nearest ? findNearestBarrierStone(screenPoint) : null;
   const nearestLink = nearest || nearestBarrierStone ? null : findNearestLink(screenPoint);
   const nearestFigure = nearest || nearestBarrierStone || nearestLink ? null : findNearestFigure(screenPoint);
   const nearestObservation = nearest || nearestBarrierStone || nearestLink || nearestFigure
@@ -14187,11 +14187,11 @@ function startDragGesture(pointerId, point, options = {}) {
     return;
   }
   const barrierOrigin = barrierLinkMode && !options.moved ? findNearestBarrierStone(point) : null;
-  const longPressBarrierStone = state.traverseMode && !barrierLinkMode && !options.moved
+  const barrierStoneCandidate = state.traverseMode && !barrierLinkMode && !options.moved
     ? findNearestBarrierStone(point)
     : null;
-  const lineEndpoint = longPressBarrierStone || options.moved ? null : findNearestLineEndpoint(point);
-  const figureVertexCandidate = longPressBarrierStone || options.moved ? null : findNearestFigureVertex(point);
+  const lineEndpoint = barrierStoneCandidate || options.moved ? null : findNearestLineEndpoint(point);
+  const figureVertexCandidate = barrierStoneCandidate || options.moved ? null : findNearestFigureVertex(point);
   const prioritizedVertex = chooseAnalysisHit([
     { kind: "line-endpoint", value: lineEndpoint },
     { kind: "figure-vertex", value: figureVertexCandidate }
@@ -14208,13 +14208,16 @@ function startDragGesture(pointerId, point, options = {}) {
     : findNearestFigureEdge(point);
   const figureSurface = lineEndpoint || figureVertex || figureEdge ? null : options.moved ? null : findNearestFigure(point);
   const longPressFigure = figureVertex || figureEdge || (figureSurface ? { figureId: figureSurface.id } : null);
-  const pointCandidate = longPressFigure || longPressBarrierStone || lineEndpoint ? null : options.moved ? null : findNearestPoint(point);
+  const pointCandidate = longPressFigure || lineEndpoint ? null : options.moved ? null : findNearestPoint(point);
   const prioritizedPoint = chooseAnalysisHit([
     { kind: "line-endpoint", value: lineEndpoint },
     { kind: "figure-vertex", value: figureVertex },
     { kind: "point", value: pointCandidate }
   ]);
   const longPressPoint = prioritizedPoint?.kind === "point" ? prioritizedPoint.value : null;
+  // A barrier stone owns its whole cell for placement/pickup, but it must not
+  // hide a registered pin or the current location drawn inside that cell.
+  const longPressBarrierStone = longPressPoint ? null : barrierStoneCandidate;
   const longPressLink = longPressBarrierStone || options.moved || longPressPoint || lineEndpoint
     ? null
     : lineBodyCandidate;
