@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2338";
+const WEB_VERSION = "0.2339";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -13837,20 +13837,12 @@ function zoomAt(screenPoint, factor) {
   render();
 }
 
-function barrierCellFitPoints(options = {}) {
+function barrierCellFitPoints() {
   if (!state.traverseMode || !state.traverseLog) return [];
-  const verticesOnly = options.verticesOnly === true;
-  const vertexStoneIds = verticesOnly
-    ? new Set(Object.values(state.traverseLog.barriers || {}).flatMap((barrier) => [
-      ...barrierStoneIds(barrier),
-      ...(Array.isArray(barrier?.vertices) ? barrier.vertices : [])
-    ]))
-    : null;
+  // A placed barrier stone is already a valid vertex-cell pan target, even
+  // before it has been registered in a completed barrier.
   return Object.entries(state.traverseLog.stones || {})
     .filter(([, stone]) => stoneDisplayCount(stone) > 0)
-    .filter(([stoneId, stone]) => !vertexStoneIds
-      || vertexStoneIds.has(stoneId)
-      || vertexStoneIds.has(stoneIdFromTile(stone.tile)))
     .flatMap(([, stone]) => {
       const boundaryGeos = tileBoundaryGeos(stone.tile);
       if (boundaryGeos.length > 0) return boundaryGeos;
@@ -13938,7 +13930,7 @@ function fitTraverseView() {
   };
   const fitVertices = state.barrierFitStage === "vertices";
   if (fitVertices) {
-    const vertexCellFitPoints = barrierCellFitPoints({ verticesOnly: true });
+    const vertexCellFitPoints = barrierCellFitPoints();
     if (vertexCellFitPoints.length === 0) {
       state.barrierFitStage = "all";
       fitToPoints(null, { includeBarrierCells: true });
@@ -13951,7 +13943,7 @@ function fitTraverseView() {
     return;
   }
 
-  if (barrierCellFitPoints({ verticesOnly: true }).length === 0) {
+  if (barrierCellFitPoints().length === 0) {
     state.barrierFitStage = "all";
     fitToPoints(null, { includeBarrierCells: true });
     restoreSelectionAfterFit();
@@ -13966,7 +13958,7 @@ function fitTraverseView() {
 function renderFitButton() {
   const button = elements.fitButton;
   if (!button) return;
-  const hasVertexCells = state.traverseMode && barrierCellFitPoints({ verticesOnly: true }).length > 0;
+  const hasVertexCells = state.traverseMode && barrierCellFitPoints().length > 0;
   const nextTarget = hasVertexCells && state.barrierFitStage === "vertices"
     ? "頂点セル（千里眼）"
     : "全体";
