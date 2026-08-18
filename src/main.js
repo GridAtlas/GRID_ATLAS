@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2321";
+const WEB_VERSION = "0.2322";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -13534,8 +13534,8 @@ function handleCanvasClick(screenPoint) {
     : findNearestLoadedObservation(screenPoint);
 
   if (nearest) {
-    state.barrierSelection = [];
-    state.selectedBarrierId = null;
+    // Point selection is independent from the barrier-cell selection. Keep
+    // the selected cell visible while toggling a pin or the current location.
     toggleSelection("point", nearest.id);
     return;
   }
