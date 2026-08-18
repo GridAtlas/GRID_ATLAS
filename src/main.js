@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2351";
+const WEB_VERSION = "0.2361";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -164,6 +164,7 @@ const GRID_MODE_LONG_PRESS_MS = 1500;
 const BARRIER_LINK_DWELL_MS = 1000;
 const BARRIER_LINK_SEGMENT_MS = 460;
 const BARRIER_LINK_COMPLETION_MS = 1100;
+const BARRIER_LINK_HOLD_DRIFT_TOLERANCE = 28;
 const BARRIER_LINK_ORANGE = "#f28a2e";
 const BARRIER_LINK_CORE = "#fff0cc";
 const BARRIER_LINK_GLOW = "rgb(255 138 46 / 0.98)";
@@ -665,6 +666,7 @@ const state = {
   barrierLinkPendingStartedAt: null,
   barrierLinkPendingDurationMs: null,
   barrierLinkHoldFrameId: null,
+  barrierLinkSettledDiamonds: [],
   barrierLinkAnimation: null,
   barrierLinkCompletion: null,
   barrierLinkPreview: false,
@@ -2415,6 +2417,7 @@ function resetBarrierLinkState() {
   state.barrierLinkPendingStoneId = null;
   state.barrierLinkPendingStartedAt = null;
   state.barrierLinkPendingDurationMs = null;
+  state.barrierLinkSettledDiamonds = [];
   state.barrierLinkAnimation = null;
   state.barrierLinkCompletion = null;
   state.barrierLinkPreview = false;
@@ -4589,6 +4592,51 @@ function drawBarrierLinkStrokeProgress(path, progress, options = {}) {
   return points;
 }
 
+function barrierLinkDiamondPoints(center, radius, rotation = 0) {
+  return Array.from({ length: 4 }, (_, index) => {
+    const angle = -Math.PI / 2 + rotation + index * Math.PI / 2;
+    return {
+      x: center.x + Math.cos(angle) * radius,
+      y: center.y + Math.sin(angle) * radius
+    };
+  });
+}
+
+function drawBarrierLinkSettledDiamond(entry) {
+  const center = barrierStoneScreenCenter(entry?.stoneId);
+  if (!center) return;
+  const radius = Math.max(20, Math.min(32, BARRIER_TILE_MIN_SCREEN_SIZE * 1.25));
+  const points = barrierLinkDiamondPoints(center, radius, Number(entry.rotation) || 0);
+  context.beginPath();
+  context.moveTo(points[0].x, points[0].y);
+  for (const point of points.slice(1)) context.lineTo(point.x, point.y);
+  context.closePath();
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.strokeStyle = "rgb(255 138 46 / 0.7)";
+  context.lineWidth = 1.8;
+  context.shadowColor = "rgb(255 138 46 / 0.8)";
+  context.shadowBlur = 12;
+  context.stroke();
+}
+
+function drawBarrierLinkFuse(path, pointer) {
+  if (!Array.isArray(path) || path.length < 1 || !pointer) return;
+  const from = barrierStoneScreenCenter(path.at(-1));
+  if (!from || Math.hypot(pointer.x - from.x, pointer.y - from.y) < 2) return;
+  context.save();
+  context.globalAlpha = 0.52;
+  context.strokeStyle = BARRIER_LINK_ORANGE;
+  context.lineWidth = 1.35;
+  context.lineCap = "round";
+  context.setLineDash([3, 6]);
+  context.beginPath();
+  context.moveTo(from.x, from.y);
+  context.lineTo(pointer.x, pointer.y);
+  context.stroke();
+  context.restore();
+}
+
 function drawBarrierLinkHoldDiamond(stoneId, startedAt) {
   const center = barrierStoneScreenCenter(stoneId);
   if (!center || !Number.isFinite(startedAt)) return;
@@ -4598,12 +4646,8 @@ function drawBarrierLinkHoldDiamond(stoneId, startedAt) {
   );
   const progress = Math.min(1, Math.max(0, (performance.now() - startedAt) / duration));
   const radius = Math.max(20, Math.min(32, BARRIER_TILE_MIN_SCREEN_SIZE * 1.25));
-  const points = [
-    { x: center.x, y: center.y - radius },
-    { x: center.x + radius, y: center.y },
-    { x: center.x, y: center.y + radius },
-    { x: center.x - radius, y: center.y }
-  ];
+  const rotation = (performance.now() - startedAt) * 0.004;
+  const points = barrierLinkDiamondPoints(center, radius, rotation);
   const pathProgress = progress * points.length;
   let head = points[0];
 
@@ -4653,6 +4697,14 @@ function drawBarrierLinkGesture() {
   context.save();
   context.globalCompositeOperation = "screen";
   context.globalAlpha = completion ? 0.74 : 0.98;
+
+  for (const entry of state.barrierLinkSettledDiamonds) {
+    drawBarrierLinkSettledDiamond(entry);
+  }
+
+  if (!completion && state.barrierLinkingMode && state.pointer.drag?.barrierLinkStarted) {
+    drawBarrierLinkFuse(path, state.pointer.drag.last);
+  }
 
   if (hasHold) {
     drawBarrierLinkHoldDiamond(
@@ -6435,6 +6487,7 @@ function beginBarrierSelectionPreview() {
   state.barrierLinkingMode = true;
   state.barrierLinkCandidateStoneId = null;
   state.barrierLinkPendingStoneId = null;
+  state.barrierLinkSettledDiamonds = [];
   state.selectedBarrierId = null;
   canvas.classList.add("is-barrier-linking");
   showAppToast(t("traverse.linkReady"));
@@ -6461,6 +6514,9 @@ function undoBarrierLinkSegment() {
   if (!state.barrierLinkPreview || state.barrierLinkPath.length <= 1 || state.barrierLinkAnimation) return;
   clearBarrierLinkHoldVisual();
   state.barrierLinkPath = state.barrierLinkPath.slice(0, -1);
+  state.barrierLinkSettledDiamonds = state.barrierLinkSettledDiamonds.filter((entry) => (
+    state.barrierLinkPath.includes(entry.stoneId)
+  ));
   state.barrierSelection = state.barrierLinkPath.length > 0
     ? [...state.barrierLinkPath]
     : [...state.barrierLinkSourceSelection];
@@ -12675,6 +12731,30 @@ function clearBarrierLinkCandidateTimer(drag) {
   clearBarrierLinkHoldVisual();
 }
 
+function rememberBarrierLinkDiamond(stoneId) {
+  if (!stoneId || state.barrierLinkSettledDiamonds.some((entry) => entry.stoneId === stoneId)) return;
+  state.barrierLinkSettledDiamonds.push({
+    stoneId,
+    rotation: ((performance.now() / 1000) % 1) * Math.PI / 2
+  });
+}
+
+function barrierLinkPointWithinHoldTolerance(stoneId, point) {
+  const center = barrierStoneScreenCenter(stoneId);
+  if (!center || !point) return false;
+  const polygon = state.traverseLog?.stones?.[stoneId]
+    ? displayedTraverseTilePolygon(state.traverseLog.stones[stoneId].tile)
+    : null;
+  const diagonal = polygon && polygon.length > 2
+    ? Math.hypot(polygon[2].x - polygon[0].x, polygon[2].y - polygon[0].y)
+    : 0;
+  const tolerance = Math.max(
+    BARRIER_LINK_HOLD_DRIFT_TOLERANCE,
+    Math.min(52, diagonal * 0.5)
+  );
+  return Math.hypot(center.x - point.x, center.y - point.y) <= tolerance;
+}
+
 function finishBarrierLinkCompletion() {
   const completion = state.barrierLinkCompletion;
   if (!completion) return;
@@ -12727,6 +12807,7 @@ function animateBarrierLinkSegment(drag, stoneId) {
     showAppToast(t("barrier.rankVertexLimit"), { duration: 1600 });
     return;
   }
+  rememberBarrierLinkDiamond(stoneId);
   clearBarrierLinkCandidateTimer(drag);
   state.barrierLinkPendingStoneId = null;
   state.barrierLinkAnimation = {
@@ -12788,7 +12869,10 @@ function scheduleBarrierLinkCandidate(drag, stoneId) {
     state.barrierLinkCandidateStoneId = stoneId;
     return;
   }
-  if (drag.barrierLinkPendingStoneId === stoneId && drag.barrierLinkCandidateTimerId) return;
+  if (drag.barrierLinkPendingStoneId === stoneId && drag.barrierLinkCandidateTimerId) {
+    draw();
+    return;
+  }
   clearBarrierLinkCandidateTimer(drag);
   drag.barrierLinkPendingStoneId = stoneId;
   state.barrierLinkCandidateStoneId = stoneId;
@@ -12803,8 +12887,13 @@ function scheduleBarrierLinkCandidate(drag, stoneId) {
 }
 
 function updateBarrierLinkGesture(drag, point) {
+  drag.last = point;
   const nearest = resolveDragEndpoint(point, "barrier");
-  const stoneId = nearest?.stoneId || null;
+  const pendingStoneId = drag.barrierLinkPendingStoneId || state.barrierLinkPendingStoneId;
+  const stoneId = nearest?.stoneId
+    || (pendingStoneId && barrierLinkPointWithinHoldTolerance(pendingStoneId, point)
+      ? pendingStoneId
+      : null);
   if (!stoneId) {
     clearBarrierLinkCandidateTimer(drag);
     drag.barrierLinkPendingStoneId = null;
@@ -12825,6 +12914,7 @@ function resumeBarrierLinkRoom() {
   state.barrierLinkingMode = true;
   state.barrierLinkPath = [];
   state.barrierSelection = sourceSelection;
+  state.barrierLinkSettledDiamonds = [];
   state.barrierLinkCandidateStoneId = null;
   state.barrierLinkPendingStoneId = null;
   state.barrierLinkAnimation = null;
@@ -14452,6 +14542,7 @@ function startDragGesture(pointerId, point, options = {}) {
         drag.longPressed = true;
         drag.barrierLinkStarted = true;
         state.barrierLinkPath = [drag.barrierLinkOriginStoneId];
+        rememberBarrierLinkDiamond(drag.barrierLinkOriginStoneId);
         state.barrierSelection = [...state.barrierLinkPath];
         state.barrierLinkCandidateStoneId = drag.barrierLinkOriginStoneId;
         canvas.classList.add("is-barrier-linking");
@@ -18288,7 +18379,11 @@ function bindEvents() {
 
     if (drag.barrierLink) {
       if (!drag.barrierLinkStarted) {
-        if (Math.hypot(dx, dy) > POINTER_MOVE_THRESHOLD) {
+        const withinHoldTolerance = barrierLinkPointWithinHoldTolerance(
+          drag.barrierLinkOriginStoneId,
+          point
+        );
+        if (!withinHoldTolerance && Math.hypot(dx, dy) > POINTER_MOVE_THRESHOLD) {
           clearDragLongPressTimer(drag);
           drag.cancelled = true;
           drag.barrierLink = false;
@@ -18297,7 +18392,9 @@ function bindEvents() {
           drag.last = point;
           return;
         } else {
+          event.preventDefault();
           drag.last = point;
+          draw();
           return;
         }
       } else {
