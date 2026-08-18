@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2391";
+const WEB_VERSION = "0.2401";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -162,6 +162,7 @@ const BARRIER_SINGLE_TILE_MAX_SCREEN_SIZE = 220;
 const GRID_MODE_LONG_PRESS_MS = 1500;
 const BARRIER_LINK_DIAMOND_MS = 500;
 const BARRIER_LINK_COMPLETION_MS = 1100;
+const BARRIER_LINK_ERROR_MESSAGE_MS = 4200;
 const BARRIER_LINK_ORANGE = "#f28a2e";
 const BARRIER_LINK_CORE = "#fff0cc";
 const BARRIER_LINK_GLOW = "rgb(255 138 46 / 0.98)";
@@ -667,6 +668,8 @@ const state = {
   barrierLinkDiamondAnimations: [],
   barrierLinkDiamondFrameId: null,
   barrierLinkCompletion: null,
+  barrierLinkError: null,
+  barrierLinkErrorTimerId: null,
   barrierLinkPreview: false,
   barrierLinkSourceSelection: [],
   barrierStoneGlyphMode: new Set(),
@@ -2408,6 +2411,11 @@ function confirmTraverseQuantity() {
 function resetBarrierLinkState() {
   clearDragLongPressTimer(state.pointer?.drag);
   clearBarrierLinkHoldVisual();
+  if (state.barrierLinkErrorTimerId !== null) {
+    window.clearTimeout(state.barrierLinkErrorTimerId);
+  }
+  state.barrierLinkErrorTimerId = null;
+  state.barrierLinkError = null;
   if (state.pointer?.drag?.barrierLink) state.pointer.drag.barrierLink = false;
   state.barrierLinkingMode = false;
   state.barrierLinkPath = [];
@@ -4615,10 +4623,33 @@ function drawBarrierLinkSettledDiamond(entry) {
   context.closePath();
   context.lineCap = "round";
   context.lineJoin = "round";
-  context.strokeStyle = "rgb(255 138 46 / 0.7)";
+  context.strokeStyle = BARRIER_LINK_GLOW;
+  context.lineWidth = 4.5;
+  context.shadowColor = BARRIER_LINK_GLOW;
+  context.shadowBlur = 16;
+  context.stroke();
+  context.strokeStyle = BARRIER_LINK_CORE;
   context.lineWidth = 1.8;
-  context.shadowColor = "rgb(255 138 46 / 0.8)";
-  context.shadowBlur = 12;
+  context.shadowColor = "rgb(255 240 204 / 0.98)";
+  context.shadowBlur = 6;
+  context.stroke();
+}
+
+function drawBarrierLinkErrorDiamond(stoneId) {
+  const center = barrierStoneScreenCenter(stoneId);
+  if (!center) return;
+  const radius = Math.max(20, Math.min(32, BARRIER_TILE_MIN_SCREEN_SIZE * 1.25));
+  const points = barrierLinkDiamondPoints(center, radius);
+  context.beginPath();
+  context.moveTo(points[0].x, points[0].y);
+  for (const point of points.slice(1)) context.lineTo(point.x, point.y);
+  context.closePath();
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.strokeStyle = "rgb(102 76 112 / 0.9)";
+  context.lineWidth = 2;
+  context.shadowColor = "transparent";
+  context.shadowBlur = 0;
   context.stroke();
 }
 
@@ -4627,8 +4658,9 @@ function drawBarrierLinkFuse(path, pointer = null, options = {}) {
   const vertices = path.map(barrierStoneScreenCenter).filter(Boolean);
   if (vertices.length < 1) return;
   context.save();
-  context.globalAlpha = 0.44;
-  context.strokeStyle = "rgb(242 138 46 / 0.86)";
+  const muted = options.muted === true;
+  context.globalAlpha = muted ? 0.74 : 0.44;
+  context.strokeStyle = muted ? "rgb(102 76 112 / 0.9)" : "rgb(242 138 46 / 0.86)";
   context.lineWidth = 1.35;
   context.lineCap = "round";
   context.lineJoin = "round";
@@ -4693,8 +4725,20 @@ function drawBarrierLinkDiamondProgress(entry) {
 }
 
 function drawBarrierLinkGesture() {
+  const error = state.barrierLinkError;
   const completion = state.barrierLinkCompletion;
   const path = completion?.path || state.barrierLinkPath;
+  if (error) {
+    context.save();
+    context.globalCompositeOperation = "source-over";
+    context.globalAlpha = 1;
+    drawBarrierLinkFuse(error.path, null, { close: true, muted: true });
+    for (const stoneId of error.path) {
+      drawBarrierLinkErrorDiamond(stoneId);
+    }
+    context.restore();
+    return;
+  }
   if (!state.barrierLinkingMode && !completion && state.barrierLinkDiamondAnimations.length === 0) return;
 
   context.save();
@@ -12850,6 +12894,11 @@ function updateBarrierLinkGesture(drag, point) {
 function resumeBarrierLinkRoom() {
   const sourceSelection = [...state.barrierLinkSourceSelection];
   if (!state.traverseMode || sourceSelection.length < 2) return false;
+  if (state.barrierLinkErrorTimerId !== null) {
+    window.clearTimeout(state.barrierLinkErrorTimerId);
+  }
+  state.barrierLinkErrorTimerId = null;
+  state.barrierLinkError = null;
   clearBarrierLinkHoldVisual();
   state.barrierLinkPreview = true;
   state.barrierLinkingMode = true;
@@ -13325,9 +13374,41 @@ function validateBarrierCompletion(vertices) {
 }
 
 function rejectBarrierLinkCompletion(message) {
-  resumeBarrierLinkRoom();
+  const completionPath = state.barrierLinkCompletion?.path;
+  const path = [
+    ...(Array.isArray(completionPath) && completionPath.length > 0
+      ? completionPath
+      : state.barrierLinkPath.length > 0
+        ? state.barrierLinkPath
+        : state.barrierSelection)
+  ];
+  clearBarrierLinkHoldVisual();
+  state.barrierLinkCompletion = null;
+  state.barrierLinkDiamondAnimations = [];
+  if (state.barrierLinkDiamondFrameId !== null) {
+    window.cancelAnimationFrame(state.barrierLinkDiamondFrameId);
+  }
+  state.barrierLinkDiamondFrameId = null;
+  state.barrierLinkingMode = false;
+  state.barrierLinkPath = [];
+  state.barrierSelection = path;
+  state.barrierLinkCandidateStoneId = null;
+  state.barrierLinkPendingStoneId = null;
+  state.barrierLinkError = { path };
+  state.barrierLinkPreview = true;
+  canvas.classList.add("is-barrier-linking");
   pulseBarrierError();
-  showAppToast(message, { error: true });
+  showAppToast(message, { error: true, duration: BARRIER_LINK_ERROR_MESSAGE_MS });
+  if (state.barrierLinkErrorTimerId !== null) {
+    window.clearTimeout(state.barrierLinkErrorTimerId);
+  }
+  const error = state.barrierLinkError;
+  state.barrierLinkErrorTimerId = window.setTimeout(() => {
+    if (state.barrierLinkError !== error) return;
+    state.barrierLinkErrorTimerId = null;
+    resumeBarrierLinkRoom();
+  }, BARRIER_LINK_ERROR_MESSAGE_MS);
+  render();
 }
 
 async function createBarrierFromSelection() {
@@ -13367,8 +13448,7 @@ async function createBarrierFromSelection() {
     const message = result.reason === "too-many"
       ? t("barrier.tooMany").replace("{max}", String(rankInfo.maxVertices))
       : result.reason === "used" ? t("barrier.stoneUsed") : t("barrier.missingStone");
-    showAppToast(message, { error: true });
-    resumeBarrierLinkRoom();
+    rejectBarrierLinkCompletion(message);
     return;
   }
   resetBarrierLinkState();
