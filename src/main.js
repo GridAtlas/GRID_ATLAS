@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2322";
+const WEB_VERSION = "0.2323";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -769,6 +769,8 @@ const CANVAS_PALETTES = {
     routeSelected: "#9b8bc7",
     pendingPointStroke: "#5e9f9a",
     traverseFill: "#5e9f9a",
+    barrierCell: "#4d9bd8",
+    barrierCellSelected: "#2f76b7",
     selected: "#9f4772",
     badgeFill: "#fffafd",
     badgeText: "#67548f",
@@ -798,6 +800,8 @@ const CANVAS_PALETTES = {
     routeSelected: "#8dffaa",
     pendingPointStroke: "#d6ffe0",
     traverseFill: "#29ff68",
+    barrierCell: "#4db7ef",
+    barrierCellSelected: "#2587c4",
     selected: "#ffffff",
     badgeFill: "#020806",
     badgeText: "#d6ffe0",
@@ -827,6 +831,8 @@ const CANVAS_PALETTES = {
     routeSelected: "#7c3aed",
     pendingPointStroke: "#0f8b8d",
     traverseFill: "#0f8b8d",
+    barrierCell: "#4d9bd8",
+    barrierCellSelected: "#2f76b7",
     selected: "#111827",
     badgeFill: "#fffaf0",
     badgeText: "#24313a",
@@ -856,6 +862,8 @@ const CANVAS_PALETTES = {
     routeSelected: "#e1b7ff",
     pendingPointStroke: "#f0d9ff",
     traverseFill: "#a85dcc",
+    barrierCell: "#4d9bd8",
+    barrierCellSelected: "#2f76b7",
     selected: "#ffffff",
     badgeFill: "#050207",
     badgeText: "#f0d9ff",
@@ -4304,6 +4312,10 @@ function drawTraverseStones(options = {}) {
       ? state.barrierSelection.includes(stoneId) || stoneId === state.barrierLinkCandidateStoneId
         || stoneId === state.barrierLinkPendingStoneId
       : false;
+    const activated = Boolean(stoneId && barrierIdForStone(state.traverseLog, stoneId));
+    const cellColor = activated
+      ? BARRIER_LINK_ORANGE
+      : selected ? colors.barrierCellSelected : colors.barrierCell;
     const diagonal = Math.hypot(polygon[2].x - polygon[0].x, polygon[2].y - polygon[0].y);
     const glyphMode = state.barrierStoneGlyphMode.has(stoneId);
     if (glyphMode ? diagonal > BARRIER_TILE_MIN_SCREEN_SIZE * 1.2 : diagonal < BARRIER_TILE_MIN_SCREEN_SIZE * 0.8) {
@@ -4319,21 +4331,21 @@ function drawTraverseStones(options = {}) {
       }), { x: 0, y: 0 });
       context.textAlign = "center";
       context.textBaseline = "middle";
-      context.font = "18px sans-serif";
+      context.font = "20px sans-serif";
       context.globalAlpha = selected ? 1 : 0.94;
-      context.fillStyle = selected ? BARRIER_LINK_ORANGE : colors.traverseFill;
+      context.fillStyle = cellColor;
       context.fillText("◆", center.x, center.y);
       context.restore();
       continue;
     }
-    context.fillStyle = selected ? BARRIER_LINK_ORANGE : colors.traverseFill;
-    context.globalAlpha = selected ? 0.32 : 0.2;
+    context.fillStyle = cellColor;
+    context.globalAlpha = selected || activated ? 0.32 : 0.2;
     drawTraversePolygon(polygon, { fill: true });
     context.globalAlpha = 0.72;
-    context.strokeStyle = selected ? BARRIER_LINK_ORANGE : colors.traverseFill;
-    context.lineWidth = selected ? 2.75 : 1.25;
+    context.strokeStyle = cellColor;
+    context.lineWidth = selected || activated ? 2.75 : 1.25;
     drawTraversePolygon(polygon, { stroke: true });
-      drawTraverseTileCount(polygon, stoneDisplayCount(stone), colors);
+    drawTraverseTileCount(polygon, stoneDisplayCount(stone), colors, cellColor);
     context.restore();
   }
 }
@@ -4350,11 +4362,11 @@ function drawTraverseTiles() {
   if (!preview) return;
   const placing = state.traverseQuantityAction === "place";
   context.save();
-  context.fillStyle = colors.traverseFill;
+  context.fillStyle = colors.barrierCell;
   context.globalAlpha = placing ? 0.14 : 0.06;
   drawTraversePolygon(preview, { fill: true });
   context.globalAlpha = placing ? 0.96 : 0.56;
-  context.strokeStyle = placing ? colors.selected : colors.traverseFill;
+  context.strokeStyle = placing ? colors.barrierCellSelected : colors.barrierCell;
   context.lineWidth = placing ? 1.8 : 1.2;
   context.setLineDash([4, 4]);
   drawTraversePolygon(preview, { stroke: true });
@@ -4384,11 +4396,11 @@ function drawBarrierPlacementDiamond(polygon, colors) {
   context.moveTo(points[0].x, points[0].y);
   for (const point of points.slice(1)) context.lineTo(point.x, point.y);
   context.closePath();
-  context.fillStyle = colors.selected;
+  context.fillStyle = colors.barrierCellSelected;
   context.globalAlpha = 0.05;
   context.fill();
   context.globalAlpha = 0.96;
-  context.strokeStyle = colors.selected;
+  context.strokeStyle = colors.barrierCellSelected;
   context.lineWidth = 1.8;
   context.setLineDash([5, 4]);
   context.stroke();
@@ -4633,7 +4645,7 @@ function drawBarrierLinkGesture() {
   context.restore();
 }
 
-function drawTraverseTileCount(polygon, count, colors) {
+function drawTraverseTileCount(polygon, count, colors, color = colors.barrierCell) {
   const right = Math.max(...polygon.map((point) => point.x)) - 5;
   const bottom = Math.max(...polygon.map((point) => point.y)) - 5;
   context.textAlign = "right";
@@ -4642,7 +4654,7 @@ function drawTraverseTileCount(polygon, count, colors) {
   context.lineWidth = 4;
   context.strokeStyle = colors.pointBaseStroke;
   context.strokeText(String(count), right, bottom);
-  context.fillStyle = colors.traverseFill;
+  context.fillStyle = color;
   context.fillText(String(count), right, bottom);
 }
 
@@ -4659,7 +4671,7 @@ function drawTraverseBarriers() {
     for (const vertex of vertices.slice(1)) context.lineTo(vertex.x, vertex.y);
     context.closePath();
     const selected = barrierId === state.selectedBarrierId;
-    context.fillStyle = colors.traverseFill;
+    context.fillStyle = BARRIER_LINK_ORANGE;
     context.globalAlpha = selected ? 0.32 : 0.18;
     context.fill("nonzero");
     context.restore();
@@ -5448,10 +5460,6 @@ function draw() {
     drawTraverseTiles();
     return;
   }
-  if (state.traverseMode) {
-    // Barrier mode is an overlay on the normal atlas outside the special views.
-    drawTraverseTiles();
-  }
   drawDragonEyePreview();
   drawBarrierLinkGesture();
   drawFigures();
@@ -5467,6 +5475,11 @@ function draw() {
   drawRouteStartSnapshot();
   drawCloudPoints({ priority: true });
   drawPoints({ priority: true });
+  if (state.traverseMode) {
+    // Keep barrier cells visually in front when a pin or current location
+    // shares the same tile.
+    drawTraverseTiles();
+  }
   drawRouteBadges();
   drawRangeSelection();
 }
