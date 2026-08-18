@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2402";
+const WEB_VERSION = "0.2414";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -1382,10 +1382,10 @@ const TRANSLATIONS = {
     "barrier.selectToDissolve": "結界を選択してください",
     "barrier.tooFew": "頂点が足りない！結界には3つ以上必要！",
     "barrier.needLocations": "結界を結ぶには、あと{count}箇所に結界石を置いてください。",
-    "barrier.tooMany": "大きすぎる！結界師ランクが足りない！（最大{max}頂点）",
-    "barrier.rankVertexLimit": "大きすぎる！結界師ランクが足りない！",
-    "barrier.sightExceeded": "大きすぎる！結界師ランクが足りない！見通し範囲を超えています（頂点 {vertices}）",
-    "barrier.crossLinkLocked": "交差結びはまだ使えない！結界師ランクが足りない！（{rank}級で解放）",
+    "barrier.tooMany": "大きすぎる！結界師のクラスが足りない！（最大{max}頂点）",
+    "barrier.rankVertexLimit": "大きすぎる！結界師のクラスが足りない！",
+    "barrier.sightExceeded": "大きすぎる！結界師のクラスが足りない！見通し範囲を超えています（頂点 {vertices}）",
+    "barrier.crossLinkLocked": "交差結びはまだ使えない！結界師のクラスが足りない！（結界師のクラス{rank}で解放）",
     "barrier.stoneUsed": "その結界石は使用中！別の結界石を選んで！",
     "barrier.missingStone": "結界石が見つからない！もう一度なぞって！",
     "barrier.selection": "結界石を{count}個選択中"
@@ -1957,10 +1957,10 @@ const TRANSLATIONS = {
     "barrier.selectToDissolve": "Select a barrier first",
     "barrier.tooFew": "Not enough vertices! A barrier needs at least three!",
     "barrier.needLocations": "Place barrier stones at {count} more locations to bind a barrier.",
-    "barrier.tooMany": "Too large! Your barrier-master rank is not high enough! (Max {max} vertices)",
-    "barrier.rankVertexLimit": "Too large! Your barrier-master rank is not high enough!",
-    "barrier.sightExceeded": "Too large! Your barrier-master rank is not high enough! The sight range is exceeded (vertices {vertices})",
-    "barrier.crossLinkLocked": "Cross-linking is not unlocked yet! Your barrier-master rank is not high enough! (Unlocks at rank {rank})",
+    "barrier.tooMany": "Too large! Your barrier-master class is not high enough! (Max {max} vertices)",
+    "barrier.rankVertexLimit": "Too large! Your barrier-master class is not high enough!",
+    "barrier.sightExceeded": "Too large! Your barrier-master class is not high enough! The sight range is exceeded (vertices {vertices})",
+    "barrier.crossLinkLocked": "Cross-linking is not unlocked yet! Your barrier-master class is not high enough! (Unlocks at barrier-master class {rank})",
     "barrier.stoneUsed": "That barrier stone is already in use! Choose another one!",
     "barrier.missingStone": "The barrier stone was not found! Trace it again!",
     "barrier.selection": "{count} barrier stone(s) selected"
@@ -2333,7 +2333,12 @@ function closeTraverseQuantityDialog() {
   const dialog = elements.traverseQuantityDialog;
   const wasOpen = Boolean(dialog?.open);
   elements.traverseQuantityDialog?.classList.remove("is-placement-overlay");
-  elements.traverseQuantityDialog?.style.removeProperty("--traverse-quantity-bottom");
+  elements.traverseQuantityDialog?.classList.remove("is-actionbar-overlay");
+  elements.traverseQuantityDialog?.style.removeProperty("--traverse-quantity-left");
+  elements.traverseQuantityDialog?.style.removeProperty("--traverse-quantity-top");
+  elements.traverseQuantityDialog?.style.removeProperty("--traverse-quantity-width");
+  elements.traverseQuantityDialog?.style.removeProperty("--traverse-quantity-height");
+  elements.actionBar?.classList.remove("is-quantity-dialog-open");
   state.traverseQuantityAction = null;
   state.traverseQuantityTargetTileId = null;
   state.traverseQuantity = 1;
@@ -2356,12 +2361,15 @@ function openTraverseQuantityDialog(action, options = {}) {
     render();
     return false;
   }
+  if (action === "place") centerAndFollowCurrentLocation();
   state.traverseQuantityAction = action;
   state.traverseQuantityTargetTileId = targetTileId;
   state.traverseQuantityMax = max;
   state.traverseQuantity = 1;
   const placementOverlay = action === "place";
   elements.traverseQuantityDialog.classList.toggle("is-placement-overlay", placementOverlay);
+  elements.traverseQuantityDialog.classList.toggle("is-actionbar-overlay", placementOverlay);
+  elements.actionBar?.classList.toggle("is-quantity-dialog-open", placementOverlay);
   renderTraverseQuantityDialog();
   if (!elements.traverseQuantityDialog.open) {
     if (placementOverlay) elements.traverseQuantityDialog.show();
@@ -2378,7 +2386,17 @@ function syncTraverseQuantityDialogPosition() {
 }
 
 function syncTraverseQuantityDialogPositionFor(dialog) {
-  if (!dialog?.open || !dialog.classList.contains("is-placement-overlay")) return;
+  if (!dialog?.open) return;
+  if (dialog.classList.contains("is-actionbar-overlay")) {
+    const actionBarRect = elements.actionBar?.getBoundingClientRect();
+    if (!actionBarRect || actionBarRect.width <= 0 || actionBarRect.height <= 0) return;
+    dialog.style.setProperty("--traverse-quantity-left", `${Math.round(actionBarRect.left)}px`);
+    dialog.style.setProperty("--traverse-quantity-top", `${Math.round(actionBarRect.top)}px`);
+    dialog.style.setProperty("--traverse-quantity-width", `${Math.round(actionBarRect.width)}px`);
+    dialog.style.setProperty("--traverse-quantity-height", `${Math.round(actionBarRect.height)}px`);
+    return;
+  }
+  if (!dialog.classList.contains("is-placement-overlay")) return;
   const viewportHeight = window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight;
   const bars = [elements.actionBar, elements.traverseActionBar]
     .map((element) => element?.getBoundingClientRect())
@@ -4188,6 +4206,7 @@ function syncCanvasSize() {
 
 function resizeCanvas() {
   syncCanvasSize();
+  syncTraverseQuantityDialogPosition();
   draw();
 }
 
@@ -13169,8 +13188,9 @@ function updateLineDragTarget(drag, screenPoint) {
 }
 
 function beginLineDrag(drag, screenPoint) {
-  if (!drag?.longPressLink || drag.lineDrag) return;
-  const link = findLink(drag.longPressLink.id);
+  const candidate = drag?.lineDragCandidate || drag?.longPressLink;
+  if (!candidate || drag.lineDrag) return;
+  const link = findLink(candidate.id);
   const touchedSide = link ? lineDragSideAtPoint(link, drag.start) : null;
   const fixedSide = touchedSide === "a" ? "b" : touchedSide === "b" ? "a" : null;
   if (!link || !fixedSide) return;
@@ -14127,7 +14147,7 @@ function renderFitButton() {
   if (!button) return;
   const hasVertexCells = state.traverseMode && barrierCellFitPoints().length > 0;
   const nextTarget = hasVertexCells && state.barrierFitStage === "vertices"
-    ? "頂点セル（千里眼）"
+    ? "頂点セル"
     : "全体";
   const title = state.traverseMode ? `次のパン対象：${nextTarget}` : "全体表示";
   button.title = title;
@@ -14468,9 +14488,14 @@ function startDragGesture(pointerId, point, options = {}) {
   const lineBodyCandidate = resolveLineBodyDragCandidate({
     point,
     lineEndpoint,
+    barrierStone: barrierStoneCandidate,
     moved: options.moved,
     findNearestLink
   });
+  // A line body is the only object that can arm reassignment. Figure, point,
+  // and barrier-cell hits below remain available for long-press/tap handling,
+  // but they must never suppress an independent line-body drag candidate.
+  const lineDragCandidate = lineBodyCandidate;
   const figureEdge = lineEndpoint || figureVertex || lineBodyCandidate || options.moved
     ? null
     : findNearestFigureEdge(point);
@@ -14511,6 +14536,7 @@ function startDragGesture(pointerId, point, options = {}) {
     longPressPoint,
     longPressLink,
     longPressBarrier,
+    lineDragCandidate,
     lineDragReady: false,
     lineDrag: null,
     cancelled: false,
@@ -14540,7 +14566,7 @@ function startDragGesture(pointerId, point, options = {}) {
     return;
   }
 
-  if (longPressLink) {
+  if (lineDragCandidate) {
     drag.lineDragReadyTimerId = window.setTimeout(() => {
       if (
         state.pointer.drag !== drag
@@ -18413,6 +18439,20 @@ function bindEvents() {
     }
 
     if (Math.hypot(dx, dy) > POINTER_MOVE_THRESHOLD) {
+      if (drag.lineDragCandidate && !drag.longPressed) {
+        if (drag.lineDragReady) {
+          clearDragLongPressTimer(drag);
+          beginLineDrag(drag, point);
+          updateLineDragTarget(drag, point);
+          draw();
+          renderStatus();
+          drag.last = point;
+          return;
+        }
+        clearDragLongPressTimer(drag);
+        drag.cancelled = true;
+        drag.lineDragCandidate = null;
+      }
       if (drag.longPressFigure) {
         if (drag.longPressed) {
           drag.last = point;

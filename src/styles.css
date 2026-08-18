@@ -1080,6 +1080,9 @@ button {
   border-top: 1px solid var(--line);
   background: var(--surface);
 }
+.actionbar.is-quantity-dialog-open > * {
+  visibility: hidden;
+}
 .action-destination {
   grid-column: 1 / -1;
   min-width: 0;
@@ -1641,6 +1644,29 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
   z-index: 20;
 }
 
+.traverse-quantity-dialog.is-actionbar-overlay {
+  position: fixed;
+  inset: auto;
+  right: auto;
+  bottom: auto;
+  left: var(--traverse-quantity-left, 0px);
+  top: var(--traverse-quantity-top, 0px);
+  width: var(--traverse-quantity-width, 100vw);
+  height: var(--traverse-quantity-height, auto);
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  transform: none;
+  border-radius: 0;
+  overflow: auto;
+  z-index: 20;
+}
+
+.traverse-quantity-dialog.is-actionbar-overlay::backdrop {
+  background: transparent;
+  backdrop-filter: none;
+}
+
 .traverse-quantity-dialog.is-placement-overlay::backdrop {
   background: transparent;
   backdrop-filter: none;
@@ -1649,6 +1675,46 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
 .traverse-quantity-dialog.is-placement-overlay .traverse-quantity-dialog-form {
   gap: 12px;
   padding: 12px 14px;
+}
+
+.traverse-quantity-dialog.is-actionbar-overlay .traverse-quantity-dialog-form {
+  box-sizing: border-box;
+  min-height: 100%;
+  gap: 4px;
+  padding: 5px 10px;
+}
+
+.traverse-quantity-dialog.is-actionbar-overlay .traverse-action-dialog-heading h2 {
+  font-size: 15px;
+}
+
+.traverse-quantity-dialog.is-actionbar-overlay .share-link-close {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  font-size: 18px;
+}
+
+.traverse-quantity-dialog.is-actionbar-overlay .traverse-quantity-dialog-message {
+  font-size: 12px;
+}
+
+.traverse-quantity-dialog.is-actionbar-overlay .traverse-quantity-stepper {
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  gap: 6px;
+}
+
+.traverse-quantity-dialog.is-actionbar-overlay .traverse-quantity-stepper-button {
+  min-height: 32px;
+}
+
+.traverse-quantity-dialog.is-actionbar-overlay .traverse-quantity-value {
+  min-height: 34px;
+  font-size: 22px;
+}
+
+.traverse-quantity-dialog.is-actionbar-overlay .button-row button {
+  min-height: 30px;
 }
 
 .barrier-pin-dialog {

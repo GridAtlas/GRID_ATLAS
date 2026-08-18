@@ -19,4 +19,12 @@ describe("line-body drag hit testing", () => {
       findNearestLink: () => ({ id: "line-1" })
     })).toBeNull();
   });
+
+  it("does not turn a barrier cell into a drag candidate", () => {
+    expect(resolveLineBodyDragCandidate({
+      point: { x: 120, y: 80 },
+      barrierStone: { stoneId: "stone-1" },
+      findNearestLink: () => ({ id: "line-1" })
+    })).toBeNull();
+  });
 });
