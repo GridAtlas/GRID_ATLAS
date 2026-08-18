@@ -29,8 +29,8 @@
     <link rel="icon" href="assets/icon-grid.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const theme=localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{document.documentElement.dataset.theme="retro"}</script>
-    <link rel="stylesheet" href="src/styles.css?v=104">
-    <script src="src/main.js?v=499" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=106">
+    <script src="src/main.js?v=501" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -544,6 +544,35 @@
         <div class="button-row">
           <button id="traverseQuantityCancelButton" type="button" data-i18n="action.cancel">キャンセル</button>
           <button id="traverseQuantityConfirmButton" class="primary-button" type="button" data-i18n="action.apply">決定</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="barrierPinDialog" class="traverse-quantity-dialog barrier-pin-dialog" aria-labelledby="barrierPinDialogTitle" tabindex="-1">
+      <form class="traverse-quantity-dialog-form barrier-pin-dialog-form">
+        <div class="traverse-action-dialog-heading">
+          <h2 id="barrierPinDialogTitle" data-i18n="traverse.pinTitle" tabindex="-1">ピンを打つ</h2>
+          <button id="barrierPinCancelButton" class="share-link-close" type="button" aria-label="閉じる" title="閉じる"><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
+        </div>
+        <p class="traverse-quantity-dialog-message" data-i18n="traverse.pinMessage">見出しと登録位置を設定してください。</p>
+        <label>
+          <span data-i18n="field.title">見出し</span>
+          <input id="barrierPinTitle" type="text" maxlength="80" autocomplete="off">
+        </label>
+        <fieldset id="barrierPinTargetFieldset" class="barrier-pin-target-fieldset">
+          <legend data-i18n="traverse.pinTarget">登録位置</legend>
+          <label class="barrier-pin-target-option">
+            <input id="barrierPinTargetPending" name="barrierPinTarget" type="radio" value="pending">
+            <span data-i18n="traverse.pinPending">仮ポイント</span>
+          </label>
+          <label class="barrier-pin-target-option">
+            <input id="barrierPinTargetCurrent" name="barrierPinTarget" type="radio" value="current">
+            <span data-i18n="traverse.pinCurrent">現在地</span>
+          </label>
+        </fieldset>
+        <output id="barrierPinTargetStatus" class="barrier-pin-target-status" aria-live="polite" hidden></output>
+        <div class="button-row">
+          <button id="barrierPinCancelButtonBottom" type="button" data-i18n="action.cancel">キャンセル</button>
+          <button id="barrierPinConfirmButton" class="primary-button" type="button" data-i18n="button.submitRegister">登録</button>
         </div>
       </form>
     </dialog>

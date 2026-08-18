@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2298";
+const WEB_VERSION = "0.2318";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -260,6 +260,7 @@ const elements = {
   clearSelectionButton: document.querySelector("#clearSelectionButton"),
   actionCenterButton: document.querySelector("#actionCenterButton"),
   actionMapButton: document.querySelector("#actionMapButton"),
+  actionBar: document.querySelector(".actionbar"),
   traverseActionBar: document.querySelector("#traverseActionBar"),
   traverseBottomCancelButton: document.querySelector("#traverseBottomCancelButton"),
   traverseBottomCancelLabel: document.querySelector("#traverseBottomCancelLabel"),
@@ -284,6 +285,15 @@ const elements = {
   traverseQuantityValue: document.querySelector("#traverseQuantityValue"),
   traverseQuantityCancelButton: document.querySelector("#traverseQuantityCancelButton"),
   traverseQuantityConfirmButton: document.querySelector("#traverseQuantityConfirmButton"),
+  barrierPinDialog: document.querySelector("#barrierPinDialog"),
+  barrierPinTitle: document.querySelector("#barrierPinTitle"),
+  barrierPinTargetFieldset: document.querySelector("#barrierPinTargetFieldset"),
+  barrierPinTargetPending: document.querySelector("#barrierPinTargetPending"),
+  barrierPinTargetCurrent: document.querySelector("#barrierPinTargetCurrent"),
+  barrierPinTargetStatus: document.querySelector("#barrierPinTargetStatus"),
+  barrierPinCancelButton: document.querySelector("#barrierPinCancelButton"),
+  barrierPinCancelButtonBottom: document.querySelector("#barrierPinCancelButtonBottom"),
+  barrierPinConfirmButton: document.querySelector("#barrierPinConfirmButton"),
   editionBadge: document.querySelector("#editionBadge"),
   webVersionBadge: document.querySelector("#webVersionBadge"),
   settingsMenu: document.querySelector("#settingsMenu"),
@@ -644,6 +654,7 @@ const state = {
   selectedBarrierId: null,
   barrierPlacementView: false,
   barrierPinMode: false,
+  barrierPinTarget: null,
   barrierDissolveMode: false,
   barrierLinkingMode: false,
   barrierLinkPath: [],
@@ -1289,6 +1300,13 @@ const TRANSLATIONS = {
     "traverse.tileMismatch": "そのタイルの位置で操作してください",
     "traverse.place": "結界石を置く",
     "traverse.pick": "結界石を拾う",
+    "traverse.pinTitle": "ピンを打つ",
+    "traverse.pinMessage": "見出しと登録位置を設定してください。",
+    "traverse.pinTarget": "登録位置",
+    "traverse.pinPending": "仮ポイント",
+    "traverse.pinCurrent": "現在地",
+    "traverse.pinNoTarget": "現在地を取得するか、仮ポイントを作成してからピンを打ってください",
+    "traverse.pinRegistered": "ピンを登録しました",
     "traverse.placementView": "配置をみる",
     "traverse.placementViewExit": "結界メニューへ戻る",
     "traverse.connect": "結界を結ぶ",
@@ -1856,6 +1874,13 @@ const TRANSLATIONS = {
     "traverse.tileMismatch": "Move to this tile to operate it",
     "traverse.place": "Place barrier stone",
     "traverse.pick": "Pick up barrier stone",
+    "traverse.pinTitle": "Place a pin",
+    "traverse.pinMessage": "Set a heading and registration location.",
+    "traverse.pinTarget": "Registration location",
+    "traverse.pinPending": "Temporary point",
+    "traverse.pinCurrent": "Current location",
+    "traverse.pinNoTarget": "Get your current location or create a temporary point before placing a pin.",
+    "traverse.pinRegistered": "Pin registered",
     "traverse.placementView": "View placement",
     "traverse.placementViewExit": "Back to barrier menu",
     "traverse.connect": "Bind barrier",
@@ -2288,11 +2313,15 @@ function renderTraverseQuantityDialog() {
 }
 
 function closeTraverseQuantityDialog() {
-  if (elements.traverseQuantityDialog?.open) elements.traverseQuantityDialog.close("cancel");
+  const dialog = elements.traverseQuantityDialog;
+  const wasOpen = Boolean(dialog?.open);
+  elements.traverseQuantityDialog?.classList.remove("is-placement-overlay");
+  elements.traverseQuantityDialog?.style.removeProperty("--traverse-quantity-bottom");
   state.traverseQuantityAction = null;
   state.traverseQuantityTargetTileId = null;
   state.traverseQuantity = 1;
   state.traverseQuantityMax = 1;
+  if (wasOpen) dialog.close("cancel");
 }
 
 function openTraverseQuantityDialog(action, options = {}) {
@@ -2314,10 +2343,35 @@ function openTraverseQuantityDialog(action, options = {}) {
   state.traverseQuantityTargetTileId = targetTileId;
   state.traverseQuantityMax = max;
   state.traverseQuantity = 1;
+  const placementOverlay = action === "place";
+  elements.traverseQuantityDialog.classList.toggle("is-placement-overlay", placementOverlay);
   renderTraverseQuantityDialog();
-  if (!elements.traverseQuantityDialog.open) elements.traverseQuantityDialog.showModal();
+  if (!elements.traverseQuantityDialog.open) {
+    if (placementOverlay) elements.traverseQuantityDialog.show();
+    else elements.traverseQuantityDialog.showModal();
+  }
+  render();
+  if (placementOverlay) window.requestAnimationFrame(syncTraverseQuantityDialogPosition);
   elements.traverseQuantityIncreaseButton?.focus();
   return true;
+}
+
+function syncTraverseQuantityDialogPosition() {
+  syncTraverseQuantityDialogPositionFor(elements.traverseQuantityDialog);
+}
+
+function syncTraverseQuantityDialogPositionFor(dialog) {
+  if (!dialog?.open || !dialog.classList.contains("is-placement-overlay")) return;
+  const viewportHeight = window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight;
+  const bars = [elements.actionBar, elements.traverseActionBar]
+    .map((element) => element?.getBoundingClientRect())
+    .filter((rect) => rect && rect.width > 0 && rect.height > 0 && rect.top < viewportHeight);
+  const coveredTop = bars.reduce(
+    (top, rect) => Math.min(top, Math.max(0, rect.top)),
+    viewportHeight
+  );
+  const bottomOffset = Math.max(0, Math.ceil(viewportHeight - coveredTop) + 8);
+  dialog.style.setProperty("--traverse-quantity-bottom", `${bottomOffset}px`);
 }
 
 function adjustTraverseQuantity(delta) {
@@ -2605,6 +2659,7 @@ function applyTraverseModeToggle(enabled) {
 }
 
 function setTraverseMode(enabled) {
+  if (state.barrierPinMode) closeBarrierPinDialog();
   state.traverseMode = Boolean(enabled);
   if (state.traverseMode) {
     // The action button lives inside the grid panel on mobile. Keep the
@@ -4292,16 +4347,50 @@ function drawTraverseTiles() {
   const currentTileId = currentGeo ? tileIdFromGeo(currentGeo) : null;
   const preview = currentTileId ? traverseTilePolygon(currentTileId) : null;
   if (!preview) return;
+  const placing = state.traverseQuantityAction === "place";
   context.save();
   context.fillStyle = colors.traverseFill;
-  context.globalAlpha = 0.06;
+  context.globalAlpha = placing ? 0.14 : 0.06;
   drawTraversePolygon(preview, { fill: true });
-  context.globalAlpha = 0.56;
-  context.strokeStyle = colors.traverseFill;
-  context.lineWidth = 1.2;
+  context.globalAlpha = placing ? 0.96 : 0.56;
+  context.strokeStyle = placing ? colors.selected : colors.traverseFill;
+  context.lineWidth = placing ? 1.8 : 1.2;
   context.setLineDash([4, 4]);
   drawTraversePolygon(preview, { stroke: true });
   context.setLineDash([]);
+  context.restore();
+  if (placing) drawBarrierPlacementDiamond(preview, colors);
+}
+
+function drawBarrierPlacementDiamond(polygon, colors) {
+  if (!Array.isArray(polygon) || polygon.length < 4) return;
+  const center = polygon.reduce((sum, point) => ({
+    x: sum.x + point.x / polygon.length,
+    y: sum.y + point.y / polygon.length
+  }), { x: 0, y: 0 });
+  const width = Math.max(...polygon.map((point) => point.x)) - Math.min(...polygon.map((point) => point.x));
+  const height = Math.max(...polygon.map((point) => point.y)) - Math.min(...polygon.map((point) => point.y));
+  const radius = Math.max(18, Math.min(72, Math.max(width, height) * 0.62));
+  const points = [
+    { x: center.x, y: center.y - radius },
+    { x: center.x + radius, y: center.y },
+    { x: center.x, y: center.y + radius },
+    { x: center.x - radius, y: center.y }
+  ];
+
+  context.save();
+  context.beginPath();
+  context.moveTo(points[0].x, points[0].y);
+  for (const point of points.slice(1)) context.lineTo(point.x, point.y);
+  context.closePath();
+  context.fillStyle = colors.selected;
+  context.globalAlpha = 0.05;
+  context.fill();
+  context.globalAlpha = 0.96;
+  context.strokeStyle = colors.selected;
+  context.lineWidth = 1.8;
+  context.setLineDash([5, 4]);
+  context.stroke();
   context.restore();
 }
 
@@ -5439,6 +5528,7 @@ function render() {
   renderGridFigureQuickDialog();
   renderGridLinkColorDialog();
   renderSelectionAnalysisDialog();
+  if (state.barrierPinMode) renderBarrierPinDialog();
   syncSettingsControls();
   syncLocationGlowAnimation();
 }
@@ -6345,42 +6435,113 @@ function selectedBarrierStoneTile() {
   return stoneId ? state.traverseLog?.stones?.[stoneId]?.tile || null : null;
 }
 
-function enterBarrierPinMode() {
-  if (!state.traverseMode || state.traverseBusy) return false;
-  state.barrierPinMode = !state.barrierPinMode;
-  if (state.barrierPinMode) {
-    resetBarrierLinkState();
-    resetDragonEyeState();
-    state.barrierPlacementView = false;
-    state.barrierDissolveMode = false;
-    showAppToast("グリッドをタップしてピンを打つ場所を選択");
+function barrierPinTargets() {
+  const targets = [];
+  if (validGeo(state.pendingGeo)) {
+    targets.push({ id: "pending", geo: normalizeGeo(state.pendingGeo), label: t("traverse.pinPending") });
   }
+  if (validGeo(state.currentGeo)) {
+    targets.push({ id: "current", geo: normalizeGeo(state.currentGeo), label: t("traverse.pinCurrent") });
+  }
+  return targets;
+}
+
+function renderBarrierPinDialog() {
+  const targets = barrierPinTargets();
+  const hasMultipleTargets = targets.length > 1;
+  const selectedTarget = targets.find((target) => target.id === state.barrierPinTarget) || targets[0] || null;
+  state.barrierPinTarget = selectedTarget?.id || null;
+
+  if (elements.barrierPinTargetFieldset) {
+    elements.barrierPinTargetFieldset.hidden = !hasMultipleTargets;
+  }
+  if (elements.barrierPinTargetPending) {
+    elements.barrierPinTargetPending.checked = selectedTarget?.id === "pending";
+    elements.barrierPinTargetPending.disabled = !targets.some((target) => target.id === "pending");
+  }
+  if (elements.barrierPinTargetCurrent) {
+    elements.barrierPinTargetCurrent.checked = selectedTarget?.id === "current";
+    elements.barrierPinTargetCurrent.disabled = !targets.some((target) => target.id === "current");
+  }
+  if (elements.barrierPinTargetStatus) {
+    elements.barrierPinTargetStatus.textContent = selectedTarget?.label || t("traverse.pinNoTarget");
+    elements.barrierPinTargetStatus.hidden = hasMultipleTargets;
+  }
+  if (elements.barrierPinConfirmButton) {
+    elements.barrierPinConfirmButton.disabled = !selectedTarget;
+  }
+}
+
+function closeBarrierPinDialog() {
+  const dialog = elements.barrierPinDialog;
+  const wasOpen = Boolean(dialog?.open);
+  state.barrierPinMode = false;
+  state.barrierPinTarget = null;
+  dialog?.classList.remove("is-placement-overlay");
+  dialog?.style.removeProperty("--traverse-quantity-bottom");
+  if (wasOpen) dialog.close("cancel");
+}
+
+function openBarrierPinDialog() {
+  if (!state.traverseMode || state.traverseBusy || !elements.barrierPinDialog) return false;
+  if (state.barrierPinMode) {
+    closeBarrierPinDialog();
+    render();
+    return true;
+  }
+  const targets = barrierPinTargets();
+  if (targets.length === 0) {
+    showAppToast(t("traverse.pinNoTarget"), { error: true });
+    return false;
+  }
+
+  resetBarrierLinkState();
+  resetDragonEyeState();
+  state.barrierPlacementView = false;
+  state.barrierDissolveMode = false;
+  state.barrierPinMode = true;
+  state.barrierPinTarget = targets.some((target) => target.id === "pending") ? "pending" : "current";
+  elements.barrierPinTitle.value = "結界ピン";
+  elements.barrierPinDialog.classList.add("is-placement-overlay");
+  renderBarrierPinDialog();
+  if (!elements.barrierPinDialog.open) elements.barrierPinDialog.show();
   render();
+  window.requestAnimationFrame(() => syncTraverseQuantityDialogPositionFor(elements.barrierPinDialog));
+  window.setTimeout(() => elements.barrierPinTitle?.focus(), 0);
   return true;
 }
 
-function placeBarrierPinAtScreen(screenPoint) {
-  if (!state.barrierPinMode) return;
-  state.barrierPinMode = false;
-  pauseLocationFollowForManualView();
+function submitBarrierPin() {
+  const target = barrierPinTargets().find((item) => item.id === state.barrierPinTarget) || barrierPinTargets()[0];
+  if (!target) {
+    showAppToast(t("traverse.pinNoTarget"), { error: true });
+    return;
+  }
+
+  const title = elements.barrierPinTitle?.value.trim() || "結界ピン";
+  closeBarrierPinDialog();
   state.mode = "add";
-  const worldPoint = screenToWorld(screenPoint);
-  state.pendingGeo = unprojectWorld(worldPoint.x, worldPoint.y);
+  state.pendingGeo = target.geo;
   state.editingPointId = null;
   state.pointDestinationListId = null;
   state.pendingLinkPointId = null;
-  elements.pointTitle.value = "結界ピン";
+  elements.pointTitle.value = title;
   elements.pointNote.value = "";
   elements.pointPhoto.value = "";
-  fillFormFromGeo(state.pendingGeo);
+  fillFormFromGeo(target.geo);
   setSelection([], { clearPending: false, render: false });
-  openPointRegistrationDialog();
   render();
+  if (typeof elements.pointForm.requestSubmit === "function") {
+    elements.pointForm.requestSubmit();
+  } else {
+    elements.pointForm.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+  }
+  showAppToast(t("traverse.pinRegistered"));
 }
 
 function handleBarrierQuickAction(action) {
   if (!state.traverseMode) return false;
-  if (action === "pin") return enterBarrierPinMode();
+  if (action === "pin") return openBarrierPinDialog();
   if (action === "place") return openTraverseQuantityDialog("place");
   if (action === "connect") {
     if (!state.barrierLinkPreview) beginBarrierSelectionPreview();
@@ -6612,7 +6773,7 @@ function renderTraverseQuickActions() {
   setActionButtonLabel(elements.actionCenterButton, "測る");
   setActionButtonLabel(elements.actionLinkButton, "置く");
   setActionButtonLabel(elements.clearSelectionButton, "結ぶ");
-  setActionButtonLabel(elements.actionInvertButton, "解除");
+  setActionButtonLabel(elements.actionInvertButton, "（選択）解除");
   setActionButtonLabel(elements.actionShareSelectedButton, t("action.shareSelected"));
   setActionButtonLabel(elements.actionMapButton, t("action.map"));
   setActionButtonLabel(elements.actionAnalyzeButton, t("action.analyze"));
@@ -13336,10 +13497,6 @@ function findNearestLoadedObservation(screenPoint) {
 }
 
 function handleCanvasClick(screenPoint) {
-  if (state.barrierPinMode) {
-    placeBarrierPinAtScreen(screenPoint);
-    return;
-  }
   if (state.barrierDissolveMode) {
     selectBarrierForDissolve(screenPoint);
     return;
@@ -17756,6 +17913,50 @@ function bindEvents() {
       closeTraverseQuantityDialog();
       returnToTraverseActionMenu();
     }
+  });
+  elements.traverseQuantityDialog?.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeTraverseQuantityDialog();
+    returnToTraverseActionMenu();
+  });
+  elements.traverseQuantityDialog?.addEventListener("close", () => {
+    if (!state.traverseQuantityAction) return;
+    closeTraverseQuantityDialog();
+    returnToTraverseActionMenu();
+  });
+  elements.barrierPinCancelButton?.addEventListener("click", () => {
+    closeBarrierPinDialog();
+    render();
+  });
+  elements.barrierPinCancelButtonBottom?.addEventListener("click", () => {
+    closeBarrierPinDialog();
+    render();
+  });
+  elements.barrierPinConfirmButton?.addEventListener("click", submitBarrierPin);
+  elements.barrierPinDialog?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    submitBarrierPin();
+  });
+  elements.barrierPinDialog?.addEventListener("change", (event) => {
+    if (event.target?.name !== "barrierPinTarget") return;
+    state.barrierPinTarget = event.target.value;
+    renderBarrierPinDialog();
+  });
+  elements.barrierPinDialog?.addEventListener("click", (event) => {
+    if (event.target === elements.barrierPinDialog) {
+      closeBarrierPinDialog();
+      render();
+    }
+  });
+  elements.barrierPinDialog?.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeBarrierPinDialog();
+    render();
+  });
+  elements.barrierPinDialog?.addEventListener("close", () => {
+    if (!state.barrierPinMode) return;
+    closeBarrierPinDialog();
+    render();
   });
   elements.zoomInButton.addEventListener("click", () => zoomAt({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 1.25));
   elements.zoomOutButton.addEventListener("click", () => zoomAt({ x: canvasSize().width / 2, y: canvasSize().height / 2 }, 0.8));

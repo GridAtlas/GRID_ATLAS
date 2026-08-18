@@ -1129,8 +1129,8 @@ button {
 :root.is-traverse-mode .actionbar #actionRegisterButton { order: 1; }
 :root.is-traverse-mode .actionbar #actionCenterButton { order: 2; }
 :root.is-traverse-mode .actionbar #actionLinkButton { order: 3; }
-:root.is-traverse-mode .actionbar #clearSelectionButton { order: 4; }
-:root.is-traverse-mode .actionbar #actionInvertButton { order: 5; }
+:root.is-traverse-mode .actionbar #actionInvertButton { order: 4; }
+:root.is-traverse-mode .actionbar #clearSelectionButton { order: 5; }
 :root.is-traverse-mode .actionbar #actionShareSelectedButton { order: 6; }
 :root.is-traverse-mode .actionbar #actionMapButton { order: 7; }
 :root.is-traverse-mode .actionbar #actionAnalyzeButton { order: 8; }
@@ -1622,6 +1622,85 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
   background: var(--surface);
   color: var(--text);
   box-shadow: var(--shadow), var(--brand-glow);
+}
+
+.traverse-quantity-dialog.is-placement-overlay {
+  inset: auto;
+  left: 50%;
+  bottom: var(--traverse-quantity-bottom, 0px);
+  width: min(520px, 100vw);
+  max-width: 100vw;
+  max-height: calc(100dvh - var(--traverse-quantity-bottom, 0px) - 8px);
+  margin: 0;
+  transform: translateX(-50%);
+  border-radius: 12px 12px 0 0;
+  z-index: 20;
+}
+
+.traverse-quantity-dialog.is-placement-overlay::backdrop {
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.traverse-quantity-dialog.is-placement-overlay .traverse-quantity-dialog-form {
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.barrier-pin-dialog {
+  width: min(420px, calc(100vw - 24px));
+}
+
+.barrier-pin-dialog-form {
+  gap: 12px;
+}
+
+.barrier-pin-target-fieldset {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.barrier-pin-target-fieldset legend {
+  grid-column: 1 / -1;
+  margin-bottom: 1px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.barrier-pin-target-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.barrier-pin-target-option input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.barrier-pin-target-status {
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .traverse-quantity-dialog::backdrop {
