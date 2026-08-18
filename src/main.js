@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2323";
+const WEB_VERSION = "0.2333";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -652,6 +652,7 @@ const state = {
   traverseLog: null,
   barrierSelection: [],
   selectedBarrierId: null,
+  barrierFitStage: "all",
   barrierPlacementView: false,
   barrierPinMode: false,
   barrierPinTarget: null,
@@ -1315,6 +1316,7 @@ const TRANSLATIONS = {
     "traverse.pinCurrent": "現在地",
     "traverse.pinNoTarget": "現在地を取得するか、仮ポイントを作成してからピンを打ってください",
     "traverse.pinRegistered": "ピンを登録しました",
+    "traverse.vertexFitUnavailable": "頂点セルがありません",
     "traverse.placementView": "配置をみる",
     "traverse.placementViewExit": "結界メニューへ戻る",
     "traverse.connect": "結界を結ぶ",
@@ -1889,6 +1891,7 @@ const TRANSLATIONS = {
     "traverse.pinCurrent": "Current location",
     "traverse.pinNoTarget": "Get your current location or create a temporary point before placing a pin.",
     "traverse.pinRegistered": "Pin registered",
+    "traverse.vertexFitUnavailable": "There are no vertex cells.",
     "traverse.placementView": "View placement",
     "traverse.placementViewExit": "Back to barrier menu",
     "traverse.connect": "Bind barrier",
@@ -2677,6 +2680,7 @@ function setTraverseMode(enabled) {
     setMobileGridPage("grid");
   }
   state.barrierPlacementView = false;
+  state.barrierFitStage = "all";
   state.barrierDissolveMode = false;
   state.barrierPinMode = false;
   resetBarrierLinkState();
@@ -5533,6 +5537,7 @@ function render() {
   renderStatus();
   renderTraverseBottomActions();
   syncTraverseModeUi();
+  renderFitButton();
   renderWebVersion();
   renderActionButtons();
   renderPointInfoDialog();
@@ -13824,10 +13829,15 @@ function zoomAt(screenPoint, factor) {
   render();
 }
 
-function barrierCellFitPoints() {
+function barrierCellFitPoints(options = {}) {
   if (!state.traverseMode || !state.traverseLog) return [];
+  const verticesOnly = options.verticesOnly === true;
+  const vertexStoneIds = verticesOnly
+    ? new Set(Object.values(state.traverseLog.barriers || {}).flatMap((barrier) => barrierStoneIds(barrier)))
+    : null;
   return Object.values(state.traverseLog.stones || {})
     .filter((stone) => stoneDisplayCount(stone) > 0)
+    .filter((stone) => !vertexStoneIds || vertexStoneIds.has(stoneIdFromTile(stone.tile)))
     .flatMap((stone) => tileBoundaryGeos(stone.tile))
     .map((geo) => ({
       ...projectLatLng(geo.lat, geo.lng),
@@ -13892,6 +13902,34 @@ function fitToPoints(fitPointsOverride = null, options = {}) {
   state.viewport.y = (minY + maxY) / 2;
   state.viewport.scale = clampScale(Math.min(scaleX, scaleY));
   render();
+}
+
+function fitTraverseView() {
+  const fitVertices = state.barrierFitStage === "vertices";
+  if (fitVertices) {
+    const vertexCellFitPoints = barrierCellFitPoints({ verticesOnly: true });
+    if (vertexCellFitPoints.length === 0) {
+      showAppToast(t("traverse.vertexFitUnavailable"), { error: true });
+      return;
+    }
+    state.barrierFitStage = "all";
+    fitToPoints(vertexCellFitPoints);
+    return;
+  }
+
+  state.barrierFitStage = "vertices";
+  fitToPoints(null, { includeBarrierCells: true });
+}
+
+function renderFitButton() {
+  const button = elements.fitButton;
+  if (!button) return;
+  const nextTarget = state.traverseMode && state.barrierFitStage === "vertices"
+    ? "頂点セル（千里眼）"
+    : "全体";
+  const title = state.traverseMode ? `次のパン対象：${nextTarget}` : "全体表示";
+  button.title = title;
+  button.setAttribute("aria-label", title);
 }
 
 function fitFollowViewport(current) {
@@ -17999,12 +18037,12 @@ function bindEvents() {
       fitBarrierPlacementView({ dissolveOnly: true });
       return;
     }
-    if (state.barrierPlacementView) {
-      fitBarrierPlacementView();
+    if (state.traverseMode) {
+      fitTraverseView();
       return;
     }
-    if (state.traverseMode) {
-      fitToPoints(null, { includeBarrierCells: true });
+    if (state.barrierPlacementView) {
+      fitBarrierPlacementView();
       return;
     }
     fitToPoints();
