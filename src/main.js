@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2335";
+const WEB_VERSION = "0.2336";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -13546,8 +13546,8 @@ function handleCanvasClick(screenPoint) {
   }
   if (state.barrierLinkingMode) return;
 
-  const nearest = findNearestPoint(screenPoint);
-  const nearestBarrierStone = state.traverseMode && !nearest ? findNearestBarrierStone(screenPoint) : null;
+  const nearestBarrierStone = state.traverseMode ? findNearestBarrierStone(screenPoint) : null;
+  const nearest = nearestBarrierStone ? null : findNearestPoint(screenPoint);
   const nearestLink = nearest || nearestBarrierStone ? null : findNearestLink(screenPoint);
   const nearestFigure = nearest || nearestBarrierStone || nearestLink ? null : findNearestFigure(screenPoint);
   const nearestObservation = nearest || nearestBarrierStone || nearestLink || nearestFigure
@@ -13555,8 +13555,8 @@ function handleCanvasClick(screenPoint) {
     : findNearestLoadedObservation(screenPoint);
 
   if (nearest) {
-    // Point selection is independent from the barrier-cell selection. Keep
-    // the selected cell visible while toggling a pin or the current location.
+    // A visible barrier cell owns its displayed hit area. Pins remain selectable
+    // everywhere else, but a pin underneath a cell must not block that cell.
     toggleSelection("point", nearest.id);
     return;
   }
@@ -14292,15 +14292,17 @@ function startDragGesture(pointerId, point, options = {}) {
     : findNearestFigureEdge(point);
   const figureSurface = lineEndpoint || figureVertex || figureEdge ? null : options.moved ? null : findNearestFigure(point);
   const longPressFigure = figureVertex || figureEdge || (figureSurface ? { figureId: figureSurface.id } : null);
-  const pointCandidate = longPressFigure || lineEndpoint ? null : options.moved ? null : findNearestPoint(point);
+  const pointCandidate = longPressFigure || lineEndpoint || barrierStoneCandidate
+    ? null
+    : options.moved ? null : findNearestPoint(point);
   const prioritizedPoint = chooseAnalysisHit([
     { kind: "line-endpoint", value: lineEndpoint },
     { kind: "figure-vertex", value: figureVertex },
     { kind: "point", value: pointCandidate }
   ]);
   const longPressPoint = prioritizedPoint?.kind === "point" ? prioritizedPoint.value : null;
-  // A barrier stone owns its whole cell for placement/pickup, but it must not
-  // hide a registered pin or the current location drawn inside that cell.
+  // A barrier stone owns its whole displayed cell for placement/pickup, even
+  // when a registered pin or the current location is drawn inside that cell.
   const longPressBarrierStone = longPressPoint ? null : barrierStoneCandidate;
   const longPressLink = longPressBarrierStone || options.moved || longPressPoint || lineEndpoint
     ? null
