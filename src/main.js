@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2334";
+const WEB_VERSION = "0.2335";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -771,7 +771,7 @@ const CANVAS_PALETTES = {
     pendingPointStroke: "#5e9f9a",
     traverseFill: "#5e9f9a",
     barrierCell: "#4d9bd8",
-    barrierCellSelected: "#2f76b7",
+    barrierCellSelected: BARRIER_LINK_ORANGE,
     selected: "#9f4772",
     badgeFill: "#fffafd",
     badgeText: "#67548f",
@@ -802,7 +802,7 @@ const CANVAS_PALETTES = {
     pendingPointStroke: "#d6ffe0",
     traverseFill: "#29ff68",
     barrierCell: "#4db7ef",
-    barrierCellSelected: "#2587c4",
+    barrierCellSelected: BARRIER_LINK_ORANGE,
     selected: "#ffffff",
     badgeFill: "#020806",
     badgeText: "#d6ffe0",
@@ -833,7 +833,7 @@ const CANVAS_PALETTES = {
     pendingPointStroke: "#0f8b8d",
     traverseFill: "#0f8b8d",
     barrierCell: "#4d9bd8",
-    barrierCellSelected: "#2f76b7",
+    barrierCellSelected: BARRIER_LINK_ORANGE,
     selected: "#111827",
     badgeFill: "#fffaf0",
     badgeText: "#24313a",
@@ -864,7 +864,7 @@ const CANVAS_PALETTES = {
     pendingPointStroke: "#f0d9ff",
     traverseFill: "#a85dcc",
     barrierCell: "#4d9bd8",
-    barrierCellSelected: "#2f76b7",
+    barrierCellSelected: BARRIER_LINK_ORANGE,
     selected: "#ffffff",
     badgeFill: "#050207",
     badgeText: "#f0d9ff",
