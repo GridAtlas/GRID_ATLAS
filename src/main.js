@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2318";
+const WEB_VERSION = "0.2319";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -6750,6 +6750,10 @@ function setActionButtonLabel(button, label) {
 
 function renderTraverseQuickActions() {
   const selectedCount = state.barrierSelection.length;
+  const hasSelection = selectedCount > 0
+    || state.selection.length > 0
+    || Boolean(state.selectedBarrierId)
+    || state.barrierPinMode;
   const preview = state.barrierLinkPreview;
   const canPlace = !state.traverseBusy && traverseQuantityLimit("place") > 0;
   const blankButtons = [elements.deletePointButton, elements.actionCopyToListButton, elements.actionMoveToListButton, elements.actionRouteButton];
@@ -6773,7 +6777,7 @@ function renderTraverseQuickActions() {
   setActionButtonLabel(elements.actionCenterButton, "測る");
   setActionButtonLabel(elements.actionLinkButton, "置く");
   setActionButtonLabel(elements.clearSelectionButton, "結ぶ");
-  setActionButtonLabel(elements.actionInvertButton, "（選択）解除");
+  setActionButtonLabel(elements.actionInvertButton, "解除");
   setActionButtonLabel(elements.actionShareSelectedButton, t("action.shareSelected"));
   setActionButtonLabel(elements.actionMapButton, t("action.map"));
   setActionButtonLabel(elements.actionAnalyzeButton, t("action.analyze"));
@@ -6783,7 +6787,7 @@ function renderTraverseQuickActions() {
   elements.actionCenterButton.disabled = state.traverseBusy;
   elements.actionLinkButton.disabled = state.traverseBusy || !canPlace;
   elements.clearSelectionButton.disabled = state.traverseBusy || (!preview && selectedCount < 2);
-  elements.actionInvertButton.disabled = state.traverseBusy || (selectedCount === 0 && !state.selectedBarrierId && !state.barrierPinMode);
+  elements.actionInvertButton.disabled = state.traverseBusy || !hasSelection;
   elements.actionShareSelectedButton.disabled = state.traverseBusy || !state.selectedBarrierId;
   elements.actionMapButton.disabled = selectedCount === 0;
   elements.actionAnalyzeButton.disabled = state.traverseBusy || (selectedCount === 0 && !state.selectedBarrierId);
@@ -12546,6 +12550,8 @@ function findNearestBarrierStone(screenPoint, options = {}) {
   const availableStoneIds = availableOnly
     ? (roomStoneIds || new Set(availableBarrierStoneIds()))
     : null;
+  let nearestCenter = null;
+  let nearestCenterDistance = Infinity;
   for (const [stoneId, stone] of Object.entries(state.traverseLog?.stones || {})) {
     if (stoneDisplayCount(stone) <= 0) continue;
     if (availableStoneIds && !availableStoneIds.has(stoneId)) continue;
@@ -12553,8 +12559,19 @@ function findNearestBarrierStone(screenPoint, options = {}) {
     if (polygon && pointInPolygon(screenPoint, polygon)) {
       return { stoneId, stone };
     }
+    const center = barrierStoneScreenCenter(stoneId);
+    if (!center) continue;
+    const distance = Math.hypot(center.x - screenPoint.x, center.y - screenPoint.y);
+    const diagonal = polygon && polygon.length > 2
+      ? Math.hypot(polygon[2].x - polygon[0].x, polygon[2].y - polygon[0].y)
+      : 0;
+    const hitRadius = Math.max(POINT_RADIUS + 12, diagonal * 0.42);
+    if (distance <= hitRadius && distance < nearestCenterDistance) {
+      nearestCenter = { stoneId, stone };
+      nearestCenterDistance = distance;
+    }
   }
-  return null;
+  return nearestCenter;
 }
 
 function resolveDragEndpoint(screenPoint, kind, options = {}) {
