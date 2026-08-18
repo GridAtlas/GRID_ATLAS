@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2333";
+const WEB_VERSION = "0.2334";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -12569,28 +12569,31 @@ function findNearestBarrierStone(screenPoint, options = {}) {
   const availableStoneIds = availableOnly
     ? (roomStoneIds || new Set(availableBarrierStoneIds()))
     : null;
+  let nearestInside = null;
+  let nearestInsideDistance = Infinity;
   let nearestCenter = null;
   let nearestCenterDistance = Infinity;
   for (const [stoneId, stone] of Object.entries(state.traverseLog?.stones || {})) {
     if (stoneDisplayCount(stone) <= 0) continue;
     if (availableStoneIds && !availableStoneIds.has(stoneId)) continue;
     const polygon = displayedTraverseTilePolygon(stone.tile);
-    if (polygon && pointInPolygon(screenPoint, polygon)) {
-      return { stoneId, stone };
-    }
     const center = barrierStoneScreenCenter(stoneId);
     if (!center) continue;
     const distance = Math.hypot(center.x - screenPoint.x, center.y - screenPoint.y);
     const diagonal = polygon && polygon.length > 2
       ? Math.hypot(polygon[2].x - polygon[0].x, polygon[2].y - polygon[0].y)
       : 0;
-    const hitRadius = Math.max(POINT_RADIUS + 12, diagonal * 0.42);
+    const hitRadius = Math.max(POINT_RADIUS + 12, BARRIER_TILE_MIN_SCREEN_SIZE, diagonal * 0.42);
+    if (polygon && pointInPolygon(screenPoint, polygon) && distance < nearestInsideDistance) {
+      nearestInside = { stoneId, stone };
+      nearestInsideDistance = distance;
+    }
     if (distance <= hitRadius && distance < nearestCenterDistance) {
       nearestCenter = { stoneId, stone };
       nearestCenterDistance = distance;
     }
   }
-  return nearestCenter;
+  return nearestInside || nearestCenter;
 }
 
 function resolveDragEndpoint(screenPoint, kind, options = {}) {
@@ -13820,6 +13823,7 @@ function sumDistances(distances) {
   return distances.reduce((sum, distance) => sum + distance, 0);
 }
 function zoomAt(screenPoint, factor) {
+  if (state.barrierLinkPreview) return;
   state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
   const before = screenToWorld(screenPoint);
   state.viewport.scale = clampScale(state.viewport.scale * factor);
@@ -13905,6 +13909,19 @@ function fitToPoints(fitPointsOverride = null, options = {}) {
 }
 
 function fitTraverseView() {
+  if (state.barrierLinkPreview) return;
+  // Fitting changes only the viewport. Never turn the cells used as fit targets
+  // into an implicit selection.
+  const selectionSnapshot = state.selection.map((entry) => ({ ...entry }));
+  const barrierSelectionSnapshot = [...state.barrierSelection];
+  const selectedBarrierIdSnapshot = state.selectedBarrierId;
+  const restoreSelectionAfterFit = () => {
+    state.selection = selectionSnapshot;
+    state.barrierSelection = barrierSelectionSnapshot;
+    state.selectedBarrierId = selectedBarrierIdSnapshot;
+    normalizeSelection();
+    render();
+  };
   const fitVertices = state.barrierFitStage === "vertices";
   if (fitVertices) {
     const vertexCellFitPoints = barrierCellFitPoints({ verticesOnly: true });
@@ -13914,11 +13931,13 @@ function fitTraverseView() {
     }
     state.barrierFitStage = "all";
     fitToPoints(vertexCellFitPoints);
+    restoreSelectionAfterFit();
     return;
   }
 
   state.barrierFitStage = "vertices";
   fitToPoints(null, { includeBarrierCells: true });
+  restoreSelectionAfterFit();
 }
 
 function renderFitButton() {
@@ -14238,6 +14257,20 @@ function startDragGesture(pointerId, point, options = {}) {
     return;
   }
   const barrierOrigin = barrierLinkMode && !options.moved ? findNearestBarrierStone(point) : null;
+  if (state.barrierLinkPreview && (!barrierLinkMode || !barrierOrigin)) {
+    state.pointer.drag = {
+      id: pointerId,
+      start: point,
+      last: point,
+      moved: true,
+      barrierLinkRoomLocked: true,
+      barrierLink: false,
+      longPressTimerId: null,
+      lineDragReadyTimerId: null,
+      lineDrag: null
+    };
+    return;
+  }
   const barrierStoneCandidate = state.traverseMode && !barrierLinkMode && !options.moved
     ? findNearestBarrierStone(point)
     : null;
@@ -14534,6 +14567,7 @@ function startPinchGesture() {
   const midpoint = pointerMidpoint(first, second);
   state.pointer.drag = null;
   state.pointer.pinch = {
+    barrierLinkRoomLocked: Boolean(state.barrierLinkPreview),
     startDistance: Math.max(1, pointerDistance(first, second)),
     startMidpoint: midpoint,
     startWorld: screenToWorld(midpoint),
@@ -14561,6 +14595,9 @@ function updatePinchGesture() {
   }
 
   const pinch = state.pointer.pinch;
+  if (pinch?.barrierLinkRoomLocked) {
+    return;
+  }
   const [, first] = entries[0];
   const [, second] = entries[1];
   const distance = Math.max(1, pointerDistance(first, second));
@@ -14647,6 +14684,11 @@ function removePointer(event, options = {}) {
   }
 
   if (drag?.barrierLinkRoomOutside) {
+    state.pointer.drag = null;
+    return;
+  }
+
+  if (drag?.barrierLinkRoomLocked) {
     state.pointer.drag = null;
     return;
   }
@@ -18111,7 +18153,7 @@ function bindEvents() {
   }
 
   canvas.addEventListener("pointerdown", (event) => {
-    if (state.barrierPlacementView || state.barrierDissolveMode) {
+    if (state.barrierPlacementView || state.barrierDissolveMode || state.barrierLinkPreview) {
       event.preventDefault();
     }
     if (event.button === 2 && !mobilePageUiActive()) {
@@ -18164,6 +18206,12 @@ function bindEvents() {
       return;
     }
 
+    if (drag.barrierLinkRoomLocked) {
+      event.preventDefault();
+      drag.last = point;
+      return;
+    }
+
     const dx = point.x - drag.start.x;
     const dy = point.y - drag.start.y;
 
@@ -18188,6 +18236,10 @@ function bindEvents() {
           clearDragLongPressTimer(drag);
           drag.cancelled = true;
           drag.barrierLink = false;
+          if (state.barrierLinkPreview) drag.barrierLinkRoomLocked = true;
+          drag.moved = true;
+          drag.last = point;
+          return;
         } else {
           drag.last = point;
           return;
