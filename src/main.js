@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2319";
+const WEB_VERSION = "0.2320";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -4320,8 +4320,9 @@ function drawTraverseStones(options = {}) {
       context.textAlign = "center";
       context.textBaseline = "middle";
       context.font = "18px sans-serif";
-      context.globalAlpha = 1;
-      context.fillText("🔶", center.x, center.y);
+      context.globalAlpha = selected ? 1 : 0.94;
+      context.fillStyle = selected ? BARRIER_LINK_ORANGE : colors.traverseFill;
+      context.fillText("◆", center.x, center.y);
       context.restore();
       continue;
     }
