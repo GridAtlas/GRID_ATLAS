@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2381";
+const WEB_VERSION = "0.2391";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -1376,14 +1376,14 @@ const TRANSLATIONS = {
     "barrier.created": "結界を張りました",
     "barrier.dissolveHint": "解く結界を選択してください",
     "barrier.selectToDissolve": "結界を選択してください",
-    "barrier.tooFew": "結界には3箇所以上の結界石が必要です",
+    "barrier.tooFew": "頂点が足りない！結界には3つ以上必要！",
     "barrier.needLocations": "結界を結ぶには、あと{count}箇所に結界石を置いてください。",
-    "barrier.tooMany": "結界の頂点は{max}つまでです",
-    "barrier.rankVertexLimit": "この段位ではこれ以上の頂点を結べません",
-    "barrier.sightExceeded": "見通しの限界（半径{radius}）を超えています。頂点 {vertices} を確認してください",
-    "barrier.crossLinkLocked": "交差結びは{rank}級で解放されます",
-    "barrier.stoneUsed": "他の結界で使用済みの結界石が含まれています",
-    "barrier.missingStone": "選択した結界石を確認できません",
+    "barrier.tooMany": "大きすぎる！結界師ランクが足りない！（最大{max}頂点）",
+    "barrier.rankVertexLimit": "大きすぎる！結界師ランクが足りない！",
+    "barrier.sightExceeded": "大きすぎる！結界師ランクが足りない！見通し範囲を超えています（頂点 {vertices}）",
+    "barrier.crossLinkLocked": "交差結びはまだ使えない！結界師ランクが足りない！（{rank}級で解放）",
+    "barrier.stoneUsed": "その結界石は使用中！別の結界石を選んで！",
+    "barrier.missingStone": "結界石が見つからない！もう一度なぞって！",
     "barrier.selection": "結界石を{count}個選択中"
     ,"barrier.scoreTitle": "結界力"
     ,"barrier.scoreDensity": "濃度"
@@ -1951,14 +1951,14 @@ const TRANSLATIONS = {
     "barrier.created": "Barrier created",
     "barrier.dissolveHint": "Select a barrier to dissolve",
     "barrier.selectToDissolve": "Select a barrier first",
-    "barrier.tooFew": "A barrier needs stones at three or more locations",
+    "barrier.tooFew": "Not enough vertices! A barrier needs at least three!",
     "barrier.needLocations": "Place barrier stones at {count} more locations to bind a barrier.",
-    "barrier.tooMany": "A barrier can have at most {max} vertices",
-    "barrier.rankVertexLimit": "This rank cannot bind any more vertices",
-    "barrier.sightExceeded": "The sight limit (radius {radius}) is exceeded. Check vertices {vertices}",
-    "barrier.crossLinkLocked": "Cross-linking unlocks at rank {rank}",
-    "barrier.stoneUsed": "One or more selected stones already belong to another barrier",
-    "barrier.missingStone": "The selected barrier stone could not be found",
+    "barrier.tooMany": "Too large! Your barrier-master rank is not high enough! (Max {max} vertices)",
+    "barrier.rankVertexLimit": "Too large! Your barrier-master rank is not high enough!",
+    "barrier.sightExceeded": "Too large! Your barrier-master rank is not high enough! The sight range is exceeded (vertices {vertices})",
+    "barrier.crossLinkLocked": "Cross-linking is not unlocked yet! Your barrier-master rank is not high enough! (Unlocks at rank {rank})",
+    "barrier.stoneUsed": "That barrier stone is already in use! Choose another one!",
+    "barrier.missingStone": "The barrier stone was not found! Trace it again!",
     "barrier.selection": "{count} barrier stone(s) selected"
     ,"barrier.scoreTitle": "Barrier power"
     ,"barrier.scoreDensity": "Density"
@@ -4622,19 +4622,27 @@ function drawBarrierLinkSettledDiamond(entry) {
   context.stroke();
 }
 
-function drawBarrierLinkFuse(path, pointer) {
-  if (!Array.isArray(path) || path.length < 1 || !pointer) return;
-  const from = barrierStoneScreenCenter(path.at(-1));
-  if (!from || Math.hypot(pointer.x - from.x, pointer.y - from.y) < 2) return;
+function drawBarrierLinkFuse(path, pointer = null, options = {}) {
+  if (!Array.isArray(path) || path.length < 1) return;
+  const vertices = path.map(barrierStoneScreenCenter).filter(Boolean);
+  if (vertices.length < 1) return;
   context.save();
-  context.globalAlpha = 0.52;
-  context.strokeStyle = BARRIER_LINK_ORANGE;
+  context.globalAlpha = 0.44;
+  context.strokeStyle = "rgb(242 138 46 / 0.86)";
   context.lineWidth = 1.35;
   context.lineCap = "round";
+  context.lineJoin = "round";
   context.setLineDash([3, 6]);
   context.beginPath();
-  context.moveTo(from.x, from.y);
-  context.lineTo(pointer.x, pointer.y);
+  context.moveTo(vertices[0].x, vertices[0].y);
+  for (const vertex of vertices.slice(1)) context.lineTo(vertex.x, vertex.y);
+  if (options.close && vertices.length >= 2) context.closePath();
+  if (pointer && !options.close) {
+    const from = vertices.at(-1);
+    if (Math.hypot(pointer.x - from.x, pointer.y - from.y) >= 2) {
+      context.lineTo(pointer.x, pointer.y);
+    }
+  }
   context.stroke();
   context.restore();
 }
@@ -4706,6 +4714,7 @@ function drawBarrierLinkGesture() {
   }
 
   if (completion) {
+    drawBarrierLinkFuse(path, null, { close: true });
     const progress = Math.min(1, Math.max(0, (performance.now() - completion.startedAt) / BARRIER_LINK_COMPLETION_MS));
     const points = drawBarrierLinkStrokeProgress(path, progress, { width: 2.4, glow: 32 });
     if (points.length >= 3) {
