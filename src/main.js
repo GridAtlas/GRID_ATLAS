@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2371";
+const WEB_VERSION = "0.2381";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -159,11 +159,9 @@ const BARRIER_TILE_MIN_SCREEN_SIZE = POINT_RADIUS * 2 + 8;
 const BARRIER_SINGLE_TILE_TARGET_RATIO = 0.28;
 const BARRIER_SINGLE_TILE_MIN_SCREEN_SIZE = 140;
 const BARRIER_SINGLE_TILE_MAX_SCREEN_SIZE = 220;
-const BARRIER_LINK_LONG_PRESS_MS = 1000;
 const GRID_MODE_LONG_PRESS_MS = 1500;
 const BARRIER_LINK_DIAMOND_MS = 500;
 const BARRIER_LINK_COMPLETION_MS = 1100;
-const BARRIER_LINK_HOLD_DRIFT_TOLERANCE = 28;
 const BARRIER_LINK_ORANGE = "#f28a2e";
 const BARRIER_LINK_CORE = "#fff0cc";
 const BARRIER_LINK_GLOW = "rgb(255 138 46 / 0.98)";
@@ -1362,7 +1360,7 @@ const TRANSLATIONS = {
     "traverse.quantityMessage": "操作する個数を選んでください。",
     "traverse.quantityDecrease": "1個減らす",
     "traverse.quantityIncrease": "1個増やす",
-    "traverse.linkReady": "起点の結界石を1秒長押ししてください",
+    "traverse.linkReady": "起点の結界石からドラッグしてください",
     "traverse.linkOriginSelected": "起点を選択しました。次の結界石へドラッグしてください",
     "traverse.linkReturnHint": "起点に戻って指を離すと結界が完成します",
     "traverse.linkReturnRequired": "最後は起点に戻って指を離してください",
@@ -1937,7 +1935,7 @@ const TRANSLATIONS = {
     "traverse.quantityMessage": "Choose how many stones to operate.",
     "traverse.quantityDecrease": "Decrease by one",
     "traverse.quantityIncrease": "Increase by one",
-    "traverse.linkReady": "Long-press an origin barrier stone for 1 second",
+    "traverse.linkReady": "Drag from an origin barrier stone",
     "traverse.linkOriginSelected": "Origin selected. Drag to the next barrier stone",
     "traverse.linkReturnHint": "Return to the origin and release to complete the barrier",
     "traverse.linkReturnRequired": "Return to the origin before releasing",
@@ -12759,22 +12757,6 @@ function settleBarrierLinkDiamondAnimations() {
   state.barrierLinkDiamondFrameId = null;
 }
 
-function barrierLinkPointWithinHoldTolerance(stoneId, point) {
-  const center = barrierStoneScreenCenter(stoneId);
-  if (!center || !point) return false;
-  const polygon = state.traverseLog?.stones?.[stoneId]
-    ? displayedTraverseTilePolygon(state.traverseLog.stones[stoneId].tile)
-    : null;
-  const diagonal = polygon && polygon.length > 2
-    ? Math.hypot(polygon[2].x - polygon[0].x, polygon[2].y - polygon[0].y)
-    : 0;
-  const tolerance = Math.max(
-    BARRIER_LINK_HOLD_DRIFT_TOLERANCE,
-    Math.min(52, diagonal * 0.5)
-  );
-  return Math.hypot(center.x - point.x, center.y - point.y) <= tolerance;
-}
-
 function finishBarrierLinkCompletion() {
   const completion = state.barrierLinkCompletion;
   if (!completion) return;
@@ -12822,12 +12804,6 @@ function scheduleBarrierLinkCandidate(drag, stoneId) {
     drag.barrierLinkClosing = true;
     state.barrierLinkCandidateStoneId = stoneId;
     state.barrierLinkPendingStoneId = null;
-    draw();
-    return;
-  }
-  if (state.barrierLinkPath.length >= currentKekkaishiRankInfo().maxVertices) {
-    state.barrierLinkCandidateStoneId = null;
-    showAppToast(t("barrier.rankVertexLimit"), { duration: 1600 });
     draw();
     return;
   }
@@ -12898,11 +12874,12 @@ function finishBarrierLinkGesture(drag, point, allowTap) {
     render();
     return;
   }
-  if (allowTap && drag.barrierLinkClosing && nearest === origin && path.length >= 3) {
-    animateBarrierLinkCompletion(path);
-    return;
-  }
   if (allowTap && path.length >= 3 && nearest === origin) {
+    const completion = validateBarrierCompletion(path);
+    if (!completion.ok) {
+      rejectBarrierLinkCompletion(completion.message);
+      return;
+    }
     animateBarrierLinkCompletion(path);
     return;
   }
@@ -13286,8 +13263,17 @@ function formatMonth(value) {
   return new Intl.DateTimeFormat(localeName(), { year: "numeric", month: "long" }).format(new Date(value));
 }
 
-async function createBarrierFromSelection() {
-  const vertices = [...state.barrierSelection];
+function pulseBarrierError() {
+  try {
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      navigator.vibrate([80, 45, 140]);
+    }
+  } catch {
+    // Vibration is optional and can be blocked by the browser or platform.
+  }
+}
+
+function validateBarrierCompletion(vertices) {
   const rankInfo = currentKekkaishiRankInfo();
   const validation = validateBarrierVertices(state.traverseLog, vertices, { maxVertices: rankInfo.maxVertices });
   if (!validation.ok) {
@@ -13298,21 +13284,21 @@ async function createBarrierFromSelection() {
       : validation.reason === "missing"
         ? t("barrier.missingStone")
         : t("barrier.tooFew");
-    showAppToast(message, { error: true });
-    resumeBarrierLinkRoom();
-    return;
+    return { ok: false, message };
   }
 
   const geos = vertices.map((stoneId) => tileCenterGeo(state.traverseLog.stones[stoneId]?.tile)).filter(Boolean);
   const sight = barrierFitsSightRadius(geos, rankInfo.rank.index);
   if (!sight.ok) {
     const exceeded = sight.exceeded.map((entry) => `#${entry.index + 1}`).join(", ");
-    showAppToast(t("barrier.sightExceeded")
-      .replace("{radius}", formatBarrierRadius(sight.radiusKm))
-      .replace("{vertices}", exceeded), { error: true });
-    resumeBarrierLinkRoom();
-    return;
+    return {
+      ok: false,
+      message: t("barrier.sightExceeded")
+        .replace("{radius}", formatBarrierRadius(sight.radiusKm))
+        .replace("{vertices}", exceeded)
+    };
   }
+
   const selfIntersecting = polygonSelfIntersects(geos);
   const linkPattern = selfIntersecting && vertices.length === 5
     ? "pentagram"
@@ -13320,15 +13306,29 @@ async function createBarrierFromSelection() {
       ? "octagram"
       : "adjacent";
   if (linkPattern === "pentagram" && rankInfo.rank.index < BARRIER_CONFIG.crossLinkFromRank) {
-    showAppToast(t("barrier.crossLinkLocked").replace("{rank}", "S"), { error: true });
-    resumeBarrierLinkRoom();
-    return;
+    return { ok: false, message: t("barrier.crossLinkLocked").replace("{rank}", "S") };
   }
   if (linkPattern === "octagram" && rankInfo.rank.index < 8) {
-    showAppToast(t("barrier.crossLinkLocked").replace("{rank}", "SSS"), { error: true });
-    resumeBarrierLinkRoom();
+    return { ok: false, message: t("barrier.crossLinkLocked").replace("{rank}", "SSS") };
+  }
+
+  return { ok: true, rankInfo, geos, linkPattern };
+}
+
+function rejectBarrierLinkCompletion(message) {
+  resumeBarrierLinkRoom();
+  pulseBarrierError();
+  showAppToast(message, { error: true });
+}
+
+async function createBarrierFromSelection() {
+  const vertices = [...state.barrierSelection];
+  const completion = validateBarrierCompletion(vertices);
+  if (!completion.ok) {
+    rejectBarrierLinkCompletion(completion.message);
     return;
   }
+  const { rankInfo, geos, linkPattern } = completion;
 
   const defaultName = t("barrier.defaultName");
   const input = await requestTextInput({
@@ -14426,7 +14426,7 @@ function startDragGesture(pointerId, point, options = {}) {
     longPressTimerId: null,
     lineDragReadyTimerId: null,
     barrierLink: barrierLinkMode,
-    barrierLinkStarted: false,
+    barrierLinkStarted: Boolean(barrierLinkMode && barrierOrigin?.stoneId),
     barrierLinkOriginStoneId: barrierOrigin?.stoneId || null,
     barrierLinkPendingStoneId: null,
     barrierLinkCandidateStoneId: null,
@@ -14435,6 +14435,19 @@ function startDragGesture(pointerId, point, options = {}) {
     dragonEye: false
   };
   state.pointer.drag = drag;
+
+  if (barrierLinkMode) {
+    drag.barrierLinkStarted = true;
+    state.barrierLinkPath = [drag.barrierLinkOriginStoneId];
+    state.barrierSelection = [...state.barrierLinkPath];
+    startBarrierLinkDiamond(drag.barrierLinkOriginStoneId);
+    state.barrierLinkCandidateStoneId = drag.barrierLinkOriginStoneId;
+    canvas.classList.add("is-barrier-linking");
+    showAppToast(t("traverse.linkOriginSelected"));
+    draw();
+    renderStatus();
+    return;
+  }
 
   if (longPressLink) {
     drag.lineDragReadyTimerId = window.setTimeout(() => {
@@ -14474,31 +14487,6 @@ function startDragGesture(pointerId, point, options = {}) {
           });
         }
       }, LINE_INFO_LONG_PRESS_MS);
-    }
-    return;
-  }
-
-  if (barrierLinkMode) {
-    if (!options.moved) {
-      drag.longPressTimerId = window.setTimeout(() => {
-        if (
-          state.pointer.drag !== drag
-          || state.pointer.active.size !== 1
-          || drag.moved
-          || drag.cancelled
-          || !drag.barrierLinkOriginStoneId
-        ) return;
-        drag.longPressed = true;
-        drag.barrierLinkStarted = true;
-        state.barrierLinkPath = [drag.barrierLinkOriginStoneId];
-        startBarrierLinkDiamond(drag.barrierLinkOriginStoneId);
-        state.barrierSelection = [...state.barrierLinkPath];
-        state.barrierLinkCandidateStoneId = drag.barrierLinkOriginStoneId;
-        canvas.classList.add("is-barrier-linking");
-        showAppToast(t("traverse.linkOriginSelected"));
-        draw();
-        renderStatus();
-      }, BARRIER_LINK_LONG_PRESS_MS);
     }
     return;
   }
@@ -18327,31 +18315,10 @@ function bindEvents() {
     }
 
     if (drag.barrierLink) {
-      if (!drag.barrierLinkStarted) {
-        const withinHoldTolerance = barrierLinkPointWithinHoldTolerance(
-          drag.barrierLinkOriginStoneId,
-          point
-        );
-        if (!withinHoldTolerance && Math.hypot(dx, dy) > POINTER_MOVE_THRESHOLD) {
-          clearDragLongPressTimer(drag);
-          drag.cancelled = true;
-          drag.barrierLink = false;
-          if (state.barrierLinkPreview) drag.barrierLinkRoomLocked = true;
-          drag.moved = true;
-          drag.last = point;
-          return;
-        } else {
-          event.preventDefault();
-          drag.last = point;
-          draw();
-          return;
-        }
-      } else {
-        event.preventDefault();
-        updateBarrierLinkGesture(drag, point);
-        drag.last = point;
-        return;
-      }
+      event.preventDefault();
+      updateBarrierLinkGesture(drag, point);
+      drag.last = point;
+      return;
     }
 
     if (Math.hypot(dx, dy) > POINTER_MOVE_THRESHOLD) {
