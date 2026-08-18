@@ -260,6 +260,10 @@ button {
   color: var(--accent-strong);
 }
 
+:root[data-theme="kekkai"] #settingsThemeField {
+  display: none;
+}
+
 .settings-panel {
   position: absolute;
   top: calc(100% + 8px);

@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2339";
+const WEB_VERSION = "0.2351";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -159,9 +159,9 @@ const BARRIER_TILE_MIN_SCREEN_SIZE = POINT_RADIUS * 2 + 8;
 const BARRIER_SINGLE_TILE_TARGET_RATIO = 0.28;
 const BARRIER_SINGLE_TILE_MIN_SCREEN_SIZE = 140;
 const BARRIER_SINGLE_TILE_MAX_SCREEN_SIZE = 220;
-const BARRIER_LINK_LONG_PRESS_MS = 2000;
+const BARRIER_LINK_LONG_PRESS_MS = 1000;
 const GRID_MODE_LONG_PRESS_MS = 1500;
-const BARRIER_LINK_DWELL_MS = 2000;
+const BARRIER_LINK_DWELL_MS = 1000;
 const BARRIER_LINK_SEGMENT_MS = 460;
 const BARRIER_LINK_COMPLETION_MS = 1100;
 const BARRIER_LINK_ORANGE = "#f28a2e";
@@ -313,6 +313,7 @@ const elements = {
   cloudTesterSignupDialog: document.querySelector("#cloudTesterSignupDialog"),
   closeCloudTesterSignupButton: document.querySelector("#closeCloudTesterSignupButton"),
   cloudTesterSignupDialogBody: document.querySelector("#cloudTesterSignupDialogBody"),
+  settingsThemeField: document.querySelector("#settingsThemeField"),
   settingsThemeSelect: document.querySelector("#settingsThemeSelect"),
   settingsLanguageSelect: document.querySelector("#settingsLanguageSelect"),
   settingsUnitSelect: document.querySelector("#settingsUnitSelect"),
@@ -1359,11 +1360,11 @@ const TRANSLATIONS = {
     "traverse.quantityMessage": "操作する個数を選んでください。",
     "traverse.quantityDecrease": "1個減らす",
     "traverse.quantityIncrease": "1個増やす",
-    "traverse.linkReady": "起点の結界石を2秒長押ししてください",
+    "traverse.linkReady": "起点の結界石を1秒長押ししてください",
     "traverse.linkOriginSelected": "起点を選択しました。次の結界石へドラッグしてください",
     "traverse.linkReturnHint": "起点に戻って指を離すと結界が完成します",
     "traverse.linkReturnRequired": "最後は起点に戻って指を離してください",
-    "traverse.linkDwell": "次の結界石で2秒待っています…",
+    "traverse.linkDwell": "次の結界石で1秒待っています…",
     "traverse.undo": "ひとつ戻す",
     "traverse.stockFull": "結界石ストックが満タンです",
     "traverse.capReached": "このタイルの結界石は上限です",
@@ -1934,11 +1935,11 @@ const TRANSLATIONS = {
     "traverse.quantityMessage": "Choose how many stones to operate.",
     "traverse.quantityDecrease": "Decrease by one",
     "traverse.quantityIncrease": "Increase by one",
-    "traverse.linkReady": "Long-press an origin barrier stone for 2 seconds",
+    "traverse.linkReady": "Long-press an origin barrier stone for 1 second",
     "traverse.linkOriginSelected": "Origin selected. Drag to the next barrier stone",
     "traverse.linkReturnHint": "Return to the origin and release to complete the barrier",
     "traverse.linkReturnRequired": "Return to the origin before releasing",
-    "traverse.linkDwell": "Holding on the next barrier stone for 2 seconds…",
+    "traverse.linkDwell": "Holding on the next barrier stone for 1 second…",
     "traverse.undo": "Undo last segment",
     "traverse.stockFull": "Barrier stone stock is full",
     "traverse.capReached": "This tile has reached its barrier-stone cap",
@@ -2150,6 +2151,7 @@ async function setGpsEnabled(value, options = {}) {
   return true;
 }
 function syncSettingsControls() {
+  if (elements.settingsThemeField) elements.settingsThemeField.hidden = currentTheme() === KEKKAI_THEME;
   elements.settingsThemeSelect.value = currentTheme() === KEKKAI_THEME ? RETRO_THEME : currentTheme();
   elements.settingsLanguageSelect.value = activeLanguage();
   elements.settingsUnitSelect.value = state.distanceUnit;
@@ -2670,8 +2672,15 @@ function applyTraverseModeToggle(enabled) {
 }
 
 function setTraverseMode(enabled) {
+  const nextMode = Boolean(enabled);
+  if (nextMode) {
+    setTheme(KEKKAI_THEME, { persist: false });
+  }
   if (state.barrierPinMode) closeBarrierPinDialog();
-  state.traverseMode = Boolean(enabled);
+  state.traverseMode = nextMode;
+  if (!nextMode) {
+    loadTheme();
+  }
   if (state.traverseMode) {
     // The action button lives inside the grid panel on mobile. Keep the
     // confirmation flow intact, but always return to that panel after the
@@ -2808,6 +2817,10 @@ function canvasPalette() {
 }
 
 function loadTheme() {
+  if (hasKekkaishiLaunchMode()) {
+    setTheme(KEKKAI_THEME, { persist: false });
+    return;
+  }
   let saved = null;
   try {
     saved = localStorage.getItem(THEME_KEY);
@@ -2844,6 +2857,9 @@ function setTheme(theme, options = {}) {
   }
   if (elements.settingsThemeSelect) {
     elements.settingsThemeSelect.value = normalized;
+  }
+  if (elements.settingsThemeField) {
+    elements.settingsThemeField.hidden = normalized === KEKKAI_THEME;
   }
 }
 
@@ -4530,6 +4546,49 @@ function drawBarrierLinkPath(path, options = {}) {
   strokeBarrierLinkPoints(vertices, options);
 }
 
+function barrierLinkStrokePoints(path, progress) {
+  const vertices = path.map(barrierStoneScreenCenter).filter(Boolean);
+  if (vertices.length < 2) return [];
+
+  const boundedProgress = Math.min(1, Math.max(0, Number(progress) || 0));
+  const segments = vertices.map((from, index) => {
+    const to = vertices[(index + 1) % vertices.length];
+    return {
+      from,
+      to,
+      length: Math.hypot(to.x - from.x, to.y - from.y)
+    };
+  });
+  const totalLength = segments.reduce((sum, segment) => sum + segment.length, 0);
+  let remaining = totalLength * boundedProgress;
+  const points = [vertices[0]];
+
+  for (const segment of segments) {
+    if (remaining <= 0) break;
+    if (segment.length <= remaining) {
+      points.push(segment.to);
+      remaining -= segment.length;
+      continue;
+    }
+
+    const ratio = segment.length > 0 ? remaining / segment.length : 0;
+    points.push({
+      x: segment.from.x + (segment.to.x - segment.from.x) * ratio,
+      y: segment.from.y + (segment.to.y - segment.from.y) * ratio
+    });
+    break;
+  }
+
+  return points;
+}
+
+function drawBarrierLinkStrokeProgress(path, progress, options = {}) {
+  const points = barrierLinkStrokePoints(path, progress);
+  if (points.length < 2) return points;
+  strokeBarrierLinkPoints(points, options);
+  return points;
+}
+
 function drawBarrierLinkHoldDiamond(stoneId, startedAt) {
   const center = barrierStoneScreenCenter(stoneId);
   if (!center || !Number.isFinite(startedAt)) return;
@@ -4594,25 +4653,6 @@ function drawBarrierLinkGesture() {
   context.save();
   context.globalCompositeOperation = "screen";
   context.globalAlpha = completion ? 0.74 : 0.98;
-  if (path.length >= 2) {
-    drawBarrierLinkPath(path, { width: completion ? 2.4 : 2.2, glow: completion ? 32 : 28 });
-  }
-
-  const animation = state.barrierLinkAnimation;
-  if (animation) {
-    const from = barrierStoneScreenCenter(animation.from);
-    const to = barrierStoneScreenCenter(animation.to);
-    if (from && to) {
-      const progress = Math.min(1, Math.max(0, (performance.now() - animation.startedAt) / BARRIER_LINK_SEGMENT_MS));
-      strokeBarrierLinkPoints([
-        from,
-        {
-          x: from.x + (to.x - from.x) * progress,
-          y: from.y + (to.y - from.y) * progress
-        }
-      ], { width: 2.4, glow: 32 });
-    }
-  }
 
   if (hasHold) {
     drawBarrierLinkHoldDiamond(
@@ -4622,28 +4662,16 @@ function drawBarrierLinkGesture() {
   }
 
   if (completion) {
-    const first = barrierStoneScreenCenter(path[0]);
-    const last = barrierStoneScreenCenter(path[path.length - 1]);
-    if (first && last) {
-      const progress = Math.min(1, Math.max(0, (performance.now() - completion.startedAt) / BARRIER_LINK_COMPLETION_MS));
-      strokeBarrierLinkPoints([
-        last,
-        {
-          x: last.x + (first.x - last.x) * progress,
-          y: last.y + (first.y - last.y) * progress
-        }
-      ], { width: 2.4, glow: 32 });
+    const progress = Math.min(1, Math.max(0, (performance.now() - completion.startedAt) / BARRIER_LINK_COMPLETION_MS));
+    const points = drawBarrierLinkStrokeProgress(path, progress, { width: 2.4, glow: 32 });
+    if (points.length >= 3) {
       context.globalAlpha = 0.1 + progress * 0.22;
       context.fillStyle = BARRIER_LINK_ORANGE;
       context.beginPath();
-      const vertices = path.map(barrierStoneScreenCenter).filter(Boolean);
-      if (vertices.length >= 3) {
-        context.moveTo(vertices[0].x, vertices[0].y);
-        for (const vertex of vertices.slice(1)) context.lineTo(vertex.x, vertex.y);
-        context.lineTo(last.x + (first.x - last.x) * progress, last.y + (first.y - last.y) * progress);
-        context.closePath();
-        context.fill();
-      }
+      context.moveTo(points[0].x, points[0].y);
+      for (const point of points.slice(1)) context.lineTo(point.x, point.y);
+      context.closePath();
+      context.fill();
     }
   }
   context.restore();
@@ -6670,7 +6698,8 @@ function renderActionButtons() {
   elements.actionAnalyzeButton.disabled = !analysisTarget;
   elements.actionRouteButton.disabled = !routeActive && !routePlan;
   elements.deletePointButton.disabled = !canDelete;
-  elements.clearSelectionButton.disabled = state.selection.length === 0 && !hasPendingPoint && barrierSelectionCount === 0;
+  const canClearSelection = state.selection.length > 0 || hasPendingPoint || barrierSelectionCount > 0;
+  elements.clearSelectionButton.disabled = !canClearSelection;
   elements.actionCenterButton.disabled = centerCandidateCount < 2;
   const shareableSelectedPointCount = selectedPointIds()
     .map(findPoint)
@@ -6708,6 +6737,9 @@ function renderActionButtons() {
       ? `選択順に${pointIds.length}地点を接続`
       : "2地点以上を選択すると接続できます";
   elements.actionAnalyzeButton.title = analysisTarget ? t("action.analyzeTitle") : t("analysis.noSelection");
+  elements.clearSelectionButton.title = hasPendingPoint && state.selection.length === 0 && barrierSelectionCount === 0
+    ? "仮ポイントを解除"
+    : t("action.clear");
   elements.actionRouteButton.classList.toggle("is-active", routeActive);
   elements.actionRouteButton.setAttribute("aria-pressed", String(routeActive));
   elements.actionRouteButton.title = routeActive ? "巡回表示を解除" : routePlan ? "選択点を起点から巡回計算" : "起点を指定するか3地点以上を選択";
@@ -6769,10 +6801,12 @@ function setActionButtonLabel(button, label) {
 
 function renderTraverseQuickActions() {
   const selectedCount = state.barrierSelection.length;
+  const hasPendingPoint = validGeo(state.pendingGeo);
   const hasSelection = selectedCount > 0
     || state.selection.length > 0
     || Boolean(state.selectedBarrierId)
-    || state.barrierPinMode;
+    || state.barrierPinMode
+    || hasPendingPoint;
   const preview = state.barrierLinkPreview;
   const canPlace = !state.traverseBusy && traverseQuantityLimit("place") > 0;
   const blankButtons = [elements.deletePointButton, elements.actionCopyToListButton, elements.actionMoveToListButton, elements.actionRouteButton];
@@ -6814,7 +6848,7 @@ function renderTraverseQuickActions() {
   elements.actionCenterButton.title = "龍脈眼で測る";
   elements.actionLinkButton.title = "結界石を置く";
   elements.clearSelectionButton.title = preview ? t("traverse.connect") : "2つ以上の石を選択すると結べます";
-  elements.actionInvertButton.title = "選択を解除";
+  elements.actionInvertButton.title = hasPendingPoint ? "仮ポイントを解除" : "選択を解除";
   elements.actionShareSelectedButton.title = t("barrier.share");
   elements.actionMapButton.title = t("action.map");
   elements.actionAnalyzeButton.title = t("action.analyze");
