@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2401";
+const WEB_VERSION = "0.2402";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -184,6 +184,7 @@ const NEW_POINT_LIST_ID = "__new_point_list__";
 const FOLLOW_SCALE_MANUAL = "manual";
 const FOLLOW_SCALE_CENTER = "center";
 const FOLLOW_SCALE_TARGET = "target";
+const CURRENT_LOCATION_GRID_SCALE = 0.7;
 const EARTH_RADIUS_METERS = 6371008.8;
 const MERCATOR_RADIUS = 6378137;
 const MAX_MERCATOR_LAT = 85.05112878;
@@ -14275,6 +14276,7 @@ function centerAndFollowCurrentLocation() {
   syncCanvasSize();
   state.screenFollowCurrentLocation = true;
   state.locationFollowScaleMode = FOLLOW_SCALE_CENTER;
+  state.viewport.scale = CURRENT_LOCATION_GRID_SCALE;
 
   const current = currentLocationPoint();
   if (current) {
