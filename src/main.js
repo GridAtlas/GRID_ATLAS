@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2336";
+const WEB_VERSION = "0.2337";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -13547,7 +13547,11 @@ function handleCanvasClick(screenPoint) {
   if (state.barrierLinkingMode) return;
 
   const nearestBarrierStone = state.traverseMode ? findNearestBarrierStone(screenPoint) : null;
-  const nearest = nearestBarrierStone ? null : findNearestPoint(screenPoint);
+  const barrierStoneIsGlyph = Boolean(
+    nearestBarrierStone
+    && state.barrierStoneGlyphMode.has(nearestBarrierStone.stoneId)
+  );
+  const nearest = barrierStoneIsGlyph ? null : findNearestPoint(screenPoint);
   const nearestLink = nearest || nearestBarrierStone ? null : findNearestLink(screenPoint);
   const nearestFigure = nearest || nearestBarrierStone || nearestLink ? null : findNearestFigure(screenPoint);
   const nearestObservation = nearest || nearestBarrierStone || nearestLink || nearestFigure
@@ -14292,7 +14296,11 @@ function startDragGesture(pointerId, point, options = {}) {
     : findNearestFigureEdge(point);
   const figureSurface = lineEndpoint || figureVertex || figureEdge ? null : options.moved ? null : findNearestFigure(point);
   const longPressFigure = figureVertex || figureEdge || (figureSurface ? { figureId: figureSurface.id } : null);
-  const pointCandidate = longPressFigure || lineEndpoint || barrierStoneCandidate
+  const barrierStoneIsGlyph = Boolean(
+    barrierStoneCandidate
+    && state.barrierStoneGlyphMode.has(barrierStoneCandidate.stoneId)
+  );
+  const pointCandidate = longPressFigure || lineEndpoint || barrierStoneIsGlyph
     ? null
     : options.moved ? null : findNearestPoint(point);
   const prioritizedPoint = chooseAnalysisHit([
@@ -14301,8 +14309,8 @@ function startDragGesture(pointerId, point, options = {}) {
     { kind: "point", value: pointCandidate }
   ]);
   const longPressPoint = prioritizedPoint?.kind === "point" ? prioritizedPoint.value : null;
-  // A barrier stone owns its whole displayed cell for placement/pickup, even
-  // when a registered pin or the current location is drawn inside that cell.
+  // A small ◇ cell owns its whole displayed hit area. Once the cell is shown
+  // as a dotted/fill polygon, a nearby pin/current-location hit can win.
   const longPressBarrierStone = longPressPoint ? null : barrierStoneCandidate;
   const longPressLink = longPressBarrierStone || options.moved || longPressPoint || lineEndpoint
     ? null
