@@ -220,8 +220,8 @@ describe("barrier data helpers", () => {
     expect(BARRIER_CONFIG.maxVertices).toBe(8);
     expect(maxVerticesForRank(0)).toBe(3);
     expect(maxVerticesForRank(8)).toBe(8);
-    expect(perimeterLimitKmForRank(0)).toBe(3);
-    expect(perimeterLimitKmForRank(8)).toBe(900);
+    expect(perimeterLimitKmForRank(0)).toBe(6);
+    expect(perimeterLimitKmForRank(8)).toBe(1800);
     expect(ryumyakuScatterForRank(0)).toBeCloseTo(0.15);
     expect(ryumyakuScatterForRank(8)).toBeCloseTo(0.05);
   });

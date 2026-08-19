@@ -208,13 +208,26 @@ export function barrierPerimeterKm(geos) {
   if (!Array.isArray(geos) || geos.length < 3 || geos.some((geo) => !validGeo(geo))) {
     return Number.POSITIVE_INFINITY;
   }
+  return closedGeoPerimeterKm(geos);
+}
+
+function closedGeoPerimeterKm(geos) {
+  if (!Array.isArray(geos) || geos.length < 2) return Number.POSITIVE_INFINITY;
   return geos.reduce((total, geo, index) => (
     total + geoDistanceKm(geo, geos[(index + 1) % geos.length])
   ), 0);
 }
 
+export function barrierLimitPerimeterKm(geos) {
+  if (!Array.isArray(geos) || geos.length < 3 || geos.some((geo) => !validGeo(geo))) {
+    return Number.POSITIVE_INFINITY;
+  }
+  if (!polygonSelfIntersects(geos)) return barrierPerimeterKm(geos);
+  return closedGeoPerimeterKm(convexHullGeos(geos));
+}
+
 export function barrierFitsPerimeter(geos, rankIndex = 0, config = BARRIER_CONFIG) {
-  const perimeterKm = barrierPerimeterKm(geos);
+  const perimeterKm = barrierLimitPerimeterKm(geos);
   if (!Number.isFinite(perimeterKm)) return { ok: false, reason: "invalid-geometry" };
   const limitKm = perimeterLimitForRank(rankIndex, config);
   return {
@@ -287,13 +300,7 @@ function interiorAngle(vertex, previous, next) {
 }
 
 export function polygonSelfIntersects(geos) {
-  const centroid = normalizedVector(geos.map(unitVector).reduce(addVector, { x: 0, y: 0, z: 0 }));
-  const points = geos.map((geo) => {
-    const vector = unitVector(geo);
-    const east = normalizedVector({ x: -centroid.y, y: centroid.x, z: 0 });
-    const north = normalizedVector(cross(centroid, east));
-    return { x: dot(vector, east), y: dot(vector, north) };
-  });
+  const points = projectGeosToTangentPlane(geos);
   for (let first = 0; first < points.length; first += 1) {
     const firstNext = (first + 1) % points.length;
     for (let second = first + 1; second < points.length; second += 1) {
@@ -303,6 +310,37 @@ export function polygonSelfIntersects(geos) {
     }
   }
   return false;
+}
+
+function convexHullGeos(geos) {
+  const points = projectGeosToTangentPlane(geos)
+    .map((point, index) => ({ ...point, geo: geos[index] }))
+    .sort((left, right) => left.x - right.x || left.y - right.y);
+  const crossProduct = (origin, first, second) => (
+    (first.x - origin.x) * (second.y - origin.y)
+      - (first.y - origin.y) * (second.x - origin.x)
+  );
+  const lower = [];
+  for (const point of points) {
+    while (lower.length >= 2 && crossProduct(lower.at(-2), lower.at(-1), point) <= 0) lower.pop();
+    lower.push(point);
+  }
+  const upper = [];
+  for (const point of [...points].reverse()) {
+    while (upper.length >= 2 && crossProduct(upper.at(-2), upper.at(-1), point) <= 0) upper.pop();
+    upper.push(point);
+  }
+  return [...lower.slice(0, -1), ...upper.slice(0, -1)].map((point) => point.geo);
+}
+
+function projectGeosToTangentPlane(geos) {
+  const centroid = normalizedVector(geos.map(unitVector).reduce(addVector, { x: 0, y: 0, z: 0 }));
+  const east = normalizedVector({ x: -centroid.y, y: centroid.x, z: 0 });
+  const north = normalizedVector(cross(centroid, east));
+  return geos.map((geo) => {
+    const vector = unitVector(geo);
+    return { x: dot(vector, east), y: dot(vector, north) };
+  });
 }
 
 function segmentsIntersect(a, b, c, d) {

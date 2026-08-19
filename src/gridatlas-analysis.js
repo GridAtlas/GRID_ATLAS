@@ -1,10 +1,13 @@
 import {
   normalizeAnalysisFigure,
-  normalizeAnalysisLine
+  normalizeAnalysisLine,
+  normalizeAnalysisVertex
 } from "./analysis-layer.js";
 
 export const GRIDATLAS_ANALYSIS_EXTENSION = "io.gridatlas.analysis";
 export const GRIDATLAS_ANALYSIS_LAYER_VERSION = 1;
+const LEGACY_GRIDATLAS_LINES_EXTENSION = "io.gridatlas.lines";
+const LEGACY_GRIDATLAS_LINES_VERSION = 1;
 
 export function normalizeGridAtlasLineColor(color) {
   return typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color)
@@ -61,19 +64,57 @@ export function buildGridAtlasAnalysisLayer(lines, figures) {
 export function readGridAtlasAnalysisLayer(document) {
   const layer = document?.extensions?.[GRIDATLAS_ANALYSIS_EXTENSION];
   if (
-    !layer
-    || typeof layer !== "object"
-    || layer.version !== GRIDATLAS_ANALYSIS_LAYER_VERSION
-    || !Array.isArray(layer.lines)
-    || !Array.isArray(layer.figures)
+    layer
+    && typeof layer === "object"
+    && layer.version === GRIDATLAS_ANALYSIS_LAYER_VERSION
+    && Array.isArray(layer.lines)
+    && Array.isArray(layer.figures)
   ) {
-    return { lines: [], figures: [] };
+    return {
+      lines: layer.lines.map(normalizeAnalysisLine).filter(Boolean),
+      figures: layer.figures.map(normalizeAnalysisFigure).filter(Boolean)
+    };
   }
 
   return {
-    lines: layer.lines.map(normalizeAnalysisLine).filter(Boolean),
-    figures: layer.figures.map(normalizeAnalysisFigure).filter(Boolean)
+    lines: readLegacyGridAtlasLines(document),
+    figures: []
   };
+}
+
+function readLegacyGridAtlasLines(document) {
+  const legacy = document?.extensions?.[LEGACY_GRIDATLAS_LINES_EXTENSION];
+  if (
+    !legacy
+    || typeof legacy !== "object"
+    || legacy.version !== LEGACY_GRIDATLAS_LINES_VERSION
+    || !Array.isArray(legacy.items)
+  ) return [];
+
+  const placesById = new Map(
+    (Array.isArray(document?.places) ? document.places : [])
+      .filter((place) => place && typeof place.id === "string" && place.id)
+      .map((place) => [place.id, place])
+  );
+  const vertexForPlaceId = (placeId) => {
+    if (typeof placeId !== "string" || !placeId) return null;
+    const place = placesById.get(placeId);
+    if (!place || typeof place !== "object") return null;
+    return normalizeAnalysisVertex({
+      lat: place.position?.latitude,
+      lng: place.position?.longitude,
+      name: place.name,
+      placeRef: placeId
+    });
+  };
+
+  return legacy.items
+    .map((line) => normalizeAnalysisLine({
+      id: line?.id,
+      a: vertexForPlaceId(line?.a),
+      b: vertexForPlaceId(line?.b)
+    }))
+    .filter(Boolean);
 }
 
 export function withoutGridAtlasAnalysisLayer(extensions) {

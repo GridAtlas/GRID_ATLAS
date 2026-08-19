@@ -49,6 +49,6 @@
 
 `strokeId`は線の任意属性です。図形の辺は`vertices[]`から導出し、`strokeId`で図形と結び付けません。閉じた図形は`closed: true`、開いた図形は`closed: false`で表します。
 
-旧`io.gridatlas.lines`は互換読み込み対象ではありません。未知の拡張として保持され、アプリでは線を復元せず地点だけを読み込みます。旧workspaceの自動移行は行いません。
+旧`io.gridatlas.lines` version 1 は、既存プリセットを読めるよう**読み込み時だけ**互換復元します。各線の地点IDを同じdocumentの`places`から座標スナップショットへ変換して考察レイヤーに表示します。書き出しの正規形式は引き続き`io.gridatlas.analysis`であり、旧workspaceの自動移行は行いません。
 
 この拡張は、既存のGRID ATLAS v1 Core必須項目を変更しません。対応していない実装では地点だけが表示されます。

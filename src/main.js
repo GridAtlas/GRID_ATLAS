@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2424";
+const WEB_VERSION = "0.2446";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -162,6 +162,7 @@ const BARRIER_SINGLE_TILE_MAX_SCREEN_SIZE = 220;
 const GRID_MODE_LONG_PRESS_MS = 1500;
 const BARRIER_LINK_DIAMOND_MS = 500;
 const BARRIER_LINK_COMPLETION_MS = 1100;
+const BARRIER_LINK_RELEASE_DRIFT_TOLERANCE = 28;
 const BARRIER_LINK_ERROR_MESSAGE_MS = 4200;
 const BARRIER_LINK_ORANGE = "#f28a2e";
 const BARRIER_LINK_CORE = "#fff0cc";
@@ -678,6 +679,7 @@ const state = {
   traverseQuantityTargetTileId: null,
   traverseQuantity: 1,
   traverseQuantityMax: 1,
+  traversePlaceViewSnapshot: null,
   traverseBusy: false,
   dragonEye: {
     active: false,
@@ -2329,9 +2331,36 @@ function renderTraverseQuantityDialog() {
   }
 }
 
-function closeTraverseQuantityDialog() {
+function captureTraversePlaceView() {
+  if (state.traversePlaceViewSnapshot) return;
+  state.traversePlaceViewSnapshot = {
+    centerGeo: { ...projectionCenterGeo() },
+    viewport: { ...state.viewport },
+    screenFollowCurrentLocation: state.screenFollowCurrentLocation,
+    locationFollowScaleMode: state.locationFollowScaleMode,
+    placed: false
+  };
+}
+
+function clearTraversePlaceViewSnapshot() {
+  state.traversePlaceViewSnapshot = null;
+}
+
+function restoreTraversePlaceView() {
+  const snapshot = state.traversePlaceViewSnapshot;
+  clearTraversePlaceViewSnapshot();
+  if (!snapshot) return;
+  setProjectionCenterGeo(snapshot.centerGeo);
+  state.viewport = { ...snapshot.viewport };
+  state.screenFollowCurrentLocation = snapshot.screenFollowCurrentLocation;
+  state.locationFollowScaleMode = snapshot.locationFollowScaleMode;
+  render();
+}
+
+function closeTraverseQuantityDialog(options = {}) {
   const dialog = elements.traverseQuantityDialog;
   const wasOpen = Boolean(dialog?.open);
+  const action = state.traverseQuantityAction;
   elements.traverseQuantityDialog?.classList.remove("is-placement-overlay");
   elements.traverseQuantityDialog?.classList.remove("is-actionbar-overlay");
   elements.traverseQuantityDialog?.style.removeProperty("--traverse-quantity-left");
@@ -2344,6 +2373,7 @@ function closeTraverseQuantityDialog() {
   state.traverseQuantity = 1;
   state.traverseQuantityMax = 1;
   if (wasOpen) dialog.close("cancel");
+  if (action === "place" && options.restorePlaceView === true) restoreTraversePlaceView();
 }
 
 function openTraverseQuantityDialog(action, options = {}) {
@@ -2361,7 +2391,10 @@ function openTraverseQuantityDialog(action, options = {}) {
     render();
     return false;
   }
-  if (action === "place") centerAndFollowCurrentLocation();
+  if (action === "place") {
+    captureTraversePlaceView();
+    centerAndFollowCurrentLocation();
+  }
   state.traverseQuantityAction = action;
   state.traverseQuantityTargetTileId = targetTileId;
   state.traverseQuantityMax = max;
@@ -2536,12 +2569,7 @@ function dragonEyeDefinition() {
 function dragonEyeMaxRadius(definition, perimeterLimitKm) {
   if (!definition) return 0;
   const sides = Math.max(3, Number(definition.sides) || 0);
-  const step = definition.linkPattern === "pentagram"
-    ? 2
-    : definition.linkPattern === "octagram"
-      ? 3
-      : 1;
-  const perimeterFactor = sides * 2 * Math.sin(Math.PI * step / sides);
+  const perimeterFactor = sides * 2 * Math.sin(Math.PI / sides);
   return perimeterFactor > 0 ? Math.max(1, Number(perimeterLimitKm) * 1000 / perimeterFactor) : 0;
 }
 
@@ -4399,11 +4427,16 @@ function drawTraverseStones(options = {}) {
       continue;
     }
     context.fillStyle = cellColor;
-    context.globalAlpha = selected || activated ? 0.32 : 0.2;
+    const barrierGlow = activated ? activeBarrierGlow() : 0;
+    context.globalAlpha = selected ? 0.32 : activated ? 0.25 + barrierGlow * 0.1 : 0.2;
     drawTraversePolygon(polygon, { fill: true });
-    context.globalAlpha = 0.72;
+    context.globalAlpha = activated ? 0.72 + barrierGlow * 0.18 : 0.72;
     context.strokeStyle = cellColor;
     context.lineWidth = selected || activated ? 2.75 : 1.25;
+    if (activated) {
+      context.shadowColor = cellColor;
+      context.shadowBlur = 8 + barrierGlow * 10;
+    }
     drawTraversePolygon(polygon, { stroke: true });
     drawTraverseTileCount(polygon, stoneDisplayCount(stone), colors, cellColor);
     context.restore();
@@ -4816,6 +4849,7 @@ function drawTraverseTileCount(polygon, count, colors, color = colors.barrierCel
 
 function drawTraverseBarriers() {
   const colors = canvasPalette();
+  const glow = activeBarrierGlow();
   for (const [barrierId, barrier] of Object.entries(state.traverseLog?.barriers || {})) {
     const vertices = barrierFigureVertices(barrier)
       .map((vertex) => projectLatLng(vertex.lat, vertex.lng))
@@ -4828,8 +4862,15 @@ function drawTraverseBarriers() {
     context.closePath();
     const selected = barrierId === state.selectedBarrierId;
     context.fillStyle = BARRIER_LINK_ORANGE;
-    context.globalAlpha = selected ? 0.32 : 0.18;
+    context.globalAlpha = selected ? 0.32 : 0.16 + glow * 0.08;
     context.fill("nonzero");
+    context.globalCompositeOperation = "screen";
+    context.globalAlpha = 0.24 + glow * 0.18;
+    context.strokeStyle = BARRIER_LINK_ORANGE;
+    context.lineWidth = selected ? 2.8 : 1.5 + glow * 0.8;
+    context.shadowColor = BARRIER_LINK_ORANGE;
+    context.shadowBlur = 8 + glow * 10;
+    context.stroke();
     context.restore();
   }
 }
@@ -5245,6 +5286,19 @@ function currentLocationGlowActive() {
   return Boolean(currentLocationPoint()) && currentLocationIsFresh() && (state.followCurrentLocation || state.screenFollowCurrentLocation);
 }
 
+function activeBarrierGlowActive() {
+  return state.traverseMode
+    && !state.barrierLinkPreview
+    && Object.keys(state.traverseLog?.barriers || {}).length > 0;
+}
+
+function activeBarrierGlow() {
+  const reduceMotion = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduceMotion) return 0.5;
+  const phase = (performance.now() % 5200) / 5200;
+  return (Math.sin(phase * Math.PI * 2) + 1) / 2;
+}
+
 function drawCurrentLocationGlow(screen, colors) {
   if (!currentLocationGlowActive()) {
     return;
@@ -5270,7 +5324,7 @@ function drawCurrentLocationGlow(screen, colors) {
 
 function syncLocationGlowAnimation() {
   const reducedMotion = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const shouldAnimate = currentLocationGlowActive() && !reducedMotion;
+  const shouldAnimate = (currentLocationGlowActive() || activeBarrierGlowActive()) && !reducedMotion;
   if (!shouldAnimate) {
     if (locationGlowFrame) {
       cancelAnimationFrame(locationGlowFrame);
@@ -5284,7 +5338,7 @@ function syncLocationGlowAnimation() {
   }
 
   const animate = () => {
-    if (!currentLocationGlowActive()) {
+    if (!currentLocationGlowActive() && !activeBarrierGlowActive()) {
       draw();
       renderStatus();
       locationGlowFrame = 0;
@@ -6200,6 +6254,10 @@ function renderTraverseBottomActions() {
 
 function returnToTraverseActionMenu() {
   if (!state.traverseMode || state.traverseBusy) return;
+  if (state.traversePlaceViewSnapshot) {
+    if (state.traversePlaceViewSnapshot.placed) clearTraversePlaceViewSnapshot();
+    else restoreTraversePlaceView();
+  }
   render();
 }
 
@@ -6535,6 +6593,7 @@ function performTraverseStoneAction(action, requestedQuantity = 1, targetTileId 
       state.lastLocationError = null;
       persistTraverseLog();
       state.traverseBusy = false;
+      if (action === "place" && state.traversePlaceViewSnapshot) state.traversePlaceViewSnapshot.placed = true;
       returnToTraverseActionMenu();
     },
     () => {
@@ -12782,6 +12841,21 @@ function resolveDragEndpoint(screenPoint, kind, options = {}) {
   return findNearestPoint(screenPoint, options);
 }
 
+function barrierLinkPointWithinReleaseTolerance(stoneId, point) {
+  const center = barrierStoneScreenCenter(stoneId);
+  if (!center || !point) return false;
+  const stone = state.traverseLog?.stones?.[stoneId];
+  const polygon = stone ? displayedTraverseTilePolygon(stone.tile) : null;
+  const diagonal = polygon && polygon.length > 2
+    ? Math.hypot(polygon[2].x - polygon[0].x, polygon[2].y - polygon[0].y)
+    : 0;
+  const tolerance = Math.max(
+    BARRIER_LINK_RELEASE_DRIFT_TOLERANCE,
+    Math.min(52, diagonal * 0.5)
+  );
+  return Math.hypot(center.x - point.x, center.y - point.y) <= tolerance;
+}
+
 function clearBarrierLinkHoldVisual() {
   if (state.barrierLinkHoldFrameId !== null) {
     window.cancelAnimationFrame(state.barrierLinkHoldFrameId);
@@ -12965,6 +13039,12 @@ function finishBarrierLinkGesture(drag, point, allowTap) {
   const path = [...state.barrierLinkPath];
   const origin = drag?.barrierLinkOriginStoneId;
   const nearest = resolveDragEndpoint(point, "barrier")?.stoneId;
+  const releasePoints = [point, drag?.last].filter(Boolean);
+  const releasedNearOrigin = origin
+    && path.length >= 3
+    && (nearest === origin || releasePoints.some((releasePoint) => (
+      barrierLinkPointWithinReleaseTolerance(origin, releasePoint)
+    )));
   state.barrierLinkPendingStoneId = null;
   if (!drag?.barrierLinkStarted) {
     state.barrierLinkingMode = false;
@@ -12973,7 +13053,7 @@ function finishBarrierLinkGesture(drag, point, allowTap) {
     render();
     return;
   }
-  if (allowTap && path.length >= 3 && nearest === origin) {
+  if (allowTap && releasedNearOrigin) {
     const completion = validateBarrierCompletion(path);
     if (!completion.ok) {
       rejectBarrierLinkCompletion(completion.message);
@@ -18236,7 +18316,7 @@ function bindEvents() {
   elements.traverseQuantityDecreaseButton?.addEventListener("click", () => adjustTraverseQuantity(-1));
   elements.traverseQuantityIncreaseButton?.addEventListener("click", () => adjustTraverseQuantity(1));
   elements.traverseQuantityCancelButton?.addEventListener("click", () => {
-    closeTraverseQuantityDialog();
+    closeTraverseQuantityDialog({ restorePlaceView: true });
     returnToTraverseActionMenu();
   });
   elements.traverseQuantityConfirmButton?.addEventListener("click", confirmTraverseQuantity);
@@ -18245,18 +18325,18 @@ function bindEvents() {
   });
   elements.traverseQuantityDialog?.addEventListener("click", (event) => {
     if (event.target === elements.traverseQuantityDialog) {
-      closeTraverseQuantityDialog();
+      closeTraverseQuantityDialog({ restorePlaceView: true });
       returnToTraverseActionMenu();
     }
   });
   elements.traverseQuantityDialog?.addEventListener("cancel", (event) => {
     event.preventDefault();
-    closeTraverseQuantityDialog();
+    closeTraverseQuantityDialog({ restorePlaceView: true });
     returnToTraverseActionMenu();
   });
   elements.traverseQuantityDialog?.addEventListener("close", () => {
     if (!state.traverseQuantityAction) return;
-    closeTraverseQuantityDialog();
+    closeTraverseQuantityDialog({ restorePlaceView: true });
     returnToTraverseActionMenu();
   });
   elements.barrierPinCancelButton?.addEventListener("click", () => {

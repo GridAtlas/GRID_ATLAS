@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BARRIER_SCORE_CONFIG,
   barrierFitsPerimeter,
+  barrierLimitPerimeterKm,
   barrierPerimeterKm,
   beautyCoefficient,
   effectiveBeautyTolerance,
@@ -256,19 +257,36 @@ describe("barrier score helpers", () => {
 
   it("keeps perimeter validation separate from scoring", () => {
     const center = { lat: 35, lng: 139 };
-    const within = [0, 120, 240].map((bearing) => destinationGeo(center, 0.55, bearing));
-    const outside = [0, 120, 240].map((bearing) => destinationGeo(center, 0.6, bearing));
+    const within = [0, 120, 240].map((bearing) => destinationGeo(center, 1.1, bearing));
+    const outside = [0, 120, 240].map((bearing) => destinationGeo(center, 1.2, bearing));
     expect(barrierFitsPerimeter(within, 0).ok).toBe(true);
     expect(barrierFitsPerimeter(outside, 0).ok).toBe(false);
-    expect(barrierPerimeterKm(within)).toBeCloseTo(3 * 0.55 * Math.sqrt(3), 1);
-    expect(geoDistanceKm(center, within[0])).toBeCloseTo(0.55, 2);
+    expect(barrierPerimeterKm(within)).toBeCloseTo(3 * 1.1 * Math.sqrt(3), 1);
+    expect(geoDistanceKm(center, within[0])).toBeCloseTo(1.1, 2);
   });
 
   it("uses the ordered closing edge in the perimeter", () => {
     const center = { lat: 35, lng: 139 };
-    const geos = [0, 120, 240].map((bearing) => destinationGeo(center, 1 / Math.sqrt(3), bearing));
-    expect(barrierFitsPerimeter(geos, 0, BARRIER_CONFIG).perimeterKm).toBeCloseTo(3, 2);
+    const geos = [0, 120, 240].map((bearing) => destinationGeo(center, 2 / Math.sqrt(3), bearing));
+    expect(barrierFitsPerimeter(geos, 0, BARRIER_CONFIG).perimeterKm).toBeCloseTo(6, 2);
     expect(barrierFitsPerimeter(geos, 0, BARRIER_CONFIG).ok).toBe(true);
+  });
+
+  it("measures crossing barriers by their convex-hull perimeter", () => {
+    const pentagon = regularPolygon(120, 5);
+    const pentagram = regularPentagram(120);
+    const octagon = regularPolygon(280, 8);
+    const octagram = regularOctagram(280);
+
+    expect(polygonSelfIntersects(pentagram)).toBe(true);
+    expect(barrierPerimeterKm(pentagram)).toBeGreaterThan(barrierPerimeterKm(pentagon));
+    expect(barrierLimitPerimeterKm(pentagram)).toBeCloseTo(barrierPerimeterKm(pentagon), 6);
+    expect(barrierFitsPerimeter(pentagram, 6)).toMatchObject({ ok: true, limitKm: 720 });
+
+    expect(polygonSelfIntersects(octagram)).toBe(true);
+    expect(barrierPerimeterKm(octagram)).toBeGreaterThan(barrierPerimeterKm(octagon));
+    expect(barrierLimitPerimeterKm(octagram)).toBeCloseTo(barrierPerimeterKm(octagon), 6);
+    expect(barrierFitsPerimeter(octagram, 8)).toMatchObject({ ok: true, limitKm: 1800 });
   });
 
   it("supports seven/eight vertices and the octagram coefficient", () => {
@@ -329,6 +347,59 @@ describe("barrier score helpers", () => {
     }
     expect(upperBound(5, true)).toBeGreaterThanOrEqual(shiniki * 1.2);
     expect(upperBound(8, true, 300)).toBeGreaterThanOrEqual(teniki * 1.2);
+  });
+
+  it("keeps configuration-derived rank limits and maximum barrier power in balance", () => {
+    const powerForShape = (rankIndex, vertices, crossing = false) => {
+      const perimeterLimit = BARRIER_CONFIG.perimeterLimitKm[rankIndex];
+      const stoneCap = BARRIER_CONFIG.stoneCapVertexByRank[rankIndex];
+      const makeVertices = (radiusKm) => {
+        const polygon = regularPolygon(radiusKm, vertices);
+        if (!crossing) return polygon;
+        return vertices === 5
+          ? [0, 2, 4, 1, 3].map((index) => polygon[index])
+          : [0, 3, 6, 1, 4, 7, 2, 5].map((index) => polygon[index]);
+      };
+      let minimumRadius = 0;
+      let maximumRadius = perimeterLimit;
+      for (let attempt = 0; attempt < 48; attempt += 1) {
+        const radius = (minimumRadius + maximumRadius) / 2;
+        if (barrierFitsPerimeter(makeVertices(radius), rankIndex).ok) minimumRadius = radius;
+        else maximumRadius = radius;
+      }
+      const geos = makeVertices(minimumRadius);
+      const selfIntersecting = polygonSelfIntersects(geos);
+      const areaKm2 = selfIntersecting ? nonZeroPolygonAreaKm2(geos) : sphericalPolygonAreaKm2(geos);
+      return vertices
+        * stoneCap
+        * shapeCoefficient(vertices, selfIntersecting)
+        * BARRIER_SCORE_CONFIG.beautyMax
+        * scaleCoefficient(areaKm2);
+    };
+    const maxPowerForRank = (rankIndex) => {
+      const maximumVertices = BARRIER_CONFIG.maxVerticesByRank[rankIndex];
+      const candidates = Array.from({ length: maximumVertices - 2 }, (_, index) => ({
+        vertices: index + 3,
+        crossing: false
+      }));
+      if (rankIndex >= BARRIER_CONFIG.crossLinkFromRank && maximumVertices >= 5) {
+        candidates.push({ vertices: 5, crossing: true });
+      }
+      if (rankIndex === BARRIER_CONFIG.maxVerticesByRank.length - 1 && maximumVertices >= 8) {
+        candidates.push({ vertices: 8, crossing: true });
+      }
+
+      return Math.max(...candidates.map(({ vertices, crossing }) => powerForShape(rankIndex, vertices, crossing)));
+    };
+    const maxima = BARRIER_CONFIG.perimeterLimitKm.map((_, rankIndex) => maxPowerForRank(rankIndex));
+    const shiniki = BARRIER_EVALUATION_CONFIG.powerThresholds.at(-2);
+    const teniki = BARRIER_EVALUATION_CONFIG.powerThresholds.at(-1);
+
+    expect(BARRIER_CONFIG.perimeterLimitKm).toEqual([...BARRIER_CONFIG.perimeterLimitKm].sort((left, right) => left - right));
+    expect(maxima.every((power, index) => index === 0 || power >= maxima[index - 1])).toBe(true);
+    expect(powerForShape(6, 5, true)).toBeGreaterThan(Math.max(...[3, 4, 5, 6].map((vertices) => powerForShape(6, vertices))));
+    expect(maxima[5]).toBeLessThan(shiniki);
+    expect(maxima[7]).toBeLessThan(teniki);
   });
 
   it("scores each barrier independently from its stones", () => {

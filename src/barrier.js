@@ -4,7 +4,7 @@ export const BARRIER_CONFIG = Object.freeze({
   dataZoom: 18,
   maxVertices: 8,
   maxVerticesByRank: Object.freeze([3, 3, 4, 5, 6, 6, 6, 8, 8]),
-  perimeterLimitKm: Object.freeze([3, 6, 12, 24, 48, 120, 360, 600, 900]),
+  perimeterLimitKm: Object.freeze([6, 12, 24, 48, 96, 240, 720, 1200, 1800]),
   crossLinkFromRank: 6,
   dailyGrant: 3,
   stockGrantHours: STOCK_GRANT_HOURS,

@@ -114,15 +114,49 @@ describe("GRID ATLAS analysis extension", () => {
     });
   });
 
-  it("ignores the retired io.gridatlas.lines extension", () => {
+  it("restores the retired line extension from its referenced places", () => {
     expect(readGridAtlasAnalysisLayer({
+      places: [
+        { id: "a", name: "A", position: { latitude: 35, longitude: 135 } },
+        { id: "b", name: "B", position: { latitude: 35.1, longitude: 135.1 } }
+      ],
       extensions: {
         "io.gridatlas.lines": {
           version: 1,
           items: [{ id: "old-line", a: "a", b: "b" }]
         }
       }
-    })).toEqual({ lines: [], figures: [] });
+    })).toEqual({
+      lines: [{
+        id: "old-line",
+        a: { lat: 35, lng: 135, key: "geo:35:135", name: "A", placeRef: "a" },
+        b: { lat: 35.1, lng: 135.1, key: "geo:35.1:135.1", name: "B", placeRef: "b" }
+      }],
+      figures: []
+    });
+  });
+
+  it("restores every valid legacy line without treating it as an unknown extension", () => {
+    const places = ["a", "b", "c", "d", "e", "f"].map((id, index) => ({
+      id,
+      name: id.toUpperCase(),
+      position: { latitude: 35 + index / 10, longitude: 135 + index / 10 }
+    }));
+    const items = [
+      { id: "legacy-1", a: "a", b: "b" },
+      { id: "legacy-2", a: "b", b: "c" },
+      { id: "legacy-3", a: "c", b: "d" },
+      { id: "legacy-4", a: "d", b: "e" },
+      { id: "legacy-5", a: "e", b: "a" }
+    ];
+
+    const layer = readGridAtlasAnalysisLayer({
+      places,
+      extensions: { "io.gridatlas.lines": { version: 1, items } }
+    });
+
+    expect(layer.lines.map((line) => line.id)).toEqual(items.map((item) => item.id));
+    expect(layer.lines.every((line) => line.a.placeRef && line.b.placeRef)).toBe(true);
   });
 
   it("removes only the new extension and preserves the old extension as unknown data", () => {
