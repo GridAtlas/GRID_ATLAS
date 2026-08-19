@@ -29,8 +29,8 @@
     <link rel="icon" href="assets/icon-grid.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const kekkai=new URLSearchParams(window.location.search).get("mode")==="kekkai";const theme=kekkai?"kekkai":localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="kekkai"?"kekkai":theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";if(kekkai)document.querySelector('meta[name="theme-color"]').setAttribute("content","#5b2a86");document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{const kekkai=new URLSearchParams(window.location.search).get("mode")==="kekkai";document.documentElement.dataset.theme=kekkai?"kekkai":"retro";if(kekkai)document.querySelector('meta[name="theme-color"]').setAttribute("content","#5b2a86")}</script>
-    <link rel="stylesheet" href="src/styles.css?v=135">
-    <script src="src/main.js?v=530" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=136">
+    <script src="src/main.js?v=531" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -597,6 +597,30 @@
           <div><dt data-i18n="kekkaishi.dailyPower">前日の結界霊量</dt><dd id="kekkaishiStatusDailyPower"></dd></div>
           <div><dt data-i18n="kekkaishi.activeCount">発動中の結界数</dt><dd id="kekkaishiStatusCount"></dd></div>
         </dl>
+        <section class="kekkaishi-status-card kekkaishi-persona-card" aria-labelledby="kekkaishiPersonaTitle">
+          <div class="kekkaishi-status-section-heading">
+            <div>
+              <h3 id="kekkaishiPersonaTitle" data-i18n="kekkaishi.personaTitle">分身</h3>
+              <p data-i18n="kekkaishi.personaHint">分身は表示だけに影響します。結界の強さやクラスは変わりません。</p>
+            </div>
+            <strong id="kekkaishiPersonaCurrent" class="kekkaishi-status-section-badge"></strong>
+          </div>
+          <fieldset class="kekkaishi-persona-options">
+            <legend data-i18n="kekkaishi.personaChoice">分身を選ぶ</legend>
+            <label class="kekkaishi-persona-option">
+              <input name="kekkaishiPersona" type="radio" value="guard">
+              <span><strong data-i18n="kekkaishi.personaGuard">守る人</strong><small data-i18n="kekkaishi.personaGuardDescription">護りたい場所がある。家、店、通学路、いつもの公園。囲んだ内側に、守りたいものがある</small></span>
+            </label>
+            <label class="kekkaishi-persona-option">
+              <input name="kekkaishiPersona" type="radio" value="see">
+              <span><strong data-i18n="kekkaishi.personaSee">視る人</strong><small data-i18n="kekkaishi.personaSeeDescription">形そのものに惹かれる。この土地の上にどんな形が引けるか、どこまで整えられるか。囲んだ中身より、線のほうを見ている</small></span>
+            </label>
+            <label class="kekkaishi-persona-option">
+              <input name="kekkaishiPersona" type="radio" value="record">
+              <span><strong data-i18n="kekkaishi.personaRecord">記す人</strong><small data-i18n="kekkaishi.personaRecordDescription">通った証を残したい。結界は、そこへ行ったことの記録として引かれる。線は、地図に残した軌跡に近い</small></span>
+            </label>
+          </fieldset>
+        </section>
         <section class="kekkaishi-status-card kekkaishi-status-shapes-panel" aria-labelledby="kekkaishiStatusShapesTitle">
           <div class="kekkaishi-status-section-heading">
             <div>

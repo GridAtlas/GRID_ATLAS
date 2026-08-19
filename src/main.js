@@ -74,6 +74,7 @@ import {
   currentBarrierPower,
   evaluateBarrierLog,
   liveCumulativeBarrierSpirit,
+  normalizeKekkaishiPersona,
   barrierRankStoneProgress,
   rankForKekkaishi,
   rankForBarrier,
@@ -137,7 +138,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2446";
+const WEB_VERSION = "0.2456";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -463,6 +464,7 @@ const elements = {
   kekkaishiStatusProgressValue: document.querySelector("#kekkaishiStatusProgressValue"),
   kekkaishiStatusProgressBar: document.querySelector("#kekkaishiStatusProgressBar"),
   kekkaishiStatusProgress: document.querySelector("#kekkaishiStatusProgress"),
+  kekkaishiPersonaCurrent: document.querySelector("#kekkaishiPersonaCurrent"),
   closeKekkaishiStatusButton: document.querySelector("#closeKekkaishiStatusButton"),
   shareKekkaishiStatusButton: document.querySelector("#shareKekkaishiStatusButton"),
   barrierDetailDensity: document.querySelector("#barrierDetailDensity"),
@@ -1455,6 +1457,17 @@ const TRANSLATIONS = {
     ,"kekkaishi.downloaded": "ステータス画像を保存しました"
     ,"kekkaishi.shareFailed": "ステータス画像の作成に失敗しました"
     ,"kekkaishi.shareText": "GRID ATLAS 結界師ランク {rank}｜累積 {power} #GRIDATLAS #結界"
+    ,"kekkaishi.personaTitle": "分身"
+    ,"kekkaishi.personaHint": "分身は表示だけに影響します。結界の強さやクラスは変わりません。"
+    ,"kekkaishi.personaChoice": "分身を選ぶ"
+    ,"kekkaishi.personaUnselected": "未選択"
+    ,"kekkaishi.personaCurrent": "現在: {persona}"
+    ,"kekkaishi.personaGuard": "守る人"
+    ,"kekkaishi.personaGuardDescription": "護りたい場所がある。家、店、通学路、いつもの公園。囲んだ内側に、守りたいものがある"
+    ,"kekkaishi.personaSee": "視る人"
+    ,"kekkaishi.personaSeeDescription": "形そのものに惹かれる。この土地の上にどんな形が引けるか、どこまで整えられるか。囲んだ中身より、線のほうを見ている"
+    ,"kekkaishi.personaRecord": "記す人"
+    ,"kekkaishi.personaRecordDescription": "通った証を残したい。結界は、そこへ行ったことの記録として引かれる。線は、地図に残した軌跡に近い"
   },
   en: {
     "settings.title": "Settings",
@@ -2030,6 +2043,17 @@ const TRANSLATIONS = {
     ,"kekkaishi.downloaded": "Status image downloaded"
     ,"kekkaishi.shareFailed": "Could not create the status image"
     ,"kekkaishi.shareText": "GRID ATLAS Kekkaishi rank {rank} | lifetime {power} #GRIDATLAS #Barrier"
+    ,"kekkaishi.personaTitle": "Persona"
+    ,"kekkaishi.personaHint": "A persona changes display only. It never changes barrier power or class."
+    ,"kekkaishi.personaChoice": "Choose a persona"
+    ,"kekkaishi.personaUnselected": "Not selected"
+    ,"kekkaishi.personaCurrent": "Current: {persona}"
+    ,"kekkaishi.personaGuard": "Guardian"
+    ,"kekkaishi.personaGuardDescription": "There is a place to protect: a home, shop, school route, or familiar park. Something worth protecting lies inside the boundary."
+    ,"kekkaishi.personaSee": "Seer"
+    ,"kekkaishi.personaSeeDescription": "Drawn to the shape itself: what can be traced over this land, and how orderly it can become. The lines matter more than what they enclose."
+    ,"kekkaishi.personaRecord": "Recorder"
+    ,"kekkaishi.personaRecordDescription": "Wants to leave proof of having passed through. A barrier is drawn as a record of having been there; its lines resemble a trace left on a map."
   }
 };
 
@@ -8674,6 +8698,14 @@ function renderKekkaishiStatusDialog() {
   const nextShapes = atMaxRank
     ? []
     : dragonEyeShapesForRank(nextIndex).filter((shape) => !currentShapes.includes(shape));
+  const persona = normalizeKekkaishiPersona(status.persona);
+  const personaKey = persona ? `kekkaishi.persona${persona[0].toUpperCase()}${persona.slice(1)}` : "kekkaishi.personaUnselected";
+  if (elements.kekkaishiPersonaCurrent) {
+    elements.kekkaishiPersonaCurrent.textContent = t("kekkaishi.personaCurrent").replace("{persona}", t(personaKey));
+  }
+  document.querySelectorAll("input[name=\"kekkaishiPersona\"]").forEach((input) => {
+    input.checked = input.value === persona;
+  });
   if (elements.kekkaishiStatusRank) {
     elements.kekkaishiStatusRank.textContent = `${rank.name}${achievedDays === null ? "" : ` ${t("kekkaishi.achievedDays").replace("{days}", String(achievedDays))}`}`;
   }
@@ -8710,6 +8742,17 @@ function renderKekkaishiStatusDialog() {
       elements.kekkaishiStatusProgress.textContent = days;
     }
   }
+}
+
+function setKekkaishiPersona(value) {
+  if (!state.traverseLog) return;
+  const persona = normalizeKekkaishiPersona(value);
+  const status = state.traverseLog.kekkaishi || createKekkaishiStatus();
+  if (status.persona === persona) return;
+  status.persona = persona;
+  state.traverseLog.kekkaishi = status;
+  persistTraverseLog();
+  renderKekkaishiStatusDialog();
 }
 
 function openKekkaishiStatusDialog() {
@@ -17889,6 +17932,11 @@ function bindEvents() {
     void setGpsEnabled(elements.settingsGpsEnabled.checked);
   });
   elements.shareKekkaishiStatusButton?.addEventListener("click", () => void shareKekkaishiStatus());
+  document.querySelectorAll("input[name=\"kekkaishiPersona\"]").forEach((input) => {
+    input.addEventListener("change", () => {
+      if (input.checked) setKekkaishiPersona(input.value);
+    });
+  });
   elements.kekkaishiStatusDialog?.addEventListener("click", (event) => {
     if (event.target === elements.kekkaishiStatusDialog) elements.kekkaishiStatusDialog.close("cancel");
   });

@@ -19,6 +19,12 @@ export const BARRIER_EVALUATION_CONFIG = Object.freeze({
   kekkaishiRankNames: Object.freeze(["F", "E", "D", "C", "B", "A", "S", "SS", "SSS"])
 });
 
+export const KEKKAISHI_PERSONAS = Object.freeze(["guard", "see", "record"]);
+
+export function normalizeKekkaishiPersona(value) {
+  return KEKKAISHI_PERSONAS.includes(value) ? value : null;
+}
+
 export function createKekkaishiStatus(now = Date.now(), barrierCount = 0, config = BARRIER_EVALUATION_CONFIG) {
   const iso = new Date(now).toISOString();
   return {
@@ -29,6 +35,7 @@ export function createKekkaishiStatus(now = Date.now(), barrierCount = 0, config
     lastEvaluatedAt: iso,
     lastDailyPower: 0,
     kekkaiCreatedCount: Math.max(0, Math.floor(Number(barrierCount) || 0)),
+    persona: null,
     startedAt: iso,
     rankAchievedAt: Array.from({ length: config.kekkaishiRankNames.length }, (_, index) => index === 0 ? iso : null)
   };
@@ -65,6 +72,7 @@ export function normalizeKekkaishiStatus(raw, now = Date.now(), barrierCount = 0
     lastEvaluatedAt: Number.isFinite(parsedLast) ? new Date(parsedLast).toISOString() : fallback.lastEvaluatedAt,
     lastDailyPower: Math.max(0, Number(raw.lastDailyPower) || 0),
     kekkaiCreatedCount: Math.max(0, Math.floor(Number(raw.kekkaiCreatedCount) || 0)),
+    persona: normalizeKekkaishiPersona(raw.persona),
     startedAt,
     rankAchievedAt
   };

@@ -10,6 +10,7 @@ import {
   evaluationSettingsSnapshot,
   evaluateBarrierLog,
   liveCumulativeBarrierSpirit,
+  normalizeKekkaishiPersona,
   normalizeKekkaishiStatus,
   rankAchievementDays,
   rankForKekkaishi,
@@ -40,6 +41,40 @@ function triangleLog() {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 describe("barrier evaluation", () => {
+  it("keeps a valid player persona without affecting normalized evaluation status", () => {
+    const raw = {
+      persona: "see",
+      lifetimeOutput: 8000,
+      dailyHistory: [12],
+      lastDailyPower: 12
+    };
+    const normalized = normalizeKekkaishiStatus(raw, Date.parse("2026-08-20T00:00:00Z"));
+    expect(normalized.persona).toBe("see");
+    expect(normalized.lifetimeOutput).toBe(8000);
+    expect(normalizeKekkaishiPersona("guard")).toBe("guard");
+    expect(normalizeKekkaishiPersona("record")).toBe("record");
+    expect(normalizeKekkaishiPersona("other")).toBeNull();
+
+    const withPersona = triangleLog();
+    const withoutPersona = triangleLog();
+    withPersona.kekkaishi.persona = "record";
+    evaluateBarrierLog(withPersona, Date.parse("2026-08-02T00:00:00Z"));
+    evaluateBarrierLog(withoutPersona, Date.parse("2026-08-02T00:00:00Z"));
+    expect(withPersona.kekkaishi.persona).toBe("record");
+    expect(withPersona.kekkaishi.lifetimeOutput).toBe(withoutPersona.kekkaishi.lifetimeOutput);
+    expect(withPersona.kekkaishi.lastDailyPower).toBe(withoutPersona.kekkaishi.lastDailyPower);
+    expect(withPersona.events.map((event) => event.type)).toEqual(withoutPersona.events.map((event) => event.type));
+
+    expect(dissolveBarrier(withPersona, "triangle", "2026-08-02T12:00:00Z").ok).toBe(true);
+    expect(registerBarrier(withPersona, {
+      id: "rebuilt",
+      name: "rebuilt",
+      vertices: Object.keys(withPersona.stones),
+      createdAt: "2026-08-02T12:00:00Z"
+    }).ok).toBe(true);
+    expect(withPersona.kekkaishi.persona).toBe("record");
+  });
+
   it("uses the loose cap until a stone becomes a vertex", () => {
     const log = createBarrierLog();
     const tile = "18/232798/103246";
