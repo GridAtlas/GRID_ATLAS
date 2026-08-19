@@ -138,7 +138,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2456";
+const WEB_VERSION = "0.2457";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -705,6 +705,7 @@ const state = {
   lastLocationError: null,
   followCurrentLocation: false,
   screenFollowCurrentLocation: false,
+  screenFollowCurrentLocationAt100m: false,
   locationWatchId: null,
   locationFollowFillForm: false,
   locationFollowScaleMode: FOLLOW_SCALE_MANUAL,
@@ -2361,6 +2362,7 @@ function captureTraversePlaceView() {
     centerGeo: { ...projectionCenterGeo() },
     viewport: { ...state.viewport },
     screenFollowCurrentLocation: state.screenFollowCurrentLocation,
+    screenFollowCurrentLocationAt100m: state.screenFollowCurrentLocationAt100m,
     locationFollowScaleMode: state.locationFollowScaleMode,
     placed: false
   };
@@ -2377,6 +2379,7 @@ function restoreTraversePlaceView() {
   setProjectionCenterGeo(snapshot.centerGeo);
   state.viewport = { ...snapshot.viewport };
   state.screenFollowCurrentLocation = snapshot.screenFollowCurrentLocation;
+  state.screenFollowCurrentLocationAt100m = snapshot.screenFollowCurrentLocationAt100m;
   state.locationFollowScaleMode = snapshot.locationFollowScaleMode;
   render();
 }
@@ -14167,11 +14170,13 @@ function zoomAt(screenPoint, factor) {
   render();
 }
 
-function barrierCellFitPoints() {
+function barrierCellFitPoints(stoneIds = null) {
   if (!state.traverseMode || !state.traverseLog) return [];
+  const allowedStoneIds = Array.isArray(stoneIds) ? new Set(stoneIds) : null;
   // A placed barrier stone is already a valid vertex-cell pan target, even
   // before it has been registered in a completed barrier.
   return Object.entries(state.traverseLog.stones || {})
+    .filter(([stoneId]) => !allowedStoneIds || allowedStoneIds.has(stoneId))
     .filter(([, stone]) => stoneDisplayCount(stone) > 0)
     .flatMap(([, stone]) => {
       const boundaryGeos = tileBoundaryGeos(stone.tile);
@@ -14437,9 +14442,19 @@ function centerAndFollowCurrentLocation() {
 
   startDeviceHeading();
   syncCanvasSize();
+  const wasAlreadyFollowing = state.screenFollowCurrentLocation;
+  const switchTo100mScale = wasAlreadyFollowing
+    && !state.screenFollowCurrentLocationAt100m;
   state.screenFollowCurrentLocation = true;
+  if (!wasAlreadyFollowing) {
+    state.screenFollowCurrentLocationAt100m = false;
+  } else if (switchTo100mScale) {
+    state.screenFollowCurrentLocationAt100m = true;
+  }
   state.locationFollowScaleMode = FOLLOW_SCALE_CENTER;
-  state.viewport.scale = CURRENT_LOCATION_GRID_SCALE;
+  if (switchTo100mScale) {
+    state.viewport.scale = CURRENT_LOCATION_GRID_SCALE;
+  }
 
   const current = currentLocationPoint();
   if (current) {
@@ -14862,15 +14877,48 @@ function selectPointsInRange(range) {
     const end = worldToScreen(endpoints.b);
     return segmentIntersectsRange(start, end, left, right, top, bottom);
   });
+  const selectedBarrierStoneIds = state.traverseMode
+    ? Object.entries(state.traverseLog?.stones || {})
+      .filter(([, stone]) => stoneDisplayCount(stone) > 0)
+      .filter(([, stone]) => {
+        const polygon = displayedTraverseTilePolygon(stone.tile);
+        if (!polygon || polygon.length < 3) return false;
+        if (polygon.some((point) => point.x >= left && point.x <= right && point.y >= top && point.y <= bottom)) {
+          return true;
+        }
+        if ([
+          { x: left, y: top },
+          { x: right, y: top },
+          { x: right, y: bottom },
+          { x: left, y: bottom }
+        ].some((corner) => pointInPolygon(corner, polygon))) {
+          return true;
+        }
+        return polygon.some((point, index) => segmentIntersectsRange(
+          point,
+          polygon[(index + 1) % polygon.length],
+          left,
+          right,
+          top,
+          bottom
+        ));
+      })
+      .map(([stoneId]) => stoneId)
+    : [];
 
   state.selection = [
     ...selectedPoints.map((point) => ({ type: "point", id: point.id })),
     ...selectedLinks.map((link) => ({ type: "link", id: link.id }))
   ];
+  state.barrierSelection = selectedBarrierStoneIds;
+  state.selectedBarrierId = null;
   state.selectedPointId = selectedPoints[0]?.id ?? null;
   state.selectedLinkId = selectedLinks[0]?.id ?? null;
   normalizeSelection();
-  return selectedPoints;
+  return {
+    points: selectedPoints,
+    barrierFitPoints: barrierCellFitPoints(selectedBarrierStoneIds)
+  };
 }
 
 function finishRangeSelection() {
@@ -14889,9 +14937,10 @@ function finishRangeSelection() {
   }
 
   pauseLocationFollowForManualView();
-  const selectedPoints = selectPointsInRange(range);
-  if (selectedPoints.length > 0) {
-    fitToPoints(selectedPoints);
+  const selectedRange = selectPointsInRange(range);
+  const panTargets = [...selectedRange.points, ...selectedRange.barrierFitPoints];
+  if (panTargets.length > 0) {
+    fitToPoints(panTargets);
   } else {
     render();
   }
@@ -15547,6 +15596,7 @@ function startLocationFollow(options = {}) {
         state.lastLocationError = error;
         const message = locationErrorMessage(error, "追跡エラー");
         state.screenFollowCurrentLocation = false;
+        state.screenFollowCurrentLocationAt100m = false;
         stopLocationFollow();
         if (autoRouteStart) {
           clearRouteStartState();
@@ -15582,6 +15632,7 @@ function clearLocationWatchIfIdle() {
 
 function stopScreenFollow(options = {}) {
   state.screenFollowCurrentLocation = false;
+  state.screenFollowCurrentLocationAt100m = false;
   clearLocationWatchIfIdle();
 
   if (options.render !== false) {
@@ -15610,6 +15661,7 @@ function pauseLocationFollowForManualView() {
   let changed = false;
   if (state.screenFollowCurrentLocation) {
     state.screenFollowCurrentLocation = false;
+    state.screenFollowCurrentLocationAt100m = false;
     changed = true;
   }
   if (state.followCurrentLocation) {
@@ -15634,7 +15686,13 @@ function renderLocationFollowButton() {
   elements.originButton.disabled = !isSupported;
   elements.originButton.classList.toggle("is-active", state.screenFollowCurrentLocation);
   elements.originButton.setAttribute("aria-pressed", String(state.screenFollowCurrentLocation));
-  elements.originButton.title = !state.gpsEnabled ? "設定でGPSを有効にしてください" : state.screenFollowCurrentLocation ? "画面追従中" : "現在地を中央にして画面追従";
+  elements.originButton.title = !state.gpsEnabled
+    ? "設定でGPSを有効にしてください"
+    : state.screenFollowCurrentLocationAt100m
+      ? "現在地を100mスケールで追従中"
+      : state.screenFollowCurrentLocation
+        ? "現在地を中央に追従中（もう一度で100mスケール）"
+        : "現在地を中央にして画面追従";
 }
 
 function currentLocationPoint() {
