@@ -64,10 +64,10 @@ import {
   tileBounds,
   tileIdFromGeo,
   ryumyakuScatterForRank,
-  sightRadiusKmForRank,
+  perimeterLimitKmForRank,
   validateBarrierVertices
 } from "./barrier.js?v=1";
-import { barrierFitsSightRadius, polygonSelfIntersects, scoreBarrier } from "./barrier-score.js?v=1";
+import { barrierFitsPerimeter, polygonSelfIntersects, scoreBarrier } from "./barrier-score.js?v=1";
 import {
   BARRIER_EVALUATION_CONFIG,
   createKekkaishiStatus,
@@ -137,7 +137,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2414";
+const WEB_VERSION = "0.2424";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -688,7 +688,7 @@ const state = {
     scatter: 0,
     rankIndex: 0,
     rankName: null,
-    sightRadiusKm: 0
+    perimeterLimitKm: 0
   },
   editingPointId: null,
   pendingGeo: null,
@@ -1332,8 +1332,8 @@ const TRANSLATIONS = {
     "dragonEye.open": "龍脈眼",
     "dragonEye.title": "龍脈眼の形を選択",
     "dragonEye.message": "形を選ぶとグリッド上で移動・拡縮できます。",
-    "dragonEye.rankInfo": "{rank}級 · 見通し半径 {radius} · 精度 誤差{scatter}% · 回転 {rotation}",
-    "dragonEye.sightLimit": "見通しの限界（半径{radius}）",
+    "dragonEye.rankInfo": "{rank}級 · 辺長合計上限 {perimeter} · 精度 誤差{scatter}% · 回転 {rotation}",
+    "dragonEye.perimeterLimit": "辺長合計の限界（上限{perimeter}）",
       "dragonEye.rotationOn": "解放",
       "dragonEye.rotationLocked": "E級で解放",
     "dragonEye.confirm": "確定",
@@ -1384,7 +1384,7 @@ const TRANSLATIONS = {
     "barrier.needLocations": "結界を結ぶには、あと{count}箇所に結界石を置いてください。",
     "barrier.tooMany": "大きすぎる！結界師のクラスが足りない！（最大{max}頂点）",
     "barrier.rankVertexLimit": "大きすぎる！結界師のクラスが足りない！",
-    "barrier.sightExceeded": "大きすぎる！結界師のクラスが足りない！見通し範囲を超えています（頂点 {vertices}）",
+    "barrier.perimeterExceeded": "大きすぎる！結界師のクラスが足りない！辺長合計が上限を超えています（{perimeter} / 上限{limit}）",
     "barrier.crossLinkLocked": "交差結びはまだ使えない！結界師のクラスが足りない！（結界師のクラス{rank}で解放）",
     "barrier.stoneUsed": "その結界石は使用中！別の結界石を選んで！",
     "barrier.missingStone": "結界石が見つからない！もう一度なぞって！",
@@ -1434,19 +1434,19 @@ const TRANSLATIONS = {
     ,"kekkaishi.currentShapes": "使用できる結界術"
     ,"kekkaishi.nextShapes": "次のクラスで追加される結界術"
     ,"kekkaishi.progressTitle": "次のクラスまで"
-    ,"kekkaishi.sightRadius": "見通し半径"
+    ,"kekkaishi.perimeterLimit": "辺長合計上限"
     ,"kekkaishi.maxVertices": "最大頂点"
     ,"kekkaishi.stoneCap": "石上限"
     ,"kekkaishi.scatter": "龍脈眼精度"
     ,"kekkaishi.scatterValue": "誤差{scatter}%"
-    ,"kekkaishi.edgeGuide": "1辺目安"
+    ,"kekkaishi.edgeGuide": "正多角形の1辺目安"
     ,"kekkaishi.progressLifetime": "累積"
     ,"kekkaishi.dailyPower": "前日の結界霊量"
     ,"kekkaishi.dailyUnit": "Pt/日"
     ,"kekkaishi.progressDays": "現在のペースであと{days}日"
     ,"kekkaishi.noDailyPower": "結界を張ると進みます"
-    ,"kekkaishi.unlocks": "使用できる結界術: {shapes} / 見通し半径{radius} / 1辺目安{edges} / 最大{vertices}頂点 / 石上限{stones} / 龍脈眼精度 誤差{scatter}%"
-    ,"kekkaishi.nextUnlocks": "次のクラスで追加される結界術: {shapes} / 見通し半径{radius} / 1辺目安{edges} / 最大{vertices}頂点 / 石上限{stones} / 龍脈眼精度 誤差{scatter}%"
+    ,"kekkaishi.unlocks": "使用できる結界術: {shapes} / 辺長合計上限{perimeter} / 正多角形の1辺目安{edges} / 最大{vertices}頂点 / 石上限{stones} / 龍脈眼精度 誤差{scatter}%"
+    ,"kekkaishi.nextUnlocks": "次のクラスで追加される結界術: {shapes} / 辺長合計上限{perimeter} / 正多角形の1辺目安{edges} / 最大{vertices}頂点 / 石上限{stones} / 龍脈眼精度 誤差{scatter}%"
     ,"kekkaishi.rankMax": "最高ランク"
     ,"kekkaishi.share": "ステータスを共有"
     ,"kekkaishi.shared": "ステータス画像を共有しました"
@@ -1907,8 +1907,8 @@ const TRANSLATIONS = {
     "dragonEye.open": "Dragon eye",
     "dragonEye.title": "Choose a Dragon Eye shape",
     "dragonEye.message": "Choose a shape, then drag or pinch it on the grid.",
-    "dragonEye.rankInfo": "Rank {rank} · sight radius {radius} · accuracy {scatter}% error · rotation {rotation}",
-    "dragonEye.sightLimit": "Sight limit (radius {radius})",
+    "dragonEye.rankInfo": "Rank {rank} · edge-sum limit {perimeter} · accuracy {scatter}% error · rotation {rotation}",
+    "dragonEye.perimeterLimit": "Edge-sum limit ({perimeter})",
       "dragonEye.rotationOn": "unlocked",
       "dragonEye.rotationLocked": "unlocks at E",
     "dragonEye.confirm": "Confirm",
@@ -1959,7 +1959,7 @@ const TRANSLATIONS = {
     "barrier.needLocations": "Place barrier stones at {count} more locations to bind a barrier.",
     "barrier.tooMany": "Too large! Your barrier-master class is not high enough! (Max {max} vertices)",
     "barrier.rankVertexLimit": "Too large! Your barrier-master class is not high enough!",
-    "barrier.sightExceeded": "Too large! Your barrier-master class is not high enough! The sight range is exceeded (vertices {vertices})",
+    "barrier.perimeterExceeded": "Too large! Your barrier-master class is not high enough! The edge-sum limit is exceeded ({perimeter} / limit {limit})",
     "barrier.crossLinkLocked": "Cross-linking is not unlocked yet! Your barrier-master class is not high enough! (Unlocks at barrier-master class {rank})",
     "barrier.stoneUsed": "That barrier stone is already in use! Choose another one!",
     "barrier.missingStone": "The barrier stone was not found! Trace it again!",
@@ -2009,19 +2009,19 @@ const TRANSLATIONS = {
     ,"kekkaishi.currentShapes": "Usable barrier techniques"
     ,"kekkaishi.nextShapes": "Barrier techniques added by the next class"
     ,"kekkaishi.progressTitle": "To the next class"
-    ,"kekkaishi.sightRadius": "Sight radius"
+    ,"kekkaishi.perimeterLimit": "Edge-sum limit"
     ,"kekkaishi.maxVertices": "Max vertices"
     ,"kekkaishi.stoneCap": "Stone cap"
     ,"kekkaishi.scatter": "Dragon Eye accuracy"
     ,"kekkaishi.scatterValue": "{scatter}% error"
-    ,"kekkaishi.edgeGuide": "Edge guide"
+    ,"kekkaishi.edgeGuide": "Regular-polygon side guide"
     ,"kekkaishi.progressLifetime": "Lifetime"
     ,"kekkaishi.dailyPower": "Previous day's barrier spirit"
     ,"kekkaishi.dailyUnit": "Pt/day"
     ,"kekkaishi.progressDays": "At this pace: {days} more days"
     ,"kekkaishi.noDailyPower": "Create a barrier to make progress"
-    ,"kekkaishi.unlocks": "Usable barrier techniques: {shapes} / sight radius {radius} / edge guide {edges} / max {vertices} vertices / stone cap {stones} / Dragon Eye accuracy {scatter}% error"
-    ,"kekkaishi.nextUnlocks": "Barrier techniques added by the next class: {shapes} / sight radius {radius} / edge guide {edges} / max {vertices} vertices / stone cap {stones} / Dragon Eye accuracy {scatter}% error"
+    ,"kekkaishi.unlocks": "Usable barrier techniques: {shapes} / edge-sum limit {perimeter} / regular-polygon side guide {edges} / max {vertices} vertices / stone cap {stones} / Dragon Eye accuracy {scatter}% error"
+    ,"kekkaishi.nextUnlocks": "Barrier techniques added by the next class: {shapes} / edge-sum limit {perimeter} / regular-polygon side guide {edges} / max {vertices} vertices / stone cap {stones} / Dragon Eye accuracy {scatter}% error"
     ,"kekkaishi.rankMax": "Maximum rank"
     ,"kekkaishi.share": "Share status"
     ,"kekkaishi.shared": "Status image shared"
@@ -2462,7 +2462,7 @@ function resetDragonEyeState() {
   state.dragonEye.scatter = 0;
   state.dragonEye.rankIndex = 0;
   state.dragonEye.rankName = null;
-  state.dragonEye.sightRadiusKm = 0;
+  state.dragonEye.perimeterLimitKm = 0;
   state.pointer.pinch = null;
   if (state.pointer.drag?.dragonEye) state.pointer.drag.dragonEye = false;
 }
@@ -2489,7 +2489,7 @@ function dragonEyeRankInfo() {
     rank,
     rankIndex,
     maxVertices,
-    sightRadiusKm: sightRadiusKmForRank(rankIndex),
+    perimeterLimitKm: perimeterLimitKmForRank(rankIndex),
     scatter: ryumyakuScatterForRank(rankIndex),
     rotationUnlocked: rankIndex >= BARRIER_CONFIG.rotationFromRank,
     shapes: dragonEyeShapesForRank(rankIndex)
@@ -2502,7 +2502,7 @@ function currentKekkaishiRankInfo() {
   return {
     rank,
     maxVertices: maxVerticesForRank(rank.index),
-    sightRadiusKm: sightRadiusKmForRank(rank.index),
+    perimeterLimitKm: perimeterLimitKmForRank(rank.index),
     stoneCapVertex: Number(BARRIER_CONFIG.stoneCapVertexByRank[rank.index]) || BARRIER_CONFIG.stoneCapVertex
   };
 }
@@ -2512,7 +2512,7 @@ function renderDragonEyeShapeOptions() {
   if (elements.dragonEyeAvailability) {
     elements.dragonEyeAvailability.textContent = t("dragonEye.rankInfo")
       .replace("{rank}", info.rank.name)
-      .replace("{radius}", formatBarrierRadius(info.sightRadiusKm))
+      .replace("{perimeter}", formatBarrierDistance(info.perimeterLimitKm))
       .replace("{scatter}", String(Math.round(info.scatter * 100)))
       .replace("{rotation}", info.rotationUnlocked ? t("dragonEye.rotationOn") : t("dragonEye.rotationLocked"));
   }
@@ -2533,15 +2533,22 @@ function dragonEyeDefinition() {
   return DRAGON_EYE_SHAPES[state.dragonEye.shape] || null;
 }
 
-function dragonEyeMaxRadius(definition, sightRadiusKm) {
+function dragonEyeMaxRadius(definition, perimeterLimitKm) {
   if (!definition) return 0;
-  return Math.max(1000, Number(sightRadiusKm) * 1000);
+  const sides = Math.max(3, Number(definition.sides) || 0);
+  const step = definition.linkPattern === "pentagram"
+    ? 2
+    : definition.linkPattern === "octagram"
+      ? 3
+      : 1;
+  const perimeterFactor = sides * 2 * Math.sin(Math.PI * step / sides);
+  return perimeterFactor > 0 ? Math.max(1, Number(perimeterLimitKm) * 1000 / perimeterFactor) : 0;
 }
 
 function dragonEyeRadiusBounds() {
   const definition = dragonEyeDefinition();
   const info = dragonEyeRankInfo();
-  const max = dragonEyeMaxRadius(definition, info.sightRadiusKm);
+  const max = dragonEyeMaxRadius(definition, info.perimeterLimitKm);
   const min = Math.min(max, 24 / Math.max(0.01, state.viewport.scale));
   return { min, max };
 }
@@ -2549,7 +2556,7 @@ function dragonEyeRadiusBounds() {
 function dragonEyeWorldVertices() {
   const definition = dragonEyeDefinition();
   const center = state.dragonEye.center;
-  const radius = Math.min(Number(state.dragonEye.radius), dragonEyeMaxRadius(definition, dragonEyeRankInfo().sightRadiusKm));
+  const radius = Math.min(Number(state.dragonEye.radius), dragonEyeMaxRadius(definition, dragonEyeRankInfo().perimeterLimitKm));
   if (!definition || !center || !Number.isFinite(radius) || radius <= 0) return [];
   const baseVertices = Array.from({ length: definition.sides }, (_, index) => {
     const angle = definition.rotation + state.dragonEye.rotation + (Math.PI * 2 * index) / definition.sides;
@@ -2583,7 +2590,7 @@ function beginDragonEye(shape) {
   }
   const size = canvasSize();
   const definition = DRAGON_EYE_SHAPES[shape];
-  const maxRadius = dragonEyeMaxRadius(definition, rankInfo.sightRadiusKm);
+  const maxRadius = dragonEyeMaxRadius(definition, rankInfo.perimeterLimitKm);
   const minRadius = Math.min(maxRadius, 24 / Math.max(0.01, state.viewport.scale));
   state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
   state.dragonEye = {
@@ -2595,7 +2602,7 @@ function beginDragonEye(shape) {
     scatter: rankInfo.scatter,
     rankIndex: rankInfo.rankIndex,
     rankName: rankInfo.rank.name,
-    sightRadiusKm: rankInfo.sightRadiusKm
+    perimeterLimitKm: rankInfo.perimeterLimitKm
   };
   if (elements.dragonEyeDialog?.open) elements.dragonEyeDialog.close("shape-selected");
   render();
@@ -2645,7 +2652,7 @@ function commitDragonEye() {
       x: vertex.x,
       y: vertex.y,
       title: `龍脈眼 ${definition.glyph} ${index + 1}`,
-      note: `${DRAGON_EYE_LIST_NAME} / ${definition.ja} / ${state.dragonEye.rankName || dragonEyeRankInfo().rank.name}級 / 精度 誤差${scatterPercent}% / 半径${formatBarrierRadius(state.dragonEye.sightRadiusKm || dragonEyeRankInfo().sightRadiusKm)}`,
+      note: `${DRAGON_EYE_LIST_NAME} / ${definition.ja} / ${state.dragonEye.rankName || dragonEyeRankInfo().rank.name}級 / 周長上限${formatBarrierDistance(state.dragonEye.perimeterLimitKm || dragonEyeRankInfo().perimeterLimitKm)} / 精度 誤差${scatterPercent}%`,
       photo: "",
       photoName: "",
       photoAssetId: "",
@@ -6751,6 +6758,10 @@ function handleBarrierQuickAction(action) {
     const tile = selectedBarrierStoneTile();
     return openTraverseQuantityDialog("pick", tile ? { targetTileId: tile } : {});
   }
+  if (action === "discard") {
+    if (selectionCanBeDeleted()) void deleteSelectedPoint();
+    return true;
+  }
   if (action === "dissolve") {
     enterBarrierDissolveMode();
     return true;
@@ -6789,6 +6800,16 @@ function setBarrierPlaceholder(button, placeholder) {
   }
 }
 
+function selectionCanBeDeleted() {
+  const pointIds = selectedPointIds();
+  const deletablePointCount = pointIds.filter((id) => (
+    id !== CURRENT_LOCATION_ID
+    && (pointEditable(id) || (state.cloud.connected && cloudPointListForPoint(id)?.editable))
+  )).length;
+  return deletablePointCount + selectedLinkIds().length + selectedFigureIds().length > 0
+    || isLoadedObservationSelected();
+}
+
 function renderActionButtons() {
   const hasPendingPoint = validGeo(state.pendingGeo);
   const pointIds = selectedPointIds();
@@ -6809,12 +6830,7 @@ function renderActionButtons() {
   const routeActive = Boolean(state.routeResult);
   const centerCandidateCount = pointIds.length;
   const mapCandidate = mapPointForSelection();
-  const deletablePointCount = pointIds.filter((id) => (
-    id !== CURRENT_LOCATION_ID
-    && (pointEditable(id) || (state.cloud.connected && cloudPointListForPoint(id)?.editable))
-  )).length;
-  const observationSelected = isLoadedObservationSelected();
-  const canDelete = deletablePointCount + linkIds.length + figureIds.length > 0 || observationSelected;
+  const canDelete = selectionCanBeDeleted();
   const transferablePointCount = transferableSelectedPoints().length;
   const analysisTarget = selectionAnalysisTarget();
 
@@ -6935,7 +6951,7 @@ function renderTraverseQuickActions() {
     || hasPendingPoint;
   const preview = state.barrierLinkPreview;
   const canPlace = !state.traverseBusy && traverseQuantityLimit("place") > 0;
-  const blankButtons = [elements.deletePointButton, elements.actionCopyToListButton, elements.actionMoveToListButton, elements.actionRouteButton];
+  const blankButtons = [elements.actionCopyToListButton, elements.actionMoveToListButton, elements.actionRouteButton];
   const activeButtons = [
     elements.actionRegisterButton,
     elements.actionCenterButton,
@@ -6944,7 +6960,8 @@ function renderTraverseQuickActions() {
     elements.actionInvertButton,
     elements.actionShareSelectedButton,
     elements.actionMapButton,
-    elements.actionAnalyzeButton
+    elements.actionAnalyzeButton,
+    elements.deletePointButton
   ];
   for (const button of [...activeButtons, ...blankButtons]) setBarrierPlaceholder(button, false);
   setActionButtonIcon(elements.actionRegisterButton, "icon-plus-circle");
@@ -6957,6 +6974,8 @@ function renderTraverseQuickActions() {
   setActionButtonLabel(elements.actionLinkButton, "置く");
   setActionButtonLabel(elements.clearSelectionButton, "結ぶ");
   setActionButtonLabel(elements.actionInvertButton, "解除");
+  setActionButtonIcon(elements.deletePointButton, "icon-trash");
+  setActionButtonLabel(elements.deletePointButton, "破棄");
   setActionButtonLabel(elements.actionShareSelectedButton, t("action.shareSelected"));
   setActionButtonLabel(elements.actionMapButton, t("action.map"));
   setActionButtonLabel(elements.actionAnalyzeButton, t("action.analyze"));
@@ -6967,6 +6986,7 @@ function renderTraverseQuickActions() {
   elements.actionLinkButton.disabled = state.traverseBusy || !canPlace;
   elements.clearSelectionButton.disabled = state.traverseBusy || (!preview && selectedCount < 2);
   elements.actionInvertButton.disabled = state.traverseBusy || !hasSelection;
+  elements.deletePointButton.disabled = state.traverseBusy || !selectionCanBeDeleted();
   elements.actionShareSelectedButton.disabled = state.traverseBusy || !state.selectedBarrierId;
   elements.actionMapButton.disabled = selectedCount === 0;
   elements.actionAnalyzeButton.disabled = state.traverseBusy || (selectedCount === 0 && !state.selectedBarrierId);
@@ -6975,6 +6995,7 @@ function renderTraverseQuickActions() {
   elements.actionLinkButton.title = "結界石を置く";
   elements.clearSelectionButton.title = preview ? t("traverse.connect") : "2つ以上の石を選択すると結べます";
   elements.actionInvertButton.title = hasPendingPoint ? "仮ポイントを解除" : "選択を解除";
+  elements.deletePointButton.title = "本体アトラスの選択対象を破棄";
   elements.actionShareSelectedButton.title = t("barrier.share");
   elements.actionMapButton.title = t("action.map");
   elements.actionAnalyzeButton.title = t("action.analyze");
@@ -8419,16 +8440,16 @@ function renderBarrierDetails() {
 }
 
 function kekkaishiUnlockSummary(rankIndex, key = "kekkaishi.unlocks") {
-  const index = Math.max(0, Math.min(BARRIER_CONFIG.sightRadiusKm.length - 1, Number(rankIndex) || 0));
-  const radius = sightRadiusKmForRank(index);
+  const index = Math.max(0, Math.min(BARRIER_CONFIG.perimeterLimitKm.length - 1, Number(rankIndex) || 0));
+  const perimeter = perimeterLimitKmForRank(index);
   const maxVertices = maxVerticesForRank(index);
   const shapes = barrierShapeSummary(index);
   const edges = Array.from({ length: Math.max(1, maxVertices - 2) }, (_, offset) => {
     const sides = offset + 3;
-    return `${sides}角${(2 * radius * Math.sin(Math.PI / sides)).toFixed(1)}km`;
+    return `${sides}角${(perimeter / sides).toFixed(1)}km`;
   }).join("・");
   return t(key)
-    .replace("{radius}", formatBarrierRadius(radius))
+    .replace("{perimeter}", formatBarrierDistance(perimeter))
     .replace("{shapes}", shapes)
     .replace("{edges}", edges)
     .replace("{vertices}", String(maxVertices))
@@ -8451,15 +8472,15 @@ function barrierShapeSummary(rankIndex) {
 
 function renderKekkaishiUnlockDetails(container, rankIndex) {
   if (!container) return;
-  const index = Math.max(0, Math.min(BARRIER_CONFIG.sightRadiusKm.length - 1, Number(rankIndex) || 0));
-  const radius = sightRadiusKmForRank(index);
+  const index = Math.max(0, Math.min(BARRIER_CONFIG.perimeterLimitKm.length - 1, Number(rankIndex) || 0));
+  const perimeter = perimeterLimitKmForRank(index);
   const maxVertices = maxVerticesForRank(index);
   const edges = Array.from({ length: Math.max(1, maxVertices - 2) }, (_, offset) => {
     const sides = offset + 3;
-    return `${sides}角${(2 * radius * Math.sin(Math.PI / sides)).toFixed(1)}km`;
+    return `${sides}角${(perimeter / sides).toFixed(1)}km`;
   }).join("・");
   const details = [
-    [t("kekkaishi.sightRadius"), formatBarrierRadius(radius)],
+    [t("kekkaishi.perimeterLimit"), formatBarrierDistance(perimeter)],
     [t("kekkaishi.maxVertices"), `${maxVertices}`],
     [t("kekkaishi.stoneCap"), `${BARRIER_CONFIG.stoneCapVertexByRank[index] || BARRIER_CONFIG.stoneCapVertex}`],
     [t("kekkaishi.scatter"), t("kekkaishi.scatterValue").replace("{scatter}", String(Math.round(ryumyakuScatterForRank(index) * 100)))],
@@ -13313,8 +13334,8 @@ function formatDistance(distance) {
   return `${Math.round(distance / 1000).toLocaleString(localeName())} km`;
 }
 
-function formatBarrierRadius(radiusKm) {
-  const value = Math.max(0, Number(radiusKm) || 0);
+function formatBarrierDistance(distanceKm) {
+  const value = Math.max(0, Number(distanceKm) || 0);
   return `${value.toFixed(1)} km`;
 }
 
@@ -13367,14 +13388,13 @@ function validateBarrierCompletion(vertices) {
   }
 
   const geos = vertices.map((stoneId) => tileCenterGeo(state.traverseLog.stones[stoneId]?.tile)).filter(Boolean);
-  const sight = barrierFitsSightRadius(geos, rankInfo.rank.index);
-  if (!sight.ok) {
-    const exceeded = sight.exceeded.map((entry) => `#${entry.index + 1}`).join(", ");
+  const perimeter = barrierFitsPerimeter(geos, rankInfo.rank.index);
+  if (!perimeter.ok) {
     return {
       ok: false,
-      message: t("barrier.sightExceeded")
-        .replace("{radius}", formatBarrierRadius(sight.radiusKm))
-        .replace("{vertices}", exceeded)
+      message: t("barrier.perimeterExceeded")
+        .replace("{limit}", formatBarrierDistance(perimeter.limitKm))
+        .replace("{perimeter}", formatBarrierDistance(perimeter.perimeterKm))
     };
   }
 
@@ -18304,7 +18324,7 @@ function bindEvents() {
   elements.targetPointButton.addEventListener("click", () => void toggleTargetForSelection());
   elements.deletePointButton.addEventListener("click", () => {
     if (state.traverseMode) {
-      handleBarrierQuickAction("pick");
+      handleBarrierQuickAction("discard");
       return;
     }
     deleteSelectedPoint();

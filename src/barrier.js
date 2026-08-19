@@ -4,7 +4,7 @@ export const BARRIER_CONFIG = Object.freeze({
   dataZoom: 18,
   maxVertices: 8,
   maxVerticesByRank: Object.freeze([3, 3, 4, 5, 6, 6, 6, 8, 8]),
-  sightRadiusKm: Object.freeze([1, 2, 4, 8, 16, 40, 120, 200, 300]),
+  perimeterLimitKm: Object.freeze([3, 6, 12, 24, 48, 120, 360, 600, 900]),
   crossLinkFromRank: 6,
   dailyGrant: 3,
   stockGrantHours: STOCK_GRANT_HOURS,
@@ -182,9 +182,9 @@ export function maxVerticesForRank(rankIndex = 0) {
   return Number(BARRIER_CONFIG.maxVerticesByRank[index]) || BARRIER_CONFIG.maxVertices;
 }
 
-export function sightRadiusKmForRank(rankIndex = 0) {
-  const index = Math.max(0, Math.min(BARRIER_CONFIG.sightRadiusKm.length - 1, Math.floor(Number(rankIndex) || 0)));
-  return Number(BARRIER_CONFIG.sightRadiusKm[index]) || BARRIER_CONFIG.sightRadiusKm[0];
+export function perimeterLimitKmForRank(rankIndex = 0) {
+  const index = Math.max(0, Math.min(BARRIER_CONFIG.perimeterLimitKm.length - 1, Math.floor(Number(rankIndex) || 0)));
+  return Number(BARRIER_CONFIG.perimeterLimitKm[index]) || BARRIER_CONFIG.perimeterLimitKm[0];
 }
 
 export function ryumyakuScatterForRank(rankIndex = 0) {
@@ -684,7 +684,9 @@ function normalizeEvent(event, now, fallbackId = "") {
       dailyGrant: Number(event.dailyGrant),
       maxVertices: Number(event.maxVertices),
       maxVerticesByRank: Array.isArray(event.maxVerticesByRank) ? event.maxVerticesByRank.map((value) => Number(value)) : [],
-      sightRadiusKm: Array.isArray(event.sightRadiusKm) ? event.sightRadiusKm.map((value) => Number(value)) : [],
+      perimeterLimitKm: Array.isArray(event.perimeterLimitKm)
+        ? event.perimeterLimitKm.map((value) => Number(value))
+        : Array.isArray(event.sightRadiusKm) ? event.sightRadiusKm.map((value) => Number(value)) : [],
       crossLinkFromRank: Number(event.crossLinkFromRank),
       stoneCapVertexByRank: Array.isArray(event.stoneCapVertexByRank) ? event.stoneCapVertexByRank.map((value) => Number(value)) : [],
       ryumyakuScatter: Array.isArray(event.ryumyakuScatter) ? event.ryumyakuScatter.map((value) => Number(value)) : [],

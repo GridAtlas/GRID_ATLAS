@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   BARRIER_SCORE_CONFIG,
-  barrierFitsSightRadius,
+  barrierFitsPerimeter,
+  barrierPerimeterKm,
   beautyCoefficient,
   effectiveBeautyTolerance,
   effectiveStoneCount,
@@ -110,7 +111,7 @@ describe("barrier score helpers", () => {
     }
   });
 
-  it("keeps the octagram area ratio stable at the SSS sight radius", () => {
+  it("keeps the octagram area ratio stable at the SSS scale", () => {
     const referenceCoefficient = nonZeroPolygonAreaKm2(regularOctagram(30)) / 30 ** 2;
     const sssCoefficient = nonZeroPolygonAreaKm2(regularOctagram(300)) / 300 ** 2;
 
@@ -253,19 +254,21 @@ describe("barrier score helpers", () => {
       .toBeGreaterThan(effectiveBeautyTolerance({ lat: 43, lng: 141 }, 500, BARRIER_SCORE_CONFIG));
   });
 
-  it("keeps sight radius validation separate from scoring", () => {
+  it("keeps perimeter validation separate from scoring", () => {
     const center = { lat: 35, lng: 139 };
-    const within = [0, 120, 240].map((bearing) => destinationGeo(center, 0.8, bearing));
-    const outside = [0, 120, 240].map((bearing) => destinationGeo(center, 1.2, bearing));
-    expect(barrierFitsSightRadius(within, 0).ok).toBe(true);
-    expect(barrierFitsSightRadius(outside, 0).ok).toBe(false);
-    expect(geoDistanceKm(center, within[0])).toBeCloseTo(0.8, 2);
+    const within = [0, 120, 240].map((bearing) => destinationGeo(center, 0.55, bearing));
+    const outside = [0, 120, 240].map((bearing) => destinationGeo(center, 0.6, bearing));
+    expect(barrierFitsPerimeter(within, 0).ok).toBe(true);
+    expect(barrierFitsPerimeter(outside, 0).ok).toBe(false);
+    expect(barrierPerimeterKm(within)).toBeCloseTo(3 * 0.55 * Math.sqrt(3), 1);
+    expect(geoDistanceKm(center, within[0])).toBeCloseTo(0.55, 2);
   });
 
-  it("uses the vertex centroid as the sight-radius reference", () => {
+  it("uses the ordered closing edge in the perimeter", () => {
     const center = { lat: 35, lng: 139 };
-    const geos = [0, 120, 240].map((bearing) => destinationGeo(center, 0.8, bearing));
-    expect(barrierFitsSightRadius(geos, 0, BARRIER_CONFIG).ok).toBe(true);
+    const geos = [0, 120, 240].map((bearing) => destinationGeo(center, 1 / Math.sqrt(3), bearing));
+    expect(barrierFitsPerimeter(geos, 0, BARRIER_CONFIG).perimeterKm).toBeCloseTo(3, 2);
+    expect(barrierFitsPerimeter(geos, 0, BARRIER_CONFIG).ok).toBe(true);
   });
 
   it("supports seven/eight vertices and the octagram coefficient", () => {

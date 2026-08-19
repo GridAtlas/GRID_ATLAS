@@ -199,28 +199,28 @@ export function geoDistanceKm(first, second, earthRadiusKm = BARRIER_SCORE_CONFI
   return 2 * earthRadiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)));
 }
 
-export function sightRadiusForRank(rankIndex = 0, config = BARRIER_CONFIG) {
-  const index = Math.max(0, Math.min(config.sightRadiusKm.length - 1, Math.floor(Number(rankIndex) || 0)));
-  return Number(config.sightRadiusKm[index]) || config.sightRadiusKm[0];
+export function perimeterLimitForRank(rankIndex = 0, config = BARRIER_CONFIG) {
+  const index = Math.max(0, Math.min(config.perimeterLimitKm.length - 1, Math.floor(Number(rankIndex) || 0)));
+  return Number(config.perimeterLimitKm[index]) || config.perimeterLimitKm[0];
 }
 
-export function barrierReferenceGeo(geos) {
-  if (!Array.isArray(geos) || geos.length === 0) return null;
-  return centroidGeo(geos);
+export function barrierPerimeterKm(geos) {
+  if (!Array.isArray(geos) || geos.length < 3 || geos.some((geo) => !validGeo(geo))) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return geos.reduce((total, geo, index) => (
+    total + geoDistanceKm(geo, geos[(index + 1) % geos.length])
+  ), 0);
 }
 
-export function barrierFitsSightRadius(geos, rankIndex = 0, config = BARRIER_CONFIG) {
-  const reference = barrierReferenceGeo(geos);
-  if (!reference) return { ok: false, reason: "invalid-reference" };
-  const radiusKm = sightRadiusForRank(rankIndex, config);
-  const distances = geos.map((geo, index) => ({ index, distanceKm: geoDistanceKm(reference, geo) }));
-  const exceeded = distances.filter((entry) => entry.distanceKm > radiusKm + 1e-9);
+export function barrierFitsPerimeter(geos, rankIndex = 0, config = BARRIER_CONFIG) {
+  const perimeterKm = barrierPerimeterKm(geos);
+  if (!Number.isFinite(perimeterKm)) return { ok: false, reason: "invalid-geometry" };
+  const limitKm = perimeterLimitForRank(rankIndex, config);
   return {
-    ok: exceeded.length === 0,
-    radiusKm,
-    reference,
-    distances,
-    exceeded
+    ok: perimeterKm <= limitKm + 1e-9,
+    perimeterKm,
+    limitKm
   };
 }
 

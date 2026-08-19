@@ -241,7 +241,7 @@ export function evaluationSettingsSnapshot(config = BARRIER_EVALUATION_CONFIG) {
     dailyGrant: Number(BARRIER_CONFIG.dailyGrant),
     maxVertices: Number(BARRIER_CONFIG.maxVertices),
     maxVerticesByRank: [...BARRIER_CONFIG.maxVerticesByRank],
-    sightRadiusKm: [...BARRIER_CONFIG.sightRadiusKm],
+    perimeterLimitKm: [...BARRIER_CONFIG.perimeterLimitKm],
     crossLinkFromRank: Number(BARRIER_CONFIG.crossLinkFromRank),
     stoneCapVertexByRank: [...BARRIER_CONFIG.stoneCapVertexByRank],
     ryumyakuScatter: [...BARRIER_CONFIG.ryumyakuScatter],
@@ -392,7 +392,9 @@ function evaluationSettingsSnapshotFromEvent(event) {
     dailyGrant: Number(event.dailyGrant),
     maxVertices: Number(event.maxVertices),
     maxVerticesByRank: Array.isArray(event.maxVerticesByRank) ? [...event.maxVerticesByRank] : [],
-    sightRadiusKm: Array.isArray(event.sightRadiusKm) ? [...event.sightRadiusKm] : [],
+    perimeterLimitKm: Array.isArray(event.perimeterLimitKm)
+      ? [...event.perimeterLimitKm]
+      : Array.isArray(event.sightRadiusKm) ? [...event.sightRadiusKm] : [],
     crossLinkFromRank: Number(event.crossLinkFromRank),
     stoneCapVertexByRank: Array.isArray(event.stoneCapVertexByRank) ? [...event.stoneCapVertexByRank] : [],
     ryumyakuScatter: Array.isArray(event.ryumyakuScatter) ? [...event.ryumyakuScatter] : [],
