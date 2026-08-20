@@ -138,7 +138,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2477";
+const WEB_VERSION = "0.2487";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -187,7 +187,8 @@ const FOLLOW_SCALE_MANUAL = "manual";
 const FOLLOW_SCALE_CENTER = "center";
 const FOLLOW_SCALE_TARGET = "target";
 const CURRENT_LOCATION_GRID_SCALE = 0.7;
-const DRAGON_EYE_SCALE_STEP = 1.25;
+const DRAGON_EYE_SIZE_PERCENT_STEP = 10;
+const DRAGON_EYE_MIN_SIZE_PERCENT = 10;
 const DRAGON_EYE_ROTATION_STEP_DEGREES = 15;
 const EARTH_RADIUS_METERS = 6371008.8;
 const MERCATOR_RADIUS = 6378137;
@@ -2616,11 +2617,31 @@ function dragonEyeMaxRadius(definition, perimeterLimitKm) {
   return perimeterFactor > 0 ? Math.max(1, Number(perimeterLimitKm) * 1000 / perimeterFactor) : 0;
 }
 
+function dragonEyeRadiusForSizePercent(percent, definition = dragonEyeDefinition(), perimeterLimitKm = dragonEyeRankInfo().perimeterLimitKm) {
+  const max = dragonEyeMaxRadius(definition, perimeterLimitKm);
+  const normalizedPercent = Math.min(100, Math.max(DRAGON_EYE_MIN_SIZE_PERCENT, Number(percent) || DRAGON_EYE_MIN_SIZE_PERCENT));
+  return max * normalizedPercent / 100;
+}
+
+function dragonEyeSizePercent(radius = state.dragonEye.radius, definition = dragonEyeDefinition(), perimeterLimitKm = dragonEyeRankInfo().perimeterLimitKm) {
+  const max = dragonEyeMaxRadius(definition, perimeterLimitKm);
+  if (max <= 0) return DRAGON_EYE_MIN_SIZE_PERCENT;
+  const rawPercent = Number(radius) / max * 100;
+  const snappedPercent = Math.round(rawPercent / DRAGON_EYE_SIZE_PERCENT_STEP) * DRAGON_EYE_SIZE_PERCENT_STEP;
+  return Math.min(100, Math.max(DRAGON_EYE_MIN_SIZE_PERCENT, snappedPercent));
+}
+
+function dragonEyeSideLength(radius, definition = dragonEyeDefinition()) {
+  if (!definition) return 0;
+  const sides = Math.max(3, Number(definition.sides) || 0);
+  return Math.max(0, Number(radius) || 0) * 2 * Math.sin(Math.PI / sides);
+}
+
 function dragonEyeRadiusBounds() {
   const definition = dragonEyeDefinition();
   const info = dragonEyeRankInfo();
   const max = dragonEyeMaxRadius(definition, info.perimeterLimitKm);
-  const min = Math.min(max, 24 / Math.max(0.01, state.viewport.scale));
+  const min = dragonEyeRadiusForSizePercent(DRAGON_EYE_MIN_SIZE_PERCENT, definition, info.perimeterLimitKm);
   return { min, max };
 }
 
@@ -2662,13 +2683,14 @@ function beginDragonEye(shape) {
   const size = canvasSize();
   const definition = DRAGON_EYE_SHAPES[shape];
   const maxRadius = dragonEyeMaxRadius(definition, rankInfo.perimeterLimitKm);
-  const minRadius = Math.min(maxRadius, 24 / Math.max(0.01, state.viewport.scale));
+  const initialRadius = Math.min(maxRadius, Math.min(size.width, size.height) * 0.24 / Math.max(0.01, state.viewport.scale));
+  const initialPercent = dragonEyeSizePercent(initialRadius, definition, rankInfo.perimeterLimitKm);
   state.locationFollowScaleMode = FOLLOW_SCALE_MANUAL;
   state.dragonEye = {
     active: true,
     shape,
     center: screenToWorld({ x: size.width / 2, y: size.height / 2 }),
-    radius: Math.min(maxRadius, Math.max(minRadius, Math.min(size.width, size.height) * 0.24 / Math.max(0.01, state.viewport.scale))),
+    radius: dragonEyeRadiusForSizePercent(initialPercent, definition, rankInfo.perimeterLimitKm),
     rotation: 0,
     scatter: rankInfo.scatter,
     rankIndex: rankInfo.rankIndex,
@@ -2706,12 +2728,14 @@ function renderDragonEyeControlPanel() {
   if (!elements.dragonEyeControlDialog) return;
   const { min, max } = dragonEyeRadiusBounds();
   const radius = Math.min(max, Math.max(min, Number(state.dragonEye.radius) || min));
+  const percent = dragonEyeSizePercent(radius);
+  const sideLength = dragonEyeSideLength(radius);
   if (elements.dragonEyeControlStatus) {
-    elements.dragonEyeControlStatus.textContent = `半径 ${formatDragonEyeRadius(radius)} ・ ${normalizedDragonEyeRotationDegrees()}°`;
+    elements.dragonEyeControlStatus.textContent = `1辺 ${percent}% (${formatDragonEyeRadius(sideLength)}) ・ ${normalizedDragonEyeRotationDegrees()}°`;
   }
   const rotationUnlocked = dragonEyeRankInfo().rotationUnlocked;
-  elements.dragonEyeShrinkButton.disabled = !state.dragonEye.active || radius <= min;
-  elements.dragonEyeExpandButton.disabled = !state.dragonEye.active || radius >= max;
+  elements.dragonEyeShrinkButton.disabled = !state.dragonEye.active || percent <= DRAGON_EYE_MIN_SIZE_PERCENT;
+  elements.dragonEyeExpandButton.disabled = !state.dragonEye.active || percent >= 100;
   elements.dragonEyeRotateCounterclockwiseButton.disabled = !state.dragonEye.active || !rotationUnlocked;
   elements.dragonEyeRotateClockwiseButton.disabled = !state.dragonEye.active || !rotationUnlocked;
 }
@@ -2740,9 +2764,8 @@ function closeDragonEyeControlPanel() {
 
 function adjustDragonEyeRadius(direction) {
   if (!state.dragonEye.active) return;
-  const { min, max } = dragonEyeRadiusBounds();
-  const factor = direction > 0 ? DRAGON_EYE_SCALE_STEP : 1 / DRAGON_EYE_SCALE_STEP;
-  state.dragonEye.radius = Math.min(max, Math.max(min, (Number(state.dragonEye.radius) || min) * factor));
+  const nextPercent = dragonEyeSizePercent() + (direction > 0 ? DRAGON_EYE_SIZE_PERCENT_STEP : -DRAGON_EYE_SIZE_PERCENT_STEP);
+  state.dragonEye.radius = dragonEyeRadiusForSizePercent(nextPercent);
   renderDragonEyeControlPanel();
   draw();
 }
@@ -15092,11 +15115,8 @@ function updatePinchGesture() {
   }
 
   if (pinch.dragonEye && state.dragonEye.active) {
-    const { min: minRadius, max: maxRadius } = dragonEyeRadiusBounds();
-    state.dragonEye.radius = Math.min(
-      maxRadius,
-      Math.max(minRadius, pinch.startDragonEyeRadius * (distance / pinch.startDistance))
-    );
+    const rawRadius = pinch.startDragonEyeRadius * (distance / pinch.startDistance);
+    state.dragonEye.radius = dragonEyeRadiusForSizePercent(dragonEyeSizePercent(rawRadius));
     const rankInfo = dragonEyeRankInfo();
     if (rankInfo.rotationUnlocked) {
       const currentAngle = pointerAngle(first, second);
@@ -15105,6 +15125,7 @@ function updatePinchGesture() {
       if (delta < -Math.PI) delta += Math.PI * 2;
       state.dragonEye.rotation = pinch.startDragonEyeRotation - delta;
     }
+    renderDragonEyeControlPanel();
     draw();
     return;
   }

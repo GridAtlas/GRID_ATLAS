@@ -29,8 +29,8 @@
     <link rel="icon" href="assets/icon-grid.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const kekkai=new URLSearchParams(window.location.search).get("mode")==="kekkai";const theme=kekkai?"kekkai":localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=theme==="kekkai"?"kekkai":theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";if(kekkai)document.querySelector('meta[name="theme-color"]').setAttribute("content","#5b2a86");document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{const kekkai=new URLSearchParams(window.location.search).get("mode")==="kekkai";document.documentElement.dataset.theme=kekkai?"kekkai":"retro";if(kekkai)document.querySelector('meta[name="theme-color"]').setAttribute("content","#5b2a86")}</script>
-    <link rel="stylesheet" href="src/styles.css?v=139">
-    <script src="src/main.js?v=534" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=140">
+    <script src="src/main.js?v=535" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -539,8 +539,8 @@
         </div>
         <output id="dragonEyeControlStatus" class="dragon-eye-control-status" aria-live="polite"></output>
         <div class="dragon-eye-control-actions" aria-label="龍脈眼の操作">
-          <button id="dragonEyeShrinkButton" type="button" aria-label="龍脈眼を縮小" title="縮小"><svg class="ui-icon" aria-hidden="true"><use href="#icon-minus"></use></svg><span>縮小</span></button>
-          <button id="dragonEyeExpandButton" type="button" aria-label="龍脈眼を拡大" title="拡大"><svg class="ui-icon" aria-hidden="true"><use href="#icon-plus"></use></svg><span>拡大</span></button>
+          <button id="dragonEyeShrinkButton" type="button" aria-label="龍脈眼の一辺を10%縮小" title="一辺を10%縮小"><svg class="ui-icon" aria-hidden="true"><use href="#icon-minus"></use></svg><span>-10%</span></button>
+          <button id="dragonEyeExpandButton" type="button" aria-label="龍脈眼の一辺を10%拡大" title="一辺を10%拡大"><svg class="ui-icon" aria-hidden="true"><use href="#icon-plus"></use></svg><span>+10%</span></button>
           <button id="dragonEyeRotateCounterclockwiseButton" type="button" aria-label="龍脈眼を反時計回りに15度回転" title="反時計回りに15度"><svg class="ui-icon" aria-hidden="true"><use href="#icon-rotate-counterclockwise"></use></svg><span>左 15°</span></button>
           <button id="dragonEyeRotateClockwiseButton" type="button" aria-label="龍脈眼を時計回りに15度回転" title="時計回りに15度"><svg class="ui-icon" aria-hidden="true"><use href="#icon-rotate-clockwise"></use></svg><span>右 15°</span></button>
         </div>
