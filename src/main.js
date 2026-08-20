@@ -138,7 +138,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2457";
+const WEB_VERSION = "0.2477";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -187,6 +187,8 @@ const FOLLOW_SCALE_MANUAL = "manual";
 const FOLLOW_SCALE_CENTER = "center";
 const FOLLOW_SCALE_TARGET = "target";
 const CURRENT_LOCATION_GRID_SCALE = 0.7;
+const DRAGON_EYE_SCALE_STEP = 1.25;
+const DRAGON_EYE_ROTATION_STEP_DEGREES = 15;
 const EARTH_RADIUS_METERS = 6371008.8;
 const MERCATOR_RADIUS = 6378137;
 const MAX_MERCATOR_LAT = 85.05112878;
@@ -271,6 +273,13 @@ const elements = {
   dragonEyeDialog: document.querySelector("#dragonEyeDialog"),
   dragonEyeAvailability: document.querySelector("#dragonEyeAvailability"),
   dragonEyeShapeOptions: document.querySelector("#dragonEyeShapeOptions"),
+  dragonEyeControlDialog: document.querySelector("#dragonEyeControlDialog"),
+  dragonEyeControlStatus: document.querySelector("#dragonEyeControlStatus"),
+  dragonEyeControlCloseButton: document.querySelector("#dragonEyeControlCloseButton"),
+  dragonEyeShrinkButton: document.querySelector("#dragonEyeShrinkButton"),
+  dragonEyeExpandButton: document.querySelector("#dragonEyeExpandButton"),
+  dragonEyeRotateCounterclockwiseButton: document.querySelector("#dragonEyeRotateCounterclockwiseButton"),
+  dragonEyeRotateClockwiseButton: document.querySelector("#dragonEyeRotateClockwiseButton"),
   traverseDragonEyeButton: document.querySelector("#traverseDragonEyeButton"),
   traversePlacementViewButton: document.querySelector("#traversePlacementViewButton"),
   traverseCreateBarrierButton: document.querySelector("#traverseCreateBarrierButton"),
@@ -2443,17 +2452,13 @@ function openTraverseQuantityDialog(action, options = {}) {
 
 function syncTraverseQuantityDialogPosition() {
   syncTraverseQuantityDialogPositionFor(elements.traverseQuantityDialog);
+  syncActionbarOverlayPositionFor(elements.dragonEyeControlDialog);
 }
 
 function syncTraverseQuantityDialogPositionFor(dialog) {
   if (!dialog?.open) return;
   if (dialog.classList.contains("is-actionbar-overlay")) {
-    const actionBarRect = elements.actionBar?.getBoundingClientRect();
-    if (!actionBarRect || actionBarRect.width <= 0 || actionBarRect.height <= 0) return;
-    dialog.style.setProperty("--traverse-quantity-left", `${Math.round(actionBarRect.left)}px`);
-    dialog.style.setProperty("--traverse-quantity-top", `${Math.round(actionBarRect.top)}px`);
-    dialog.style.setProperty("--traverse-quantity-width", `${Math.round(actionBarRect.width)}px`);
-    dialog.style.setProperty("--traverse-quantity-height", `${Math.round(actionBarRect.height)}px`);
+    syncActionbarOverlayPositionFor(dialog);
     return;
   }
   if (!dialog.classList.contains("is-placement-overlay")) return;
@@ -2467,6 +2472,16 @@ function syncTraverseQuantityDialogPositionFor(dialog) {
   );
   const bottomOffset = Math.max(0, Math.ceil(viewportHeight - coveredTop) + 8);
   dialog.style.setProperty("--traverse-quantity-bottom", `${bottomOffset}px`);
+}
+
+function syncActionbarOverlayPositionFor(dialog) {
+  if (!dialog?.open || !dialog.classList.contains("is-actionbar-overlay")) return;
+  const actionBarRect = elements.actionBar?.getBoundingClientRect();
+  if (!actionBarRect || actionBarRect.width <= 0 || actionBarRect.height <= 0) return;
+  dialog.style.setProperty("--traverse-quantity-left", `${Math.round(actionBarRect.left)}px`);
+  dialog.style.setProperty("--traverse-quantity-top", `${Math.round(actionBarRect.top)}px`);
+  dialog.style.setProperty("--traverse-quantity-width", `${Math.round(actionBarRect.width)}px`);
+  dialog.style.setProperty("--traverse-quantity-height", `${Math.round(actionBarRect.height)}px`);
 }
 
 function adjustTraverseQuantity(delta) {
@@ -2514,6 +2529,7 @@ function resetBarrierLinkState() {
 }
 
 function resetDragonEyeState() {
+  closeDragonEyeControlPanel();
   state.dragonEye.active = false;
   state.dragonEye.shape = null;
   state.dragonEye.center = null;
@@ -2661,6 +2677,7 @@ function beginDragonEye(shape) {
   };
   if (elements.dragonEyeDialog?.open) elements.dragonEyeDialog.close("shape-selected");
   render();
+  openDragonEyeControlPanel();
 }
 
 function openDragonEyeDialog() {
@@ -2673,6 +2690,69 @@ function cancelDragonEye() {
   if (!state.dragonEye.active) return;
   resetDragonEyeState();
   returnToTraverseActionMenu();
+}
+
+function normalizedDragonEyeRotationDegrees() {
+  const degrees = Math.round((Number(state.dragonEye.rotation) || 0) * 180 / Math.PI);
+  return ((degrees % 360) + 360) % 360;
+}
+
+function formatDragonEyeRadius(radiusMeters) {
+  const meters = Math.max(0, Number(radiusMeters) || 0);
+  return meters < 1000 ? `${Math.round(meters)} m` : formatBarrierDistance(meters / 1000);
+}
+
+function renderDragonEyeControlPanel() {
+  if (!elements.dragonEyeControlDialog) return;
+  const { min, max } = dragonEyeRadiusBounds();
+  const radius = Math.min(max, Math.max(min, Number(state.dragonEye.radius) || min));
+  if (elements.dragonEyeControlStatus) {
+    elements.dragonEyeControlStatus.textContent = `半径 ${formatDragonEyeRadius(radius)} ・ ${normalizedDragonEyeRotationDegrees()}°`;
+  }
+  const rotationUnlocked = dragonEyeRankInfo().rotationUnlocked;
+  elements.dragonEyeShrinkButton.disabled = !state.dragonEye.active || radius <= min;
+  elements.dragonEyeExpandButton.disabled = !state.dragonEye.active || radius >= max;
+  elements.dragonEyeRotateCounterclockwiseButton.disabled = !state.dragonEye.active || !rotationUnlocked;
+  elements.dragonEyeRotateClockwiseButton.disabled = !state.dragonEye.active || !rotationUnlocked;
+}
+
+function openDragonEyeControlPanel() {
+  const dialog = elements.dragonEyeControlDialog;
+  if (!state.dragonEye.active || !dialog) return;
+  dialog.classList.add("is-actionbar-overlay");
+  elements.actionBar?.classList.add("is-actionbar-overlay-open");
+  renderDragonEyeControlPanel();
+  if (!dialog.open) dialog.show();
+  window.requestAnimationFrame(() => syncActionbarOverlayPositionFor(dialog));
+}
+
+function closeDragonEyeControlPanel() {
+  const dialog = elements.dragonEyeControlDialog;
+  if (!dialog) return;
+  dialog.classList.remove("is-actionbar-overlay");
+  dialog.style.removeProperty("--traverse-quantity-left");
+  dialog.style.removeProperty("--traverse-quantity-top");
+  dialog.style.removeProperty("--traverse-quantity-width");
+  dialog.style.removeProperty("--traverse-quantity-height");
+  elements.actionBar?.classList.remove("is-actionbar-overlay-open");
+  if (dialog.open) dialog.close("close");
+}
+
+function adjustDragonEyeRadius(direction) {
+  if (!state.dragonEye.active) return;
+  const { min, max } = dragonEyeRadiusBounds();
+  const factor = direction > 0 ? DRAGON_EYE_SCALE_STEP : 1 / DRAGON_EYE_SCALE_STEP;
+  state.dragonEye.radius = Math.min(max, Math.max(min, (Number(state.dragonEye.radius) || min) * factor));
+  renderDragonEyeControlPanel();
+  draw();
+}
+
+function rotateDragonEye(direction) {
+  if (!state.dragonEye.active || !dragonEyeRankInfo().rotationUnlocked) return;
+  const radians = DRAGON_EYE_ROTATION_STEP_DEGREES * Math.PI / 180;
+  state.dragonEye.rotation = (Number(state.dragonEye.rotation) || 0) + (direction > 0 ? -radians : radians);
+  renderDragonEyeControlPanel();
+  draw();
 }
 
 function dragonEyePlacementVertex(vertex) {
@@ -6814,7 +6894,8 @@ function handleBarrierQuickAction(action) {
     return true;
   }
   if (action === "dragon-eye") {
-    openDragonEyeDialog();
+    if (state.dragonEye.active) openDragonEyeControlPanel();
+    else openDragonEyeDialog();
     return true;
   }
   if (action === "invert") {
@@ -7037,7 +7118,7 @@ function renderTraverseQuickActions() {
     || hasPendingPoint;
   const preview = state.barrierLinkPreview;
   const canPlace = !state.traverseBusy && traverseQuantityLimit("place") > 0;
-  const blankButtons = [elements.actionCopyToListButton, elements.actionMoveToListButton, elements.actionRouteButton];
+  const blankButtons = [elements.actionCopyToListButton, elements.actionMoveToListButton];
   const activeButtons = [
     elements.actionRegisterButton,
     elements.actionCenterButton,
@@ -7047,7 +7128,8 @@ function renderTraverseQuickActions() {
     elements.actionShareSelectedButton,
     elements.actionMapButton,
     elements.actionAnalyzeButton,
-    elements.deletePointButton
+    elements.deletePointButton,
+    elements.actionRouteButton
   ];
   for (const button of [...activeButtons, ...blankButtons]) setBarrierPlaceholder(button, false);
   setActionButtonIcon(elements.actionRegisterButton, "icon-plus-circle");
@@ -7055,11 +7137,13 @@ function renderTraverseQuickActions() {
   setActionButtonIcon(elements.actionLinkButton, "icon-plus-circle");
   setActionButtonIcon(elements.clearSelectionButton, "icon-connect");
   setActionButtonIcon(elements.actionInvertButton, "icon-clear");
+  setActionButtonIcon(elements.actionRouteButton, "icon-analysis");
   setActionButtonLabel(elements.actionRegisterButton, "打つ");
   setActionButtonLabel(elements.actionCenterButton, "測る");
   setActionButtonLabel(elements.actionLinkButton, "置く");
   setActionButtonLabel(elements.clearSelectionButton, "結ぶ");
   setActionButtonLabel(elements.actionInvertButton, "解除");
+  setActionButtonLabel(elements.actionRouteButton, "評価");
   setActionButtonIcon(elements.deletePointButton, "icon-trash");
   setActionButtonLabel(elements.deletePointButton, "破棄");
   setActionButtonLabel(elements.actionShareSelectedButton, t("action.shareSelected"));
@@ -7076,6 +7160,7 @@ function renderTraverseQuickActions() {
   elements.actionShareSelectedButton.disabled = state.traverseBusy || !state.selectedBarrierId;
   elements.actionMapButton.disabled = selectedCount === 0;
   elements.actionAnalyzeButton.disabled = state.traverseBusy || (selectedCount === 0 && !state.selectedBarrierId);
+  elements.actionRouteButton.disabled = false;
   elements.actionRegisterButton.title = state.barrierPinMode ? "ピンを打つ場所をタップ" : "ピンを打つ";
   elements.actionCenterButton.title = "龍脈眼で測る";
   elements.actionLinkButton.title = "結界石を置く";
@@ -7085,12 +7170,14 @@ function renderTraverseQuickActions() {
   elements.actionShareSelectedButton.title = t("barrier.share");
   elements.actionMapButton.title = t("action.map");
   elements.actionAnalyzeButton.title = t("action.analyze");
+  elements.actionRouteButton.title = "結界師の評価を見る";
   elements.actionRegisterButton.classList.toggle("is-active", state.barrierPinMode);
   elements.actionCenterButton.classList.toggle("is-active", state.dragonEye.active);
   elements.clearSelectionButton.classList.toggle("is-active", preview);
   elements.actionShareSelectedButton.classList.toggle("is-active", false);
   elements.actionMapButton.classList.toggle("is-active", false);
   elements.actionAnalyzeButton.classList.toggle("is-active", false);
+  elements.actionRouteButton.classList.toggle("is-active", false);
 }
 
 function renderPointInfoDialog() {
@@ -18084,7 +18171,7 @@ function bindEvents() {
   elements.closePointRegistrationButton.addEventListener("click", closePointRegistration);
   elements.actionRouteButton.addEventListener("click", () => {
     if (state.traverseMode) {
-      handleBarrierQuickAction("placement");
+      openKekkaishiStatusDialog();
       return;
     }
     setRouteFromSelectedPoints();
@@ -18418,6 +18505,15 @@ function bindEvents() {
     const option = event.target.closest("[data-dragon-eye-shape]");
     if (!option) return;
     beginDragonEye(option.dataset.dragonEyeShape);
+  });
+  elements.dragonEyeControlCloseButton?.addEventListener("click", closeDragonEyeControlPanel);
+  elements.dragonEyeShrinkButton?.addEventListener("click", () => adjustDragonEyeRadius(-1));
+  elements.dragonEyeExpandButton?.addEventListener("click", () => adjustDragonEyeRadius(1));
+  elements.dragonEyeRotateCounterclockwiseButton?.addEventListener("click", () => rotateDragonEye(-1));
+  elements.dragonEyeRotateClockwiseButton?.addEventListener("click", () => rotateDragonEye(1));
+  elements.dragonEyeControlDialog?.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeDragonEyeControlPanel();
   });
   elements.traverseQuantityDecreaseButton?.addEventListener("click", () => adjustTraverseQuantity(-1));
   elements.traverseQuantityIncreaseButton?.addEventListener("click", () => adjustTraverseQuantity(1));

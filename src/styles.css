@@ -1080,7 +1080,8 @@ button {
   border-top: 1px solid var(--line);
   background: var(--surface);
 }
-.actionbar.is-quantity-dialog-open > * {
+.actionbar.is-quantity-dialog-open > *,
+.actionbar.is-actionbar-overlay-open > * {
   visibility: hidden;
 }
 .action-destination {
@@ -1715,6 +1716,99 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
 
 .traverse-quantity-dialog.is-actionbar-overlay .button-row button {
   min-height: 30px;
+}
+
+.dragon-eye-control-dialog {
+  width: min(360px, calc(100vw - 24px));
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow), var(--brand-glow);
+}
+
+.dragon-eye-control-dialog.is-actionbar-overlay {
+  position: fixed;
+  inset: auto;
+  right: auto;
+  bottom: auto;
+  left: var(--traverse-quantity-left, 0px);
+  top: var(--traverse-quantity-top, 0px);
+  width: var(--traverse-quantity-width, 100vw);
+  height: var(--traverse-quantity-height, auto);
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  transform: none;
+  border-radius: 0;
+  overflow: auto;
+  z-index: 20;
+}
+
+.dragon-eye-control-dialog.is-actionbar-overlay::backdrop {
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.dragon-eye-control-dialog-form {
+  display: grid;
+  gap: 5px;
+  padding: 5px 10px;
+}
+
+.dragon-eye-control-dialog.is-actionbar-overlay .dragon-eye-control-dialog-form {
+  box-sizing: border-box;
+  min-height: 100%;
+}
+
+.dragon-eye-control-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dragon-eye-control-heading h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.dragon-eye-control-heading .share-link-close {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  font-size: 18px;
+}
+
+.dragon-eye-control-status {
+  display: block;
+  min-height: 17px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.dragon-eye-control-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.dragon-eye-control-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.dragon-eye-control-actions .ui-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .barrier-pin-dialog {
