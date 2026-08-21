@@ -30,13 +30,11 @@ import {
   withoutGridAtlasAnalysisLayer
 } from "./gridatlas-analysis.js?v=2";
 import {
-  ANALYSIS_LAYER_VERSION,
   analysisLineEndpointIdentityKey,
   analysisVertexPlaceRef,
   createAnalysisFigure,
   createAnalysisLine,
   figureEdges,
-  normalizeAnalysisLayer as normalizeAnalysisLayerModel,
   normalizeAnalysisFigure,
   normalizeAnalysisLine,
   normalizeAnalysisVertex,
@@ -83,8 +81,6 @@ import {
 } from "./barrier-evaluation.js?v=1";
 
 const STORAGE_KEY = "grid-atlas-workspace-v2";
-const DEFAULT_ANALYSIS_LAYER_ID = "analysis-layer-default";
-const DEFAULT_ANALYSIS_LAYER_NAME = "考察レイヤー";
 const THEME_KEY = "grid-atlas-theme";
 const LANGUAGE_KEY = "grid-atlas-language";
 const DISTANCE_UNIT_KEY = "grid-atlas-distance-unit";
@@ -139,7 +135,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2510";
+const WEB_VERSION = "0.2531";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -614,13 +610,6 @@ const state = {
     testerSharedListIds: new Set(),
     listOrder: [],
   },
-  analysisLayer: {
-    version: ANALYSIS_LAYER_VERSION,
-    id: DEFAULT_ANALYSIS_LAYER_ID,
-    name: DEFAULT_ANALYSIS_LAYER_NAME,
-    lines: [],
-    figures: []
-  },
   transientAnalysisIds: new Set(),
   mode: "inspect",
   mobilePage: "map",
@@ -749,22 +738,81 @@ let atlasModeLongPressTriggered = false;
 Object.defineProperty(state, "links", {
   configurable: true,
   get() {
-    return this.analysisLayer.lines;
+    return listedAnalysisItems("lines");
   },
   set(value) {
-    this.analysisLayer.lines = Array.isArray(value) ? value : [];
+    replaceListedAnalysisItems("lines", value);
   }
 });
 
 Object.defineProperty(state, "figures", {
   configurable: true,
   get() {
-    return this.analysisLayer.figures;
+    return listedAnalysisItems("figures");
   },
   set(value) {
-    this.analysisLayer.figures = Array.isArray(value) ? value : [];
+    replaceListedAnalysisItems("figures", value);
   }
 });
+
+const ANALYSIS_OWNER_LIST_ID = Symbol("analysisOwnerListId");
+
+function markAnalysisOwner(item, listId) {
+  if (!item || !listId) return item;
+  Object.defineProperty(item, ANALYSIS_OWNER_LIST_ID, {
+    configurable: true,
+    enumerable: false,
+    writable: true,
+    value: listId
+  });
+  return item;
+}
+
+function analysisOwnerListId(item) {
+  return typeof item?.[ANALYSIS_OWNER_LIST_ID] === "string" ? item[ANALYSIS_OWNER_LIST_ID] : "";
+}
+
+function listedAnalysisItems(kind) {
+  return state.pointLists.flatMap((list) => (
+    (Array.isArray(list[kind]) ? list[kind] : []).map((item) => markAnalysisOwner(item, list.id))
+  ));
+}
+
+function activeAnalysisPointList() {
+  ensurePointLists();
+  const active = state.pointLists.find((list) => list.id === state.activePointListId && list.editable);
+  return active || state.pointLists.find((list) => list.editable) || createLocalPointList();
+}
+
+function analysisDestinationList(item) {
+  if (item?.layer === "barrier" || item?.barrierId) return kekkaiPointList();
+  const owned = state.pointLists.find((list) => list.id === analysisOwnerListId(item));
+  return owned || activeAnalysisPointList();
+}
+
+function replaceListedAnalysisItems(kind, values) {
+  const previousOwners = new Map(listedAnalysisItems(kind).map((item) => [item.id, analysisOwnerListId(item)]));
+  for (const list of state.pointLists) list[kind] = [];
+  for (const item of Array.isArray(values) ? values : []) {
+    if (!item) continue;
+    const ownerId = analysisOwnerListId(item) || previousOwners.get(item.id);
+    const destination = state.pointLists.find((list) => list.id === ownerId) || analysisDestinationList(item);
+    if (!destination) continue;
+    destination[kind].push(markAnalysisOwner(item, destination.id));
+  }
+}
+
+function appendListedAnalysisItem(kind, item, list = analysisDestinationList(item)) {
+  if (!item || !list) return null;
+  if (!Array.isArray(list[kind])) list[kind] = [];
+  list[kind].push(markAnalysisOwner(item, list.id));
+  return item;
+}
+
+function isVisibleAnalysisItem(item) {
+  const list = state.pointLists.find((candidate) => candidate.id === analysisOwnerListId(item));
+  return Boolean(list && list.visible !== false && (!state.traverseMode || list.reservedKind === "kekkai"));
+}
 
 const CANVAS_PALETTES = {
   pastel: {
@@ -2893,7 +2941,7 @@ function setTraverseMode(enabled) {
   if (state.barrierPinMode) closeBarrierPinDialog();
   state.traverseMode = nextMode;
   if (!nextMode) {
-    loadTheme();
+    loadTheme({ ignoreKekkaishiLaunch: true });
   }
   if (state.traverseMode) {
     // The action button lives inside the grid panel on mobile. Keep the
@@ -3030,8 +3078,8 @@ function canvasPalette() {
   return CANVAS_PALETTES[currentTheme()];
 }
 
-function loadTheme() {
-  if (hasKekkaishiLaunchMode()) {
+function loadTheme(options = {}) {
+  if (!options.ignoreKekkaishiLaunch && hasKekkaishiLaunchMode()) {
     setTheme(KEKKAI_THEME, { persist: false });
     return;
   }
@@ -3062,7 +3110,7 @@ function setTheme(theme, options = {}) {
         : "#d86f9b";
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColor);
 
-  if (options.persist !== false) {
+  if (options.persist !== false && normalized !== KEKKAI_THEME) {
     localStorage.setItem(THEME_KEY, normalized);
   }
 
@@ -3073,7 +3121,7 @@ function setTheme(theme, options = {}) {
     elements.settingsThemeSelect.value = normalized;
   }
   if (elements.settingsThemeField) {
-    elements.settingsThemeField.hidden = normalized === KEKKAI_THEME;
+    elements.settingsThemeField.hidden = Boolean(state.traverseMode);
   }
 }
 
@@ -3197,7 +3245,6 @@ function applyWorkspace(workspace) {
   const duplicateListsCoalesced = coalesceDuplicateLocalLists();
   const activeListVisibilityChanged = ensureActivePointListVisible();
   refreshVisiblePoints();
-  state.analysisLayer = normalizeAnalysisLayer(workspace.analysisLayer);
   state.selection = [];
   state.selectedPointId = null;
   state.selectedLinkId = null;
@@ -3260,7 +3307,10 @@ function createPointList(options = {}) {
     importedAt: typeof options.importedAt === "string" ? options.importedAt : now,
     createdAt: typeof options.createdAt === "string" ? options.createdAt : now,
     updatedAt: typeof options.updatedAt === "string" ? options.updatedAt : now,
-    points: Array.isArray(options.points) ? options.points : []
+    points: Array.isArray(options.points) ? options.points : [],
+    lines: Array.isArray(options.lines) ? options.lines.map(normalizeAnalysisLine).filter(Boolean) : [],
+    figures: Array.isArray(options.figures) ? options.figures.map(normalizeAnalysisFigure).filter(Boolean) : [],
+    reservedKind: options.reservedKind === "kekkai" ? "kekkai" : ""
   };
 }
 
@@ -3292,6 +3342,7 @@ function ensurePointLists() {
 
 function visiblePointLists() {
   ensurePointLists();
+  if (state.traverseMode) return [kekkaiPointList()];
   return state.pointLists.filter((list) => list.visible !== false);
 }
 
@@ -3313,7 +3364,7 @@ function cloudListVisible(cloudId) {
 }
 
 function visibleCloudPointLists() {
-  return state.cloud.connected
+  return !state.traverseMode && state.cloud.connected
     ? state.cloud.pointLists.filter((list) => cloudListVisible(list.cloudId || list.id))
     : [];
 }
@@ -3669,7 +3720,10 @@ function createNamedLocalPointList(name) {
 }
 
 function kekkaiPointList() {
-  const list = createNamedLocalPointList(KEKKAI_POINT_LIST_NAME);
+  let list = state.pointLists.find((item) => item.reservedKind === "kekkai")
+    || state.pointLists.find((item) => comparableListName(item.name) === comparableListName(KEKKAI_POINT_LIST_NAME));
+  if (!list) list = createNamedLocalPointList(KEKKAI_POINT_LIST_NAME);
+  list.reservedKind = "kekkai";
   list.visible = true;
   return list;
 }
@@ -4036,7 +4090,10 @@ function normalizePointList(list, existingPointIds = new Set(), fallbackName = "
     importedAt: typeof list?.importedAt === "string" ? list.importedAt : new Date().toISOString(),
     createdAt: typeof list?.createdAt === "string" ? list.createdAt : new Date().toISOString(),
     updatedAt: typeof list?.updatedAt === "string" ? list.updatedAt : new Date().toISOString(),
-    points
+    points,
+    lines: Array.isArray(list?.lines) ? list.lines : [],
+    figures: Array.isArray(list?.figures) ? list.figures : [],
+    reservedKind: list?.reservedKind === "kekkai" ? "kekkai" : ""
   });
 
   if (normalized.id === DEFAULT_POINT_LIST_ID) {
@@ -4345,13 +4402,10 @@ function pointGeoFromAny(point, origin) {
 function workspaceSnapshot() {
   ensurePointLists();
   const transientAnalysisIds = state.transientAnalysisIds;
-  const analysisLayer = {
-    ...clonePlain(state.analysisLayer),
-    lines: state.links.filter((line) => !transientAnalysisIds.has(line.id)).map(clonePlain),
-    figures: state.figures.filter((figure) => !transientAnalysisIds.has(figure.id)).map(clonePlain)
-  };
   const pointLists = state.pointLists.filter((list) => list.transient !== true).map((list) => ({
     ...(({ transientAnalysisIds: _transientAnalysisIds, ...persistedList }) => persistedList)(list),
+    lines: (list.lines || []).filter((line) => !transientAnalysisIds.has(line.id)).map(clonePlain),
+    figures: (list.figures || []).filter((figure) => !transientAnalysisIds.has(figure.id)).map(clonePlain),
     points: list.points.map((point) => ({
       ...point,
       photo: point.photoAssetId ? "" : point.photo
@@ -4364,7 +4418,6 @@ function workspaceSnapshot() {
     activePointListId: state.activePointListId,
     favoriteListIds: [...state.favoriteListIds],
     storageListSectionCollapsed: { ...state.storageListSectionCollapsed },
-    analysisLayer,
     cloudHiddenListIds: [...state.cloud.hiddenListIds],
     testerSharedCloudListIds: [...state.cloud.testerSharedListIds],
     cloudListOrder: [...state.cloud.listOrder]
@@ -5139,7 +5192,7 @@ function figureSegments(figure) {
 
 function drawFigures() {
   const colors = canvasPalette();
-  for (const figure of state.figures) {
+  for (const figure of state.figures.filter(isVisibleAnalysisItem)) {
     if (figure.layer === "barrier" || figure.barrierId) continue;
     const vertices = figureRuntimeVertices(figure);
     if (vertices.length < 2) continue;
@@ -5164,7 +5217,7 @@ function drawFigures() {
 }
 
 function drawLinks() {
-  for (const link of state.links) {
+  for (const link of state.links.filter(isVisibleAnalysisItem)) {
     const endpoints = linkEndpoints(link);
     if (!endpoints) {
       continue;
@@ -11816,9 +11869,11 @@ async function renameStorageList(storageId) {
 
 function removeLocalListForStorageChange(listId) {
   const list = state.pointLists.find((item) => item.id === listId);
-  if (!list) return;
+  if (!list || list.reservedKind === "kekkai") return;
   const before = workspaceSnapshot();
   const pointIds = new Set(list.points.map((point) => point.id));
+  const lineIds = new Set((list.lines || []).map((line) => line.id));
+  const figureIds = new Set((list.figures || []).map((figure) => figure.id));
 
   if (list.id === DEFAULT_POINT_LIST_ID) {
     const index = state.pointLists.findIndex((item) => item.id === list.id);
@@ -11833,7 +11888,11 @@ function removeLocalListForStorageChange(listId) {
   ensurePointLists();
   refreshVisiblePoints();
   pruneHiddenPointReferences();
-  state.selection = state.selection.filter((entry) => entry.type !== "point" || !pointIds.has(entry.id));
+  state.selection = state.selection.filter((entry) => (
+    (entry.type !== "point" || !pointIds.has(entry.id))
+    && (entry.type !== "link" || !lineIds.has(entry.id))
+    && (entry.type !== "figure" || !figureIds.has(entry.id))
+  ));
   normalizeSelection();
 
   try {
@@ -12050,12 +12109,22 @@ async function deleteStoredList(storageId, options = {}) {
     renderStorageLists();
     return;
   }
+  if (entry.local?.reservedKind === "kekkai") {
+    setCloudStatus(cloudText("結界アトラスは削除できません", "Kekkai Atlas cannot be deleted"), { error: true });
+    return;
+  }
   const name = entry.local?.name || entry.cloud?.name || "地点リスト";
+  const local = entry.local;
+  const counts = {
+    points: local?.points?.length || 0,
+    lines: local?.lines?.length || 0,
+    figures: local?.figures?.length || 0
+  };
   if (options.confirm !== false && !await requestConfirm({
     title: cloudText("リスト削除の確認", "Confirm list deletion"),
     message: cloudText(
-      `${name}を削除しますか？\n保存されている場所すべてから削除します。`,
-      `Delete ${name}?\nIt will be removed from every storage location.`
+      `「${name}」を削除します。\n地点 ${counts.points}件・線分 ${counts.lines}件・図形 ${counts.figures}件が削除されます。`,
+      `Delete “${name}”?\nThis removes ${counts.points} place(s), ${counts.lines} line(s), and ${counts.figures} figure(s).`
     ),
     confirmLabel: t("action.delete"),
     danger: true
@@ -12110,15 +12179,15 @@ function setStorageListVisible(storageId, visible, options = {}) {
 
 async function deletePointList(listId) {
   const list = state.pointLists.find((item) => item.id === listId);
-  if (!list || list.id === DEFAULT_POINT_LIST_ID) {
+  if (!list || list.id === DEFAULT_POINT_LIST_ID || list.reservedKind === "kekkai") {
     return;
   }
 
   const confirmed = await requestConfirm({
     title: cloudText("リスト削除の確認", "Confirm list deletion"),
     message: cloudText(
-      `${list.name || "地点リスト"}を削除しますか。`,
-      `Delete ${list.name || "point list"}?`
+      `「${list.name || "地点リスト"}」を削除します。\n地点 ${list.points.length}件・線分 ${(list.lines || []).length}件・図形 ${(list.figures || []).length}件が削除されます。`,
+      `Delete “${list.name || "point list"}”?\nThis removes ${list.points.length} place(s), ${(list.lines || []).length} line(s), and ${(list.figures || []).length} figure(s).`
     ),
     confirmLabel: t("action.delete"),
     danger: true
@@ -12128,11 +12197,17 @@ async function deletePointList(listId) {
   }
 
   const pointIds = new Set(list.points.map((point) => point.id));
+  const lineIds = new Set((list.lines || []).map((line) => line.id));
+  const figureIds = new Set((list.figures || []).map((figure) => figure.id));
   state.pointLists = state.pointLists.filter((item) => item.id !== listId);
   ensurePointLists();
   refreshVisiblePoints();
   pruneHiddenPointReferences();
-  state.selection = state.selection.filter((entry) => entry.type !== "point" || !pointIds.has(entry.id));
+  state.selection = state.selection.filter((entry) => (
+    (entry.type !== "point" || !pointIds.has(entry.id))
+    && (entry.type !== "link" || !lineIds.has(entry.id))
+    && (entry.type !== "figure" || !figureIds.has(entry.id))
+  ));
   normalizeSelection();
   persistWorkspace();
   render();
@@ -12244,15 +12319,6 @@ function findLink(id) {
 
 function findFigure(id) {
   return state.figures.find((figure) => figure.id === id) ?? null;
-}
-
-function normalizeAnalysisLayer(layer) {
-  const normalized = normalizeAnalysisLayerModel(layer);
-  return {
-    ...normalized,
-    id: typeof layer?.id === "string" && layer.id ? layer.id : DEFAULT_ANALYSIS_LAYER_ID,
-    name: typeof layer?.name === "string" && layer.name.trim() ? layer.name.trim() : DEFAULT_ANALYSIS_LAYER_NAME
-  };
 }
 
 function linkEndpoints(link) {
@@ -13354,7 +13420,7 @@ function findNearestLink(screenPoint) {
   let nearest = null;
   let nearestDistance = Infinity;
 
-  for (const link of state.links) {
+  for (const link of state.links.filter(isVisibleAnalysisItem)) {
     const endpoints = linkEndpoints(link);
     if (!endpoints) {
       continue;
@@ -13375,7 +13441,7 @@ function findNearestLink(screenPoint) {
 function findNearestLineEndpoint(screenPoint) {
   let nearest = null;
   let nearestDistance = Infinity;
-  for (const link of state.links) {
+  for (const link of state.links.filter(isVisibleAnalysisItem)) {
     for (const side of ["a", "b"]) {
       const endpoint = linkEndpoint(link, side);
       if (!endpoint) continue;
@@ -13394,7 +13460,7 @@ function findNearestFigure(screenPoint) {
   let nearest = null;
   let nearestDistance = Infinity;
 
-  for (const figure of state.figures) {
+  for (const figure of state.figures.filter(isVisibleAnalysisItem)) {
     if (figure.layer === "barrier" || figure.barrierId) continue;
     const points = figureRuntimeVertices(figure).map(worldToScreen);
     if (points.length < 2) continue;
@@ -13418,8 +13484,8 @@ function findNearestFigure(screenPoint) {
 
 function findNearestFigureEdge(screenPoint, options = {}) {
   const figures = options.selectedOnly === false
-    ? state.figures
-    : state.figures.filter((figure) => isFigureSelected(figure.id));
+    ? state.figures.filter(isVisibleAnalysisItem)
+    : state.figures.filter((figure) => isVisibleAnalysisItem(figure) && isFigureSelected(figure.id));
   let nearest = null;
   let nearestDistance = Infinity;
 
@@ -13441,8 +13507,8 @@ function findNearestFigureEdge(screenPoint, options = {}) {
 
 function findNearestFigureVertex(screenPoint, options = {}) {
   const figures = options.selectedOnly === false
-    ? state.figures
-    : state.figures.filter((figure) => isFigureSelected(figure.id));
+    ? state.figures.filter(isVisibleAnalysisItem)
+    : state.figures.filter((figure) => isVisibleAnalysisItem(figure) && isFigureSelected(figure.id));
   let nearest = null;
   let nearestDistance = Infinity;
 
@@ -13823,7 +13889,7 @@ async function connectSelectedPoints() {
       createdAt
     });
     if (link) {
-      state.links.push(link);
+      appendListedAnalysisItem("lines", link);
       created = true;
     }
   }
@@ -13840,7 +13906,7 @@ async function connectSelectedPoints() {
         createdAt
       });
       if (link) {
-        state.links.push(link);
+        appendListedAnalysisItem("lines", link);
         created = true;
       }
     }
@@ -13853,7 +13919,7 @@ async function connectSelectedPoints() {
       createdAt
     });
     if (createdFigure) {
-      state.figures.push(createdFigure);
+      appendListedAnalysisItem("figures", createdFigure);
       created = true;
     }
   }
@@ -14577,7 +14643,7 @@ function fitTargetPoints() {
     .flatMap((list) => list.points)
     .map(syncProjectedPoint)
     .filter(Boolean);
-  const figurePoints = state.figures.flatMap(figureRuntimeVertices);
+  const figurePoints = state.figures.filter(isVisibleAnalysisItem).flatMap(figureRuntimeVertices);
   const points = [...state.points, ...cloudPoints, ...figurePoints, ...routeStartSnapshot, ...loadedPoints];
   if (state.followCurrentLocation || points.length === 0) {
     const current = currentLocationPoint();
@@ -15025,7 +15091,7 @@ function selectPointsInRange(range) {
     && point.y >= minY
     && point.y <= maxY
   ));
-  const selectedLinks = state.links.filter((link) => {
+  const selectedLinks = state.links.filter(isVisibleAnalysisItem).filter((link) => {
     const endpoints = linkEndpoints(link);
     if (!endpoints) return false;
     const start = worldToScreen(endpoints.a);
@@ -16521,12 +16587,7 @@ function pointListGridAtlasDocument(list, options = {}) {
     document.extensions = documentExtensions;
   }
 
-  const analysisLayer = options.includeAnalysisLayer === true
-    ? buildGridAtlasAnalysisLayer(
-      list.analysisLayer?.lines,
-      list.analysisLayer?.figures
-    )
-    : null;
+  const analysisLayer = buildGridAtlasAnalysisLayer(list.lines, list.figures);
   if (analysisLayer) {
     document.extensions = {
       ...(document.extensions || {}),
@@ -16760,8 +16821,8 @@ async function shareStorageListFile(storageId) {
   });
   if (!input) return;
   const name = input.value.trim() || list.name || t("list.shareSelectedDefaultName");
-  const shareList = { ...clonePlain(list), name, analysisLayer: undefined };
-  if (input.action === "file") await sharePointListFile(shareList, { confirm: false, includeAnalysisLayer: false });
+  const shareList = { ...clonePlain(list), name };
+  if (input.action === "file") await sharePointListFile(shareList, { confirm: false });
   if (input.action === "image") await shareSelectedSnapshot(shareList.points || [], [], [], name, shareList.points || []);
   if (input.action === "cloud") await shareSelectedCloud(shareList);
 }
@@ -17192,7 +17253,7 @@ async function shareSelectedCloud(list) {
   try {
     const client = cloudClientFromInputs();
     const response = await client.createShare(
-      list?.type === "place-list" ? list : pointListGridAtlasDocument(list, { includeAnalysisLayer: Boolean(list?.analysisLayer) }),
+      list?.type === "place-list" ? list : pointListGridAtlasDocument(list),
       list.name,
       90
     );
@@ -17248,15 +17309,10 @@ async function shareSelectedPointsFile() {
     updatedAt: now,
     gridAtlas: { documentId: createId() },
     points: points.map(clonePlain),
-    analysisLayer: {
-      version: ANALYSIS_LAYER_VERSION,
-      id: createId(),
-      name,
-      lines: lines.map(clonePlain),
-      figures: figures.map(clonePlain)
-    }
+    lines: lines.map(clonePlain),
+    figures: figures.map(clonePlain)
   };
-  const shareOptions = { confirm: false, includeAnalysisLayer: true };
+  const shareOptions = { confirm: false };
   if (input.action === "file") await sharePointListFile(list, shareOptions);
   if (input.action === "image") await shareSelectedSnapshot(points, lines, figures, name, visiblePointsAtShare);
   if (input.action === "cloud") await shareSelectedCloud(list);
@@ -17295,10 +17351,6 @@ function analysisLayerFromGridAtlasDocument(document, pointList) {
     return normalizeAnalysisVertex({ ...normalized, placeRef: localPlaceRef });
   };
   return {
-    version: ANALYSIS_LAYER_VERSION,
-    id: createId(),
-    name: `${document.name || DEFAULT_ANALYSIS_LAYER_NAME} - ${DEFAULT_ANALYSIS_LAYER_NAME}`,
-    sourceDocumentId: document.id,
     lines: importedLayer.lines
       .map((line) => normalizeAnalysisLine({
         ...line,
@@ -17406,46 +17458,38 @@ async function gridAtlasPackageToPointList(gridAtlasPackage, existingPointIds, e
     }
   }, existingPointIds, displayName);
 
-  return {
-    list: pointList,
-    analysisLayer: analysisLayerFromGridAtlasDocument(document, pointList)
-  };
+  const analysis = analysisLayerFromGridAtlasDocument(document, pointList);
+  pointList.lines = analysis.lines;
+  pointList.figures = analysis.figures;
+  return { list: pointList };
 }
 
 function analysisLinkPairKey(link) {
   return linkEndpointPairKey(link);
 }
 
-function mergeAnalysisLinks(links) {
-  const next = state.links.slice();
-  const seenPairs = new Set(next.map(analysisLinkPairKey));
-  const seenIds = new Set(next.map((link) => link.id));
-  for (const rawLink of Array.isArray(links) ? links : []) {
+function mergeAnalysisIntoList(list, analysis) {
+  if (!list) return;
+  const nextLines = Array.isArray(list.lines) ? list.lines.slice() : [];
+  const seenPairs = new Set(nextLines.map(analysisLinkPairKey));
+  const seenIds = new Set(nextLines.map((link) => link.id));
+  for (const rawLink of Array.isArray(analysis?.lines) ? analysis.lines : []) {
     const link = normalizeStoredLink(rawLink);
     if (!link || seenIds.has(link.id) || seenPairs.has(analysisLinkPairKey(link))) continue;
-    next.push(link);
+    nextLines.push(link);
     seenIds.add(link.id);
     seenPairs.add(analysisLinkPairKey(link));
   }
-  state.links = next;
-}
-
-function mergeAnalysisFigures(figures) {
-  const next = state.figures.slice();
-  const seenIds = new Set(next.map((figure) => figure.id));
-  for (const rawFigure of Array.isArray(figures) ? figures : []) {
+  const nextFigures = Array.isArray(list.figures) ? list.figures.slice() : [];
+  const seenFigureIds = new Set(nextFigures.map((figure) => figure.id));
+  for (const rawFigure of Array.isArray(analysis?.figures) ? analysis.figures : []) {
     const figure = normalizeAnalysisFigure(rawFigure);
-    if (!figure || seenIds.has(figure.id)) continue;
-    next.push(figure);
-    seenIds.add(figure.id);
+    if (!figure || seenFigureIds.has(figure.id)) continue;
+    nextFigures.push(figure);
+    seenFigureIds.add(figure.id);
   }
-  state.figures = next;
-}
-
-function mergeAnalysisLayers(layers) {
-  const validLayers = Array.isArray(layers) ? layers : [];
-  mergeAnalysisLinks(validLayers.flatMap((layer) => layer?.lines || []));
-  mergeAnalysisFigures(validLayers.flatMap((layer) => layer?.figures || []));
+  list.lines = nextLines;
+  list.figures = nextFigures;
 }
 
 function focusPresetVisibility(targetLists) {
@@ -17492,7 +17536,7 @@ function applyImportedPointLists(importedLists, importedAnalysisLayers, successM
     const existingFigureIds = new Set(state.figures.map((figure) => figure.id));
     const importedTransientAnalysisIds = new Set();
     state.pointLists = [...state.pointLists, ...importedLists];
-    mergeAnalysisLayers(importedAnalysisLayers);
+    for (const { list, analysis } of importedAnalysisLayers) mergeAnalysisIntoList(list, analysis);
     if (options.persist === false) {
       for (const line of state.links) {
         if (!existingLineIds.has(line.id)) {
@@ -17550,7 +17594,7 @@ async function importGridAtlasPackages(packages, options = {}) {
         && list.gridAtlas?.documentDigest === documentDigest
       ));
       if (duplicate) {
-        importedAnalysisLayers.push(analysisLayerFromGridAtlasDocument(gridAtlasPackage.document, duplicate));
+        importedAnalysisLayers.push({ list: duplicate, analysis: analysisLayerFromGridAtlasDocument(gridAtlasPackage.document, duplicate) });
         if (options.source === "preset" && duplicate.name !== gridAtlasPackage.document.name) {
           duplicate.name = gridAtlasPackage.document.name;
         }
@@ -17565,7 +17609,7 @@ async function importGridAtlasPackages(packages, options = {}) {
         { conflict, preserveName: options.source === "preset" }
       );
       importedLists.push(imported.list);
-      importedAnalysisLayers.push(imported.analysisLayer);
+      importedAnalysisLayers.push({ list: imported.list, analysis: { lines: imported.list.lines, figures: imported.list.figures } });
     }
 
     if (options.persist === false) {

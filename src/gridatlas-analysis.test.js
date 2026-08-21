@@ -73,6 +73,20 @@ describe("GRID ATLAS analysis extension", () => {
     });
   });
 
+  it("keeps each list's analysis extension scoped to that list when exporting", () => {
+    const listALayer = buildGridAtlasAnalysisLayer([
+      { id: "a-line", a: vertex(35, 135, "A"), b: vertex(35.1, 135.1, "B") }
+    ], []);
+    const listBLayer = buildGridAtlasAnalysisLayer([], [
+      { id: "b-figure", vertices: [vertex(36, 136, "C"), vertex(36.1, 136.1, "D"), vertex(36.2, 136, "E")] }
+    ]);
+
+    expect(listALayer.lines.map((line) => line.id)).toEqual(["a-line"]);
+    expect(listALayer.figures).toEqual([]);
+    expect(listBLayer.lines).toEqual([]);
+    expect(listBLayer.figures.map((figure) => figure.id)).toEqual(["b-figure"]);
+  });
+
   it("reads only io.gridatlas.analysis and keeps vertex snapshots independent of places", () => {
     const document = {
       places: [],
