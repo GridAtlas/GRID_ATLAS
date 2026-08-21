@@ -99,7 +99,8 @@ const PUBLIC_PRESET_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const GPS_ENABLED_KEY = "grid-atlas-gps-enabled";
 const BARRIER_LOG_KEY = "grid-atlas-barrier-log-v1";
 const LEGACY_TRAVERSE_LOG_KEY = "grid-atlas-traverse-log-v1";
-const DRAGON_EYE_LIST_NAME = "結界モード龍脈眼";
+const KEKKAI_POINT_LIST_NAME = "結界アトラス";
+const LEGACY_DRAGON_EYE_LIST_NAME = "結界モード龍脈眼";
 const DRAGON_EYE_SHAPES = Object.freeze({
   triangle: Object.freeze({ sides: 3, rotation: -Math.PI / 2, glyph: "△", ja: "正三角形", en: "Equilateral triangle" }),
   square: Object.freeze({ sides: 4, rotation: Math.PI / 4, glyph: "□", ja: "正方形", en: "Square" }),
@@ -138,7 +139,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2487";
+const WEB_VERSION = "0.2510";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -160,7 +161,7 @@ const BARRIER_TILE_MIN_SCREEN_SIZE = POINT_RADIUS * 2 + 8;
 const BARRIER_SINGLE_TILE_TARGET_RATIO = 0.28;
 const BARRIER_SINGLE_TILE_MIN_SCREEN_SIZE = 140;
 const BARRIER_SINGLE_TILE_MAX_SCREEN_SIZE = 220;
-const GRID_MODE_LONG_PRESS_MS = 1500;
+const ATLAS_MODE_LONG_PRESS_MS = 3000;
 const BARRIER_LINK_DIAMOND_MS = 500;
 const BARRIER_LINK_COMPLETION_MS = 1100;
 const BARRIER_LINK_RELEASE_DRIFT_TOLERANCE = 28;
@@ -740,11 +741,10 @@ let pendingTextInputOptions = null;
 let pointSubmitInFlight = null;
 let activeStorageListDrag = null;
 let activePointIndexDrag = null;
-let gridModePressTimerId = 0;
-let gridModePressPointerId = null;
-let gridModePressTab = null;
-let gridModeLongPressTriggered = false;
-let gridModeSuppressClick = false;
+let atlasModePressTimerId = 0;
+let atlasModePressPointerId = null;
+let atlasModePressTitle = null;
+let atlasModeLongPressTriggered = false;
 
 Object.defineProperty(state, "links", {
   configurable: true,
@@ -2453,6 +2453,7 @@ function openTraverseQuantityDialog(action, options = {}) {
 
 function syncTraverseQuantityDialogPosition() {
   syncTraverseQuantityDialogPositionFor(elements.traverseQuantityDialog);
+  syncActionbarOverlayPositionFor(elements.dragonEyeDialog);
   syncActionbarOverlayPositionFor(elements.dragonEyeControlDialog);
 }
 
@@ -2702,10 +2703,26 @@ function beginDragonEye(shape) {
   openDragonEyeControlPanel();
 }
 
+function clearDragonEyeDialogOverlay() {
+  const dialog = elements.dragonEyeDialog;
+  if (!dialog) return;
+  dialog.classList.remove("is-actionbar-overlay");
+  dialog.style.removeProperty("--traverse-quantity-left");
+  dialog.style.removeProperty("--traverse-quantity-top");
+  dialog.style.removeProperty("--traverse-quantity-width");
+  dialog.style.removeProperty("--traverse-quantity-height");
+  if (!elements.dragonEyeControlDialog?.open) {
+    elements.actionBar?.classList.remove("is-actionbar-overlay-open");
+  }
+}
+
 function openDragonEyeDialog() {
   if (!state.traverseMode || state.traverseBusy || !elements.dragonEyeDialog) return;
   renderDragonEyeShapeOptions();
-  if (!elements.dragonEyeDialog.open) elements.dragonEyeDialog.showModal();
+  elements.dragonEyeDialog.classList.add("is-actionbar-overlay");
+  elements.actionBar?.classList.add("is-actionbar-overlay-open");
+  if (!elements.dragonEyeDialog.open) elements.dragonEyeDialog.show();
+  window.requestAnimationFrame(() => syncActionbarOverlayPositionFor(elements.dragonEyeDialog));
 }
 
 function cancelDragonEye() {
@@ -2799,7 +2816,7 @@ function commitDragonEye() {
 
   const now = new Date().toISOString();
   const placementVertices = vertices.map(dragonEyePlacementVertex);
-  const list = createNamedLocalPointList(DRAGON_EYE_LIST_NAME);
+  const list = kekkaiPointList();
   list.visible = true;
   list.updatedAt = now;
   const scatterPercent = Math.round((Number(state.dragonEye.scatter) || dragonEyeRankInfo().scatter) * 100);
@@ -2810,7 +2827,7 @@ function commitDragonEye() {
       x: vertex.x,
       y: vertex.y,
       title: `龍脈眼 ${definition.glyph} ${index + 1}`,
-      note: `${DRAGON_EYE_LIST_NAME} / ${definition.ja} / ${state.dragonEye.rankName || dragonEyeRankInfo().rank.name}級 / 周長上限${formatBarrierDistance(state.dragonEye.perimeterLimitKm || dragonEyeRankInfo().perimeterLimitKm)} / 精度 誤差${scatterPercent}%`,
+      note: `${KEKKAI_POINT_LIST_NAME} / ${definition.ja} / ${state.dragonEye.rankName || dragonEyeRankInfo().rank.name}級 / 周長上限${formatBarrierDistance(state.dragonEye.perimeterLimitKm || dragonEyeRankInfo().perimeterLimitKm)} / 精度 誤差${scatterPercent}%`,
       photo: "",
       photoName: "",
       photoAssetId: "",
@@ -3176,6 +3193,7 @@ function applyWorkspace(workspace) {
       )
       ? workspace.activePointListId
       : DEFAULT_POINT_LIST_ID;
+  const legacyDragonEyePointsMigrated = migrateLegacyDragonEyePointLists();
   const duplicateListsCoalesced = coalesceDuplicateLocalLists();
   const activeListVisibilityChanged = ensureActivePointListVisible();
   refreshVisiblePoints();
@@ -3194,7 +3212,7 @@ function applyWorkspace(workspace) {
   resetObservationTrail();
   state.editingPointId = null;
   state.pendingGeo = null;
-  if (activeListVisibilityChanged || duplicateListsCoalesced) {
+  if (activeListVisibilityChanged || duplicateListsCoalesced || legacyDragonEyePointsMigrated) {
     persistWorkspace();
   }
 }
@@ -3648,6 +3666,35 @@ function createNamedLocalPointList(name) {
   state.pointLists.push(list);
   persistWorkspace();
   return list;
+}
+
+function kekkaiPointList() {
+  const list = createNamedLocalPointList(KEKKAI_POINT_LIST_NAME);
+  list.visible = true;
+  return list;
+}
+
+function migrateLegacyDragonEyePointLists() {
+  const legacyLists = state.pointLists.filter((list) => (
+    list.source === "local"
+    && list.editable
+    && comparableListName(list.name) === comparableListName(LEGACY_DRAGON_EYE_LIST_NAME)
+  ));
+  if (legacyLists.length === 0) return false;
+
+  const destination = kekkaiPointList();
+  const destinationPointIds = new Set(destination.points.map((point) => point.id));
+  for (const legacy of legacyLists) {
+    for (const point of legacy.points) {
+      while (destinationPointIds.has(point.id)) point.id = createId();
+      destinationPointIds.add(point.id);
+      destination.points.push(point);
+    }
+    destination.updatedAt = [destination.updatedAt, legacy.updatedAt].filter(Boolean).sort().at(-1) || destination.updatedAt;
+    remapLocalListReferences(legacy.id, destination.id);
+  }
+  state.pointLists = state.pointLists.filter((list) => !legacyLists.includes(list));
+  return true;
 }
 
 async function promptNewPointListForRegistration() {
@@ -6039,49 +6086,42 @@ function setMobileGridPage(name) {
   }
 }
 
-function clearGridModeLongPress() {
-  if (gridModePressTimerId) window.clearTimeout(gridModePressTimerId);
-  gridModePressTimerId = 0;
-  gridModePressPointerId = null;
-  gridModePressTab = null;
-  gridModeLongPressTriggered = false;
+function clearAtlasModeLongPress() {
+  if (atlasModePressTimerId) window.clearTimeout(atlasModePressTimerId);
+  atlasModePressTimerId = 0;
+  atlasModePressPointerId = null;
+  atlasModePressTitle = null;
+  atlasModeLongPressTriggered = false;
 }
 
-function startGridModeLongPress(event) {
-  if (event.currentTarget?.dataset.mobileGridPage !== "grid") return;
+function startAtlasModeLongPress(event) {
   if (event.pointerType === "mouse" && event.button !== 0) return;
-  clearGridModeLongPress();
-  gridModePressPointerId = event.pointerId;
-  gridModePressTab = event.currentTarget;
-  gridModePressTimerId = window.setTimeout(() => {
-    if (!gridModePressTab || gridModePressPointerId !== event.pointerId) return;
-    gridModePressTimerId = 0;
-    gridModeLongPressTriggered = true;
-    gridModeSuppressClick = true;
+  clearAtlasModeLongPress();
+  atlasModePressPointerId = event.pointerId;
+  atlasModePressTitle = event.currentTarget;
+  atlasModePressTimerId = window.setTimeout(() => {
+    if (!atlasModePressTitle || atlasModePressPointerId !== event.pointerId) return;
+    atlasModePressTimerId = 0;
+    atlasModeLongPressTriggered = true;
     syncTraverseModeUi();
     setMobilePage("map");
     setMobileGridPage("grid");
     void requestTraverseModeToggle();
-  }, GRID_MODE_LONG_PRESS_MS);
+  }, ATLAS_MODE_LONG_PRESS_MS);
 }
 
-function finishGridModeLongPress(event) {
+function finishAtlasModeLongPress(event) {
   if (event.type === "pointerleave" && event.pointerType !== "mouse") return;
-  if (gridModePressPointerId !== null && event.pointerId !== gridModePressPointerId) return;
-  if (gridModePressTimerId) window.clearTimeout(gridModePressTimerId);
-  gridModePressTimerId = 0;
-  gridModePressPointerId = null;
-  gridModePressTab = null;
-  if (gridModeLongPressTriggered) event.preventDefault();
-  gridModeLongPressTriggered = false;
+  if (atlasModePressPointerId !== null && event.pointerId !== atlasModePressPointerId) return;
+  if (atlasModePressTimerId) window.clearTimeout(atlasModePressTimerId);
+  atlasModePressTimerId = 0;
+  atlasModePressPointerId = null;
+  atlasModePressTitle = null;
+  if (atlasModeLongPressTriggered) event.preventDefault();
+  atlasModeLongPressTriggered = false;
 }
 
-function handleMobileGridTabClick(tab, event) {
-  if (tab.dataset.mobileGridPage === "grid" && gridModeSuppressClick) {
-    gridModeSuppressClick = false;
-    event.preventDefault();
-    return;
-  }
+function handleMobileGridTabClick(tab) {
   setMobileGridPage(tab.dataset.mobileGridPage);
   if (tab.closest(".sidebar")) {
     setMobilePage("map");
@@ -6892,7 +6932,7 @@ function submitBarrierPin() {
   state.mode = "add";
   state.pendingGeo = target.geo;
   state.editingPointId = null;
-  state.pointDestinationListId = null;
+  state.pointDestinationListId = pointListStorageKey(kekkaiPointList());
   state.pendingLinkPointId = null;
   elements.pointTitle.value = title;
   elements.pointNote.value = "";
@@ -10878,7 +10918,10 @@ function renderPointDestinationSelect() {
   if (!select) return;
   const lists = registrationDestinationPointLists();
   const editingList = state.editingPointId ? pointListForPoint(state.editingPointId) : null;
-  let selectedKey = state.pointDestinationListId
+  const fixedKekkaiDestination = state.traverseMode && !editingList ? kekkaiPointList() : null;
+  let selectedKey = fixedKekkaiDestination
+    ? pointListStorageKey(fixedKekkaiDestination)
+    : state.pointDestinationListId
     || (editingList ? pointListStorageKey(editingList) : defaultPointDestinationListId());
   if (selectedKey !== NEW_POINT_LIST_ID && !lists.some((list) => pointListStorageKey(list) === selectedKey)) {
     selectedKey = defaultPointDestinationListId();
@@ -10886,18 +10929,20 @@ function renderPointDestinationSelect() {
   state.pointDestinationListId = selectedKey;
 
   select.replaceChildren();
-  const newListOption = document.createElement("option");
-  newListOption.value = NEW_POINT_LIST_ID;
-  newListOption.textContent = t("list.newOption");
-  select.append(newListOption);
-  for (const list of lists) {
+  if (!fixedKekkaiDestination) {
+    const newListOption = document.createElement("option");
+    newListOption.value = NEW_POINT_LIST_ID;
+    newListOption.textContent = t("list.newOption");
+    select.append(newListOption);
+  }
+  for (const list of fixedKekkaiDestination ? [fixedKekkaiDestination] : lists) {
     const option = document.createElement("option");
     option.value = pointListStorageKey(list);
     option.textContent = list.name || "地点リスト";
     select.append(option);
   }
   select.value = selectedKey;
-  select.disabled = state.cloud.busy;
+  select.disabled = state.cloud.busy || Boolean(fixedKekkaiDestination);
 }
 function renderStorageLists() {
   const entries = storageListEntries();
@@ -15354,8 +15399,11 @@ async function submitPointInternal() {
     return;
   }
 
-  const destinationKey = elements.pointDestinationListSelect.value || state.pointDestinationListId || NEW_POINT_LIST_ID;
-  let destinationList = destinationKey === NEW_POINT_LIST_ID ? null : pointListByStorageKey(destinationKey);
+  const fixedKekkaiDestination = state.traverseMode && !editingPoint ? kekkaiPointList() : null;
+  const destinationKey = fixedKekkaiDestination
+    ? pointListStorageKey(fixedKekkaiDestination)
+    : elements.pointDestinationListSelect.value || state.pointDestinationListId || NEW_POINT_LIST_ID;
+  let destinationList = fixedKekkaiDestination || (destinationKey === NEW_POINT_LIST_ID ? null : pointListByStorageKey(destinationKey));
   if (destinationKey !== NEW_POINT_LIST_ID && !destinationList) {
     elements.shareImportStatus.value = t("list.nameRequired");
     return;
@@ -18546,6 +18594,11 @@ function bindEvents() {
   elements.dragonEyeDialog?.addEventListener("click", (event) => {
     if (event.target === elements.dragonEyeDialog) elements.dragonEyeDialog.close("cancel");
   });
+  elements.dragonEyeDialog?.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    elements.dragonEyeDialog.close("cancel");
+  });
+  elements.dragonEyeDialog?.addEventListener("close", clearDragonEyeDialogOverlay);
   elements.traverseQuantityDialog?.addEventListener("click", (event) => {
     if (event.target === elements.traverseQuantityDialog) {
       closeTraverseQuantityDialog({ restorePlaceView: true });
@@ -18668,13 +18721,11 @@ function bindEvents() {
   }
   for (const tab of elements.mobileGridTabs) {
     tab.addEventListener("click", (event) => handleMobileGridTabClick(tab, event));
-    if (tab.dataset.mobileGridPage === "grid") {
-      tab.addEventListener("pointerdown", startGridModeLongPress);
-      tab.addEventListener("pointerup", finishGridModeLongPress);
-      tab.addEventListener("pointercancel", finishGridModeLongPress);
-      tab.addEventListener("pointerleave", finishGridModeLongPress);
-    }
   }
+  elements.brandTitle?.addEventListener("pointerdown", startAtlasModeLongPress);
+  elements.brandTitle?.addEventListener("pointerup", finishAtlasModeLongPress);
+  elements.brandTitle?.addEventListener("pointercancel", finishAtlasModeLongPress);
+  elements.brandTitle?.addEventListener("pointerleave", finishAtlasModeLongPress);
 
   canvas.addEventListener("pointerdown", (event) => {
     if (state.barrierPlacementView || state.barrierDissolveMode || state.barrierLinkPreview) {
