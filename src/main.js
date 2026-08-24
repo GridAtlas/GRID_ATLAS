@@ -135,7 +135,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2542";
+const WEB_VERSION = "0.2553";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -233,6 +233,11 @@ const elements = {
   pointTransferDestinationList: document.querySelector("#pointTransferDestinationList"),
   createPointTransferListButton: document.querySelector("#createPointTransferListButton"),
   cancelPointTransferButton: document.querySelector("#cancelPointTransferButton"),
+  geometryDestinationDialog: document.querySelector("#geometryDestinationDialog"),
+  geometryDestinationDialogTitle: document.querySelector("#geometryDestinationDialogTitle"),
+  geometryDestinationDialogHint: document.querySelector("#geometryDestinationDialogHint"),
+  geometryDestinationList: document.querySelector("#geometryDestinationList"),
+  cancelGeometryDestinationButton: document.querySelector("#cancelGeometryDestinationButton"),
   confirmDialog: document.querySelector("#confirmDialog"),
   confirmDialogTitle: document.querySelector("#confirmDialogTitle"),
   confirmDialogMessage: document.querySelector("#confirmDialogMessage"),
@@ -582,6 +587,7 @@ const state = {
 
   pointTransferDestinationListId: "",
   pendingPointTransferMode: null,
+  pendingGeometryDestination: null,
   pendingStorageTransfer: null,
   cloud: {
     connected: false,
@@ -989,7 +995,6 @@ const TRANSLATIONS = {
     "state.noPoints": "地点なし",
     "action.register": "登録",
     "action.connect": "接続",
-    "action.drawOutline": "輪郭",
     "action.center": "中心",
     "action.clear": "解除",
     "action.start": "起点",
@@ -1103,8 +1108,12 @@ const TRANSLATIONS = {
     "line.colorApplied": "線の色を変更しました",
     "line.closeShapeTitle": "図形を閉じますか？",
     "line.closeShapeMessage": "3地点以上が選択されています。最後の地点から起点へ接続して図形を閉じますか？",
-    "line.outlineDrawn": "図形の輪郭線を引きました",
-    "line.outlineAlreadyDrawn": "この図形の輪郭線はすべて引かれています",
+    "line.destinationTitle": "図形の格納先を選択",
+    "line.destinationMessage": "複数のリストから地点を選択しています。線分と図形を格納するリストを選択してください。",
+    "line.destinationLabel": "図形の格納先リスト",
+    "line.destinationEmpty": "格納先にできるリストがありません。",
+    "line.connected": "{count}本の線分を接続しました",
+    "line.alreadyConnected": "選択した地点は、このリストではすでに接続されています",
     "line.dragStatus": "接続先を変更中：{name} にドロップ",
     "line.reconnected": "「{old}」を「{new}」へ接続変更しました",
     "line.invalidTarget": "別の地点へドロップしてください",
@@ -1578,7 +1587,6 @@ const TRANSLATIONS = {
     "state.noPoints": "No points",
     "action.register": "Add",
     "action.connect": "Link",
-    "action.drawOutline": "Outline",
     "action.center": "Center",
     "action.clear": "Clear",
     "action.start": "Start",
@@ -1692,8 +1700,12 @@ const TRANSLATIONS = {
     "line.colorApplied": "Line color changed",
     "line.closeShapeTitle": "Close the shape?",
     "line.closeShapeMessage": "Three or more points are selected. Close the shape by connecting the last point back to the first?",
-    "line.outlineDrawn": "Drew the figure outline",
-    "line.outlineAlreadyDrawn": "This figure already has every outline segment",
+    "line.destinationTitle": "Choose geometry destination",
+    "line.destinationMessage": "The selected points belong to multiple lists. Choose the list that will store the lines and figure.",
+    "line.destinationLabel": "Geometry destination list",
+    "line.destinationEmpty": "There are no lists available to store this geometry.",
+    "line.connected": "Connected {count} line(s)",
+    "line.alreadyConnected": "The selected points are already connected in this list",
     "line.dragStatus": "Changing connection: drop on {name}",
     "line.reconnected": "Changed the connection from “{old}” to “{new}”",
     "line.invalidTarget": "Drop on a different point",
@@ -4051,6 +4063,86 @@ async function transferSelectedPointsToActiveList(mode) {
     .replace("{name}", destinationList.name)
     .replace("{count}", String(transferredIds.length)));
   render();
+}
+
+function geometryStorageLists() {
+  ensurePointLists();
+  return state.pointLists.filter((list) => list.reservedKind !== "kekkai");
+}
+
+function geometryDestinationForPoints(pointIds) {
+  const sourceLists = pointIds
+    .map(pointListForPoint)
+    .filter(Boolean);
+  const sourceKeys = new Set(sourceLists.map(pointListStorageKey).filter(Boolean));
+
+  if (sourceKeys.size === 1) {
+    const sourceKey = sourceKeys.values().next().value;
+    const sourceList = state.pointLists.find((list) => pointListStorageKey(list) === sourceKey);
+    if (sourceList) return sourceList;
+  }
+
+  return state.pointLists.find((list) => (
+    list.id === state.activePointListId && list.editable && list.reservedKind !== "kekkai"
+  )) ?? null;
+}
+
+function beginGeometryDestinationSelection(pointIds, closeShape) {
+  state.pendingGeometryDestination = { pointIds: [...pointIds], closeShape };
+  render();
+  requestAnimationFrame(() => {
+    if (!elements.geometryDestinationDialog.open) elements.geometryDestinationDialog.showModal();
+    (elements.geometryDestinationList.querySelector("button") || elements.cancelGeometryDestinationButton)?.focus();
+  });
+}
+
+function cancelGeometryDestinationSelection() {
+  state.pendingGeometryDestination = null;
+  if (elements.geometryDestinationDialog.open) elements.geometryDestinationDialog.close("cancel");
+  render();
+}
+
+function chooseGeometryDestination(listId) {
+  const pending = state.pendingGeometryDestination;
+  const destination = geometryStorageLists().find((list) => list.id === listId);
+  if (!pending || !destination) return;
+  state.pendingGeometryDestination = null;
+  if (elements.geometryDestinationDialog.open) elements.geometryDestinationDialog.close("selected");
+  finishConnectingSelectedPoints(pending.pointIds, pending.closeShape, destination);
+}
+
+function renderGeometryDestinationDialog() {
+  const pending = state.pendingGeometryDestination;
+  elements.geometryDestinationDialogTitle.textContent = t("line.destinationTitle");
+  elements.geometryDestinationDialogHint.textContent = pending ? t("line.destinationMessage") : "";
+  elements.geometryDestinationList.setAttribute("aria-label", t("line.destinationLabel"));
+  elements.geometryDestinationList.replaceChildren();
+
+  if (pending && geometryStorageLists().length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "point-transfer-dialog-empty";
+    empty.textContent = t("line.destinationEmpty");
+    elements.geometryDestinationList.append(empty);
+  }
+
+  for (const list of geometryStorageLists()) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "point-transfer-destination-button";
+    button.dataset.geometryDestinationListId = list.id;
+    button.setAttribute("role", "option");
+    button.setAttribute("aria-label", `${list.name} ${list.points.length}${t("label.points")}`);
+    const name = document.createElement("span");
+    name.className = "point-transfer-destination-name";
+    name.textContent = list.name;
+    const count = document.createElement("span");
+    count.className = "point-transfer-destination-count";
+    count.textContent = `${list.points.length}${t("label.points")}`;
+    button.append(name, count);
+    button.addEventListener("click", () => chooseGeometryDestination(list.id));
+    button.disabled = !pending;
+    elements.geometryDestinationList.append(button);
+  }
 }
 
 function pointListForPoint(pointId) {
@@ -7114,16 +7206,6 @@ function renderActionButtons() {
     && visiblePointCount > 0;
   const linkIds = selectedLinkIds();
   const figureIds = selectedFigureIds();
-  const selectedFigure = pointIds.length === 0 && figureIds.length === 1
-    ? findFigure(figureIds[0])
-    : null;
-  const canDrawSelectedFigureOutline = Boolean(
-    selectedFigure
-    && figureEdges(selectedFigure).some((edge) => {
-      const key = endpointPairKey(edge.a, edge.b);
-      return key && !state.links.some((link) => linkEndpointPairKey(link) === key);
-    })
-  );
   const barrierSelectionCount = state.barrierSelection.length;
   const routePlan = routePlanFromCurrentSelection();
   const routeActive = Boolean(state.routeResult);
@@ -7135,7 +7217,7 @@ function renderActionButtons() {
 
   const canOpenRegistration = !hasPendingPoint && state.selection.length === 0;
   elements.actionRegisterButton.disabled = !hasPendingPoint && !canOpenRegistration;
-  elements.actionLinkButton.disabled = pointIds.length < 2 && !canDrawSelectedFigureOutline;
+  elements.actionLinkButton.disabled = pointIds.length < 2;
   elements.actionAnalyzeButton.disabled = !analysisTarget;
   elements.actionRouteButton.disabled = !routeActive && !routePlan;
   elements.deletePointButton.disabled = !canDelete;
@@ -7171,17 +7253,11 @@ function renderActionButtons() {
   elements.actionRegisterButton.classList.remove("is-active");
   elements.actionRegisterButton.title = hasPendingPoint ? "仮ポイントを登録" : canOpenRegistration ? "地点登録画面を開く" : "仮ポイントを作成すると登録できます";
   elements.actionLinkButton.classList.toggle("is-active", false);
-  if (elements.actionLinkLabel) {
-    elements.actionLinkLabel.textContent = selectedFigure ? t("action.drawOutline") : t("action.connect");
-  }
+  if (elements.actionLinkLabel) elements.actionLinkLabel.textContent = t("action.connect");
   elements.actionLinkButton.title = pointIds.length >= 3
     ? `選択順に${pointIds.length}地点を接続（最後と最初も接続）`
     : pointIds.length >= 2
       ? `選択順に${pointIds.length}地点を接続`
-      : selectedFigure
-        ? canDrawSelectedFigureOutline
-          ? "図形の頂点を独立した線分でつなぐ"
-          : t("line.outlineAlreadyDrawn")
       : "2地点以上を選択すると接続できます";
   elements.actionAnalyzeButton.title = analysisTarget ? t("action.analyzeTitle") : t("analysis.noSelection");
   elements.clearSelectionButton.title = hasPendingPoint && state.selection.length === 0 && barrierSelectionCount === 0
@@ -11043,6 +11119,7 @@ function renderStorageLists() {
 
   renderStorageTransferDialog();
   renderPointTransferDialog();
+  renderGeometryDestinationDialog();
 
   renderCloudLastFetched();
   syncCloudControls();
@@ -12953,9 +13030,10 @@ function routePlanFromCurrentSelection() {
   return points.length >= 2 ? { start, points } : null;
 }
 
-function findLinkBetween(a, b) {
+function findLinkBetween(a, b, list = activeAnalysisPointList()) {
   const pair = [pointEndpointIdentityKey(a), pointEndpointIdentityKey(b)].sort().join("\u0000");
-  return state.links.find((link) => linkEndpointPairKey(link) === pair) ?? null;
+  return (Array.isArray(list?.lines) ? list.lines : [])
+    .find((link) => linkEndpointPairKey(link) === pair) ?? null;
 }
 
 function pointEndpointIdentityKey(pointId) {
@@ -13873,49 +13951,7 @@ async function createBarrierFromSelection() {
 }
 
 function handleLinkAction() {
-  const pointIds = selectedPointIds();
-  const figureIds = selectedFigureIds();
-  if (pointIds.length === 0 && figureIds.length === 1) {
-    drawFigureOutline(findFigure(figureIds[0]));
-    return;
-  }
   void connectSelectedPoints();
-}
-
-function drawFigureOutline(figure) {
-  if (!figure) return;
-  const owner = analysisDestinationList(figure);
-  const existingPairs = new Set(state.links.map(linkEndpointPairKey).filter(Boolean));
-  const strokeId = createId();
-  const createdAt = new Date().toISOString();
-  let created = 0;
-
-  for (const edge of figureEdges(figure)) {
-    const pair = endpointPairKey(edge.a, edge.b);
-    if (!pair || existingPairs.has(pair)) continue;
-    const line = createAnalysisLine({
-      id: createId(),
-      a: edge.a,
-      b: edge.b,
-      color: figure.color || "",
-      strokeId,
-      createdAt
-    });
-    if (!line) continue;
-    appendListedAnalysisItem("lines", line, owner);
-    existingPairs.add(pair);
-    created += 1;
-  }
-
-  if (created === 0) {
-    showAppToast(t("line.outlineAlreadyDrawn"));
-    render();
-    return;
-  }
-
-  persistWorkspace();
-  showAppToast(t("line.outlineDrawn"));
-  render();
 }
 
 async function connectSelectedPoints() {
@@ -13935,13 +13971,26 @@ async function connectSelectedPoints() {
     });
   }
 
+  const destination = geometryDestinationForPoints(pointIds);
+  if (!destination) {
+    beginGeometryDestinationSelection(pointIds, closeShape);
+    return;
+  }
+
+  finishConnectingSelectedPoints(pointIds, closeShape, destination);
+}
+
+function finishConnectingSelectedPoints(pointIds, closeShape, destination) {
+  if (!destination) return;
+
   const strokeId = createId();
   const createdAt = new Date().toISOString();
   let created = false;
+  let createdCount = 0;
   for (let index = 1; index < pointIds.length; index += 1) {
     const a = pointIds[index - 1];
     const b = pointIds[index];
-    if (findLinkBetween(a, b)) {
+    if (findLinkBetween(a, b, destination)) {
       continue;
     }
 
@@ -13953,15 +14002,16 @@ async function connectSelectedPoints() {
       createdAt
     });
     if (link) {
-      appendListedAnalysisItem("lines", link);
+      appendListedAnalysisItem("lines", link, destination);
       created = true;
+      createdCount += 1;
     }
   }
 
   if (closeShape) {
     const a = pointIds.at(-1);
     const b = pointIds[0];
-    if (!findLinkBetween(a, b)) {
+    if (!findLinkBetween(a, b, destination)) {
       const link = createStoredLink({
         id: createId(),
         aPoint: findPoint(a),
@@ -13970,8 +14020,9 @@ async function connectSelectedPoints() {
         createdAt
       });
       if (link) {
-        appendListedAnalysisItem("lines", link);
+        appendListedAnalysisItem("lines", link, destination);
         created = true;
+        createdCount += 1;
       }
     }
   }
@@ -13983,13 +14034,16 @@ async function connectSelectedPoints() {
       createdAt
     });
     if (createdFigure) {
-      appendListedAnalysisItem("figures", createdFigure);
+      appendListedAnalysisItem("figures", createdFigure, destination);
       created = true;
     }
   }
 
   if (created) {
     persistWorkspace();
+    if (createdCount > 0) showAppToast(t("line.connected").replace("{count}", String(createdCount)));
+  } else {
+    showAppToast(t("line.alreadyConnected"));
   }
 
   state.mode = "inspect";
@@ -18240,6 +18294,15 @@ function bindEvents() {
   });
   elements.pointTransferDialog.addEventListener("click", (event) => {
     if (event.target === elements.pointTransferDialog) cancelPointTransfer();
+  });
+  elements.cancelGeometryDestinationButton.addEventListener("click", cancelGeometryDestinationSelection);
+  elements.geometryDestinationDialog.addEventListener("close", () => {
+    if (!state.pendingGeometryDestination) return;
+    state.pendingGeometryDestination = null;
+    render();
+  });
+  elements.geometryDestinationDialog.addEventListener("click", (event) => {
+    if (event.target === elements.geometryDestinationDialog) cancelGeometryDestinationSelection();
   });
   elements.storageTransferMoveButton.addEventListener("click", () => void executeStorageListTransfer("move"));
   elements.storageTransferCopyButton.addEventListener("click", () => void executeStorageListTransfer("copy"));

@@ -29,8 +29,8 @@
     <link rel="icon" href="assets/icon-grid.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const kekkai=new URLSearchParams(window.location.search).get("mode")==="kekkai";const theme=kekkai?"kekkai":localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=kekkai?"kekkai":theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";if(kekkai)document.querySelector('meta[name="theme-color"]').setAttribute("content","#5b2a86");document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{const kekkai=new URLSearchParams(window.location.search).get("mode")==="kekkai";document.documentElement.dataset.theme=kekkai?"kekkai":"retro";if(kekkai)document.querySelector('meta[name="theme-color"]').setAttribute("content","#5b2a86")}</script>
-    <link rel="stylesheet" href="src/styles.css?v=150">
-    <script src="src/main.js?v=545" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=152">
+    <script src="src/main.js?v=547" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -939,6 +939,20 @@
             <span data-i18n="list.transferDialogNew">新しいリストを作成</span>
           </button>
           <button id="cancelPointTransferButton" class="compact-button" type="submit" value="cancel" data-i18n="action.cancel">キャンセル</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="geometryDestinationDialog" class="point-transfer-dialog" aria-labelledby="geometryDestinationDialogTitle" tabindex="-1">
+      <form class="point-transfer-dialog-form" method="dialog">
+        <div class="point-transfer-dialog-heading">
+          <div>
+            <h2 id="geometryDestinationDialogTitle" tabindex="-1"></h2>
+            <p id="geometryDestinationDialogHint" class="point-transfer-dialog-hint"></p>
+          </div>
+        </div>
+        <div id="geometryDestinationList" class="point-transfer-destination-list" role="listbox"></div>
+        <div class="point-transfer-dialog-actions">
+          <button id="cancelGeometryDestinationButton" class="compact-button" type="submit" value="cancel" data-i18n="action.cancel">キャンセル</button>
         </div>
       </form>
     </dialog>
