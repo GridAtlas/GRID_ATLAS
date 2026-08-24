@@ -135,7 +135,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2532";
+const WEB_VERSION = "0.2542";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -989,6 +989,7 @@ const TRANSLATIONS = {
     "state.noPoints": "地点なし",
     "action.register": "登録",
     "action.connect": "接続",
+    "action.drawOutline": "輪郭",
     "action.center": "中心",
     "action.clear": "解除",
     "action.start": "起点",
@@ -1102,6 +1103,8 @@ const TRANSLATIONS = {
     "line.colorApplied": "線の色を変更しました",
     "line.closeShapeTitle": "図形を閉じますか？",
     "line.closeShapeMessage": "3地点以上が選択されています。最後の地点から起点へ接続して図形を閉じますか？",
+    "line.outlineDrawn": "図形の輪郭線を引きました",
+    "line.outlineAlreadyDrawn": "この図形の輪郭線はすべて引かれています",
     "line.dragStatus": "接続先を変更中：{name} にドロップ",
     "line.reconnected": "「{old}」を「{new}」へ接続変更しました",
     "line.invalidTarget": "別の地点へドロップしてください",
@@ -1575,6 +1578,7 @@ const TRANSLATIONS = {
     "state.noPoints": "No points",
     "action.register": "Add",
     "action.connect": "Link",
+    "action.drawOutline": "Outline",
     "action.center": "Center",
     "action.clear": "Clear",
     "action.start": "Start",
@@ -1688,6 +1692,8 @@ const TRANSLATIONS = {
     "line.colorApplied": "Line color changed",
     "line.closeShapeTitle": "Close the shape?",
     "line.closeShapeMessage": "Three or more points are selected. Close the shape by connecting the last point back to the first?",
+    "line.outlineDrawn": "Drew the figure outline",
+    "line.outlineAlreadyDrawn": "This figure already has every outline segment",
     "line.dragStatus": "Changing connection: drop on {name}",
     "line.reconnected": "Changed the connection from “{old}” to “{new}”",
     "line.invalidTarget": "Drop on a different point",
@@ -7108,6 +7114,16 @@ function renderActionButtons() {
     && visiblePointCount > 0;
   const linkIds = selectedLinkIds();
   const figureIds = selectedFigureIds();
+  const selectedFigure = pointIds.length === 0 && figureIds.length === 1
+    ? findFigure(figureIds[0])
+    : null;
+  const canDrawSelectedFigureOutline = Boolean(
+    selectedFigure
+    && figureEdges(selectedFigure).some((edge) => {
+      const key = endpointPairKey(edge.a, edge.b);
+      return key && !state.links.some((link) => linkEndpointPairKey(link) === key);
+    })
+  );
   const barrierSelectionCount = state.barrierSelection.length;
   const routePlan = routePlanFromCurrentSelection();
   const routeActive = Boolean(state.routeResult);
@@ -7119,7 +7135,7 @@ function renderActionButtons() {
 
   const canOpenRegistration = !hasPendingPoint && state.selection.length === 0;
   elements.actionRegisterButton.disabled = !hasPendingPoint && !canOpenRegistration;
-  elements.actionLinkButton.disabled = pointIds.length < 2;
+  elements.actionLinkButton.disabled = pointIds.length < 2 && !canDrawSelectedFigureOutline;
   elements.actionAnalyzeButton.disabled = !analysisTarget;
   elements.actionRouteButton.disabled = !routeActive && !routePlan;
   elements.deletePointButton.disabled = !canDelete;
@@ -7155,11 +7171,17 @@ function renderActionButtons() {
   elements.actionRegisterButton.classList.remove("is-active");
   elements.actionRegisterButton.title = hasPendingPoint ? "仮ポイントを登録" : canOpenRegistration ? "地点登録画面を開く" : "仮ポイントを作成すると登録できます";
   elements.actionLinkButton.classList.toggle("is-active", false);
-  if (elements.actionLinkLabel) elements.actionLinkLabel.textContent = t("action.connect");
+  if (elements.actionLinkLabel) {
+    elements.actionLinkLabel.textContent = selectedFigure ? t("action.drawOutline") : t("action.connect");
+  }
   elements.actionLinkButton.title = pointIds.length >= 3
     ? `選択順に${pointIds.length}地点を接続（最後と最初も接続）`
     : pointIds.length >= 2
       ? `選択順に${pointIds.length}地点を接続`
+      : selectedFigure
+        ? canDrawSelectedFigureOutline
+          ? "図形の頂点を独立した線分でつなぐ"
+          : t("line.outlineAlreadyDrawn")
       : "2地点以上を選択すると接続できます";
   elements.actionAnalyzeButton.title = analysisTarget ? t("action.analyzeTitle") : t("analysis.noSelection");
   elements.clearSelectionButton.title = hasPendingPoint && state.selection.length === 0 && barrierSelectionCount === 0
@@ -13851,7 +13873,49 @@ async function createBarrierFromSelection() {
 }
 
 function handleLinkAction() {
+  const pointIds = selectedPointIds();
+  const figureIds = selectedFigureIds();
+  if (pointIds.length === 0 && figureIds.length === 1) {
+    drawFigureOutline(findFigure(figureIds[0]));
+    return;
+  }
   void connectSelectedPoints();
+}
+
+function drawFigureOutline(figure) {
+  if (!figure) return;
+  const owner = analysisDestinationList(figure);
+  const existingPairs = new Set(state.links.map(linkEndpointPairKey).filter(Boolean));
+  const strokeId = createId();
+  const createdAt = new Date().toISOString();
+  let created = 0;
+
+  for (const edge of figureEdges(figure)) {
+    const pair = endpointPairKey(edge.a, edge.b);
+    if (!pair || existingPairs.has(pair)) continue;
+    const line = createAnalysisLine({
+      id: createId(),
+      a: edge.a,
+      b: edge.b,
+      color: figure.color || "",
+      strokeId,
+      createdAt
+    });
+    if (!line) continue;
+    appendListedAnalysisItem("lines", line, owner);
+    existingPairs.add(pair);
+    created += 1;
+  }
+
+  if (created === 0) {
+    showAppToast(t("line.outlineAlreadyDrawn"));
+    render();
+    return;
+  }
+
+  persistWorkspace();
+  showAppToast(t("line.outlineDrawn"));
+  render();
 }
 
 async function connectSelectedPoints() {
