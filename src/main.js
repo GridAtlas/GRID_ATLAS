@@ -135,7 +135,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2553";
+const WEB_VERSION = "0.2563";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -17676,8 +17676,10 @@ function applyImportedPointLists(importedLists, importedAnalysisLayers, successM
       focusPresetVisibility(options.focusLists || importedLists);
     }
     refreshVisiblePoints();
-    state.selection = importedLists.flatMap((list) => list.points.map((point) => ({ type: "point", id: point.id })));
-    normalizeSelection();
+    if (options.source !== "preset") {
+      state.selection = importedLists.flatMap((list) => list.points.map((point) => ({ type: "point", id: point.id })));
+      normalizeSelection();
+    }
     if (options.persist !== false) persistWorkspace();
   } catch (error) {
     state.pointLists = previousLists;
@@ -17691,7 +17693,10 @@ function applyImportedPointLists(importedLists, importedAnalysisLayers, successM
 
   elements.shareImportStatus.value = successMessage;
   if (mobilePageUiActive()) setMobilePage("map");
-  fitToPoints();
+  const presetPoints = options.source === "preset"
+    ? importedLists.flatMap((list) => list.points)
+    : null;
+  fitToPoints(presetPoints);
 }
 
 async function importGridAtlasPackages(packages, options = {}) {
@@ -17746,12 +17751,14 @@ async function importGridAtlasPackages(packages, options = {}) {
       if (options.source === "preset") {
         focusPresetVisibility(duplicates);
       }
-      state.selection = duplicate.points.map((point) => ({ type: "point", id: point.id }));
-      normalizeSelection();
+      if (options.source !== "preset") {
+        state.selection = duplicate.points.map((point) => ({ type: "point", id: point.id }));
+        normalizeSelection();
+      }
       persistWorkspace();
       elements.shareImportStatus.value = cloudText("このリストは読み込み済みです", "This list is already imported");
       render();
-      fitToPoints();
+      fitToPoints(options.source === "preset" ? duplicate.points : null);
       return true;
     }
 
