@@ -141,7 +141,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2597";
+const WEB_VERSION = "0.2598";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -7145,7 +7145,9 @@ function handleBarrierQuickAction(action) {
     return true;
   }
   if (action === "share") {
-    if (state.selectedBarrierId) void shareSelectedBarrierImage();
+    const shareableSelectedObjectCount = selectedShareableObjectCount();
+    if (shareableSelectedObjectCount > 0) void shareSelectedPointsFile();
+    else if (state.selectedBarrierId) void shareSelectedBarrierFigure();
     else showAppToast(t("barrier.selectToDissolve"), { error: true });
     return true;
   }
@@ -7203,6 +7205,13 @@ function selectionCanBeDeleted() {
     || isLoadedObservationSelected();
 }
 
+function selectedShareableObjectCount() {
+  return selectedPointIds()
+    .map(findPoint)
+    .filter((point) => point && point.id !== CURRENT_LOCATION_ID)
+    .length + selectedLinkIds().length + selectedFigureIds().length;
+}
+
 function renderActionButtons() {
   const hasPendingPoint = validGeo(state.pendingGeo);
   const pointIds = selectedPointIds();
@@ -7244,9 +7253,7 @@ function renderActionButtons() {
     .length;
   const shareableSelectedLineCount = selectedLinkIds().length;
   const shareableSelectedFigureCount = selectedFigureIds().length;
-  const shareableSelectedObjectCount = shareableSelectedPointCount
-    + shareableSelectedLineCount
-    + shareableSelectedFigureCount;
+  const shareableSelectedObjectCount = selectedShareableObjectCount();
   elements.actionCopyToListButton.disabled = transferablePointCount === 0;
   elements.actionMoveToListButton.disabled = transferablePointCount === 0;
   elements.actionShareSelectedButton.disabled = shareableSelectedObjectCount === 0;
@@ -7343,6 +7350,7 @@ function setActionButtonLabel(button, label) {
 function renderTraverseQuickActions() {
   const selectedCount = state.barrierSelection.length;
   const hasPendingPoint = validGeo(state.pendingGeo);
+  const shareableSelectedObjectCount = selectedShareableObjectCount();
   const mapPoints = externalMapPointsForSelection();
   const mapCandidate = mapPoints.at(-1) ?? null;
   const mapRouteActive = mapPoints.length > 1;
@@ -7392,7 +7400,9 @@ function renderTraverseQuickActions() {
   elements.clearSelectionButton.disabled = state.traverseBusy || (!preview && selectedCount < 2);
   elements.actionInvertButton.disabled = state.traverseBusy || !hasSelection;
   elements.deletePointButton.disabled = state.traverseBusy || !selectionCanBeDeleted();
-  elements.actionShareSelectedButton.disabled = state.traverseBusy || !state.selectedBarrierId;
+  elements.actionShareSelectedButton.disabled = state.traverseBusy || (
+    shareableSelectedObjectCount === 0 && !state.selectedBarrierId
+  );
   elements.actionMapButton.disabled = !mapCandidate;
   elements.actionAnalyzeButton.disabled = state.traverseBusy || (selectedCount === 0 && !state.selectedBarrierId);
   elements.actionRouteButton.disabled = false;
@@ -7402,7 +7412,12 @@ function renderTraverseQuickActions() {
   elements.clearSelectionButton.title = preview ? t("traverse.connect") : "2つ以上の石を選択すると結べます";
   elements.actionInvertButton.title = hasPendingPoint ? "仮ポイントを解除" : "選択を解除";
   elements.deletePointButton.title = "本体アトラスの選択対象を破棄";
-  elements.actionShareSelectedButton.title = t("barrier.share");
+  elements.actionShareSelectedButton.title = shareableSelectedObjectCount > 0
+    ? cloudText(
+      `選択した結界図形を共有`,
+      "Share the selected barrier figure"
+    )
+    : t("barrier.share");
   elements.actionMapButton.title = mapRouteActive
     ? `選択順で${mapPoints.length}地点のルートを地図で開く`
     : mapCandidate?.isCenter
@@ -17458,24 +17473,24 @@ async function shareSelectedCloud(list) {
   }
 }
 
-async function shareSelectedPointsFile() {
+async function shareSelectedPointsFile(options = {}) {
   normalizeSelection();
   const visiblePointsAtShare = visibleSelectablePoints()
     .filter((point) => point.id !== CURRENT_LOCATION_ID)
     .map((point) => ({ ...point, geo: shareSnapshotGeo(point) }))
     .filter((point) => validGeo(point.geo));
-  const points = selectedPointIds()
+  const points = Array.isArray(options.points) ? options.points : selectedPointIds()
     .filter((pointId) => pointId !== CURRENT_LOCATION_ID)
     .map(findPoint)
     .filter(Boolean);
-  const lines = selectedLinkIds().map(findLink).filter(Boolean);
-  const figures = selectedFigureIds().map(findFigure).filter(Boolean);
+  const lines = Array.isArray(options.lines) ? options.lines : selectedLinkIds().map(findLink).filter(Boolean);
+  const figures = Array.isArray(options.figures) ? options.figures : selectedFigureIds().map(findFigure).filter(Boolean);
   if (points.length === 0 && lines.length === 0 && figures.length === 0) {
     setShareFeedback(t("list.shareSelectedUnavailable"), { error: true });
     return;
   }
 
-  const defaultName = t("list.shareSelectedDefaultName");
+  const defaultName = options.defaultName || t("list.shareSelectedDefaultName");
   const input = await requestTextInput({
     title: t("list.shareSelectedNamePrompt"),
     message: t("list.exportPrivacy"),
@@ -17504,6 +17519,20 @@ async function shareSelectedPointsFile() {
   if (input.action === "image") await shareSelectedSnapshot(points, lines, figures, name, visiblePointsAtShare);
   if (input.action === "cloud") await shareSelectedCloud(list);
 }
+
+async function shareSelectedBarrierFigure() {
+  const barrier = state.selectedBarrierId ? state.traverseLog?.barriers?.[state.selectedBarrierId] : null;
+  const figure = barrier ? barrierFigureForId(state.selectedBarrierId) : null;
+  if (!figure) {
+    setShareFeedback(t("list.shareSelectedUnavailable"), { error: true });
+    return;
+  }
+  await shareSelectedPointsFile({
+    figures: [figure],
+    defaultName: barrier.name || t("barrier.defaultName")
+  });
+}
+
 function gridAtlasFileLikely(file) {
   return Boolean(file) && (
     String(file.name || "").toLowerCase().endsWith(".gridatlas")
