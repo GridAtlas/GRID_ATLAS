@@ -141,7 +141,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2583";
+const WEB_VERSION = "0.2584";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -14305,7 +14305,10 @@ function handleCanvasClick(screenPoint) {
     nearestBarrierStone
     && state.barrierStoneGlyphMode.has(nearestBarrierStone.stoneId)
   );
-  const nearest = barrierStoneIsGlyph ? null : findNearestPoint(screenPoint);
+  // A barrier cell owns its full visible hit area, including where it overlaps
+  // a point such as the current location. This keeps vertex-cell actions
+  // (including opening its center in an external map) available consistently.
+  const nearest = nearestBarrierStone || barrierStoneIsGlyph ? null : findNearestPoint(screenPoint);
   const nearestLink = nearest || nearestBarrierStone ? null : findNearestLink(screenPoint);
   const nearestFigure = nearest || nearestBarrierStone || nearestLink ? null : findNearestFigure(screenPoint);
   const nearestObservation = nearest || nearestBarrierStone || nearestLink || nearestFigure
@@ -14313,8 +14316,6 @@ function handleCanvasClick(screenPoint) {
     : findNearestLoadedObservation(screenPoint);
 
   if (nearest) {
-    // A visible barrier cell owns its displayed hit area. Pins remain selectable
-    // everywhere else, but a pin underneath a cell must not block that cell.
     toggleSelection("point", nearest.id);
     return;
   }
