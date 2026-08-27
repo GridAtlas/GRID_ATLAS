@@ -35,6 +35,7 @@ import {
   createAnalysisFigure,
   createAnalysisLine,
   figureEdges,
+  figureVertexWalk,
   normalizeAnalysisFigure,
   normalizeAnalysisLine,
   normalizeAnalysisVertex,
@@ -58,6 +59,7 @@ import {
   stoneDisplayCount,
   stoneExactCount,
   stoneIdFromTile,
+  stockCapForRank,
   tileCenterGeo,
   tileBounds,
   tileIdFromGeo,
@@ -105,8 +107,10 @@ const DRAGON_EYE_SHAPES = Object.freeze({
   hexagon: Object.freeze({ sides: 6, rotation: 0, glyph: "⬡", ja: "正六角形", en: "Regular hexagon" }),
   heptagon: Object.freeze({ sides: 7, rotation: -Math.PI / 2, glyph: "７", ja: "正七角形", en: "Regular heptagon" }),
   octagon: Object.freeze({ sides: 8, rotation: Math.PI / 8, glyph: "８", ja: "正八角形", en: "Regular octagon" }),
-  pentagram: Object.freeze({ sides: 5, rotation: -Math.PI / 2, glyph: "✦", ja: "五芒星", en: "Pentagram", linkPattern: "pentagram" }),
-  octagram: Object.freeze({ sides: 8, rotation: Math.PI / 8, glyph: "✳", ja: "八芒星", en: "Octagram", linkPattern: "octagram" })
+  pentagram: Object.freeze({ sides: 5, rotation: -Math.PI / 2, glyph: "✦", ja: "五芒星", en: "Pentagram", linkPattern: "pentagram", skip: 2 }),
+  hexagram: Object.freeze({ sides: 6, rotation: Math.PI / 6, glyph: "✡", ja: "六芒星", en: "Hexagram", linkPattern: "hexagram", skip: 2 }),
+  octagram: Object.freeze({ sides: 8, rotation: Math.PI / 8, glyph: "✳", ja: "八芒星", en: "Octagram", linkPattern: "octagram", skip: 3 }),
+  octagram2: Object.freeze({ sides: 8, rotation: Math.PI / 8, glyph: "✥", ja: "八芒星", en: "Octagram", linkPattern: "octagram2", skip: 2 })
 });
 
 const DRAGON_EYE_SHAPE_PREVIEW_POINTS = Object.freeze({
@@ -118,7 +122,9 @@ const DRAGON_EYE_SHAPE_PREVIEW_POINTS = Object.freeze({
   heptagon: "50,8 89,30 80,76 50,92 20,76 11,30",
   octagon: "30,10 70,10 90,30 90,70 70,90 30,90 10,70 10,30",
   pentagram: "50,8 60,36 90,36 66,53 76,83 50,64 24,83 34,53 10,36 40,36",
-  octagram: "50,7 58,31 72,13 68,38 93,31 71,50 93,69 68,62 72,87 58,69 50,93 42,69 28,87 32,62 7,69 29,50 7,31 32,38 28,13 42,31"
+  hexagram: "50,8 86,70 14,70 50,8 86,30 14,30",
+  octagram: "50,7 58,31 72,13 68,38 93,31 71,50 93,69 68,62 72,87 58,69 50,93 42,69 28,87 32,62 7,69 29,50 7,31 32,38 28,13 42,31",
+  octagram2: "30,10 90,50 30,90 10,30 70,10 90,70 50,90 10,50"
 });
 
 const CLOUD_ACCESS_TOKEN_KEY = "grid-atlas-cloud-access-token";
@@ -135,7 +141,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2563";
+const WEB_VERSION = "0.2583";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -1420,8 +1426,10 @@ const TRANSLATIONS = {
       "dragonEye.hexagon": "正六角形",
       "dragonEye.heptagon": "正七角形",
       "dragonEye.octagon": "正八角形",
-      "dragonEye.pentagram": "五芒星",
-      "dragonEye.octagram": "八芒星",
+    "dragonEye.pentagram": "五芒星",
+    "dragonEye.hexagram": "六芒星",
+    "dragonEye.octagram": "八芒星",
+    "dragonEye.octagram2": "八芒星",
       "dragonEye.secret": "シークレット",
     "dragonEye.placed": "龍脈眼を{count}地点として保存しました",
     "traverse.modeOnTitle": "結界モードに切り替えますか？",
@@ -2012,8 +2020,10 @@ const TRANSLATIONS = {
       "dragonEye.hexagon": "Regular hexagon",
       "dragonEye.heptagon": "Regular heptagon",
       "dragonEye.octagon": "Regular octagon",
-      "dragonEye.pentagram": "Pentagram",
-      "dragonEye.octagram": "Octagram",
+    "dragonEye.pentagram": "Pentagram",
+    "dragonEye.hexagram": "Hexagram",
+    "dragonEye.octagram": "Octagram",
+    "dragonEye.octagram2": "Octagram",
       "dragonEye.secret": "SECRET",
     "dragonEye.placed": "Saved the Dragon Eye as {count} points",
     "traverse.modeOnTitle": "Switch to barrier mode?",
@@ -2327,6 +2337,7 @@ function syncBarrierFiguresFromLog() {
       vertices,
       note: barrier.note || "",
       createdAt: barrier.createdAt,
+      skip: Math.max(1, Number(barrier.skip) || 1),
       layer: "barrier",
       barrierId
     }));
@@ -2383,7 +2394,7 @@ function actionQuantityLimit(action, options = {}) {
     const cap = options.stoneCap ?? BARRIER_CONFIG.stoneCapLoose;
     return Math.max(0, Math.min(amount, cap - count));
   }
-  const stockRoom = Math.max(0, BARRIER_CONFIG.stockCap - amount);
+  const stockRoom = Math.max(0, stockCapForRank(currentKekkaishiRankInfo().rank.index) - amount);
   return options.stone && count > 0 ? Math.max(0, Math.min(count, stockRoom)) : 0;
 }
 
@@ -2620,7 +2631,9 @@ function dragonEyeShapesForRank(rankIndex) {
   if (maxVertices >= 7) shapes.push("heptagon");
   if (maxVertices >= 8) shapes.push("octagon");
   if (rankIndex >= BARRIER_CONFIG.crossLinkFromRank && maxVertices >= 5) shapes.push("pentagram");
-  if (rankIndex >= BARRIER_CONFIG.maxVerticesByRank.length - 1 && maxVertices >= 8) shapes.push("octagram");
+  if (rankIndex >= 12 && maxVertices >= 6) shapes.push("hexagram");
+  if (rankIndex >= 13 && maxVertices >= 8) shapes.push("octagram");
+  if (rankIndex >= 14 && maxVertices >= 8) shapes.push("octagram2");
   return Object.freeze([...new Set(shapes)]);
 }
 
@@ -2724,13 +2737,35 @@ function dragonEyeWorldVertices() {
       y: center.y + Math.sin(angle) * radius
     };
   });
-  if (definition.linkPattern === "pentagram") return [0, 2, 4, 1, 3].map((index) => baseVertices[index]);
-  if (definition.linkPattern === "octagram") return [0, 3, 6, 1, 4, 7, 2, 5].map((index) => baseVertices[index]);
   return baseVertices;
 }
 
+function dragonEyePathVertices() {
+  const definition = dragonEyeDefinition();
+  const vertices = dragonEyeWorldVertices();
+  const skip = Math.max(1, Number(definition?.skip) || 1);
+  if (skip === 1 || vertices.length < 3) return vertices;
+  const visited = new Set();
+  const components = [];
+  for (let start = 0; start < vertices.length; start += 1) {
+    if (visited.has(start)) continue;
+    const component = [];
+    let index = start;
+    do {
+      component.push(index);
+      visited.add(index);
+      index = (index + skip) % vertices.length;
+    } while (index !== start && component.length <= vertices.length);
+    components.push(component);
+  }
+  const walk = [...components[0]];
+  for (let index = 1; index < components.length; index += 1) walk.push(components[index - 1][0], ...components[index]);
+  if (components.length > 1) walk.push(components.at(-1)[0]);
+  return walk.map((index) => vertices[index]);
+}
+
 function dragonEyeScreenVertices() {
-  return dragonEyeWorldVertices().map(worldToScreen);
+  return dragonEyePathVertices().map(worldToScreen);
 }
 
 function isInsideDragonEye(screenPoint) {
@@ -6896,7 +6931,7 @@ function performTraverseStoneAction(action, requestedQuantity = 1, targetTileId 
           if (stone.countExact <= 0) {
             delete state.traverseLog.stones[stoneId];
           }
-          state.traverseLog.stock.amount = Math.min(BARRIER_CONFIG.stockCap, state.traverseLog.stock.amount + 1);
+          state.traverseLog.stock.amount = Math.min(stockCapForRank(currentKekkaishiRankInfo().rank.index), state.traverseLog.stock.amount + 1);
           appendBarrierEvent(state.traverseLog, {
             type: "stone-picked",
             at: now,
@@ -7152,9 +7187,7 @@ function handleBarrierQuickAction(action) {
     return true;
   }
   if (action === "map") {
-    const tile = selectedBarrierStoneTile();
-    const geo = tile ? tileCenterGeo(tile) : null;
-    if (geo) openPointInExternalMap({ title: t("traverse.stoneTile"), geo }, preferredMapProvider());
+    openSelectedPointInPreferredMap();
     return true;
   }
   if (action === "clear") {
@@ -7246,9 +7279,11 @@ function renderActionButtons() {
   }
   elements.actionMapButton.title = mapCandidate?.isPending
     ? "仮ポイントを地図で開く"
-    : mapCandidate
-      ? "選択地点を地図で開く"
-      : "地点を選択または仮ポイントを作成すると地図で開けます";
+    : mapCandidate?.isCenter
+      ? "選択対象の中心を地図で開く"
+      : mapCandidate
+        ? "選択地点を地図で開く"
+        : "地点・図形・頂点セルを選択または仮ポイントを作成すると地図で開けます";
 
   elements.actionRegisterButton.classList.remove("is-active");
   elements.actionRegisterButton.title = hasPendingPoint ? "仮ポイントを登録" : canOpenRegistration ? "地点登録画面を開く" : "仮ポイントを作成すると登録できます";
@@ -7325,6 +7360,7 @@ function setActionButtonLabel(button, label) {
 function renderTraverseQuickActions() {
   const selectedCount = state.barrierSelection.length;
   const hasPendingPoint = validGeo(state.pendingGeo);
+  const mapCandidate = mapPointForSelection();
   const hasSelection = selectedCount > 0
     || state.selection.length > 0
     || Boolean(state.selectedBarrierId)
@@ -7372,7 +7408,7 @@ function renderTraverseQuickActions() {
   elements.actionInvertButton.disabled = state.traverseBusy || !hasSelection;
   elements.deletePointButton.disabled = state.traverseBusy || !selectionCanBeDeleted();
   elements.actionShareSelectedButton.disabled = state.traverseBusy || !state.selectedBarrierId;
-  elements.actionMapButton.disabled = selectedCount === 0;
+  elements.actionMapButton.disabled = !mapCandidate;
   elements.actionAnalyzeButton.disabled = state.traverseBusy || (selectedCount === 0 && !state.selectedBarrierId);
   elements.actionRouteButton.disabled = false;
   elements.actionRegisterButton.title = state.barrierPinMode ? "ピンを打つ場所をタップ" : "ピンを打つ";
@@ -7382,7 +7418,11 @@ function renderTraverseQuickActions() {
   elements.actionInvertButton.title = hasPendingPoint ? "仮ポイントを解除" : "選択を解除";
   elements.deletePointButton.title = "本体アトラスの選択対象を破棄";
   elements.actionShareSelectedButton.title = t("barrier.share");
-  elements.actionMapButton.title = t("action.map");
+  elements.actionMapButton.title = mapCandidate?.isCenter
+    ? "選択対象の中心を地図で開く"
+    : mapCandidate
+      ? "選択地点を地図で開く"
+      : "地点・図形・頂点セルを選択すると地図で開けます";
   elements.actionAnalyzeButton.title = t("action.analyze");
   elements.actionRouteButton.title = "結界師の評価を見る";
   elements.actionRegisterButton.classList.toggle("is-active", state.barrierPinMode);
@@ -7749,7 +7789,7 @@ function renderGridBarrierStoneQuickDialog() {
   elements.gridBarrierStoneQuickPlaceButton.disabled = stockAmount < 1 || count >= stoneCap;
   elements.gridBarrierStoneQuickPlaceButton.setAttribute("aria-label", t("traverse.place"));
   elements.gridBarrierStoneQuickPlaceButton.title = t("traverse.place");
-  elements.gridBarrierStoneQuickPickButton.disabled = count < 1 || stockAmount >= BARRIER_CONFIG.stockCap;
+  elements.gridBarrierStoneQuickPickButton.disabled = count < 1 || stockAmount >= stockCapForRank(currentKekkaishiRankInfo().rank.index);
   elements.gridBarrierStoneQuickPickButton.setAttribute("aria-label", t("traverse.pick"));
   elements.gridBarrierStoneQuickPickButton.title = t("traverse.pick");
   elements.gridBarrierStoneQuickEditButton.disabled = false;
@@ -8853,7 +8893,7 @@ function barrierShapeSummary(rankIndex) {
   if (maxVertices >= 7) glyphs.push("7角");
   if (maxVertices >= 8) glyphs.push("8角");
   if (rankIndex >= BARRIER_CONFIG.crossLinkFromRank && maxVertices >= 5) glyphs.push("✦");
-  if (rankIndex >= BARRIER_CONFIG.maxVerticesByRank.length - 1 && maxVertices >= 8) glyphs.push("✳");
+  if (rankIndex >= 13 && maxVertices >= 8) glyphs.push("✳");
   return glyphs.join(" ");
 }
 
@@ -12738,9 +12778,39 @@ function editableSelectedPoint() {
 }
 
 function mapPointForSelection() {
-  const selected = singleSelectedPoint();
-  if (selected) {
-    return selected;
+  const primary = primarySelection();
+  if (primary?.type === "point") return findPoint(primary.id);
+
+  if (primary?.type === "figure") {
+    const figure = findFigure(primary.id);
+    const center = mapCenterPoint(
+      figure?.name || `${t("analysis.figure")} ${figure?.vertices.length || ""}`.trim(),
+      figure?.vertices,
+      "figure"
+    );
+    if (center) return center;
+  }
+
+  const barrier = state.selectedBarrierId
+    ? state.traverseLog?.barriers?.[state.selectedBarrierId]
+    : null;
+  if (barrier) {
+    const figure = barrierFigureForId(state.selectedBarrierId);
+    const vertices = figure?.vertices?.length
+      ? figure.vertices
+      : barrierStoneIds(barrier)
+        .map((stoneId) => tileCenterGeo(state.traverseLog?.stones?.[stoneId]?.tile))
+        .filter(validGeo);
+    const center = mapCenterPoint(barrier.name || t("barrier.defaultName"), vertices, "barrier");
+    if (center) return center;
+  }
+
+  if (state.barrierSelection.length > 0) {
+    const vertices = state.barrierSelection
+      .map((stoneId) => tileCenterGeo(state.traverseLog?.stones?.[stoneId]?.tile))
+      .filter(validGeo);
+    const center = mapCenterPoint(t("barrier.selection").replace("{count}", String(vertices.length)), vertices, "barrier-cells");
+    if (center) return center;
   }
 
   if (!validGeo(state.pendingGeo)) {
@@ -12752,6 +12822,18 @@ function mapPointForSelection() {
     title: elements.pointTitle.value.trim() || "仮ポイント",
     geo: normalizeGeo(state.pendingGeo),
     isPending: true,
+    isVirtual: true
+  };
+}
+
+function mapCenterPoint(title, points, id) {
+  const geo = geographicCenter(Array.isArray(points) ? points : []);
+  if (!geo) return null;
+  return {
+    id: `__map_center_${id}__`,
+    title,
+    geo,
+    isCenter: true,
     isVirtual: true
   };
 }

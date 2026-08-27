@@ -21,6 +21,11 @@ function hasOwn(value, key) {
   return Boolean(value) && Object.prototype.hasOwnProperty.call(value, key);
 }
 
+function normalizeFigureSkip(value, vertexCount) {
+  const skip = Math.floor(Number(value));
+  return Number.isInteger(skip) && skip >= 1 && skip < Math.max(2, vertexCount) ? skip : 1;
+}
+
 export function canonicalAnalysisVertexKey(lat, lng) {
   const normalizedLat = finiteCoordinate(lat);
   const normalizedLng = finiteCoordinate(lng);
@@ -118,6 +123,8 @@ export function normalizeAnalysisFigure(figure) {
   if (vertices.length < 2) return null;
 
   const normalized = { id, vertices };
+  const skip = normalizeFigureSkip(figure.skip, vertices.length);
+  if (skip !== 1) normalized.skip = skip;
   const name = cleanText(figure.name);
   const note = cleanText(figure.note);
   const color = normalizeColor(figure.color);
@@ -133,10 +140,11 @@ export function normalizeAnalysisFigure(figure) {
   return normalized;
 }
 
-export function createAnalysisFigure({ id, vertices, name = "", note = "", color = "", createdAt = "", layer = "", barrierId = "" } = {}) {
+export function createAnalysisFigure({ id, vertices, skip = 1, name = "", note = "", color = "", createdAt = "", layer = "", barrierId = "" } = {}) {
   return normalizeAnalysisFigure({
     id,
     vertices,
+    ...(skip !== 1 ? { skip } : {}),
     ...(name ? { name } : {}),
     ...(note ? { note } : {}),
     ...(color ? { color } : {}),
@@ -150,17 +158,58 @@ export function figureEdges(figure) {
   const normalized = normalizeAnalysisFigure(figure);
   if (!normalized || normalized.vertices.length < 2) return [];
 
-  const edges = normalized.vertices.slice(1).map((vertex, index) => ({
-    a: normalized.vertices[index],
+  const { vertices } = normalized;
+  const skip = normalizeFigureSkip(normalized.skip, vertices.length);
+  if (skip !== 1) {
+    return vertices.map((vertex, index) => ({
+      a: vertex,
+      b: vertices[(index + skip) % vertices.length]
+    }));
+  }
+
+  const edges = vertices.slice(1).map((vertex, index) => ({
+    a: vertices[index],
     b: vertex
   }));
-  if (normalized.vertices.length >= 3) {
+  if (vertices.length >= 3) {
     edges.push({
-      a: normalized.vertices.at(-1),
-      b: normalized.vertices[0]
+      a: vertices.at(-1),
+      b: vertices[0]
     });
   }
   return edges;
+}
+
+// A single closed walk can represent every skip figure. For composite figures
+// ({6/2}, {8/2}) its zero-width connector is traversed in both directions, so
+// the existing non-zero fill rule sees the actual edge set without adding area.
+export function figureVertexWalk(figure) {
+  const normalized = normalizeAnalysisFigure(figure);
+  if (!normalized || normalized.vertices.length < 3) return [];
+  const { vertices } = normalized;
+  const skip = normalizeFigureSkip(normalized.skip, vertices.length);
+  if (skip === 1) return [...vertices];
+
+  const visited = new Set();
+  const components = [];
+  for (let start = 0; start < vertices.length; start += 1) {
+    if (visited.has(start)) continue;
+    const component = [];
+    let index = start;
+    do {
+      component.push(index);
+      visited.add(index);
+      index = (index + skip) % vertices.length;
+    } while (index !== start && component.length <= vertices.length);
+    components.push(component);
+  }
+
+  const walk = [...components[0]];
+  for (let index = 1; index < components.length; index += 1) {
+    walk.push(components[index - 1][0], ...components[index]);
+  }
+  if (components.length > 1) walk.push(components.at(-1)[0]);
+  return walk.map((index) => vertices[index]);
 }
 
 export function analysisLineEndpointIdentityKey(line, side) {

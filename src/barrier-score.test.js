@@ -18,6 +18,7 @@ import {
 } from "./barrier-score.js";
 import { BARRIER_CONFIG } from "./barrier.js";
 import { BARRIER_EVALUATION_CONFIG } from "./barrier-evaluation.js";
+import { createAnalysisFigure, figureVertexWalk } from "./analysis-layer.js";
 
 const triangle = [
   { lat: 35.681236, lng: 139.767125 },
@@ -110,6 +111,24 @@ describe("barrier score helpers", () => {
       const area = nonZeroPolygonAreaKm2(regularOctagram(radiusKm));
       expect(relativeDifference(area, expectedCoefficient * radiusKm ** 2)).toBeLessThan(0.01);
     }
+  });
+
+  it("derives non-zero area from the edge walk for composite skip figures", () => {
+    const radiusKm = 30;
+    const hexagram = createAnalysisFigure({
+      id: "hexagram",
+      skip: 2,
+      vertices: regularPolygon(radiusKm, 6).map((geo, index) => ({ ...geo, name: String(index) }))
+    });
+    const octagram2 = createAnalysisFigure({
+      id: "octagram2",
+      skip: 2,
+      vertices: regularPolygon(radiusKm, 8).map((geo, index) => ({ ...geo, name: String(index) }))
+    });
+    const hexagramArea = nonZeroPolygonAreaKm2(figureVertexWalk(hexagram));
+    const octagram2Area = nonZeroPolygonAreaKm2(figureVertexWalk(octagram2));
+    expect(relativeDifference(hexagramArea, Math.sqrt(3) * radiusKm ** 2)).toBeLessThan(0.01);
+    expect(relativeDifference(octagram2Area, 2.34315 * radiusKm ** 2)).toBeLessThan(0.01);
   });
 
   it("keeps the octagram area ratio stable at the SSS scale", () => {
@@ -281,12 +300,12 @@ describe("barrier score helpers", () => {
     expect(polygonSelfIntersects(pentagram)).toBe(true);
     expect(barrierPerimeterKm(pentagram)).toBeGreaterThan(barrierPerimeterKm(pentagon));
     expect(barrierLimitPerimeterKm(pentagram)).toBeCloseTo(barrierPerimeterKm(pentagon), 6);
-    expect(barrierFitsPerimeter(pentagram, 6)).toMatchObject({ ok: true, limitKm: 720 });
+    expect(barrierFitsPerimeter(pentagram, 12)).toMatchObject({ ok: true, limitKm: 720 });
 
     expect(polygonSelfIntersects(octagram)).toBe(true);
     expect(barrierPerimeterKm(octagram)).toBeGreaterThan(barrierPerimeterKm(octagon));
     expect(barrierLimitPerimeterKm(octagram)).toBeCloseTo(barrierPerimeterKm(octagon), 6);
-    expect(barrierFitsPerimeter(octagram, 8)).toMatchObject({ ok: true, limitKm: 1800 });
+    expect(barrierFitsPerimeter(octagram, 14)).toMatchObject({ ok: true, limitKm: 1800 });
   });
 
   it("supports seven/eight vertices and the octagram coefficient", () => {
@@ -397,9 +416,9 @@ describe("barrier score helpers", () => {
 
     expect(BARRIER_CONFIG.perimeterLimitKm).toEqual([...BARRIER_CONFIG.perimeterLimitKm].sort((left, right) => left - right));
     expect(maxima.every((power, index) => index === 0 || power >= maxima[index - 1])).toBe(true);
-    expect(powerForShape(6, 5, true)).toBeGreaterThan(Math.max(...[3, 4, 5, 6].map((vertices) => powerForShape(6, vertices))));
-    expect(maxima[5]).toBeLessThan(shiniki);
-    expect(maxima[7]).toBeLessThan(teniki);
+    expect(powerForShape(12, 5, true)).toBeGreaterThan(Math.max(...[3, 4, 5, 6].map((vertices) => powerForShape(12, vertices))));
+    expect(maxima[11]).toBeLessThan(shiniki);
+    expect(maxima[12]).toBeLessThan(teniki);
   });
 
   it("scores each barrier independently from its stones", () => {

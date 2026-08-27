@@ -3,16 +3,18 @@ const STOCK_GRANT_HOURS = Object.freeze([4, 12, 20]);
 export const BARRIER_CONFIG = Object.freeze({
   dataZoom: 18,
   maxVertices: 8,
-  maxVerticesByRank: Object.freeze([3, 3, 4, 5, 6, 6, 6, 8, 8]),
-  perimeterLimitKm: Object.freeze([6, 12, 24, 48, 96, 240, 720, 1200, 1800]),
-  crossLinkFromRank: 6,
+  maxVerticesByRank: Object.freeze([3, 3, 3, 3, 3, 3, 4, 4, 4, 5, 6, 6, 6, 8, 8]),
+  perimeterLimitKm: Object.freeze([6, 8, 10, 12, 16, 20, 24, 30, 36, 48, 96, 240, 720, 1200, 1800]),
+  kekkaishiLifetimeThresholds: Object.freeze([0, 100, 400, 800, 1600, 3600, 8000, 14000, 23000, 40000, 160000, 800000, 4000000, 20000000, 100000000]),
+  kekkaishiRankNames: Object.freeze(["F3", "F2", "F1", "E3", "E2", "E1", "D3", "D2", "D1", "C", "B", "A", "S", "SS", "SSS"]),
+  crossLinkFromRank: 11,
   dailyGrant: 3,
   stockGrantHours: STOCK_GRANT_HOURS,
-  stockCap: 20,
+  stockCapByRank: Object.freeze([20, 20, 20, 20, 30, 30, 30, 40, 40, 40, 60, 80, 100, 200, 300]),
   stoneCapVertex: 100,
-  stoneCapVertexByRank: Object.freeze([100, 100, 100, 100, 100, 100, 100, 200, 300]),
+  stoneCapVertexByRank: Object.freeze([100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 200, 300]),
   stoneCapLoose: 20,
-  ryumyakuScatter: Object.freeze([0.15, 0.13, 0.11, 0.09, 0.07, 0.06, 0.05, 0.05, 0.05]),
+  ryumyakuScatter: Object.freeze([0.15, 0.15, 0.14, 0.14, 0.13, 0.13, 0.12, 0.12, 0.11, 0.09, 0.07, 0.06, 0.05, 0.05, 0.05]),
   rotationFromRank: 0,
   windowDays: 90,
   weatherRate: 0.001,
@@ -80,8 +82,9 @@ export function sanitizeBarrierLog(raw, now = Date.now()) {
   }
 
   const sourceStock = raw.stock && typeof raw.stock === "object" ? raw.stock : {};
+  const stockCap = stockCapForLifetime(raw?.kekkaishi?.lifetimeOutput);
   const amount = Number.isFinite(Number(sourceStock.amount))
-    ? Math.min(BARRIER_CONFIG.stockCap, Math.max(0, Math.floor(Number(sourceStock.amount))))
+    ? Math.min(stockCap, Math.max(0, Math.floor(Number(sourceStock.amount))))
     : BARRIER_CONFIG.dailyGrant;
   const parsedLastGrantAt = Date.parse(sourceStock.lastGrantAt);
   const lastGrantAt = Number.isFinite(parsedLastGrantAt) ? parsedLastGrantAt : now;
@@ -121,11 +124,24 @@ export function grantBarrierStock(log, now = Date.now()) {
   if (grantTimes.length === 0) return false;
 
   log.stock.amount = Math.min(
-    BARRIER_CONFIG.stockCap,
+    stockCapForLifetime(log?.kekkaishi?.lifetimeOutput),
     Math.max(0, Math.floor(Number(log.stock.amount) || 0)) + grantTimes.length
   );
   log.stock.lastGrantAt = new Date(grantTimes[grantTimes.length - 1]).toISOString();
   return true;
+}
+
+export function stockCapForRank(rankIndex = 0) {
+  const index = Math.max(0, Math.min(BARRIER_CONFIG.stockCapByRank.length - 1, Math.floor(Number(rankIndex) || 0)));
+  return Number(BARRIER_CONFIG.stockCapByRank[index]) || BARRIER_CONFIG.stockCapByRank[0];
+}
+
+export function stockCapForLifetime(lifetimeOutput = 0) {
+  let rankIndex = 0;
+  for (let index = 0; index < BARRIER_CONFIG.kekkaishiLifetimeThresholds.length; index += 1) {
+    if (Number(lifetimeOutput) >= BARRIER_CONFIG.kekkaishiLifetimeThresholds[index]) rankIndex = index;
+  }
+  return stockCapForRank(rankIndex);
 }
 
 function barrierStockGrantTimes(afterAt, throughAt) {
@@ -218,6 +234,7 @@ export function registerBarrier(log, barrier) {
     note: typeof barrier.note === "string" ? barrier.note.slice(0, 500) : "",
     stoneIds: [...barrier.vertices],
     linkPattern: typeof barrier.linkPattern === "string" ? barrier.linkPattern : "adjacent",
+    skip: Math.max(1, Math.floor(Number(barrier.skip) || 1)),
     createdAt,
     guardian: normalizeGuardian(barrier.guardian, createdAt),
     rankProgress
@@ -233,6 +250,7 @@ export function registerBarrier(log, barrier) {
     note: log.barriers[barrier.id].note,
     vertices: [...log.barriers[barrier.id].stoneIds],
     linkPattern: log.barriers[barrier.id].linkPattern,
+    skip: log.barriers[barrier.id].skip,
     guardian: log.barriers[barrier.id].guardian,
     rankProgress: log.barriers[barrier.id].rankProgress
   });
@@ -689,6 +707,7 @@ function normalizeEvent(event, now, fallbackId = "") {
         : Array.isArray(event.sightRadiusKm) ? event.sightRadiusKm.map((value) => Number(value)) : [],
       crossLinkFromRank: Number(event.crossLinkFromRank),
       stoneCapVertexByRank: Array.isArray(event.stoneCapVertexByRank) ? event.stoneCapVertexByRank.map((value) => Number(value)) : [],
+      stockCapByRank: Array.isArray(event.stockCapByRank) ? event.stockCapByRank.map((value) => Number(value)) : [],
       ryumyakuScatter: Array.isArray(event.ryumyakuScatter) ? event.ryumyakuScatter.map((value) => Number(value)) : [],
       rotationFromRank: Number(event.rotationFromRank),
       beautyTolerance: Number(event.beautyTolerance),

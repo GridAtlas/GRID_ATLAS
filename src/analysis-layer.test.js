@@ -7,6 +7,7 @@ import {
   createAnalysisFigure,
   createAnalysisLine,
   figureEdges,
+  figureVertexWalk,
   normalizeAnalysisLayer,
   normalizeAnalysisLine,
   normalizeAnalysisVertex,
@@ -110,6 +111,18 @@ describe("analysis layer model", () => {
       a: { name: "C" },
       b: { name: "A" }
     });
+  });
+
+  it("derives skip-figure edges while keeping vertices as the sole stored geometry", () => {
+    const figure = createAnalysisFigure({
+      id: "hexagram",
+      skip: 2,
+      vertices: Array.from({ length: 6 }, (_, index) => vertex(35 + index / 100, 135 + index / 100, String(index)))
+    });
+    expect(figure).toMatchObject({ skip: 2 });
+    expect(figureEdges(figure)).toHaveLength(6);
+    expect(figureEdges(figure)[0]).toMatchObject({ a: { name: "0" }, b: { name: "2" } });
+    expect(figureVertexWalk(figure).map((entry) => entry.name)).toEqual(["0", "2", "4", "0", "1", "3", "5", "1"]);
   });
 
   it("normalizes canonical sibling lines and figures without reading legacy links", () => {

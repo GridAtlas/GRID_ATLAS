@@ -1,5 +1,6 @@
 import { BARRIER_CONFIG, barrierStoneIds, stoneDisplayCount, stoneExactCount } from "./barrier.js";
 import { nonZeroPolygonAreaKm2, sphericalPolygonAreaKm2 } from "./shape-analysis.js";
+import { figureVertexWalk, normalizeAnalysisFigure } from "./analysis-layer.js";
 
 export { nonZeroPolygonAreaKm2, sphericalPolygonAreaKm2 };
 
@@ -22,7 +23,9 @@ export const BARRIER_SCORE_CONFIG = Object.freeze({
     heptagon: 2.1,
     octagon: 2.4,
     star: 3,
+    hexagram: 3.5,
     octagram: 4,
+    octagram2: 4.5,
     other: 1.8
   }),
   rankNames: Object.freeze(["標", "注連", "垣", "結界", "霊域", "聖域", "神域", "天域"]),
@@ -35,17 +38,20 @@ export function scoreBarrier(log, barrierId, config = BARRIER_SCORE_CONFIG) {
   if (!barrier) return null;
   const stoneIds = barrierStoneIds(barrier);
   const stones = stoneIds.map((stoneId) => log.stones?.[stoneId]).filter(Boolean);
-  const figureVertices = log.figures?.[barrier.figureId]?.vertices;
+  const figure = normalizeAnalysisFigure(log.figures?.[barrier.figureId]);
+  const figureVertices = figure?.vertices;
   const geos = Array.isArray(figureVertices) && figureVertices.length >= 3
     ? figureVertices.map((vertex) => ({ lat: Number(vertex.lat), lng: Number(vertex.lng) })).filter((geo) => Number.isFinite(geo.lat) && Number.isFinite(geo.lng))
     : stones.map((stone) => tileCenterGeo(stone.tile)).filter(Boolean);
   if (geos.length < 3) return null;
 
-  const selfIntersecting = polygonSelfIntersects(geos);
+  const edgeWalk = figure ? figureVertexWalk(figure).map((vertex) => ({ lat: vertex.lat, lng: vertex.lng })) : geos;
+  const skip = Number(figure?.skip ?? barrier.skip) || 1;
+  const selfIntersecting = skip > 1 || polygonSelfIntersects(edgeWalk);
   const areaKm2 = selfIntersecting
-    ? nonZeroPolygonAreaKm2(geos, config.earthRadiusKm)
+    ? nonZeroPolygonAreaKm2(edgeWalk, config.earthRadiusKm)
     : sphericalPolygonAreaKm2(geos, config.earthRadiusKm);
-  const shape = shapeCoefficient(geos.length, selfIntersecting, config.shapeCoefficients, barrier.linkPattern);
+  const shape = shapeCoefficient(geos.length, selfIntersecting, config.shapeCoefficients, barrier.linkPattern, skip);
   const beauty = beautyCoefficient(geos, config);
   const scale = scaleCoefficient(areaKm2, config);
   const stoneCount = stones.reduce((sum, stone) => sum + stoneDisplayCount(stone), 0);
@@ -113,7 +119,9 @@ export function beautyCoefficient(geos, config = BARRIER_SCORE_CONFIG) {
   return minimum + (maximum - minimum) * combinedQuality;
 }
 
-export function shapeCoefficient(vertexCount, selfIntersecting, coefficients = BARRIER_SCORE_CONFIG.shapeCoefficients, linkPattern = "adjacent") {
+export function shapeCoefficient(vertexCount, selfIntersecting, coefficients = BARRIER_SCORE_CONFIG.shapeCoefficients, linkPattern = "adjacent", skip = 1) {
+  if (vertexCount === 6 && (linkPattern === "hexagram" || skip === 2)) return coefficients.hexagram;
+  if (vertexCount === 8 && (linkPattern === "octagram2" || skip === 2)) return coefficients.octagram2;
   if (selfIntersecting && vertexCount === 5 && linkPattern === "pentagram") return coefficients.star;
   if (selfIntersecting && vertexCount === 8 && linkPattern === "octagram") return coefficients.octagram;
   if (selfIntersecting && vertexCount === 5) return coefficients.star;

@@ -14,6 +14,7 @@ import {
   ryumyakuScatterForRank,
   sanitizeBarrierLog,
   perimeterLimitKmForRank,
+  stockCapForRank,
   stoneIdFromTile,
   tileCenterGeo,
   tileBounds,
@@ -219,11 +220,16 @@ describe("barrier data helpers", () => {
   it("exposes monotonic rank gates for vertices, perimeter, and Dragon Eye scatter", () => {
     expect(BARRIER_CONFIG.maxVertices).toBe(8);
     expect(maxVerticesForRank(0)).toBe(3);
-    expect(maxVerticesForRank(8)).toBe(8);
+    expect(maxVerticesForRank(8)).toBe(4);
+    expect(maxVerticesForRank(14)).toBe(8);
     expect(perimeterLimitKmForRank(0)).toBe(6);
-    expect(perimeterLimitKmForRank(8)).toBe(1800);
+    expect(perimeterLimitKmForRank(8)).toBe(36);
+    expect(perimeterLimitKmForRank(14)).toBe(1800);
     expect(ryumyakuScatterForRank(0)).toBeCloseTo(0.15);
-    expect(ryumyakuScatterForRank(8)).toBeCloseTo(0.05);
+    expect(ryumyakuScatterForRank(8)).toBeCloseTo(0.11);
+    expect(ryumyakuScatterForRank(14)).toBeCloseTo(0.05);
+    expect(stockCapForRank(11)).toBe(80);
+    expect(stockCapForRank(14)).toBe(300);
   });
 
   it("grants one stone at 12:00, 20:00, and 04:00 in local time", () => {
@@ -249,7 +255,7 @@ describe("barrier data helpers", () => {
     const log = createBarrierLog(lastGrantAt);
     log.stock.amount = 1;
     expect(grantBarrierStock(log, now)).toBe(true);
-    expect(log.stock.amount).toBe(BARRIER_CONFIG.stockCap);
+    expect(log.stock.amount).toBe(stockCapForRank(0));
     expect(log.stock.lastGrantAt).toBe(new Date(2026, 7, 12, 20, 0).toISOString());
   });
 

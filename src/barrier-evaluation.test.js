@@ -162,15 +162,15 @@ describe("barrier evaluation", () => {
   });
 
   it("uses only lifetime output for player rank and keeps peak display data", () => {
-    expect(BARRIER_EVALUATION_CONFIG.kekkaishiLifetimeThresholds).toEqual([0, 800, 8000, 40000, 160000, 800000, 4000000, 20000000, 100000000]);
+    expect(BARRIER_EVALUATION_CONFIG.kekkaishiLifetimeThresholds).toEqual([0, 100, 400, 800, 1600, 3600, 8000, 14000, 23000, 40000, 160000, 800000, 4000000, 20000000, 100000000]);
     expect(BARRIER_EVALUATION_CONFIG).not.toHaveProperty("kekkaishiPeakThresholds");
     expect(BARRIER_EVALUATION_CONFIG).not.toHaveProperty("kekkaishiSustainDays");
     const status = { lifetimeOutput: BARRIER_EVALUATION_CONFIG.kekkaishiLifetimeThresholds[2], peakAverage: 0, dailyHistory: [5] };
-    expect(rankForKekkaishi(status).name).toBe("D");
+    expect(rankForKekkaishi(status).name).toBe("F1");
     status.peakAverage = 100000;
-    expect(rankForKekkaishi(status).name).toBe("D");
+    expect(rankForKekkaishi(status).name).toBe("F1");
     expect(recentAverage(status)).toBeCloseTo(5 / BARRIER_EVALUATION_CONFIG.windowDays);
-    expect(BARRIER_EVALUATION_CONFIG.kekkaishiRankNames).toHaveLength(9);
+    expect(BARRIER_EVALUATION_CONFIG.kekkaishiRankNames).toHaveLength(15);
   });
 
   it("sums the current power of active barriers", () => {
@@ -232,9 +232,9 @@ describe("barrier evaluation", () => {
     expect(restored.kekkaishi.lifetimeOutput).toBeCloseTo(power / 2, 8);
   });
 
-  it("allows E rank on the first evaluated day when lifetime threshold is met", () => {
+  it("allows F2 rank on the first evaluated day when lifetime threshold is met", () => {
     const lifetime = BARRIER_EVALUATION_CONFIG.kekkaishiLifetimeThresholds[1];
-    expect(rankForKekkaishi({ lifetimeOutput: lifetime, peakAverage: 0 }).name).toBe("E");
+    expect(rankForKekkaishi({ lifetimeOutput: lifetime, peakAverage: 0 }).name).toBe("F2");
   });
 
   it("records rank achievement timestamps once and never overwrites them", () => {
@@ -319,7 +319,9 @@ describe("barrier evaluation", () => {
       heptagon: 2.1,
       octagon: 2.4,
       star: 3,
-      octagram: 4
+      hexagram: 3.5,
+      octagram: 4,
+      octagram2: 4.5
     });
     const log = triangleLog();
     evaluateBarrierLog(log, Date.parse("2026-08-02T00:00:00Z"));

@@ -15,8 +15,8 @@ export const BARRIER_EVALUATION_CONFIG = Object.freeze({
   daysRequired: Object.freeze([0, 7, 30, 90, 180, 365, 730, 1095]),
   rankNames: Object.freeze(["標", "注連", "垣", "結界", "霊域", "聖域", "神域", "天域"]),
   rankReadings: Object.freeze(["しるべ", "しめ", "かき", "けっかい", "れいいき", "せいいき", "しんいき", "てんいき"]),
-  kekkaishiLifetimeThresholds: Object.freeze([0, 800, 8000, 40000, 160000, 800000, 4000000, 20000000, 100000000]),
-  kekkaishiRankNames: Object.freeze(["F", "E", "D", "C", "B", "A", "S", "SS", "SSS"])
+  kekkaishiLifetimeThresholds: BARRIER_CONFIG.kekkaishiLifetimeThresholds,
+  kekkaishiRankNames: BARRIER_CONFIG.kekkaishiRankNames
 });
 
 export const KEKKAISHI_PERSONAS = Object.freeze(["guard", "see", "record"]);
@@ -252,6 +252,7 @@ export function evaluationSettingsSnapshot(config = BARRIER_EVALUATION_CONFIG) {
     perimeterLimitKm: [...BARRIER_CONFIG.perimeterLimitKm],
     crossLinkFromRank: Number(BARRIER_CONFIG.crossLinkFromRank),
     stoneCapVertexByRank: [...BARRIER_CONFIG.stoneCapVertexByRank],
+    stockCapByRank: [...BARRIER_CONFIG.stockCapByRank],
     ryumyakuScatter: [...BARRIER_CONFIG.ryumyakuScatter],
     rotationFromRank: Number(BARRIER_CONFIG.rotationFromRank),
     beautyTolerance: Number(BARRIER_SCORE_CONFIG.beautyTolerance),
@@ -405,6 +406,7 @@ function evaluationSettingsSnapshotFromEvent(event) {
       : Array.isArray(event.sightRadiusKm) ? [...event.sightRadiusKm] : [],
     crossLinkFromRank: Number(event.crossLinkFromRank),
     stoneCapVertexByRank: Array.isArray(event.stoneCapVertexByRank) ? [...event.stoneCapVertexByRank] : [],
+    stockCapByRank: Array.isArray(event.stockCapByRank) ? [...event.stockCapByRank] : [],
     ryumyakuScatter: Array.isArray(event.ryumyakuScatter) ? [...event.ryumyakuScatter] : [],
     rotationFromRank: Number(event.rotationFromRank),
     beautyTolerance: Number(event.beautyTolerance),
