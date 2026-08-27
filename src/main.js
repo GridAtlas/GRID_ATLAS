@@ -43,6 +43,7 @@ import {
 } from "./analysis-layer.js?v=1";
 import { chooseAnalysisHit } from "./analysis-hit-priority.js?v=1";
 import { resolveLineBodyDragCandidate } from "./drag-hit-testing.js?v=1";
+import { externalMapUrl } from "./external-map-url.js?v=1";
 import { analyzeLineIntersection, analyzeOpenPath, analyzeSegmentShape, vincentyDistanceMeters } from "./shape-analysis.js?v=1";
 import {
   BARRIER_CONFIG,
@@ -141,7 +142,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2585";
+const WEB_VERSION = "0.2595";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -1381,6 +1382,7 @@ const TRANSLATIONS = {
     "message.pointUnavailable": "地点を確認できません",
     "message.linkUnavailable": "線を確認できません",
     "message.quickHint": "接続、リスト間コピー／移動、共有、巡回、削除、解除をクイックボタンで実行できます。",
+    "message.mapRouteHint": "地図では選択順に、出発地 → 経由地 → 目的地としてルート検索します",
     "message.currentLocation": "現在地",
     "message.lastObservedLocation": "最終観測位置",
   "traverse.noLocation": "現在地を取得してから結界石を操作してください",
@@ -1975,6 +1977,7 @@ const TRANSLATIONS = {
     "message.pointUnavailable": "Point unavailable",
     "message.linkUnavailable": "Line unavailable",
     "message.quickHint": "Use quick buttons to link, copy or move between lists, share, route, delete, or clear.",
+    "message.mapRouteHint": "The map searches a route in selected order: origin, waypoints, then destination.",
     "message.currentLocation": "Current location",
     "message.lastObservedLocation": "Last observed position",
     "traverse.noLocation": "Get your current location before placing or picking up a stone",
@@ -7243,7 +7246,9 @@ function renderActionButtons() {
   const routePlan = routePlanFromCurrentSelection();
   const routeActive = Boolean(state.routeResult);
   const centerCandidateCount = pointIds.length;
-  const mapCandidate = mapPointForSelection();
+  const mapPoints = externalMapPointsForSelection();
+  const mapCandidate = mapPoints.at(-1) ?? null;
+  const mapRouteActive = mapPoints.length > 1;
   const canDelete = selectionCanBeDeleted();
   const transferablePointCount = transferableSelectedPoints().length;
   const analysisTarget = selectionAnalysisTarget();
@@ -7277,7 +7282,9 @@ function renderActionButtons() {
   for (const button of elements.clearAllListButtons) {
     button.disabled = clearableVisibleListCount === 0;
   }
-  elements.actionMapButton.title = mapCandidate?.isPending
+  elements.actionMapButton.title = mapRouteActive
+    ? `選択順で${mapPoints.length}地点のルートを地図で開く`
+    : mapCandidate?.isPending
     ? "仮ポイントを地図で開く"
     : mapCandidate?.isCenter
       ? "選択対象の中心を地図で開く"
@@ -7360,7 +7367,9 @@ function setActionButtonLabel(button, label) {
 function renderTraverseQuickActions() {
   const selectedCount = state.barrierSelection.length;
   const hasPendingPoint = validGeo(state.pendingGeo);
-  const mapCandidate = mapPointForSelection();
+  const mapPoints = externalMapPointsForSelection();
+  const mapCandidate = mapPoints.at(-1) ?? null;
+  const mapRouteActive = mapPoints.length > 1;
   const hasSelection = selectedCount > 0
     || state.selection.length > 0
     || Boolean(state.selectedBarrierId)
@@ -7418,7 +7427,9 @@ function renderTraverseQuickActions() {
   elements.actionInvertButton.title = hasPendingPoint ? "仮ポイントを解除" : "選択を解除";
   elements.deletePointButton.title = "本体アトラスの選択対象を破棄";
   elements.actionShareSelectedButton.title = t("barrier.share");
-  elements.actionMapButton.title = mapCandidate?.isCenter
+  elements.actionMapButton.title = mapRouteActive
+    ? `選択順で${mapPoints.length}地点のルートを地図で開く`
+    : mapCandidate?.isCenter
     ? "選択対象の中心を地図で開く"
     : mapCandidate
       ? "選択地点を地図で開く"
@@ -9321,8 +9332,12 @@ function renderDetails() {
     elements.detailTitle.textContent = state.selection.map(selectionTitle).join(", ");
     elements.detailCoords.textContent = parts.join(" / ");
     elements.detailCreated.textContent = state.selection.map((entry, index) => `${index + 1}. ${selectionTitle(entry)}`).join(" / ");
-    elements.detailNote.textContent = t("message.quickHint");
-    elements.mapOpenActions.hidden = true;
+    const mapPoints = externalMapPointsForSelection();
+    const routeSearch = mapPoints.length > 1;
+    elements.detailNote.textContent = routeSearch
+      ? t("message.mapRouteHint")
+      : t("message.quickHint");
+    elements.mapOpenActions.hidden = !routeSearch;
     elements.targetActions.hidden = true;
     return;
   }
@@ -9790,21 +9805,11 @@ function clearTarget(options = {}) {
   }
 }
 function openSelectedPointInExternalMap(provider) {
-  const point = selectedPoint();
-  if (!point) {
-    return;
-  }
-
-  openPointInExternalMap(point, provider);
+  openPointsInExternalMap(externalMapPointsForSelection(), provider);
 }
 
 function openSelectedPointInPreferredMap() {
-  const point = mapPointForSelection();
-  if (!point) {
-    return;
-  }
-
-  openPointInExternalMap(point, preferredMapProvider());
+  openPointsInExternalMap(externalMapPointsForSelection(), preferredMapProvider());
 }
 
 function openPointInfoTargetInPreferredMap() {
@@ -9817,21 +9822,14 @@ function openPointInfoTargetInPreferredMap() {
 }
 
 function openPointInExternalMap(point, provider) {
-  const geo = pointGeo(point);
-  const url = externalMapUrl(provider, geo, point.title);
-  window.location.href = url;
+  openPointsInExternalMap([point], provider);
 }
 
-function externalMapUrl(provider, geo, title) {
-  const lat = formatCoordinate(geo.lat);
-  const lng = formatCoordinate(geo.lng);
-  const label = encodeURIComponent(title || "GRID ATLAS Point");
-
-  if (provider === "apple") {
-    return `https://maps.apple.com/?ll=${lat},${lng}&q=${label}`;
-  }
-
-  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+function openPointsInExternalMap(points, provider) {
+  const stops = points.map((point) => ({ ...point, geo: pointGeo(point) }));
+  const url = externalMapUrl(provider, stops);
+  if (!url) return;
+  window.location.href = url;
 }
 function renderAnalysis() {
   elements.pointCount.textContent = String(visibleSelectablePoints().length);
@@ -12779,31 +12777,11 @@ function editableSelectedPoint() {
 
 function mapPointForSelection() {
   const primary = primarySelection();
-  if (primary?.type === "point") return findPoint(primary.id);
+  const selectedPoint = mapPointForSelectionEntry(primary);
+  if (selectedPoint) return selectedPoint;
 
-  if (primary?.type === "figure") {
-    const figure = findFigure(primary.id);
-    const center = mapCenterPoint(
-      figure?.name || `${t("analysis.figure")} ${figure?.vertices.length || ""}`.trim(),
-      figure?.vertices,
-      "figure"
-    );
-    if (center) return center;
-  }
-
-  const barrier = state.selectedBarrierId
-    ? state.traverseLog?.barriers?.[state.selectedBarrierId]
-    : null;
-  if (barrier) {
-    const figure = barrierFigureForId(state.selectedBarrierId);
-    const vertices = figure?.vertices?.length
-      ? figure.vertices
-      : barrierStoneIds(barrier)
-        .map((stoneId) => tileCenterGeo(state.traverseLog?.stones?.[stoneId]?.tile))
-        .filter(validGeo);
-    const center = mapCenterPoint(barrier.name || t("barrier.defaultName"), vertices, "barrier");
-    if (center) return center;
-  }
+  const barrier = mapPointForSelectedBarrier();
+  if (barrier) return barrier;
 
   if (state.barrierSelection.length > 0) {
     const vertices = state.barrierSelection
@@ -12824,6 +12802,54 @@ function mapPointForSelection() {
     isPending: true,
     isVirtual: true
   };
+}
+
+function externalMapPointsForSelection() {
+  const selectedPoints = state.selection.map(mapPointForSelectionEntry).filter(Boolean);
+  if (selectedPoints.length > 0) return selectedPoints;
+
+  const barrier = mapPointForSelectedBarrier();
+  if (barrier) return [barrier];
+
+  const stones = state.barrierSelection
+    .map((stoneId, index) => {
+      const geo = tileCenterGeo(state.traverseLog?.stones?.[stoneId]?.tile);
+      return validGeo(geo)
+        ? { id: `__barrier_stone_${stoneId}__`, title: `結界石 ${index + 1}`, geo, isVirtual: true }
+        : null;
+    })
+    .filter(Boolean);
+  if (stones.length > 0) return stones;
+
+  const point = mapPointForSelection();
+  return point ? [point] : [];
+}
+
+function mapPointForSelectionEntry(entry) {
+  if (entry?.type === "point") return findPoint(entry.id);
+  if (entry?.type !== "figure") return null;
+
+  const figure = findFigure(entry.id);
+  return mapCenterPoint(
+    figure?.name || `${t("analysis.figure")} ${figure?.vertices.length || ""}`.trim(),
+    figure?.vertices,
+    `figure_${entry.id}`
+  );
+}
+
+function mapPointForSelectedBarrier() {
+  const barrier = state.selectedBarrierId
+    ? state.traverseLog?.barriers?.[state.selectedBarrierId]
+    : null;
+  if (!barrier) return null;
+
+  const figure = barrierFigureForId(state.selectedBarrierId);
+  const vertices = figure?.vertices?.length
+    ? figure.vertices
+    : barrierStoneIds(barrier)
+      .map((stoneId) => tileCenterGeo(state.traverseLog?.stones?.[stoneId]?.tile))
+      .filter(validGeo);
+  return mapCenterPoint(barrier.name || t("barrier.defaultName"), vertices, "barrier");
 }
 
 function mapCenterPoint(title, points, id) {
