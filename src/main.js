@@ -141,7 +141,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2584";
+const WEB_VERSION = "0.2585";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -12827,7 +12827,10 @@ function mapPointForSelection() {
 }
 
 function mapCenterPoint(title, points, id) {
-  const geo = geographicCenter(Array.isArray(points) ? points : []);
+  const centerPoints = Array.isArray(points)
+    ? points.map((point) => validGeo(point) ? { geo: point } : point)
+    : [];
+  const geo = geographicCenter(centerPoints);
   if (!geo) return null;
   return {
     id: `__map_center_${id}__`,
