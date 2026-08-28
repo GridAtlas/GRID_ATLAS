@@ -223,13 +223,24 @@ describe("barrier data helpers", () => {
     expect(maxVerticesForRank(8)).toBe(4);
     expect(maxVerticesForRank(14)).toBe(8);
     expect(perimeterLimitKmForRank(0)).toBe(6);
-    expect(perimeterLimitKmForRank(8)).toBe(36);
+    expect(perimeterLimitKmForRank(8)).toBe(48);
     expect(perimeterLimitKmForRank(14)).toBe(1800);
     expect(ryumyakuScatterForRank(0)).toBeCloseTo(0.15);
     expect(ryumyakuScatterForRank(8)).toBeCloseTo(0.11);
     expect(ryumyakuScatterForRank(14)).toBeCloseTo(0.05);
     expect(stockCapForRank(11)).toBe(80);
     expect(stockCapForRank(14)).toBe(300);
+  });
+
+  it("keeps per-edge perimeter allowance monotonic across class unlocks", () => {
+    const isMonotonic = (values) => values.every((value, index) => index === 0 || value >= values[index - 1]);
+    const triangleEdgeAllowances = BARRIER_CONFIG.perimeterLimitKm.map((perimeter) => perimeter / 3);
+    const maximumVertexEdgeAllowances = BARRIER_CONFIG.perimeterLimitKm.map((perimeter, index) => (
+      perimeter / BARRIER_CONFIG.maxVerticesByRank[index]
+    ));
+
+    expect(isMonotonic(triangleEdgeAllowances)).toBe(true);
+    expect(isMonotonic(maximumVertexEdgeAllowances)).toBe(true);
   });
 
   it("grants one stone at 12:00, 20:00, and 04:00 in local time", () => {

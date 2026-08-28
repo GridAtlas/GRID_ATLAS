@@ -3,8 +3,8 @@ const STOCK_GRANT_HOURS = Object.freeze([4, 12, 20]);
 export const BARRIER_CONFIG = Object.freeze({
   dataZoom: 18,
   maxVertices: 8,
-  maxVerticesByRank: Object.freeze([3, 3, 3, 3, 3, 3, 4, 4, 4, 5, 6, 6, 6, 8, 8]),
-  perimeterLimitKm: Object.freeze([6, 8, 10, 12, 16, 20, 24, 30, 36, 48, 96, 240, 720, 1200, 1800]),
+  maxVerticesByRank: Object.freeze([3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 6, 6, 6, 8, 8]),
+  perimeterLimitKm: Object.freeze([6, 9, 12, 16, 20, 24, 32, 40, 48, 60, 120, 240, 720, 1200, 1800]),
   kekkaishiLifetimeThresholds: Object.freeze([0, 100, 400, 800, 1600, 3600, 8000, 14000, 23000, 40000, 160000, 800000, 4000000, 20000000, 100000000]),
   kekkaishiRankNames: Object.freeze(["F3", "F2", "F1", "E3", "E2", "E1", "D3", "D2", "D1", "C", "B", "A", "S", "SS", "SSS"]),
   crossLinkFromRank: 11,
