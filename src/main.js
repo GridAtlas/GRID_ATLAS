@@ -142,7 +142,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2610";
+const WEB_VERSION = "0.2621";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -5360,7 +5360,9 @@ function figureSegments(figure) {
 function drawFigures() {
   const colors = canvasPalette();
   for (const figure of state.figures.filter(isVisibleAnalysisItem)) {
-    if (figure.layer === "barrier" || figure.barrierId) continue;
+    // 結界モードでは専用の発光表現で描く。本体モードでは、結界図形も
+    // 所属する「結界アトラス」リストの表示状態に従う通常の図形として描く。
+    if (state.traverseMode && (figure.layer === "barrier" || figure.barrierId)) continue;
     const vertices = figureRuntimeVertices(figure);
     if (vertices.length < 2) continue;
 
@@ -7080,6 +7082,50 @@ function selectedBarrierStoneTile() {
   return stoneId ? state.traverseLog?.stones?.[stoneId]?.tile || null : null;
 }
 
+function testerPlacementHasMultipleSelection() {
+  const selectionCount = state.selection.length
+    + state.barrierSelection.length
+    + (state.selectedBarrierId ? 1 : 0);
+  return selectionCount > 1;
+}
+
+function testerPlacementTarget() {
+  if (!kekkaiTesterModeActive()) return null;
+  if (testerPlacementHasMultipleSelection()) return null;
+
+  const point = lastSelectedPoint();
+  const pinnedGeo = point && !point.isVirtual ? pointGeo(point) : null;
+  if (validGeo(pinnedGeo)) {
+    const geo = normalizeGeo(pinnedGeo);
+    return {
+      kind: "pin",
+      geo,
+      tileId: tileIdFromGeo(geo),
+      label: `地点「${point.title || "無題"}」`
+    };
+  }
+
+  if (state.barrierSelection.length === 1) {
+    const tileId = selectedBarrierStoneTile();
+    const geo = tileId ? tileCenterGeo(tileId) : null;
+    if (validGeo(geo)) {
+      return { kind: "cell", geo: normalizeGeo(geo), tileId, label: "セル" };
+    }
+  }
+
+  if (validGeo(state.pendingGeo)) {
+    const geo = normalizeGeo(state.pendingGeo);
+    return {
+      kind: "temporary",
+      geo,
+      tileId: tileIdFromGeo(geo),
+      label: "仮ポイント"
+    };
+  }
+
+  return null;
+}
+
 function barrierPinTargets() {
   const targets = [];
   if (validGeo(state.pendingGeo)) {
@@ -7188,14 +7234,13 @@ function handleBarrierQuickAction(action) {
   if (!state.traverseMode) return false;
   if (action === "pin") return openBarrierPinDialog();
   if (action === "place") {
-    if (kekkaiTesterModeActive()) {
-      const temporaryGeo = validGeo(state.pendingGeo) ? state.pendingGeo : null;
-      if (temporaryGeo) {
-        return openTraverseQuantityDialog("place", {
-          targetTileId: tileIdFromGeo(temporaryGeo),
-          temporaryGeo
-        });
-      }
+    if (kekkaiTesterModeActive() && testerPlacementHasMultipleSelection()) return false;
+    const testerTarget = testerPlacementTarget();
+    if (testerTarget) {
+      return openTraverseQuantityDialog("place", {
+        targetTileId: testerTarget.tileId,
+        temporaryGeo: testerTarget.geo
+      });
     }
     return openTraverseQuantityDialog("place");
   }
@@ -7450,8 +7495,11 @@ function renderTraverseQuickActions() {
     || hasPendingPoint;
   const preview = state.barrierLinkPreview;
   const testerPlacement = kekkaiTesterModeActive();
-  const testerTargetTileId = hasPendingPoint ? tileIdFromGeo(state.pendingGeo) : null;
-  const canPlace = !state.traverseBusy && traverseQuantityLimit("place", testerPlacement && testerTargetTileId);
+  const testerMultipleSelection = testerPlacement && testerPlacementHasMultipleSelection();
+  const testerTarget = testerPlacementTarget();
+  const canPlace = !state.traverseBusy
+    && !testerMultipleSelection
+    && traverseQuantityLimit("place", testerTarget?.tileId || null);
   const blankButtons = [elements.actionCopyToListButton, elements.actionMoveToListButton];
   const activeButtons = [
     elements.actionRegisterButton,
@@ -7499,8 +7547,10 @@ function renderTraverseQuickActions() {
   elements.actionRouteButton.disabled = false;
   elements.actionRegisterButton.title = state.barrierPinMode ? "ピンを打つ場所をタップ" : "ピンを打つ";
   elements.actionCenterButton.title = "龍脈眼で測る";
-  elements.actionLinkButton.title = testerPlacement
-    ? hasPendingPoint ? "仮ポイントに結界石を置く" : "結界石を置く"
+  elements.actionLinkButton.title = testerMultipleSelection
+    ? "配置先は1つだけ選択してください"
+    : testerTarget
+    ? `${testerTarget.label}に結界石を置く`
     : "結界石を置く";
   elements.clearSelectionButton.title = preview ? t("traverse.connect") : "2つ以上の石を選択すると結べます";
   elements.actionInvertButton.title = hasPendingPoint ? "仮ポイントを解除" : "選択を解除";
@@ -7882,9 +7932,14 @@ function renderGridBarrierStoneQuickDialog() {
   elements.gridBarrierStoneQuickMapLabel.textContent = t("action.map");
 
   const unlimitedStock = kekkaiTesterModeActive();
-  elements.gridBarrierStoneQuickPlaceButton.disabled = (!unlimitedStock && stockAmount < 1) || count >= stoneCap;
+  const testerMultipleSelection = unlimitedStock && testerPlacementHasMultipleSelection();
+  elements.gridBarrierStoneQuickPlaceButton.disabled = testerMultipleSelection
+    || (!unlimitedStock && stockAmount < 1)
+    || count >= stoneCap;
   elements.gridBarrierStoneQuickPlaceButton.setAttribute("aria-label", t("traverse.place"));
-  elements.gridBarrierStoneQuickPlaceButton.title = t("traverse.place");
+  elements.gridBarrierStoneQuickPlaceButton.title = testerMultipleSelection
+    ? "配置先は1つだけ選択してください"
+    : t("traverse.place");
   elements.gridBarrierStoneQuickPickButton.disabled = count < 1 || (!unlimitedStock && stockAmount >= stockCapForRank(currentKekkaishiRankInfo().rank.index));
   elements.gridBarrierStoneQuickPickButton.setAttribute("aria-label", t("traverse.pick"));
   elements.gridBarrierStoneQuickPickButton.title = t("traverse.pick");
@@ -8418,8 +8473,12 @@ function startBarrierStoneQuickAction(action) {
   const target = barrierStoneFromQuickDialog();
   const targetTileId = target?.stone?.tile;
   if (!targetTileId) return;
+  if (action === "place" && kekkaiTesterModeActive() && testerPlacementHasMultipleSelection()) return;
   if (elements.gridBarrierStoneQuickDialog?.open) elements.gridBarrierStoneQuickDialog.close(action);
-  openTraverseQuantityDialog(action, { targetTileId });
+  const temporaryGeo = action === "place" && kekkaiTesterModeActive()
+    ? tileCenterGeo(targetTileId)
+    : null;
+  openTraverseQuantityDialog(action, { targetTileId, temporaryGeo });
 }
 
 async function renameBarrierStoneFromQuickDialog() {
@@ -14443,6 +14502,7 @@ function handleCanvasClick(screenPoint) {
     : findNearestLoadedObservation(screenPoint);
 
   if (nearest) {
+    if (kekkaiTesterModeActive()) state.barrierSelection = [];
     toggleSelection("point", nearest.id);
     return;
   }
@@ -14471,6 +14531,10 @@ function handleCanvasClick(screenPoint) {
   if (state.traverseMode) {
     if (nearestBarrierStone) {
       state.selectedBarrierId = null;
+      if (kekkaiTesterModeActive()) {
+        state.selection = [];
+        state.pendingGeo = null;
+      }
       toggleBarrierStoneSelection(nearestBarrierStone.stoneId);
       return;
     }
@@ -14486,6 +14550,7 @@ function handleCanvasClick(screenPoint) {
   }
 
   pauseLocationFollowForManualView();
+  if (kekkaiTesterModeActive()) state.selection = [];
   state.mode = "inspect";
   fillFormFromWorld(screenToWorld(screenPoint));
   render();
