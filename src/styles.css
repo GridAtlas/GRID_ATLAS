@@ -789,6 +789,17 @@ button {
   width: auto;
 }
 
+.settings-kekkai-tester > span {
+  display: grid;
+  gap: 2px;
+}
+
+.settings-kekkai-tester small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -2254,7 +2265,7 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
   gap: 5px;
 }
 
-.kekkaishi-status-detail-grid div {
+.kekkaishi-status-detail-grid > div {
   display: grid;
   gap: 2px;
   min-width: 0;
@@ -2264,7 +2275,7 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
   background: var(--surface);
 }
 
-.kekkaishi-status-detail-grid span {
+.kekkaishi-status-detail-grid > div > span {
   overflow: hidden;
   color: var(--muted);
   font-size: 10px;
@@ -2272,12 +2283,48 @@ html.is-traverse-mode .traverse-action-button:not([hidden]) {
   white-space: nowrap;
 }
 
-.kekkaishi-status-detail-grid strong {
+.kekkaishi-status-detail-grid > div > strong {
   overflow: hidden;
   color: var(--text);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kekkaishi-status-detail-grid > .kekkaishi-status-stones-detail {
+  grid-column: 1 / -1;
+}
+
+.kekkaishi-status-stones-detail dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  margin: 0;
+}
+
+.kekkaishi-status-stones-detail dl div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.kekkaishi-status-stones-detail dt {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kekkaishi-status-stones-detail dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
   white-space: nowrap;
 }
 

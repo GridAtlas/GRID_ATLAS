@@ -29,8 +29,8 @@
     <link rel="icon" href="assets/icon-grid.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-grid.png">
     <script>try{const kekkai=new URLSearchParams(window.location.search).get("mode")==="kekkai";const theme=kekkai?"kekkai":localStorage.getItem("grid-atlas-theme");document.documentElement.dataset.theme=kekkai?"kekkai":theme==="basic"||theme==="atlas-paper"||theme==="paper"?"basic":theme==="pastel"||theme==="light"?"pastel":"retro";if(kekkai)document.querySelector('meta[name="theme-color"]').setAttribute("content","#5b2a86");document.documentElement.lang=localStorage.getItem("grid-atlas-language")==="en"?"en":"ja"}catch{const kekkai=new URLSearchParams(window.location.search).get("mode")==="kekkai";document.documentElement.dataset.theme=kekkai?"kekkai":"retro";if(kekkai)document.querySelector('meta[name="theme-color"]').setAttribute("content","#5b2a86")}</script>
-    <link rel="stylesheet" href="src/styles.css?v=161">
-    <script src="src/main.js?v=556" type="module" defer></script>
+    <link rel="stylesheet" href="src/styles.css?v=164">
+    <script src="src/main.js?v=559" type="module" defer></script>
   </head>
   <body>
     <svg class="icon-sprite" aria-hidden="true" focusable="false">
@@ -117,6 +117,13 @@
               <label class="settings-check">
                 <input id="settingsGpsEnabled" type="checkbox">
                 <span data-i18n="settings.gps">GPS機能を使用</span>
+              </label>
+              <label id="kekkaiTesterField" class="settings-check settings-kekkai-tester" hidden>
+                <input id="kekkaiTesterEnabled" type="checkbox">
+                <span>
+                  <span data-i18n="kekkaiTester.toggle">結界テスターをONにする</span>
+                  <small data-i18n="kekkaiTester.hint">仮ポイントへ置く / 結界石の保有 ♾️</small>
+                </span>
               </label>
               <div class="settings-nav settings-nav-subtle">
                 <button id="openGridAtlasButton" class="settings-nav-button" type="button" data-i18n="settings.openGridAtlas">.gridatlasを開く</button>

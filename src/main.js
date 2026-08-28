@@ -97,6 +97,7 @@ const PUBLIC_PRESET_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const GPS_ENABLED_KEY = "grid-atlas-gps-enabled";
 const BARRIER_LOG_KEY = "grid-atlas-barrier-log-v1";
 const LEGACY_TRAVERSE_LOG_KEY = "grid-atlas-traverse-log-v1";
+const KEKKAI_TESTER_ENABLED_KEY = "grid-atlas-kekkai-tester-enabled";
 const KEKKAI_POINT_LIST_NAME = "結界アトラス";
 const LEGACY_DRAGON_EYE_LIST_NAME = "結界モード龍脈眼";
 const DRAGON_EYE_SHAPES = Object.freeze({
@@ -141,7 +142,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2598";
+const WEB_VERSION = "0.2610";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -339,6 +340,8 @@ const elements = {
   settingsUnitSelect: document.querySelector("#settingsUnitSelect"),
   settingsGpsEnabled: document.querySelector("#settingsGpsEnabled"),
   settingsMapProviderSelect: document.querySelector("#settingsMapProviderSelect"),
+  kekkaiTesterField: document.querySelector("#kekkaiTesterField"),
+  kekkaiTesterEnabled: document.querySelector("#kekkaiTesterEnabled"),
   systemUpdateButton: document.querySelector("#systemUpdateButton"),
   systemUpdateStatus: document.querySelector("#systemUpdateStatus"),
   systemUpdateVersion: document.querySelector("#systemUpdateVersion"),
@@ -664,6 +667,7 @@ const state = {
   observationTrail: [],
   loadedObservations: [],
   traverseMode: false,
+  kekkaiTesterEnabled: false,
   traverseLog: null,
   barrierSelection: [],
   selectedBarrierId: null,
@@ -690,6 +694,7 @@ const state = {
   barrierStoneGlyphMode: new Set(),
   traverseQuantityAction: null,
   traverseQuantityTargetTileId: null,
+  traverseQuantityTemporaryGeo: null,
   traverseQuantity: 1,
   traverseQuantityMax: 1,
   traversePlaceViewSnapshot: null,
@@ -1389,6 +1394,10 @@ const TRANSLATIONS = {
     "traverse.stockEmpty": "置ける結界石がありません",
     "traverse.noStone": "このタイルに結界石がありません",
     "traverse.stockLabel": "結界石 {amount} / {cap}",
+    "kekkaiTester.toggle": "結界テスターをONにする",
+    "kekkaiTester.hint": "仮ポイントへ置く / 結界石の保有 ♾️",
+    "kekkaiTester.enabled": "結界テスターをONにしました",
+    "kekkaiTester.disabled": "結界テスターをOFFにしました",
     "traverse.stoneTile": "結界石タイル",
     "traverse.stoneCount": "石 {count}個",
     "traverse.vertex": "頂点",
@@ -1520,6 +1529,9 @@ const TRANSLATIONS = {
     ,"kekkaishi.perimeterLimit": "辺長合計上限"
     ,"kekkaishi.maxVertices": "最大頂点"
     ,"kekkaishi.stoneCap": "石上限"
+    ,"kekkaishi.stones": "結界石"
+    ,"kekkaishi.stockCap": "保有上限"
+    ,"kekkaishi.vertexCap": "頂点上限"
     ,"kekkaishi.scatter": "龍脈眼精度"
     ,"kekkaishi.scatterValue": "誤差{scatter}%"
     ,"kekkaishi.edgeGuide": "正多角形の1辺目安"
@@ -1528,8 +1540,8 @@ const TRANSLATIONS = {
     ,"kekkaishi.dailyUnit": "Pt/日"
     ,"kekkaishi.progressDays": "現在のペースであと{days}日"
     ,"kekkaishi.noDailyPower": "結界を張ると進みます"
-    ,"kekkaishi.unlocks": "使用できる結界術: {shapes} / 辺長合計上限{perimeter} / 正多角形の1辺目安{edges} / 最大{vertices}頂点 / 石上限{stones} / 龍脈眼精度 誤差{scatter}%"
-    ,"kekkaishi.nextUnlocks": "次のクラスで追加される結界術: {shapes} / 辺長合計上限{perimeter} / 正多角形の1辺目安{edges} / 最大{vertices}頂点 / 石上限{stones} / 龍脈眼精度 誤差{scatter}%"
+    ,"kekkaishi.unlocks": "使用できる結界術: {shapes} / 辺長合計上限{perimeter} / 正多角形の1辺目安{edges} / 最大{vertices}頂点 / 結界石（保有上限{stock} / 頂点上限{vertex}） / 龍脈眼精度 誤差{scatter}%"
+    ,"kekkaishi.nextUnlocks": "次のクラスで追加される結界術: {shapes} / 辺長合計上限{perimeter} / 正多角形の1辺目安{edges} / 最大{vertices}頂点 / 結界石（保有上限{stock} / 頂点上限{vertex}） / 龍脈眼精度 誤差{scatter}%"
     ,"kekkaishi.rankMax": "最高ランク"
     ,"kekkaishi.share": "ステータスを共有"
     ,"kekkaishi.shared": "ステータス画像を共有しました"
@@ -1973,6 +1985,10 @@ const TRANSLATIONS = {
     "traverse.stockEmpty": "No barrier stones available to place",
     "traverse.noStone": "There is no barrier stone on this tile",
     "traverse.stockLabel": "Barrier stones {amount} / {cap}",
+    "kekkaiTester.toggle": "Enable barrier tester",
+    "kekkaiTester.hint": "Place at temporary points / barrier stones ♾️",
+    "kekkaiTester.enabled": "Barrier tester enabled",
+    "kekkaiTester.disabled": "Barrier tester disabled",
     "traverse.stoneTile": "Barrier stone tile",
     "traverse.stoneCount": "{count} stone(s)",
     "traverse.vertex": "Vertex",
@@ -2104,6 +2120,9 @@ const TRANSLATIONS = {
     ,"kekkaishi.perimeterLimit": "Edge-sum limit"
     ,"kekkaishi.maxVertices": "Max vertices"
     ,"kekkaishi.stoneCap": "Stone cap"
+    ,"kekkaishi.stones": "Barrier stones"
+    ,"kekkaishi.stockCap": "Holding cap"
+    ,"kekkaishi.vertexCap": "Vertex cap"
     ,"kekkaishi.scatter": "Dragon Eye accuracy"
     ,"kekkaishi.scatterValue": "{scatter}% error"
     ,"kekkaishi.edgeGuide": "Regular-polygon side guide"
@@ -2112,8 +2131,8 @@ const TRANSLATIONS = {
     ,"kekkaishi.dailyUnit": "Pt/day"
     ,"kekkaishi.progressDays": "At this pace: {days} more days"
     ,"kekkaishi.noDailyPower": "Create a barrier to make progress"
-    ,"kekkaishi.unlocks": "Usable barrier techniques: {shapes} / edge-sum limit {perimeter} / regular-polygon side guide {edges} / max {vertices} vertices / stone cap {stones} / Dragon Eye accuracy {scatter}% error"
-    ,"kekkaishi.nextUnlocks": "Barrier techniques added by the next class: {shapes} / edge-sum limit {perimeter} / regular-polygon side guide {edges} / max {vertices} vertices / stone cap {stones} / Dragon Eye accuracy {scatter}% error"
+    ,"kekkaishi.unlocks": "Usable barrier techniques: {shapes} / edge-sum limit {perimeter} / regular-polygon side guide {edges} / max {vertices} vertices / barrier stones (holding cap {stock} / vertex cap {vertex}) / Dragon Eye accuracy {scatter}% error"
+    ,"kekkaishi.nextUnlocks": "Barrier techniques added by the next class: {shapes} / edge-sum limit {perimeter} / regular-polygon side guide {edges} / max {vertices} vertices / barrier stones (holding cap {stock} / vertex cap {vertex}) / Dragon Eye accuracy {scatter}% error"
     ,"kekkaishi.rankMax": "Maximum rank"
     ,"kekkaishi.share": "Share status"
     ,"kekkaishi.shared": "Status image shared"
@@ -2254,6 +2273,31 @@ function syncSettingsControls() {
   elements.settingsGpsEnabled.checked = state.gpsEnabled;
   elements.settingsMapProviderSelect.value = state.mapProvider;
   elements.routeReturnToStart.checked = state.routeReturnToStart;
+  const testerAvailable = state.traverseMode && state.cloud.testerActive;
+  if (elements.kekkaiTesterField) elements.kekkaiTesterField.hidden = !testerAvailable;
+  if (elements.kekkaiTesterEnabled) {
+    elements.kekkaiTesterEnabled.checked = testerAvailable && state.kekkaiTesterEnabled;
+    elements.kekkaiTesterEnabled.disabled = !testerAvailable;
+  }
+}
+
+function kekkaiTesterModeActive() {
+  return state.traverseMode && state.cloud.testerActive && state.kekkaiTesterEnabled;
+}
+
+function setKekkaiTesterEnabled(enabled, options = {}) {
+  const next = Boolean(enabled) && state.traverseMode && state.cloud.testerActive;
+  const changed = state.kekkaiTesterEnabled !== next;
+  state.kekkaiTesterEnabled = next;
+  if (!next && state.barrierPlacementView) exitBarrierPlacementView();
+  if (options.persist !== false) {
+    try {
+      localStorage.setItem(KEKKAI_TESTER_ENABLED_KEY, String(next));
+    } catch {}
+  }
+  syncSettingsControls();
+  if (options.render !== false) render();
+  if (changed && options.announce !== false) showAppToast(t(next ? "kekkaiTester.enabled" : "kekkaiTester.disabled"));
 }
 
 function loadTraverseLog() {
@@ -2369,10 +2413,13 @@ function availableBarrierStoneIds() {
 function actionQuantityLimit(action, options = {}) {
   const amount = Math.max(0, Math.floor(Number(options.amount) || 0));
   const count = stoneDisplayCount(options.stone);
+  const unlimitedStock = options.unlimitedStock === true;
   if (action === "place") {
     const cap = options.stoneCap ?? BARRIER_CONFIG.stoneCapLoose;
-    return Math.max(0, Math.min(amount, cap - count));
+    const room = Math.max(0, cap - count);
+    return unlimitedStock ? room : Math.min(amount, room);
   }
+  if (unlimitedStock) return count;
   const stockRoom = Math.max(0, stockCapForRank(currentKekkaishiRankInfo().rank.index) - amount);
   return options.stone && count > 0 ? Math.max(0, Math.min(count, stockRoom)) : 0;
 }
@@ -2384,12 +2431,14 @@ function currentTraverseActionContext(targetTileId = null) {
   const stoneId = currentTile ? stoneIdFromTile(currentTile) : null;
   const stone = stoneId ? state.traverseLog?.stones?.[stoneId] : null;
   const stoneCap = stoneId ? stoneCapFor(state.traverseLog, stoneId, currentKekkaishiRankInfo().rank.index) : null;
+  const unlimitedStock = kekkaiTesterModeActive();
   return {
     amount: Math.max(0, Math.floor(Number(state.traverseLog?.stock?.amount) || 0)),
     currentTile,
     stoneId,
     stone,
-    stoneCap
+    stoneCap,
+    unlimitedStock
   };
 }
 
@@ -2398,7 +2447,8 @@ function traverseQuantityLimit(action, targetTileId = null) {
   return actionQuantityLimit(action, {
     amount: context.amount,
     stone: context.stone,
-    stoneCap: context.stoneCap
+    stoneCap: context.stoneCap,
+    unlimitedStock: context.unlimitedStock
   });
 }
 
@@ -2463,6 +2513,7 @@ function closeTraverseQuantityDialog(options = {}) {
   elements.actionBar?.classList.remove("is-quantity-dialog-open");
   state.traverseQuantityAction = null;
   state.traverseQuantityTargetTileId = null;
+  state.traverseQuantityTemporaryGeo = null;
   state.traverseQuantity = 1;
   state.traverseQuantityMax = 1;
   if (wasOpen) dialog.close("cancel");
@@ -2474,22 +2525,24 @@ function openTraverseQuantityDialog(action, options = {}) {
   const targetTileId = typeof options.targetTileId === "string" && options.targetTileId
     ? options.targetTileId
     : null;
+  const temporaryGeo = validGeo(options.temporaryGeo) ? normalizeGeo(options.temporaryGeo) : null;
   const context = currentTraverseActionContext(targetTileId);
   const max = traverseQuantityLimit(action, targetTileId);
   if (max < 1) {
     const message = action === "place"
-      ? context.amount < 1 ? t("traverse.stockEmpty") : t("traverse.capReached")
+      ? !context.unlimitedStock && context.amount < 1 ? t("traverse.stockEmpty") : t("traverse.capReached")
       : context.stone ? t("traverse.stockFull") : t("traverse.noStone");
     showAppToast(message, { error: true });
     render();
     return false;
   }
-  if (action === "place") {
+  if (action === "place" && !temporaryGeo) {
     captureTraversePlaceView();
     centerAndFollowCurrentLocation();
   }
   state.traverseQuantityAction = action;
   state.traverseQuantityTargetTileId = targetTileId;
+  state.traverseQuantityTemporaryGeo = temporaryGeo;
   state.traverseQuantityMax = max;
   state.traverseQuantity = 1;
   const placementOverlay = action === "place";
@@ -2554,10 +2607,11 @@ function adjustTraverseQuantity(delta) {
 function confirmTraverseQuantity() {
   const action = state.traverseQuantityAction;
   const targetTileId = state.traverseQuantityTargetTileId;
+  const temporaryGeo = state.traverseQuantityTemporaryGeo;
   const quantity = state.traverseQuantity;
   if (!action || quantity < 1) return;
   closeTraverseQuantityDialog();
-  void performTraverseStoneAction(action, quantity, targetTileId);
+  void performTraverseStoneAction(action, quantity, targetTileId, { temporaryGeo });
 }
 
 function resetBarrierLinkState() {
@@ -3046,6 +3100,7 @@ function loadPreferences() {
     unit = localStorage.getItem(DISTANCE_UNIT_KEY) === IMPERIAL_UNIT ? IMPERIAL_UNIT : METRIC_UNIT;
     returnToStart = localStorage.getItem(ROUTE_RETURN_KEY) === "true";
     gpsEnabled = localStorage.getItem(GPS_ENABLED_KEY) === "true";
+    state.kekkaiTesterEnabled = localStorage.getItem(KEKKAI_TESTER_ENABLED_KEY) === "true";
     const savedMapProvider = localStorage.getItem(MAP_PROVIDER_KEY);
     if (savedMapProvider === MAP_PROVIDER_APPLE || savedMapProvider === MAP_PROVIDER_GOOGLE) {
       mapProvider = savedMapProvider;
@@ -6797,23 +6852,141 @@ function returnToKekkaiTitle() {
   window.location.assign(KEKKAI_TITLE_URL);
 }
 
-function performTraverseStoneAction(action, requestedQuantity = 1, targetTileId = null) {
+function performTraverseStoneAction(action, requestedQuantity = 1, targetTileId = null, options = {}) {
   if (!state.traverseMode || state.traverseBusy || !state.traverseLog) return;
-  if (!navigator.geolocation?.getCurrentPosition) {
-    showAppToast(t("traverse.gpsUnavailable"), { error: true });
-    returnToTraverseActionMenu();
-    return;
-  }
+  const unlimitedStock = kekkaiTesterModeActive();
+  const testerPlacement = action === "place"
+    && unlimitedStock
+    && validGeo(options.temporaryGeo);
   refreshTraverseStock();
   const quantity = Math.max(1, Math.floor(Number(requestedQuantity) || 1));
-  if (action === "place" && (state.traverseLog.stock?.amount ?? 0) <= 0) {
+  if (action === "place" && !unlimitedStock && (state.traverseLog.stock?.amount ?? 0) <= 0) {
     showAppToast(t("traverse.stockEmpty"), { error: true });
     returnToTraverseActionMenu();
     return;
   }
 
+  const applyAtGeo = (geo) => {
+    const tileId = tileIdFromGeo(geo);
+    if (!tileId) {
+      state.traverseBusy = false;
+      showAppToast(t("traverse.gpsUnavailable"), { error: true });
+      returnToTraverseActionMenu();
+      return;
+    }
+    if (targetTileId && tileId !== targetTileId) {
+      state.traverseBusy = false;
+      showAppToast(t("traverse.tileMismatch"), { error: true });
+      returnToTraverseActionMenu();
+      return;
+    }
+
+    const stoneId = stoneIdFromTile(tileId);
+    let stone = stoneId ? state.traverseLog.stones[stoneId] : null;
+    if (action === "place") {
+      const stoneCap = stoneCapFor(state.traverseLog, stoneId, currentKekkaishiRankInfo().rank.index);
+      const limit = actionQuantityLimit("place", {
+        amount: state.traverseLog.stock.amount,
+        stone,
+        stoneCap,
+        unlimitedStock
+      });
+      if (limit <= 0) {
+        state.traverseBusy = false;
+        showAppToast(t("traverse.capReached"), { error: true });
+        returnToTraverseActionMenu();
+        return;
+      }
+      const count = Math.min(quantity, limit);
+      for (let index = 0; index < count; index += 1) {
+        const now = new Date().toISOString();
+        const nextStone = stone ?? {
+          tile: tileId,
+          lat: null,
+          lng: null,
+          countExact: 0,
+          count: 0,
+          firstAt: now,
+          lastAt: now
+        };
+        nextStone.countExact = stoneExactCount(nextStone) + 1;
+        nextStone.count = stoneDisplayCount(nextStone);
+        nextStone.firstAt ||= now;
+        nextStone.lastAt = now;
+        state.traverseLog.stones[stoneId] = nextStone;
+        stone = nextStone;
+        if (!unlimitedStock) state.traverseLog.stock.amount = Math.max(0, state.traverseLog.stock.amount - 1);
+        appendBarrierEvent(state.traverseLog, {
+          type: "stone-placed",
+          at: now,
+          tile: tileId,
+          stoneId,
+          barrierId: barrierIdForStone(state.traverseLog, stoneId),
+          amount: 1,
+          countExact: nextStone.countExact
+        });
+      }
+    } else {
+      const limit = actionQuantityLimit("pick", {
+        amount: state.traverseLog.stock.amount,
+        stone,
+        stoneCap: stoneCapFor(state.traverseLog, stoneId, currentKekkaishiRankInfo().rank.index),
+        unlimitedStock
+      });
+      if (limit <= 0) {
+        state.traverseBusy = false;
+        showAppToast(stone ? t("traverse.stockFull") : t("traverse.noStone"), { error: true });
+        returnToTraverseActionMenu();
+        return;
+      }
+      const count = Math.min(quantity, limit);
+      for (let index = 0; index < count; index += 1) {
+        const now = new Date().toISOString();
+        const isVertex = stoneCapFor(state.traverseLog, stoneId, currentKekkaishiRankInfo().rank.index) > BARRIER_CONFIG.stoneCapLoose;
+        stone.countExact = Math.max(isVertex ? 1 : 0, stoneExactCount(stone) - 1);
+        stone.count = stoneDisplayCount(stone);
+        stone.lastAt = now;
+        if (stone.countExact <= 0) delete state.traverseLog.stones[stoneId];
+        if (!unlimitedStock) {
+          state.traverseLog.stock.amount = Math.min(stockCapForRank(currentKekkaishiRankInfo().rank.index), state.traverseLog.stock.amount + 1);
+        }
+        appendBarrierEvent(state.traverseLog, {
+          type: "stone-picked",
+          at: now,
+          tile: tileId,
+          stoneId,
+          barrierId: barrierIdForStone(state.traverseLog, stoneId),
+          amount: 1,
+          countExact: stone.countExact
+        });
+        if (stone.countExact <= 0) break;
+      }
+    }
+    if (testerPlacement) {
+      state.pendingGeo = geo;
+    } else {
+      state.currentGeo = geo;
+      state.lastLocationUpdateAt = Date.now();
+      state.lastLocationError = null;
+    }
+    persistTraverseLog();
+    state.traverseBusy = false;
+    if (action === "place" && state.traversePlaceViewSnapshot) state.traversePlaceViewSnapshot.placed = true;
+    returnToTraverseActionMenu();
+  };
+
   state.traverseBusy = true;
   render();
+  if (testerPlacement) {
+    applyAtGeo(normalizeGeo(options.temporaryGeo));
+    return;
+  }
+  if (!navigator.geolocation?.getCurrentPosition) {
+    state.traverseBusy = false;
+    showAppToast(t("traverse.gpsUnavailable"), { error: true });
+    returnToTraverseActionMenu();
+    return;
+  }
   navigator.geolocation.getCurrentPosition(
     (position) => {
       const accuracy = Number(position.coords?.accuracy);
@@ -6823,113 +6996,11 @@ function performTraverseStoneAction(action, requestedQuantity = 1, targetTileId 
         returnToTraverseActionMenu();
         return;
       }
-
-      const geo = normalizeGeo({
+      applyAtGeo(normalizeGeo({
         lat: position.coords.latitude,
         lng: position.coords.longitude,
         accuracy
-      });
-      const tileId = tileIdFromGeo(geo);
-      if (!tileId) {
-        state.traverseBusy = false;
-        showAppToast(t("traverse.gpsUnavailable"), { error: true });
-        returnToTraverseActionMenu();
-        return;
-      }
-
-      if (targetTileId && tileId !== targetTileId) {
-        state.traverseBusy = false;
-        showAppToast(t("traverse.tileMismatch"), { error: true });
-        returnToTraverseActionMenu();
-        return;
-      }
-
-      const stoneId = stoneIdFromTile(tileId);
-      let stone = stoneId ? state.traverseLog.stones[stoneId] : null;
-      if (action === "place") {
-        const stoneCap = stoneCapFor(state.traverseLog, stoneId, currentKekkaishiRankInfo().rank.index);
-        const limit = actionQuantityLimit("place", {
-          amount: state.traverseLog.stock.amount,
-          stone,
-          stoneCap
-        });
-        if (limit <= 0) {
-          state.traverseBusy = false;
-          showAppToast(t("traverse.capReached"), { error: true });
-          returnToTraverseActionMenu();
-          return;
-        }
-        const count = Math.min(quantity, limit);
-        for (let index = 0; index < count; index += 1) {
-          const now = new Date().toISOString();
-          const nextStone = stone ?? {
-            tile: tileId,
-            lat: null,
-            lng: null,
-            countExact: 0,
-            count: 0,
-            firstAt: now,
-            lastAt: now
-          };
-          nextStone.countExact = stoneExactCount(nextStone) + 1;
-          nextStone.count = stoneDisplayCount(nextStone);
-          nextStone.firstAt ||= now;
-          nextStone.lastAt = now;
-          state.traverseLog.stones[stoneId] = nextStone;
-          stone = nextStone;
-          state.traverseLog.stock.amount = Math.max(0, state.traverseLog.stock.amount - 1);
-          appendBarrierEvent(state.traverseLog, {
-            type: "stone-placed",
-            at: now,
-            tile: tileId,
-            stoneId,
-            barrierId: barrierIdForStone(state.traverseLog, stoneId),
-            amount: 1,
-            countExact: nextStone.countExact
-          });
-        }
-      } else {
-          const limit = actionQuantityLimit("pick", {
-          amount: state.traverseLog.stock.amount,
-          stone,
-          stoneCap: stoneCapFor(state.traverseLog, stoneId, currentKekkaishiRankInfo().rank.index)
-        });
-        if (limit <= 0) {
-          state.traverseBusy = false;
-          showAppToast(stone ? t("traverse.stockFull") : t("traverse.noStone"), { error: true });
-          returnToTraverseActionMenu();
-          return;
-        }
-        const count = Math.min(quantity, limit);
-        for (let index = 0; index < count; index += 1) {
-          const now = new Date().toISOString();
-          const isVertex = stoneCapFor(state.traverseLog, stoneId, currentKekkaishiRankInfo().rank.index) > BARRIER_CONFIG.stoneCapLoose;
-          stone.countExact = Math.max(isVertex ? 1 : 0, stoneExactCount(stone) - 1);
-          stone.count = stoneDisplayCount(stone);
-          stone.lastAt = now;
-          if (stone.countExact <= 0) {
-            delete state.traverseLog.stones[stoneId];
-          }
-          state.traverseLog.stock.amount = Math.min(stockCapForRank(currentKekkaishiRankInfo().rank.index), state.traverseLog.stock.amount + 1);
-          appendBarrierEvent(state.traverseLog, {
-            type: "stone-picked",
-            at: now,
-            tile: tileId,
-            stoneId,
-            barrierId: barrierIdForStone(state.traverseLog, stoneId),
-            amount: 1,
-            countExact: stone.countExact
-          });
-          if (stone.countExact <= 0) break;
-        }
-      }
-      state.currentGeo = geo;
-      state.lastLocationUpdateAt = Date.now();
-      state.lastLocationError = null;
-      persistTraverseLog();
-      state.traverseBusy = false;
-      if (action === "place" && state.traversePlaceViewSnapshot) state.traversePlaceViewSnapshot.placed = true;
-      returnToTraverseActionMenu();
+      }));
     },
     () => {
       state.traverseBusy = false;
@@ -7116,7 +7187,18 @@ function submitBarrierPin() {
 function handleBarrierQuickAction(action) {
   if (!state.traverseMode) return false;
   if (action === "pin") return openBarrierPinDialog();
-  if (action === "place") return openTraverseQuantityDialog("place");
+  if (action === "place") {
+    if (kekkaiTesterModeActive()) {
+      const temporaryGeo = validGeo(state.pendingGeo) ? state.pendingGeo : null;
+      if (temporaryGeo) {
+        return openTraverseQuantityDialog("place", {
+          targetTileId: tileIdFromGeo(temporaryGeo),
+          temporaryGeo
+        });
+      }
+    }
+    return openTraverseQuantityDialog("place");
+  }
   if (action === "connect") {
     if (!state.barrierLinkPreview) beginBarrierSelectionPreview();
     return true;
@@ -7192,6 +7274,8 @@ function setBarrierPlaceholder(button, placeholder) {
     button.title = "";
     button.setAttribute("aria-label", "空き枠");
     button.disabled = true;
+  } else {
+    button.removeAttribute("aria-label");
   }
 }
 
@@ -7332,12 +7416,17 @@ function renderActionButtons() {
     setActionButtonIcon(button, iconId);
   }
   setActionButtonLabel(elements.actionRegisterButton, t("action.register"));
+  setActionButtonLabel(elements.actionLinkButton, t("action.connect"));
+  setActionButtonLabel(elements.actionCenterButton, t("action.center"));
   setActionButtonLabel(elements.clearSelectionButton, t("action.clear"));
   setActionButtonLabel(elements.actionInvertButton, t("action.invert"));
+  setActionButtonLabel(elements.actionRouteButton, t("action.route"));
   setActionButtonLabel(elements.actionAnalyzeButton, t("action.analyze"));
   setActionButtonLabel(elements.actionShareSelectedButton, t("action.shareSelected"));
+  setActionButtonLabel(elements.deletePointButton, t("action.delete"));
+  setActionButtonLabel(elements.actionCopyToListButton, t("action.copyToList"));
+  setActionButtonLabel(elements.actionMoveToListButton, t("action.moveToList"));
   setActionButtonLabel(elements.actionMapButton, t("action.map"));
-  elements.actionRouteLabel.textContent = t("action.route");
   renderLocationFollowButton();
   if (state.traverseMode) renderTraverseQuickActions();
 }
@@ -7360,7 +7449,9 @@ function renderTraverseQuickActions() {
     || state.barrierPinMode
     || hasPendingPoint;
   const preview = state.barrierLinkPreview;
-  const canPlace = !state.traverseBusy && traverseQuantityLimit("place") > 0;
+  const testerPlacement = kekkaiTesterModeActive();
+  const testerTargetTileId = hasPendingPoint ? tileIdFromGeo(state.pendingGeo) : null;
+  const canPlace = !state.traverseBusy && traverseQuantityLimit("place", testerPlacement && testerTargetTileId);
   const blankButtons = [elements.actionCopyToListButton, elements.actionMoveToListButton];
   const activeButtons = [
     elements.actionRegisterButton,
@@ -7408,7 +7499,9 @@ function renderTraverseQuickActions() {
   elements.actionRouteButton.disabled = false;
   elements.actionRegisterButton.title = state.barrierPinMode ? "ピンを打つ場所をタップ" : "ピンを打つ";
   elements.actionCenterButton.title = "龍脈眼で測る";
-  elements.actionLinkButton.title = "結界石を置く";
+  elements.actionLinkButton.title = testerPlacement
+    ? hasPendingPoint ? "仮ポイントに結界石を置く" : "結界石を置く"
+    : "結界石を置く";
   elements.clearSelectionButton.title = preview ? t("traverse.connect") : "2つ以上の石を選択すると結べます";
   elements.actionInvertButton.title = hasPendingPoint ? "仮ポイントを解除" : "選択を解除";
   elements.deletePointButton.title = "本体アトラスの選択対象を破棄";
@@ -7788,10 +7881,11 @@ function renderGridBarrierStoneQuickDialog() {
   elements.gridBarrierStoneQuickMemoLabel.textContent = t("action.memo");
   elements.gridBarrierStoneQuickMapLabel.textContent = t("action.map");
 
-  elements.gridBarrierStoneQuickPlaceButton.disabled = stockAmount < 1 || count >= stoneCap;
+  const unlimitedStock = kekkaiTesterModeActive();
+  elements.gridBarrierStoneQuickPlaceButton.disabled = (!unlimitedStock && stockAmount < 1) || count >= stoneCap;
   elements.gridBarrierStoneQuickPlaceButton.setAttribute("aria-label", t("traverse.place"));
   elements.gridBarrierStoneQuickPlaceButton.title = t("traverse.place");
-  elements.gridBarrierStoneQuickPickButton.disabled = count < 1 || stockAmount >= stockCapForRank(currentKekkaishiRankInfo().rank.index);
+  elements.gridBarrierStoneQuickPickButton.disabled = count < 1 || (!unlimitedStock && stockAmount >= stockCapForRank(currentKekkaishiRankInfo().rank.index));
   elements.gridBarrierStoneQuickPickButton.setAttribute("aria-label", t("traverse.pick"));
   elements.gridBarrierStoneQuickPickButton.title = t("traverse.pick");
   elements.gridBarrierStoneQuickEditButton.disabled = false;
@@ -8872,6 +8966,8 @@ function kekkaishiUnlockSummary(rankIndex, key = "kekkaishi.unlocks") {
   const index = Math.max(0, Math.min(BARRIER_CONFIG.perimeterLimitKm.length - 1, Number(rankIndex) || 0));
   const perimeter = perimeterLimitKmForRank(index);
   const maxVertices = maxVerticesForRank(index);
+  const stockCap = stockCapForRank(index);
+  const vertexCap = BARRIER_CONFIG.stoneCapVertexByRank[index] || BARRIER_CONFIG.stoneCapVertex;
   const shapes = barrierShapeSummary(index);
   const edges = Array.from({ length: Math.max(1, maxVertices - 2) }, (_, offset) => {
     const sides = offset + 3;
@@ -8882,7 +8978,8 @@ function kekkaishiUnlockSummary(rankIndex, key = "kekkaishi.unlocks") {
     .replace("{shapes}", shapes)
     .replace("{edges}", edges)
     .replace("{vertices}", String(maxVertices))
-    .replace("{stones}", String(BARRIER_CONFIG.stoneCapVertexByRank[index] || BARRIER_CONFIG.stoneCapVertex))
+    .replace("{stock}", String(stockCap))
+    .replace("{vertex}", String(vertexCap))
     .replace("{scatter}", String(Math.round(ryumyakuScatterForRank(index) * 100)));
 }
 
@@ -8911,18 +9008,44 @@ function renderKekkaishiUnlockDetails(container, rankIndex) {
   const details = [
     [t("kekkaishi.perimeterLimit"), formatBarrierDistance(perimeter)],
     [t("kekkaishi.maxVertices"), `${maxVertices}`],
-    [t("kekkaishi.stoneCap"), `${BARRIER_CONFIG.stoneCapVertexByRank[index] || BARRIER_CONFIG.stoneCapVertex}`],
+    {
+      label: t("kekkaishi.stones"),
+      values: [
+        [t("kekkaishi.stockCap"), `${stockCapForRank(index)}`],
+        [t("kekkaishi.vertexCap"), `${BARRIER_CONFIG.stoneCapVertexByRank[index] || BARRIER_CONFIG.stoneCapVertex}`]
+      ]
+    },
     [t("kekkaishi.scatter"), t("kekkaishi.scatterValue").replace("{scatter}", String(Math.round(ryumyakuScatterForRank(index) * 100)))],
     [t("kekkaishi.edgeGuide"), edges]
   ];
   container.replaceChildren();
-  for (const [label, value] of details) {
+  for (const detail of details) {
     const item = document.createElement("div");
+    if (Array.isArray(detail)) {
+      const [label, value] = detail;
+      const labelNode = document.createElement("span");
+      const valueNode = document.createElement("strong");
+      labelNode.textContent = label;
+      valueNode.textContent = value;
+      item.append(labelNode, valueNode);
+      container.append(item);
+      continue;
+    }
+
+    item.classList.add("kekkaishi-status-stones-detail");
     const labelNode = document.createElement("span");
-    const valueNode = document.createElement("strong");
-    labelNode.textContent = label;
-    valueNode.textContent = value;
-    item.append(labelNode, valueNode);
+    const valueList = document.createElement("dl");
+    labelNode.textContent = detail.label;
+    for (const [label, value] of detail.values) {
+      const valueItem = document.createElement("div");
+      const valueLabel = document.createElement("dt");
+      const valueNode = document.createElement("dd");
+      valueLabel.textContent = label;
+      valueNode.textContent = value;
+      valueItem.append(valueLabel, valueNode);
+      valueList.append(valueItem);
+    }
+    item.append(labelNode, valueList);
     container.append(item);
   }
 }
@@ -11820,6 +11943,7 @@ function disconnectCloud() {
   elements.cloudAccessToken.value = "";
   state.cloud.testerCode = "";
   state.cloud.testerActive = false;
+  setKekkaiTesterEnabled(false, { persist: false, announce: false, render: false });
   state.cloud.testerError = "";
   state.cloud.canUseMine = Boolean(state.cloud.authSession?.access_token);
   state.cloud.connected = Boolean(state.cloud.authSession?.access_token);
@@ -11846,6 +11970,7 @@ async function refreshCloudLists(options = {}) {
     state.cloud.canUseMine = response.permissions?.mine === true;
     state.cloud.testerActive = response.permissions?.tester === true
       || state.cloud.lists.some((list) => list.scope === "testerShared");
+    if (!state.cloud.testerActive) setKekkaiTesterEnabled(false, { persist: false, announce: false, render: false });
     state.cloud.testerError = state.cloud.testerCode && !state.cloud.testerActive
       ? cloudText("テスター権限を確認できませんでした。コードを確認してください。", "Tester permission could not be confirmed. Check the code.")
       : "";
@@ -11889,6 +12014,7 @@ async function refreshCloudLists(options = {}) {
     state.cloud.pointRows = [];
     state.cloud.canUseMine = false;
     state.cloud.testerActive = false;
+    setKekkaiTesterEnabled(false, { persist: false, announce: false, render: false });
     state.cloud.testerError = state.cloud.testerCode ? cloudErrorMessage(error) : "";
     setCloudStatus(cloudErrorMessage(error), { error: true });
   } finally {
@@ -18421,6 +18547,9 @@ function bindEvents() {
   elements.settingsGpsEnabled.addEventListener("change", () => {
     void setGpsEnabled(elements.settingsGpsEnabled.checked);
   });
+  elements.kekkaiTesterEnabled?.addEventListener("change", () => {
+    setKekkaiTesterEnabled(elements.kekkaiTesterEnabled.checked);
+  });
   elements.shareKekkaishiStatusButton?.addEventListener("click", () => void shareKekkaishiStatus());
   elements.kekkaishiStatusDialog?.addEventListener("click", (event) => {
     if (event.target === elements.kekkaishiStatusDialog) elements.kekkaishiStatusDialog.close("cancel");
@@ -18454,6 +18583,7 @@ function bindEvents() {
     const wasTraverseMode = state.traverseMode;
     state.cloud.testerCode = elements.cloudAccessToken.value.trim();
     state.cloud.testerActive = false;
+    setKekkaiTesterEnabled(false, { persist: false, announce: false, render: false });
     state.cloud.testerError = "";
     state.cloud.connected = Boolean(state.cloud.authSession?.access_token);
     renderStorageLists();
