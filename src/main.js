@@ -142,7 +142,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2621";
+const WEB_VERSION = "0.2622";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -804,6 +804,10 @@ function analysisDestinationList(item) {
   if (item?.layer === "barrier" || item?.barrierId) return kekkaiPointList();
   const owned = state.pointLists.find((list) => list.id === analysisOwnerListId(item));
   return owned || activeAnalysisPointList();
+}
+
+function isReadOnlyBarrierFigure(figure) {
+  return Boolean(figure?.layer === "barrier" || figure?.barrierId);
 }
 
 function replaceListedAnalysisItems(kind, values) {
@@ -7330,7 +7334,11 @@ function selectionCanBeDeleted() {
     id !== CURRENT_LOCATION_ID
     && (pointEditable(id) || (state.cloud.connected && cloudPointListForPoint(id)?.editable))
   )).length;
-  return deletablePointCount + selectedLinkIds().length + selectedFigureIds().length > 0
+  const deletableFigureCount = selectedFigureIds()
+    .map(findFigure)
+    .filter((figure) => figure && !isReadOnlyBarrierFigure(figure))
+    .length;
+  return deletablePointCount + selectedLinkIds().length + deletableFigureCount > 0
     || isLoadedObservationSelected();
 }
 
@@ -8539,6 +8547,7 @@ async function editFigureMemoFromQuickDialog() {
   const figure = state.gridFigureQuickFigureId ? findFigure(state.gridFigureQuickFigureId) : null;
   const barrierId = state.gridFigureQuickBarrierId || figure?.barrierId || null;
   const barrier = barrierId ? state.traverseLog?.barriers?.[barrierId] : null;
+  if (barrier && !state.traverseMode) return;
   const vertexIndex = state.gridFigureQuickVertexIndex;
   const vertex = figure && Number.isInteger(vertexIndex) ? figure.vertices[vertexIndex] : null;
   const currentNote = barrier && !vertex
@@ -8733,6 +8742,7 @@ async function deleteFigureVertexFromQuickDialog() {
 async function deleteFigureFromQuickDialog() {
   const barrierId = state.gridFigureQuickBarrierId;
   if (barrierId) {
+    if (!state.traverseMode) return;
     const barrier = state.traverseLog?.barriers?.[barrierId];
     if (!barrier) return;
 
@@ -8927,6 +8937,7 @@ function openGridFigureQuickDialog(figure, options = {}) {
   const barrierId = typeof options.barrierId === "string" ? options.barrierId : null;
   const barrier = barrierId ? state.traverseLog?.barriers?.[barrierId] : null;
   if ((!figure && !barrier) || !elements.gridFigureQuickDialog?.show) return;
+  if (!state.traverseMode && (barrier || isReadOnlyBarrierFigure(figure))) return;
   hideGridPointHover();
   if (elements.gridPointQuickDialog?.open) elements.gridPointQuickDialog.close("figure");
   if (elements.gridLinkQuickDialog?.open) elements.gridLinkQuickDialog.close("figure");
@@ -12644,6 +12655,7 @@ function figureIdsMatchingSelectedGeometry(linkIds, pointIds) {
   );
 
   return state.figures
+    .filter((figure) => !isReadOnlyBarrierFigure(figure))
     .filter((figure) => {
       const edges = figureEdges(figure);
       const edgeKeys = edges.map((edge) => endpointPairKey(edge.a, edge.b)).filter(Boolean);
@@ -13829,7 +13841,7 @@ function findNearestFigure(screenPoint) {
   let nearestDistance = Infinity;
 
   for (const figure of state.figures.filter(isVisibleAnalysisItem)) {
-    if (figure.layer === "barrier" || figure.barrierId) continue;
+    if (state.traverseMode && isReadOnlyBarrierFigure(figure)) continue;
     const points = figureRuntimeVertices(figure).map(worldToScreen);
     if (points.length < 2) continue;
 
@@ -15272,7 +15284,9 @@ function startDragGesture(pointerId, point, options = {}) {
     ? null
     : findNearestFigureEdge(point);
   const figureSurface = lineEndpoint || figureVertex || figureEdge ? null : options.moved ? null : findNearestFigure(point);
-  const longPressFigure = figureVertex || figureEdge || (figureSurface ? { figureId: figureSurface.id } : null);
+  const longPressFigure = figureVertex || figureEdge || (
+    figureSurface && !isReadOnlyBarrierFigure(figureSurface) ? { figureId: figureSurface.id } : null
+  );
   const barrierStoneIsGlyph = Boolean(
     barrierStoneCandidate
     && state.barrierStoneGlyphMode.has(barrierStoneCandidate.stoneId)
@@ -18376,8 +18390,9 @@ async function deleteSelectedPoint() {
     !candidateCloudPointIdSet.has(id) && !candidatePointIds.includes(id)
   ));
   const explicitLinkIds = selectedLinkIds();
-  const explicitFigureIds = selectedFigureIds();
-  const inferredFigureIds = figureIdsMatchingSelectedGeometry(explicitLinkIds, selectedIds);
+  const explicitFigureIds = selectedFigureIds().filter((id) => !isReadOnlyBarrierFigure(findFigure(id)));
+  const inferredFigureIds = figureIdsMatchingSelectedGeometry(explicitLinkIds, selectedIds)
+    .filter((id) => !isReadOnlyBarrierFigure(findFigure(id)));
   const selectedObservations = selectedLoadedObservations();
   const selectedObservationIdSet = new Set(selectedObservations.map((observation) => observation.id));
   const candidatePointIdSet = new Set(candidatePointIds);
