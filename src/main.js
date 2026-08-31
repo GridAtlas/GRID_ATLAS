@@ -142,7 +142,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2632";
+const WEB_VERSION = "0.2634";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -470,6 +470,7 @@ const elements = {
   barrierRankProgress: document.querySelector("#barrierRankProgress"),
   kekkaishiStatusDialog: document.querySelector("#kekkaishiStatusDialog"),
   kekkaishiStatusRank: document.querySelector("#kekkaishiStatusRank"),
+  kekkaishiStatusRankAchievement: document.querySelector("#kekkaishiStatusRankAchievement"),
   kekkaishiStatusLifetime: document.querySelector("#kekkaishiStatusLifetime"),
   kekkaishiStatusCurrentPower: document.querySelector("#kekkaishiStatusCurrentPower"),
   kekkaishiStatusDailyPower: document.querySelector("#kekkaishiStatusDailyPower"),
@@ -9238,7 +9239,12 @@ function renderKekkaishiStatusDialog() {
     ? []
     : dragonEyeShapesForRank(nextIndex).filter((shape) => !currentShapes.includes(shape));
   if (elements.kekkaishiStatusRank) {
-    elements.kekkaishiStatusRank.textContent = `${rank.name}${achievedDays === null ? "" : ` ${t("kekkaishi.achievedDays").replace("{days}", String(achievedDays))}`}`;
+    elements.kekkaishiStatusRank.textContent = rank.name;
+  }
+  if (elements.kekkaishiStatusRankAchievement) {
+    const achievement = achievedDays === null ? "" : t("kekkaishi.achievedDays").replace("{days}", String(achievedDays));
+    elements.kekkaishiStatusRankAchievement.textContent = achievement;
+    elements.kekkaishiStatusRankAchievement.hidden = !achievement;
   }
   elements.kekkaishiStatusLifetime?.parentElement?.classList.toggle("is-producing", activeBarrierCount > 0);
   renderKekkaishiLiveLifetime(displayedLifetime, rank, atMaxRank);
@@ -13837,29 +13843,43 @@ function findNearestLineEndpoint(screenPoint) {
 }
 
 function findNearestFigure(screenPoint) {
-  let nearest = null;
-  let nearestDistance = Infinity;
+  const candidates = [];
 
   for (const figure of state.figures.filter(isVisibleAnalysisItem)) {
     if (state.traverseMode && isReadOnlyBarrierFigure(figure)) continue;
     const points = figureRuntimeVertices(figure).map(worldToScreen);
     if (points.length < 2) continue;
 
-    let distance = Infinity;
+    let edgeDistance = Infinity;
     for (let index = 1; index < points.length; index += 1) {
-      distance = Math.min(distance, distanceToSegment(screenPoint, points[index - 1], points[index]));
+      edgeDistance = Math.min(edgeDistance, distanceToSegment(screenPoint, points[index - 1], points[index]));
     }
     if (points.length >= 3) {
-      distance = Math.min(distance, distanceToSegment(screenPoint, points.at(-1), points[0]));
-      if (pointInPolygon(screenPoint, points)) distance = 0;
+      edgeDistance = Math.min(edgeDistance, distanceToSegment(screenPoint, points.at(-1), points[0]));
+      if (pointInPolygon(screenPoint, points)) {
+        candidates.push({
+          kind: "figure-surface",
+          value: figure,
+          area: screenPolygonArea(points)
+        });
+      }
     }
-    if (distance < nearestDistance) {
-      nearest = figure;
-      nearestDistance = distance;
+    if (edgeDistance <= LINE_SELECTION_HIT_RADIUS) {
+      candidates.push({ kind: "figure-edge", value: figure, distance: edgeDistance });
     }
   }
 
-  return nearestDistance <= LINE_SELECTION_HIT_RADIUS ? nearest : null;
+  return chooseAnalysisHit(candidates)?.value || null;
+}
+
+function screenPolygonArea(points) {
+  let doubleArea = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
+    doubleArea += current.x * next.y - next.x * current.y;
+  }
+  return Math.abs(doubleArea) / 2;
 }
 
 function findNearestFigureEdge(screenPoint, options = {}) {
@@ -14508,8 +14528,15 @@ function handleCanvasClick(screenPoint) {
   // current location visible beneath it.
   const nearest = barrierStoneIsGlyph ? null : findNearestPoint(screenPoint);
   const nearestLink = nearest || nearestBarrierStone ? null : findNearestLink(screenPoint);
-  const nearestFigure = nearest || nearestBarrierStone || nearestLink ? null : findNearestFigure(screenPoint);
-  const nearestObservation = nearest || nearestBarrierStone || nearestLink || nearestFigure
+  // Barriers are rendered above ordinary analysis figures in traverse mode,
+  // so their hit test must run before a figure surface can claim the tap.
+  const nearestBarrier = nearest || nearestBarrierStone || nearestLink || !state.traverseMode
+    ? null
+    : findNearestBarrier(screenPoint);
+  const nearestFigure = nearest || nearestBarrierStone || nearestLink || nearestBarrier
+    ? null
+    : findNearestFigure(screenPoint);
+  const nearestObservation = nearest || nearestBarrierStone || nearestLink || nearestBarrier || nearestFigure
     ? null
     : findNearestLoadedObservation(screenPoint);
 
@@ -14523,6 +14550,13 @@ function handleCanvasClick(screenPoint) {
     state.barrierSelection = [];
     state.selectedBarrierId = null;
     toggleSelection("link", nearestLink.id);
+    return;
+  }
+
+  if (nearestBarrier) {
+    state.barrierSelection = [];
+    state.selectedBarrierId = state.selectedBarrierId === nearestBarrier.barrierId ? null : nearestBarrier.barrierId;
+    render();
     return;
   }
 
@@ -14548,13 +14582,6 @@ function handleCanvasClick(screenPoint) {
         state.pendingGeo = null;
       }
       toggleBarrierStoneSelection(nearestBarrierStone.stoneId);
-      return;
-    }
-    const barrier = findNearestBarrier(screenPoint);
-    if (barrier) {
-      state.barrierSelection = [];
-      state.selectedBarrierId = state.selectedBarrierId === barrier.barrierId ? null : barrier.barrierId;
-      render();
       return;
     }
     state.selectedBarrierId = null;

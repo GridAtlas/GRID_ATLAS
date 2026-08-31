@@ -24,4 +24,13 @@ describe("analysis hit priority", () => {
 
     expect(result.value).toBe("point");
   });
+
+  it("prefers the smaller nested figure surface", () => {
+    const result = chooseAnalysisHit([
+      { kind: "figure-surface", value: "large", area: 1200 },
+      { kind: "figure-surface", value: "small", area: 120 }
+    ]);
+
+    expect(result.value).toBe("small");
+  });
 });
