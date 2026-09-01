@@ -142,7 +142,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2634";
+const WEB_VERSION = "0.2635";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -5390,8 +5390,82 @@ function drawFigures() {
   }
 }
 
+function orderedContinuousStroke(links) {
+  if (!Array.isArray(links) || links.length < 2) return null;
+
+  const entries = links.map((link) => {
+    const endpoints = linkEndpoints(link);
+    const aKey = endpoints?.a?.endpointKey;
+    const bKey = endpoints?.b?.endpointKey;
+    return endpoints && aKey && bKey && aKey !== bKey ? { link, endpoints, aKey, bKey } : null;
+  });
+  if (entries.some((entry) => !entry)) return null;
+
+  const degree = new Map();
+  for (const entry of entries) {
+    degree.set(entry.aKey, (degree.get(entry.aKey) || 0) + 1);
+    degree.set(entry.bKey, (degree.get(entry.bKey) || 0) + 1);
+  }
+  const endpoints = [...degree].filter(([, count]) => count === 1).map(([key]) => key);
+  if ([...degree.values()].some((count) => count > 2) || (endpoints.length !== 0 && endpoints.length !== 2)) {
+    return null;
+  }
+
+  let currentKey = endpoints[0] || entries[0].aKey;
+  let currentPoint = endpoints.length > 0 ? entries.find((entry) => entry.aKey === currentKey || entry.bKey === currentKey)?.endpoints : entries[0].endpoints;
+  currentPoint = currentPoint?.a?.endpointKey === currentKey ? currentPoint.a : currentPoint?.b;
+  if (!currentPoint) return null;
+
+  const remaining = new Set(entries);
+  const points = [currentPoint];
+  while (remaining.size > 0) {
+    const entry = [...remaining].find((candidate) => candidate.aKey === currentKey || candidate.bKey === currentKey);
+    if (!entry) return null;
+    const nextPoint = entry.aKey === currentKey ? entry.endpoints.b : entry.endpoints.a;
+    currentKey = entry.aKey === currentKey ? entry.bKey : entry.aKey;
+    points.push(nextPoint);
+    remaining.delete(entry);
+  }
+  return points;
+}
+
 function drawLinks() {
-  for (const link of state.links.filter(isVisibleAnalysisItem)) {
+  const visibleLinks = state.links.filter(isVisibleAnalysisItem);
+  const drawnLinkIds = new Set();
+  const strokeGroups = new Map();
+  for (const link of visibleLinks) {
+    const strokeId = linkStrokeId(link);
+    if (!strokeId) continue;
+    const group = strokeGroups.get(strokeId) || [];
+    group.push(link);
+    strokeGroups.set(strokeId, group);
+  }
+
+  for (const links of strokeGroups.values()) {
+    const colors = new Set(links.map((link) => normalizeGridAtlasLineColor(link.color) || ""));
+    if (links.some((link) => isLinkSelected(link.id)) || colors.size !== 1) continue;
+    const points = orderedContinuousStroke(links);
+    if (!points) continue;
+
+    context.save();
+    context.beginPath();
+    const start = worldToScreen(points[0]);
+    context.moveTo(start.x, start.y);
+    for (const point of points.slice(1)) {
+      const screenPoint = worldToScreen(point);
+      context.lineTo(screenPoint.x, screenPoint.y);
+    }
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.strokeStyle = [...colors][0] || canvasPalette().link;
+    context.lineWidth = 2.4;
+    context.stroke();
+    context.restore();
+    for (const link of links) drawnLinkIds.add(link.id);
+  }
+
+  for (const link of visibleLinks) {
+    if (drawnLinkIds.has(link.id)) continue;
     const endpoints = linkEndpoints(link);
     if (!endpoints) {
       continue;
