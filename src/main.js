@@ -133,7 +133,7 @@ const CLOUD_PASSWORD_SETUP_KEY_PREFIX = "grid-atlas-cloud-password-set:";
 const CLOUD_SIGNUP_PENDING_KEY = "grid-atlas-cloud-signup-pending";
 const CLOUD_PRODUCTION_API_URL = "https://grid-atlas-cloud-staging.kazki1981.workers.dev";
 const CLOUD_SHARE_URL_PARAMETER = "share";
-const CLOUD_AUTO_REFRESH_INTERVAL_MS = 30_000;
+const CLOUD_AUTO_REFRESH_INTERVAL_MS = 3 * 60_000;
 const PASTEL_THEME = "pastel";
 const RETRO_THEME = "retro";
 const BASIC_THEME = "basic";
@@ -142,7 +142,7 @@ const KEKKAI_MODE = "kekkai";
 const KEKKAI_TITLE_URL = "https://gridatlas.github.io/KEKKAI/";
 const JA_LANGUAGE = "ja";
 const EN_LANGUAGE = "en";
-const WEB_VERSION = "0.2635";
+const WEB_VERSION = "0.2646";
 let cloudProgressClearTimer = null;
 const LINE_COLOR_OPTIONS = Object.freeze([
   { value: "#e53935", ja: "赤", en: "Red" },
@@ -614,6 +614,7 @@ const state = {
     authBusy: false,
     authPending: false,
     busy: false,
+    refreshing: false,
     apiUrl: "",
     lists: [],
     pointLists: [],
@@ -11754,7 +11755,8 @@ async function initializeCloudAuth() {
   state.cloud.authConfigured = Boolean(config.url && config.publishableKey);
   state.cloud.authPending = state.cloud.authConfigured;
   if (state.cloud.authPending) {
-    setCloudProgress(0, 1, "read");
+    // Session confirmation is background work. Show cloud progress only after
+    // a tester code or signed-in session actually starts a cloud list request.
     renderStorageLists();
     renderActionButtons();
   }
@@ -12108,8 +12110,13 @@ function disconnectCloud() {
   render();
 }
 async function refreshCloudLists(options = {}) {
-  setCloudBusy(true);
-  setCloudProgress(0, 3, "read");
+  if (state.cloud.refreshing) return;
+  const background = options.background === true;
+  let showProgress = !background;
+  let blocksUi = !background;
+  state.cloud.refreshing = true;
+  if (blocksUi) setCloudBusy(true);
+  if (showProgress) setCloudProgress(0, 1, "read");
   try {
     const client = cloudClientFromInputs();
     const response = await client.listLists();
@@ -12127,18 +12134,46 @@ async function refreshCloudLists(options = {}) {
     state.cloud.listOrder = state.cloud.lists.map((list) => list.id);
     repairLocalCloudIdCollisions();
 
-    setCloudProgress(1, 3, "read");
-    const details = await Promise.all(state.cloud.lists.map((list) => client.getList(list.id)));
-    state.cloud.pointLists = await Promise.all(details.map(async (result) => {
+    const listMetaById = new Map(state.cloud.lists.map((list) => [list.id, list]));
+    const cachedById = new Map(state.cloud.pointLists.map((list) => [list.cloudId || list.id, list]));
+    const changedLists = state.cloud.lists.filter((list) => (
+      cachedById.get(list.id)?.cloudRevision !== list.revision
+    ));
+    const retainedLists = new Map(
+      state.cloud.pointLists
+        .filter((list) => listMetaById.has(list.cloudId || list.id))
+        .map((list) => {
+          const meta = listMetaById.get(list.cloudId || list.id);
+          return [list.cloudId || list.id, { ...list, cloudScope: meta?.scope || list.cloudScope }];
+        })
+    );
+    const progressTotal = 1 + changedLists.length;
+    let progressCompleted = 1;
+    // The metadata check is intentionally quiet. Once it finds data that must
+    // be hydrated, the operation can affect the screen, so make it visible.
+    if (!showProgress && changedLists.length > 0) {
+      showProgress = true;
+      blocksUi = true;
+      setCloudBusy(true);
+    }
+    if (showProgress) setCloudProgress(progressCompleted, progressTotal, "read");
+    const refreshedLists = await Promise.all(changedLists.map(async (meta) => {
+      const result = await client.getList(meta.id);
       const list = cloudPayloadToPointList(result.list, {
         localId: "cloud-preview:" + result.list.list.id,
         revision: result.revision,
         editable: true,
-        scope: state.cloud.lists.find((meta) => meta.id === result.list.list.id)?.scope || "mine"
+        scope: meta.scope || "mine"
       });
-      return hydrateCloudPointListAssets(list, client);
+      const hydrated = await hydrateCloudPointListAssets(list, client);
+      progressCompleted += 1;
+      if (showProgress) setCloudProgress(progressCompleted, progressTotal, "read");
+      return hydrated;
     }));
-    setCloudProgress(2, 3, "read");
+    for (const list of refreshedLists) retainedLists.set(list.cloudId || list.id, list);
+    state.cloud.pointLists = state.cloud.lists
+      .map((meta) => retainedLists.get(meta.id))
+      .filter(Boolean);
     applyCloudListOrder();
     repairLocalCloudPointIdCollisions();
     ensureActivePointListVisible();
@@ -12148,13 +12183,16 @@ async function refreshCloudLists(options = {}) {
     ));
     syncProjectedCoordinates();
     state.cloud.connected = true;
-    await refreshCloudShares();
+    if (elements.cloudDialog?.open) await refreshCloudShares();
     state.cloud.lastFetchedAt = Date.now();
-    setCloudProgress(3, 3, "read");
     if (options.quiet !== true && state.cloud.canUseMine) {
       setCloudStatus(cloudText(
-        `${state.cloud.lists.length}件のマイリスト（クラウド）を読み込みました`,
-        `Loaded ${state.cloud.lists.length} My List(s) (Cloud)`
+        changedLists.length
+          ? `${changedLists.length}件のマイリスト（クラウド）を更新しました`
+          : "クラウドは最新です",
+        changedLists.length
+          ? `Updated ${changedLists.length} My List(s) (Cloud)`
+          : "Cloud is up to date"
       ));
     }
   } catch (error) {
@@ -12168,7 +12206,8 @@ async function refreshCloudLists(options = {}) {
     state.cloud.testerError = state.cloud.testerCode ? cloudErrorMessage(error) : "";
     setCloudStatus(cloudErrorMessage(error), { error: true });
   } finally {
-    if (options.keepBusy !== true) setCloudBusy(false);
+    state.cloud.refreshing = false;
+    if (blocksUi && options.keepBusy !== true) setCloudBusy(false);
     render();
   }
 }
@@ -12184,12 +12223,12 @@ async function requestCloudRefresh() {
 function maybeRefreshCloudListsForListPage() {
   const listManagementVisible = state.mobilePage === "data"
     || (state.mobilePage === "map" && state.mobileGridPage === "lists");
-  if (!listManagementVisible || document.visibilityState !== "visible" || !state.cloud.connected || state.cloud.busy) return;
+  if (!listManagementVisible || document.visibilityState !== "visible" || !state.cloud.connected || state.cloud.busy || state.cloud.refreshing) return;
   const now = Date.now();
   if (now - state.cloud.lastAutoRefreshAt < CLOUD_AUTO_REFRESH_INTERVAL_MS) return;
   if (state.cloud.lastFetchedAt && now - state.cloud.lastFetchedAt < CLOUD_AUTO_REFRESH_INTERVAL_MS) return;
   state.cloud.lastAutoRefreshAt = now;
-  void refreshCloudLists({ quiet: true });
+  void refreshCloudLists({ quiet: true, background: true });
 }
 
 async function renameStorageList(storageId) {
